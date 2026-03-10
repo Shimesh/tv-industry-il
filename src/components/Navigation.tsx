@@ -130,14 +130,21 @@ export default function Navigation() {
             </div>
 
             {/* User Menu / Login */}
-            {user && profile ? (
+            {user ? (
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => { setUserMenuOpen(!userMenuOpen); setThemeMenuOpen(false); }}
                   className="flex items-center gap-2 p-1.5 rounded-xl transition-all hover:bg-[var(--theme-accent-glow)]"
                 >
-                  <UserAvatar name={profile.displayName} photoURL={profile.photoURL} size="sm" isOnline={profile.isOnline} />
-                  <span className="hidden sm:block text-sm font-medium text-[var(--theme-text)] max-w-[100px] truncate">{profile.displayName}</span>
+                  <UserAvatar
+                    name={profile?.displayName || user.displayName || user.email || 'משתמש'}
+                    photoURL={profile?.photoURL || user.photoURL}
+                    size="sm"
+                    isOnline={true}
+                  />
+                  <span className="hidden sm:block text-sm font-medium text-[var(--theme-text)] max-w-[100px] truncate">
+                    {profile?.displayName || user.displayName || 'משתמש'}
+                  </span>
                   <ChevronDown className={`w-4 h-4 text-[var(--theme-text-secondary)] hidden sm:block transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -148,15 +155,16 @@ export default function Navigation() {
                   }}>
                     {/* User info header */}
                     <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
-                      <p className="text-sm font-bold text-[var(--theme-text)]">{profile.displayName}</p>
-                      <p className="text-xs text-[var(--theme-text-secondary)] truncate">{profile.email}</p>
+                      <p className="text-sm font-bold text-[var(--theme-text)]">
+                        {profile?.displayName || user.displayName || 'משתמש'}
+                      </p>
+                      <p className="text-xs text-[var(--theme-text-secondary)] truncate">
+                        {profile?.email || user.email}
+                      </p>
                       <div className="flex items-center gap-1.5 mt-1.5">
-                        <span className={`w-2 h-2 rounded-full ${
-                          profile.status === 'available' ? 'bg-green-500' :
-                          profile.status === 'busy' ? 'bg-red-500' : 'bg-gray-500'
-                        }`} />
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
                         <span className="text-xs text-[var(--theme-text-secondary)]">
-                          {profile.status === 'available' ? 'פנוי' : profile.status === 'busy' ? 'תפוס' : 'לא פעיל'}
+                          {profile?.status === 'busy' ? 'תפוס' : 'פנוי'}
                         </span>
                       </div>
                     </div>

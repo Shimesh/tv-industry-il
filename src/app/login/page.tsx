@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tv, Mail, Lock, User, Briefcase, Eye, EyeOff, ArrowLeft, Sparkles } from 'lucide-react';
@@ -27,8 +27,15 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
+
+  // Redirect to home if already logged in (handles redirect flow from Google)
+  useEffect(() => {
+    if (user && !authLoading) {
+      router.push('/');
+    }
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
