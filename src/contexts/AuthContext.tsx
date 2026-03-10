@@ -7,6 +7,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -55,6 +57,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Handle Google redirect result on page load
+  useEffect(() => {
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        const profileRef = doc(db, 'users', result.user.uid);
+        const profileSnap = await getDoc(profileRef);
+        if (!profileSnap.exists()) {
+          const profileData: Omit<UserProfile, 'uid'> = {
+            displayName: result.user.displayName || 'משתמש חדש',
+            email: result.user.email || '',
+            photoURL: result.user.photoURL,
+            department: '',
+            role: '',
+            phone: '',
+            skills: [],
+            bio: '',
+            status: 'available',
+            isOnline: true,
+            onboardingComplete: false,
+            theme: 'dark',
+          };
+          await setDoc(profileRef, {
+            ...profileData,
+            createdAt: serverTimestamp(),
+            lastSeen: serverTimestamp(),
+          });
+          setProfile({ uid: result.user.uid, ...profileData });
+        }
+      }
+    }).catch(() => {
+      // Redirect result errors handled silently
+    });
+  }, []);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -111,33 +147,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    const profileRef = doc(db, 'users', result.user.uid);
-    const profileSnap = await getDoc(profileRef);
+    try {
+      // Try popup first (works on localhost and some browsers)
+      const result = await signInWithPopup(auth, googleProvider);
+      const profileRef = doc(db, 'users', result.user.uid);
+      const profileSnap = await getDoc(profileRef);
 
-    if (!profileSnap.exists()) {
-      const profileData: Omit<UserProfile, 'uid'> = {
-        displayName: result.user.displayName || 'משתמש חדש',
-        email: result.user.email || '',
-        photoURL: result.user.photoURL,
-        department: '',
-        role: '',
-        phone: '',
-        skills: [],
-        bio: '',
-        status: 'available',
-        isOnline: true,
-        onboardingComplete: false,
-        theme: 'dark',
-      };
+      if (!profileSnap.exists()) {
+        const profileData: Omit<UserProfile, 'uid'> = {
+          displayName: result.user.displayName || 'משתמש חדש',
+          email: result.user.email || '',
+          photoURL: result.user.photoURL,
+          department: '',
+          role: '',
+          phone: '',
+          skills: [],
+          bio: '',
+          status: 'available',
+          isOnline: true,
+          onboardingComplete: false,
+          theme: 'dark',
+        };
 
-      await setDoc(profileRef, {
-        ...profileData,
-        createdAt: serverTimestamp(),
-        lastSeen: serverTimestamp(),
-      });
+        await setDoc(profileRef, {
+          ...profileData,
+          createdAt: serverTimestamp(),
+          lastSeen: serverTimestamp(),
+        });
 
-      setProfile({ uid: result.user.uid, ...profileData });
+        setProfile({ uid: result.user.uid, ...profileData });
+      }
+    } catch (popupError: unknown) {
+      const err = popupError as { code?: string };
+      // If popup blocked or fails, fall back to redirect
+      if (err.code === 'auth/popup-blocked' ||
+          err.code === 'auth/popup-closed-by-user' ||
+          err.code === 'auth/cancelled-popup-request') {
+        // For popup-closed, user cancelled - don't redirect
+        if (err.code === 'auth/popup-closed-by-user') throw popupError;
+      }
+      // For any other popup error, use redirect
+      await signInWithRedirect(auth, googleProvider);
     }
   };
 
