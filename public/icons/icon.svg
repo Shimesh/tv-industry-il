@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- TV Screen -->
+  <rect x="116" y="136" width="280" height="190" rx="20" fill="rgba(255,255,255,0.15)"/>
+  <rect x="130" y="150" width="252" height="162" rx="12" fill="rgba(255,255,255,0.1)"/>
+  <!-- Play button -->
+  <polygon points="230,200 230,280 295,240" fill="white" opacity="0.9"/>
+  <!-- Stand -->
+  <rect x="220" y="338" width="72" height="12" rx="6" fill="rgba(255,255,255,0.3)"/>
+  <rect x="196" y="356" width="120" height="10" rx="5" fill="rgba(255,255,255,0.2)"/>
+  <!-- IL text -->
+  <text x="256" y="420" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="48" fill="white" opacity="0.9">TV IL</text>
+</svg>

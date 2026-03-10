@@ -1,26 +1,315 @@
 @import "tailwindcss";
 
+/* Theme CSS Variables - Default (Dark theme) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #030712;
+  --foreground: #f3f4f6;
+
+  /* Theme System Variables */
+  --theme-bg: #030712;
+  --theme-bg-secondary: #111827;
+  --theme-bg-card: rgba(17, 24, 39, 0.5);
+  --theme-text: #f3f4f6;
+  --theme-text-secondary: #9ca3af;
+  --theme-border: #1f2937;
+  --theme-accent: #a78bfa;
+  --theme-accent-secondary: #60a5fa;
+  --theme-accent-glow: rgba(139, 92, 246, 0.15);
+  --theme-nav-bg: rgba(17, 24, 39, 0.8);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  direction: rtl;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--theme-bg, #030712);
+  color: var(--theme-text, #f3f4f6);
+  font-family: 'Heebo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom Scrollbar - theme aware */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--theme-bg-secondary, #111827);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-border, #374151);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-text-secondary, #4b5563);
+}
+
+/* Gradient Text Utility */
+.gradient-text {
+  background: linear-gradient(135deg, var(--theme-accent, #a78bfa), var(--theme-accent-secondary, #60a5fa), #34d399);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-warm {
+  background: linear-gradient(135deg, #f472b6, #a78bfa, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Card Glow Effect */
+.card-glow {
+  transition: all 0.3s ease;
+}
+
+.card-glow:hover {
+  box-shadow: 0 0 20px var(--theme-accent-glow, rgba(139, 92, 246, 0.15)), 0 0 40px rgba(59, 130, 246, 0.1);
+  border-color: var(--theme-accent, rgba(139, 92, 246, 0.3));
+  transform: translateY(-2px);
+}
+
+/* Breaking News Ticker */
+@keyframes ticker {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.ticker-animation {
+  animation: ticker 30s linear infinite;
+}
+
+/* Pulse Animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse-live {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+/* Fade In Animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Stagger children animation */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+
+/* Gradient Border */
+.gradient-border {
+  position: relative;
+  border-radius: 12px;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 13px;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--theme-accent, #7c3aed), var(--theme-accent-secondary, #3b82f6), #10b981);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Background gradient animation */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* Hide scrollbar for channel selector */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Chat bubble animations */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.chat-bubble-sent {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.chat-bubble-received {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+/* Typing indicator animation */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+.typing-dot {
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Call ringing animation */
+@keyframes ring {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(15deg); }
+  20% { transform: rotate(-10deg); }
+  30% { transform: rotate(15deg); }
+  40% { transform: rotate(-5deg); }
+  50%, 100% { transform: rotate(0deg); }
+}
+
+.animate-ring {
+  animation: ring 1.5s ease-in-out infinite;
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--theme-bg-secondary) 25%, var(--theme-border) 50%, var(--theme-bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Notification badge pulse */
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* Page transition */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: pageIn 0.4s ease-out;
+}
+
+/* Confetti animation */
+@keyframes confettiFall {
+  0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+.confetti-piece {
+  animation: confettiFall 3s ease-in forwards;
+}
+
+/* Light theme specific overrides */
+[data-theme="light"] .gradient-text {
+  background: linear-gradient(135deg, #6d28d9, #2563eb, #059669);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .card-glow:hover {
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .gradient-border::before {
+  background: linear-gradient(135deg, #6d28d9, #2563eb, #059669);
+}
+
+/* Forest theme specific overrides */
+[data-theme="forest"] .gradient-text {
+  background: linear-gradient(135deg, #66bb6a, #26a69a, #81c784);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="forest"] .card-glow:hover {
+  box-shadow: 0 0 20px rgba(102, 187, 106, 0.15), 0 0 40px rgba(38, 166, 154, 0.08);
+}
+
+/* Ensure good contrast on light backgrounds */
+[data-theme="light"] .skeleton-shimmer {
+  background: linear-gradient(90deg, #eef2f7 25%, #d1d5db 50%, #eef2f7 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Broadcast countdown flash animation */
+@keyframes countdownFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.countdown-flash {
+  animation: countdownFlash 0.5s ease-in-out infinite;
+  color: #ef4444 !important;
+}
+
+.countdown-flash-intense {
+  animation: countdownFlash 0.25s ease-in-out infinite;
+  color: #ef4444 !important;
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
 }
