@@ -31,8 +31,11 @@ export default function LoginPage() {
   const router = useRouter();
 
   // Redirect to home if already logged in (handles redirect flow from Google)
+  console.log('[LOGIN] render - authLoading:', authLoading, 'user:', user?.email ?? 'null');
   useEffect(() => {
+    console.log('[LOGIN] useEffect - authLoading:', authLoading, 'user:', user?.email ?? 'null');
     if (user && !authLoading) {
+      console.log('[LOGIN] user found after loading, redirecting to /');
       router.push('/');
     }
   }, [user, authLoading, router]);

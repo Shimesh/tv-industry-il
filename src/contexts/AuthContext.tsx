@@ -53,9 +53,12 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | null> {
+  console.log('[AUTH] fetchOrCreateProfile - start for uid:', firebaseUser.uid, 'email:', firebaseUser.email);
   try {
     const profileRef = doc(db, 'users', firebaseUser.uid);
+    console.log('[AUTH] fetchOrCreateProfile - calling getDoc...');
     const profileSnap = await getDoc(profileRef);
+    console.log('[AUTH] fetchOrCreateProfile - getDoc result: exists =', profileSnap.exists());
 
     if (profileSnap.exists()) {
       // Update online status (non-blocking)
@@ -64,6 +67,7 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
     }
 
     // Profile doesn't exist yet - create it
+    console.log('[AUTH] fetchOrCreateProfile - creating new profile...');
     const profileData: Omit<UserProfile, 'uid'> = {
       displayName: firebaseUser.displayName || 'משתמש חדש',
       email: firebaseUser.email || '',
@@ -84,11 +88,11 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
       createdAt: serverTimestamp(),
       lastSeen: serverTimestamp(),
     });
+    console.log('[AUTH] fetchOrCreateProfile - profile created successfully');
 
     return { uid: firebaseUser.uid, ...profileData };
-  } catch {
-    // Firestore operations failed (likely security rules) - auth still works
-    console.warn('Firestore profile fetch failed - user is authenticated but profile unavailable');
+  } catch (error) {
+    console.error('[AUTH] fetchOrCreateProfile - ERROR:', error);
     return null;
   }
 }
@@ -98,31 +102,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Handle Google redirect result on page load
+  // Handle Google redirect result FIRST, then listen to auth state
   useEffect(() => {
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          const userProfile = await fetchOrCreateProfile(result.user);
-          if (userProfile) setProfile(userProfile);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    let unsubscribe: (() => void) | undefined;
 
-  // Listen to auth state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        const userProfile = await fetchOrCreateProfile(firebaseUser);
-        setProfile(userProfile);
-      } else {
-        setProfile(null);
+    const init = async () => {
+      console.log('[AUTH] 1. init() started');
+      // Process pending Google redirect result BEFORE listening to auth state.
+      // Without this, onAuthStateChanged fires with null (user not yet resolved),
+      // sets loading=false, and the login page thinks no one is logged in.
+      try {
+        console.log('[AUTH] 2. calling getRedirectResult...');
+        const result = await getRedirectResult(auth);
+        console.log('[AUTH] 3. getRedirectResult returned:', result ? `user=${result.user?.email}` : 'null (not a redirect)');
+        if (result?.user) {
+          console.log('[AUTH] 3a. redirect user found, fetching profile...');
+          await fetchOrCreateProfile(result.user);
+          // Don't redirect here - onAuthStateChanged will fire and handle it
+        }
+      } catch (error) {
+        console.error('[AUTH] 3-ERROR. getRedirectResult failed:', error);
       }
-      setLoading(false);
-    });
-    return () => unsubscribe();
+
+      // NOW listen to auth state changes (fires immediately with current state)
+      console.log('[AUTH] 4. setting up onAuthStateChanged listener...');
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        console.log('[AUTH] 5. onAuthStateChanged fired, user:', firebaseUser?.email ?? 'null');
+        setUser(firebaseUser);
+        if (firebaseUser) {
+          console.log('[AUTH] 6. user exists, fetching profile...');
+          const userProfile = await fetchOrCreateProfile(firebaseUser);
+          console.log('[AUTH] 7. profile result:', userProfile ? 'loaded' : 'null');
+          setProfile(userProfile);
+        } else {
+          console.log('[AUTH] 6. no user, clearing profile');
+          setProfile(null);
+        }
+        console.log('[AUTH] 8. setLoading(false) - auth flow complete');
+        setLoading(false);
+      });
+    };
+
+    init();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
