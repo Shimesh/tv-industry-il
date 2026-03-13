@@ -84,21 +84,20 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     try {
+      // This redirects the page to Google - won't return here
       await signInWithGoogle();
-      router.push('/');
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/popup-closed-by-user') {
-        setError('');
-      } else if (firebaseError.code === 'auth/unauthorized-domain') {
+      if (firebaseError.code === 'auth/unauthorized-domain') {
         setError('הדומיין הנוכחי לא מורשה ב-Firebase. יש להוסיף אותו בהגדרות Firebase → Authentication → Authorized domains');
       } else if (firebaseError.code === 'auth/configuration-not-found' || firebaseError.code === 'auth/invalid-api-key') {
         setError('Firebase לא מוגדר כראוי. יש להגדיר קובץ .env.local עם פרטי Firebase אמיתיים');
       } else {
         setError(`שגיאה בהתחברות: ${firebaseError.code || firebaseError.message || 'שגיאה לא ידועה'}`);
       }
+      setIsLoading(false);
     }
-    setIsLoading(false);
+    // Don't setIsLoading(false) on success - page is redirecting to Google
   };
 
   return (

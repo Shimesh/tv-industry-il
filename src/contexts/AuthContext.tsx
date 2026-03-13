@@ -6,7 +6,6 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -163,29 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    try {
-      // Try popup first (works on localhost and most browsers)
-      const result = await signInWithPopup(auth, googleProvider);
-      // Auth succeeded - fetch/create profile separately (don't let Firestore errors affect auth)
-      const userProfile = await fetchOrCreateProfile(result.user);
-      if (userProfile) setProfile(userProfile);
-    } catch (popupError: unknown) {
-      const err = popupError as { code?: string };
-      // Only fall back to redirect for popup-specific errors
-      if (err.code === 'auth/popup-closed-by-user') {
-        throw popupError;
-      }
-      if (
-        err.code === 'auth/popup-blocked' ||
-        err.code === 'auth/cancelled-popup-request' ||
-        err.code === 'auth/internal-error'
-      ) {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
-      // For non-popup auth errors, re-throw
-      throw popupError;
-    }
+    // Always use redirect - popups are blocked in production/iframes
+    await signInWithRedirect(auth, googleProvider);
   };
 
   const logout = async () => {
