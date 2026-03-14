@@ -162,10 +162,97 @@ function ProductionsContent() {
       }, { merge: true });
 
       await batch.commit();
+
+      // Auto-update crew member profiles
+      await syncCrewProfiles(weekId, prods, wStart, wEnd);
     } catch (error) {
       console.error('Error saving to Firestore:', error);
     }
   }, [user, workerName]);
+
+  // Sync crew members with registered user profiles
+  const syncCrewProfiles = useCallback(async (
+    weekId: string,
+    prods: Production[],
+    wStart: string,
+    wEnd: string,
+  ) => {
+    try {
+      // Collect all unique crew names from all productions
+      const allCrewNames = new Set<string>();
+      for (const prod of prods) {
+        for (const crew of prod.crew) {
+          if (crew.name) allCrewNames.add(crew.name);
+        }
+      }
+      if (allCrewNames.size === 0) return;
+
+      // Query all users to match by displayName
+      const usersRef = collection(db, 'users');
+      const usersSnap = await getDocs(usersRef);
+      const usersByName = new Map<string, string>(); // displayName -> uid
+
+      usersSnap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.displayName) {
+          usersByName.set(data.displayName, docSnap.id);
+        }
+      });
+
+      // Match crew names to registered users
+      const batch2 = writeBatch(db);
+      let matchCount = 0;
+
+      for (const crewName of allCrewNames) {
+        const matchedUid = usersByName.get(crewName);
+        if (!matchedUid) continue;
+
+        // Find all productions this crew member is part of
+        const memberProds = prods.filter(p =>
+          p.crew.some(c => c.name === crewName) && p.status !== 'cancelled'
+        );
+
+        if (memberProds.length === 0) continue;
+
+        // Build production summaries for the user's schedule
+        const productionEntries = memberProds.map(p => {
+          const crewEntry = p.crew.find(c => c.name === crewName);
+          return {
+            productionId: p.id || generateProductionId(p.name, p.date, p.studio),
+            name: p.name,
+            studio: p.studio,
+            date: p.date,
+            day: p.day,
+            startTime: crewEntry?.startTime || p.startTime,
+            endTime: crewEntry?.endTime || p.endTime,
+            role: crewEntry?.role || '',
+            roleDetail: crewEntry?.roleDetail || '',
+          };
+        });
+
+        // Save to user's personal schedule
+        const userScheduleRef = doc(db, 'users', matchedUid, 'schedules', weekId);
+        batch2.set(userScheduleRef, {
+          workerName: crewName,
+          weekStart: wStart,
+          weekEnd: wEnd,
+          productions: productionEntries,
+          autoUpdatedAt: serverTimestamp(),
+          autoUpdatedBy: user?.uid || '',
+        }, { merge: true });
+
+        matchCount++;
+      }
+
+      if (matchCount > 0) {
+        await batch2.commit();
+        console.log(`Auto-updated ${matchCount} crew member profiles`);
+      }
+    } catch (error) {
+      console.error('Error syncing crew profiles:', error);
+      // Non-critical - don't break the flow
+    }
+  }, [user]);
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
