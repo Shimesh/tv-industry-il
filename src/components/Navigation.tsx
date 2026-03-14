@@ -9,11 +9,12 @@ import UserAvatar from './UserAvatar';
 import {
   Tv, Calendar, Users, Newspaper, Building2, Menu, X,
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
-  Palette, ChevronDown, Settings, CheckCircle
+  Palette, ChevronDown, Settings, CheckCircle, Clapperboard
 } from 'lucide-react';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
+  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
   { href: '/directory', label: 'אלפון', icon: Users },
   { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
