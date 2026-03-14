@@ -4,7 +4,17 @@ import { parseScheduleHTML, parseManualText } from '@/lib/productionSchedulePars
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { url, manualText } = body;
+    const { url, manualText, rawHtml } = body;
+
+    // If raw HTML provided (from browser fetch), parse it server-side
+    if (rawHtml) {
+      const parsed = parseScheduleHTML(rawHtml, '');
+      return NextResponse.json({
+        success: true,
+        data: parsed,
+        source: 'raw_html',
+      });
+    }
 
     // If manual text provided, parse it directly
     if (manualText) {
@@ -24,9 +34,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate URL
-    let parsedUrl: URL;
     try {
-      parsedUrl = new URL(url);
+      new URL(url);
     } catch {
       return NextResponse.json(
         { error: 'invalid_url', message: 'הלינק לא תקין' },
@@ -34,19 +43,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch personal schedule HTML
+    // Server-side fetch with SSL bypass for self-signed certs
     let personalHtml = '';
     let deptHtml = '';
 
     try {
-      // Bypass SSL for Herzliya internal system
+      // Server-side fetch - note: browser CORS proxy is the primary path
+      // This is a fallback for when the server CAN reach the URL
       const fetchOptions: RequestInit = {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
         },
-        // @ts-expect-error - Node.js specific option for self-signed certs
+        // @ts-expect-error - Node.js 20 experimental option
         rejectUnauthorized: false,
       };
 
@@ -57,7 +67,7 @@ export async function POST(request: NextRequest) {
       }
       personalHtml = await personalResponse.text();
 
-      // Fetch department view - try appending showdept parameter
+      // Fetch department view
       const deptUrl = new URL(url);
       deptUrl.searchParams.set('HSELWEBprgnameShowFmp', '1');
 
@@ -76,34 +86,26 @@ export async function POST(request: NextRequest) {
             deptHtml = await deptResponse2.text();
           }
         } catch {
-          // Department view unavailable - continue with personal only
           console.warn('Department view not available');
         }
       }
     } catch (error) {
-      console.error('Fetch error:', error);
+      console.error('Server fetch error:', error);
       return NextResponse.json({
         error: 'network',
-        message: 'הלינק לא נגיש. ייתכן שהוא נגיש רק מרשת הרצליה. נסה מהבית או מה-VPN.',
+        message: 'השרת לא הצליח לגשת ללינק. נסה את ה-CORS proxy (הגישה מהדפדפן).',
       }, { status: 502 });
     }
 
     // Parse HTML
     const parsed = parseScheduleHTML(personalHtml, deptHtml);
 
-    if (parsed.productions.length === 0) {
-      return NextResponse.json({
-        success: true,
-        data: parsed,
-        warning: 'לא נמצאו הפקות בלינק. ייתכן שהפורמט השתנה.',
-        rawHtmlPreview: personalHtml.substring(0, 500),
-      });
-    }
-
     return NextResponse.json({
       success: true,
       data: parsed,
-      source: 'url',
+      source: 'server',
+      rawHtmlPreview: parsed.productions.length === 0 ? personalHtml.substring(0, 1000) : undefined,
+      warning: parsed.productions.length === 0 ? 'לא נמצאו הפקות בלינק.' : undefined,
     });
   } catch (error) {
     console.error('API error:', error);

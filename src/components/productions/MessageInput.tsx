@@ -2,6 +2,7 @@
 
 import { useState, useRef, ClipboardEvent } from 'react';
 import { Link2, User, Calendar, Loader2, Send, X, Clipboard, AlertTriangle } from 'lucide-react';
+import { FetchProgress } from '@/lib/browserFetch';
 
 interface DetectedInfo {
   url: string | null;
@@ -15,9 +16,10 @@ interface MessageInputProps {
   onFetch: (url: string | null, manualText: string | null) => Promise<void>;
   loading: boolean;
   existingWeekId?: string | null;
+  fetchProgress?: FetchProgress | null;
 }
 
-export default function MessageInput({ onFetch, loading, existingWeekId }: MessageInputProps) {
+export default function MessageInput({ onFetch, loading, existingWeekId, fetchProgress }: MessageInputProps) {
   const [text, setText] = useState('');
   const [detected, setDetected] = useState<DetectedInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,9 @@ export default function MessageInput({ onFetch, loading, existingWeekId }: Messa
     setError(null);
   };
 
+  // Loading step message from progress
+  const loadingMessage = fetchProgress?.message || 'טוען לוח עבודה...';
+
   return (
     <div className="space-y-3">
       {/* Input area */}
@@ -124,7 +129,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId }: Messa
           disabled={loading}
         />
 
-        {text && (
+        {text && !loading && (
           <button
             onClick={clearAll}
             className="absolute top-3 left-3 p-1.5 rounded-lg hover:bg-[var(--theme-accent-glow)] transition-colors"
@@ -193,7 +198,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId }: Messa
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>טוען לוח עבודה...</span>
+                  <span>{loadingMessage}</span>
                 </>
               ) : (
                 <>
@@ -215,7 +220,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId }: Messa
       )}
 
       {/* Quick paste button (when no text) */}
-      {!text && !detected && (
+      {!text && !detected && !loading && (
         <button
           onClick={async () => {
             try {
@@ -228,7 +233,6 @@ export default function MessageInput({ onFetch, loading, existingWeekId }: Messa
                 }
               }
             } catch {
-              // Clipboard access denied
               textareaRef.current?.focus();
             }
           }}

@@ -16,18 +16,18 @@ import {
   generateProductionId,
   getHebrewDay,
 } from '@/lib/productionDiff';
+import { parseScheduleHTML, parseManualText } from '@/lib/productionScheduleParser';
+import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
   doc,
   getDoc,
-  setDoc,
-  updateDoc,
   collection,
   getDocs,
   writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Clapperboard, RefreshCw } from 'lucide-react';
+import { Clapperboard, RefreshCw, ChevronDown, ChevronUp, Bug } from 'lucide-react';
 
 export default function ProductionsPage() {
   return (
@@ -48,6 +48,10 @@ function ProductionsContent() {
   const [lastDiff, setLastDiff] = useState<ScheduleDiff | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
+  const [debugHtml, setDebugHtml] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showManualFallback, setShowManualFallback] = useState(false);
 
   // Load existing week data from Firestore
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
@@ -58,7 +62,6 @@ function ProductionsContent() {
 
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        // Load crew subcollection
         const crewRef = collection(db, 'productions', 'global', 'weeks', weekId, 'productions', docSnap.id, 'crew');
         const crewSnapshot = await getDocs(crewRef);
         const crew = crewSnapshot.docs.map(c => c.data() as Production['crew'][0]);
@@ -92,14 +95,12 @@ function ProductionsContent() {
     prods: Production[],
     wStart: string,
     wEnd: string,
-    isUpdate: boolean,
   ) => {
     if (!user) return;
 
     try {
       const batch = writeBatch(db);
 
-      // Update or create week metadata
       const metaRef = doc(db, 'productions', 'global', 'weeks', weekId);
       const metaSnap = await getDoc(metaRef);
 
@@ -125,7 +126,6 @@ function ProductionsContent() {
         });
       }
 
-      // Save each production
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
         const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
@@ -143,7 +143,6 @@ function ProductionsContent() {
           versions: prod.versions || [],
         }, { merge: true });
 
-        // Save crew as subcollection
         for (const crew of prod.crew) {
           const crewId = crew.name.replace(/\s+/g, '_').toLowerCase();
           const crewRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId, 'crew', crewId);
@@ -155,7 +154,6 @@ function ProductionsContent() {
         }
       }
 
-      // Save user-specific reference
       const userScheduleRef = doc(db, 'users', user.uid, 'schedules', weekId);
       batch.set(userScheduleRef, {
         workerName,
@@ -166,135 +164,224 @@ function ProductionsContent() {
       await batch.commit();
     } catch (error) {
       console.error('Error saving to Firestore:', error);
-      // Don't throw - Firestore errors shouldn't break the UI
     }
   }, [user, workerName]);
 
-  // Main fetch handler
+  // Process parsed schedule (shared between URL fetch and manual paste)
+  const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
+    if (!parsed.weekStart) {
+      const now = new Date();
+      const day = now.getDay();
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - day);
+      parsed.weekStart = sunday.toISOString().split('T')[0];
+      const saturday = new Date(sunday);
+      saturday.setDate(sunday.getDate() + 6);
+      parsed.weekEnd = saturday.toISOString().split('T')[0];
+    }
+
+    const weekId = getWeekId(parsed.weekStart);
+    const wName = parsed.workerName || profile?.displayName || '';
+
+    setWorkerName(wName);
+    setWeekStart(parsed.weekStart);
+    setWeekEnd(parsed.weekEnd);
+
+    if (currentWeekId === weekId && productions.length > 0) {
+      const diff = diffSchedules(productions, parsed.productions);
+
+      if (diff.hasChanges) {
+        const updated = applyDiff(productions, parsed.productions, diff, user?.uid || '', wName);
+        setProductions(updated);
+        setLastDiff(diff);
+        setShowSummary(true);
+        await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
+        setStatusMessage(`${diff.changes.length} שינויים עודכנו`);
+      } else {
+        setStatusMessage('אין שינויים חדשים');
+      }
+    } else {
+      const existingProds = await loadExistingWeek(weekId);
+
+      if (existingProds.length > 0) {
+        const diff = diffSchedules(existingProds, parsed.productions);
+
+        if (diff.hasChanges) {
+          const updated = applyDiff(existingProds, parsed.productions, diff, user?.uid || '', wName);
+          setProductions(updated);
+          setLastDiff(diff);
+          setShowSummary(true);
+          await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
+        } else {
+          setProductions(existingProds);
+          setStatusMessage('הלוח כבר עדכני');
+        }
+      } else {
+        const prodsWithIds = parsed.productions.map(p => ({
+          ...p,
+          id: p.id || generateProductionId(p.name, p.date, p.studio),
+          day: p.day || getHebrewDay(p.date),
+          versions: [{
+            timestamp: new Date().toISOString(),
+            changedBy: user?.uid || '',
+            changedByName: wName,
+            changes: [{
+              type: 'ADD_PRODUCTION' as const,
+              productionName: p.name,
+              productionDate: p.date,
+              description: 'הפקה נוספה לראשונה',
+            }],
+          }],
+        }));
+        setProductions(prodsWithIds);
+        await saveToFirestore(weekId, prodsWithIds, parsed.weekStart, parsed.weekEnd);
+        setStatusMessage(`נטען לוח עבודה עם ${prodsWithIds.length} הפקות`);
+      }
+
+      setCurrentWeekId(weekId);
+    }
+  }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
+
+  // Main fetch handler - browser-side with CORS proxy
   const handleFetch = useCallback(async (url: string | null, manualText: string | null) => {
     setLoading(true);
     setStatusMessage(null);
     setLastDiff(null);
     setShowSummary(false);
+    setDebugHtml(null);
+    setShowManualFallback(false);
 
     try {
-      // Call API
-      const response = await fetch('/api/productions/fetch-schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, manualText }),
+      // Manual text input
+      if (manualText && !url) {
+        setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+        const parsed = parseManualText(manualText);
+
+        if (parsed.productions.length === 0) {
+          // Check if it looks like HTML
+          if (manualText.includes('<') && manualText.includes('>')) {
+            // Try parsing as HTML
+            const htmlParsed = parseScheduleHTML(manualText, '');
+            if (htmlParsed.productions.length > 0) {
+              setFetchProgress({ step: 'done', message: getStepMessage('done') });
+              await processSchedule(htmlParsed);
+              return;
+            }
+          }
+          setDebugHtml(manualText.substring(0, 2000));
+          setStatusMessage('לא הצלחתי לחלץ הפקות מהטקסט. נסה להדביק את תוכן הדף המלא.');
+          setShowManualFallback(true);
+          return;
+        }
+
+        setFetchProgress({ step: 'done', message: getStepMessage('done') });
+        await processSchedule(parsed);
+        return;
+      }
+
+      if (!url) {
+        throw new Error('לא סופק לינק');
+      }
+
+      // Browser-side fetch via CORS proxy
+      setFetchProgress({ step: 'detecting', message: getStepMessage('detecting') });
+
+      const result = await fetchScheduleFromBrowser(url, (progress) => {
+        setFetchProgress(progress);
       });
 
-      const result = await response.json();
+      if (result.error || !result.personalHtml) {
+        // Browser fetch failed - try server-side API as fallback
+        setFetchProgress({ step: 'connecting', message: '📡 מנסה דרך השרת...' });
 
-      if (!response.ok) {
-        throw new Error(result.message || 'שגיאה בטעינת הלוח');
-      }
+        try {
+          const apiResponse = await fetch('/api/productions/fetch-schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+          });
 
-      if (result.warning) {
-        setStatusMessage(result.warning);
-      }
+          const apiResult = await apiResponse.json();
 
-      const parsed: ParsedSchedule = result.data;
-
-      if (!parsed.weekStart) {
-        // If no week dates detected, use current week
-        const now = new Date();
-        const day = now.getDay();
-        const sunday = new Date(now);
-        sunday.setDate(now.getDate() - day);
-        parsed.weekStart = sunday.toISOString().split('T')[0];
-        const saturday = new Date(sunday);
-        saturday.setDate(sunday.getDate() + 6);
-        parsed.weekEnd = saturday.toISOString().split('T')[0];
-      }
-
-      const weekId = getWeekId(parsed.weekStart);
-      const wName = parsed.workerName || profile?.displayName || '';
-
-      setWorkerName(wName);
-      setWeekStart(parsed.weekStart);
-      setWeekEnd(parsed.weekEnd);
-
-      // Check if same week exists
-      if (currentWeekId === weekId && productions.length > 0) {
-        // DIFF mode - incremental update
-        const diff = diffSchedules(productions, parsed.productions);
-
-        if (diff.hasChanges) {
-          const updated = applyDiff(
-            productions,
-            parsed.productions,
-            diff,
-            user?.uid || '',
-            wName,
-          );
-          setProductions(updated);
-          setLastDiff(diff);
-          setShowSummary(true);
-
-          // Save to Firestore
-          await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd, true);
-          setStatusMessage(`${diff.changes.length} שינויים עודכנו`);
-        } else {
-          setStatusMessage('אין שינויים חדשים');
-        }
-      } else {
-        // First load or new week
-        const existingProds = await loadExistingWeek(weekId);
-
-        if (existingProds.length > 0) {
-          // Existing data in Firestore - diff against it
-          const diff = diffSchedules(existingProds, parsed.productions);
-
-          if (diff.hasChanges) {
-            const updated = applyDiff(
-              existingProds,
-              parsed.productions,
-              diff,
-              user?.uid || '',
-              wName,
-            );
-            setProductions(updated);
-            setLastDiff(diff);
-            setShowSummary(true);
-            await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd, true);
-          } else {
-            setProductions(existingProds);
-            setStatusMessage('הלוח כבר עדכני');
+          if (apiResponse.ok && apiResult.success && apiResult.data.productions.length > 0) {
+            setFetchProgress({ step: 'done', message: getStepMessage('done') });
+            await processSchedule(apiResult.data);
+            return;
           }
-        } else {
-          // Completely new week
-          const prodsWithIds = parsed.productions.map(p => ({
-            ...p,
-            id: p.id || generateProductionId(p.name, p.date, p.studio),
-            day: p.day || getHebrewDay(p.date),
-            versions: [{
-              timestamp: new Date().toISOString(),
-              changedBy: user?.uid || '',
-              changedByName: wName,
-              changes: [{
-                type: 'ADD_PRODUCTION' as const,
-                productionName: p.name,
-                productionDate: p.date,
-                description: `הפקה נוספה לראשונה`,
-              }],
-            }],
-          }));
-          setProductions(prodsWithIds);
-          await saveToFirestore(weekId, prodsWithIds, parsed.weekStart, parsed.weekEnd, false);
-          setStatusMessage(`נטען לוח עבודה עם ${prodsWithIds.length} הפקות`);
+        } catch {
+          // Server fallback also failed
         }
 
-        setCurrentWeekId(weekId);
+        // Both failed - show manual fallback
+        setFetchProgress({ step: 'error', message: '❌ לא הצלחתי להתחבר' });
+        setShowManualFallback(true);
+        setStatusMessage(result.error || 'לא הצלחתי לגשת ללינק');
+        return;
       }
+
+      // Successfully fetched HTML - parse it
+      setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+
+      // Save raw HTML for debug
+      setDebugHtml(result.personalHtml.substring(0, 5000));
+
+      const parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
+
+      if (parsed.productions.length === 0) {
+        setStatusMessage('לא נמצאו הפקות. ייתכן שהפורמט של הדף שונה ממה שציפיתי.');
+        setShowManualFallback(true);
+        setFetchProgress({ step: 'error', message: '⚠️ לא נמצאו הפקות' });
+        return;
+      }
+
+      setFetchProgress({ step: 'done', message: getStepMessage('done') });
+      await processSchedule(parsed);
     } catch (error) {
       console.error('Fetch error:', error);
-      throw error; // Let MessageInput handle the error display
+      setFetchProgress({ step: 'error', message: '❌ שגיאה' });
+      throw error;
     } finally {
       setLoading(false);
+      // Clear progress after 3 seconds
+      setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
+  }, [processSchedule]);
+
+  // Handle manual HTML paste
+  const handleManualHtmlPaste = useCallback(async (html: string) => {
+    setLoading(true);
+    setShowManualFallback(false);
+    setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+
+    try {
+      setDebugHtml(html.substring(0, 5000));
+
+      // Try HTML parse first
+      const parsed = parseScheduleHTML(html, '');
+      if (parsed.productions.length > 0) {
+        setFetchProgress({ step: 'done', message: getStepMessage('done') });
+        await processSchedule(parsed);
+        return;
+      }
+
+      // Try text parse
+      const textParsed = parseManualText(html);
+      if (textParsed.productions.length > 0) {
+        setFetchProgress({ step: 'done', message: getStepMessage('done') });
+        await processSchedule(textParsed);
+        return;
+      }
+
+      setStatusMessage('לא הצלחתי לחלץ הפקות. נסה להדביק את כל תוכן הדף (Ctrl+A, Ctrl+C).');
+      setFetchProgress({ step: 'error', message: '⚠️ לא נמצאו הפקות' });
+    } catch (error) {
+      console.error('Manual parse error:', error);
+      setStatusMessage('שגיאה בעיבוד הטקסט');
+    } finally {
+      setLoading(false);
+      setTimeout(() => setFetchProgress(null), 3000);
+    }
+  }, [processSchedule]);
 
   // Reload from Firestore
   const handleReload = async () => {
@@ -349,8 +436,28 @@ function ProductionsContent() {
           onFetch={handleFetch}
           loading={loading}
           existingWeekId={currentWeekId}
+          fetchProgress={fetchProgress}
         />
       </div>
+
+      {/* Fetch progress indicator */}
+      {fetchProgress && loading && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{
+          background: 'var(--theme-bg-secondary)',
+          border: '1px solid var(--theme-border)',
+        }}>
+          <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{
+            borderColor: 'var(--theme-accent)',
+            borderTopColor: 'transparent',
+          }} />
+          <span style={{ color: 'var(--theme-text)' }}>{fetchProgress.message}</span>
+        </div>
+      )}
+
+      {/* Manual fallback instructions */}
+      {showManualFallback && (
+        <ManualFallback onSubmit={handleManualHtmlPaste} loading={loading} />
+      )}
 
       {/* Status message */}
       {statusMessage && !showSummary && (
@@ -382,7 +489,7 @@ function ProductionsContent() {
       )}
 
       {/* Empty state */}
-      {!loading && productions.length === 0 && !statusMessage && (
+      {!loading && productions.length === 0 && !statusMessage && !showManualFallback && (
         <div className="text-center py-16">
           <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
             <Clapperboard className="w-10 h-10 text-orange-400/50" />
@@ -395,6 +502,93 @@ function ProductionsContent() {
           </p>
         </div>
       )}
+
+      {/* Debug section */}
+      {debugHtml && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl transition-all hover:bg-[var(--theme-accent-glow)]"
+            style={{ color: 'var(--theme-text-secondary)' }}
+          >
+            <Bug className="w-3.5 h-3.5" />
+            <span>תוכן HTML גולמי (דיבאג)</span>
+            {showDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+
+          {showDebug && (
+            <div className="mt-2 p-4 rounded-xl overflow-x-auto max-h-[400px] overflow-y-auto" style={{
+              background: 'var(--theme-bg)',
+              border: '1px solid var(--theme-border)',
+            }}>
+              <pre className="text-xs whitespace-pre-wrap break-all font-mono" dir="ltr" style={{
+                color: 'var(--theme-text-secondary)',
+              }}>
+                {debugHtml}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Manual fallback component
+function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => void; loading: boolean }) {
+  const [manualHtml, setManualHtml] = useState('');
+
+  return (
+    <div className="mb-6 rounded-xl border p-4" style={{
+      background: 'var(--theme-bg-secondary)',
+      borderColor: 'rgba(251, 191, 36, 0.3)',
+    }}>
+      <div className="mb-3">
+        <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--theme-text)' }}>
+          ⚠️ לא הצלחתי להתחבר לשרת הרצליה
+        </h3>
+        <div className="text-xs space-y-1" style={{ color: 'var(--theme-text-secondary)' }}>
+          <p>אנא בצע את הצעדים הבאים:</p>
+          <ol className="list-decimal pr-5 space-y-0.5">
+            <li>פתח את הלינק בדפדפן</li>
+            <li>סמן &quot;הצגת מחלקה&quot; אם רלוונטי</li>
+            <li>
+              לחץ <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+A</kbd>{' '}
+              ואז <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+C</kbd>
+            </li>
+            <li>חזור לכאן והדבק בשדה למטה</li>
+          </ol>
+        </div>
+      </div>
+
+      <textarea
+        value={manualHtml}
+        onChange={(e) => setManualHtml(e.target.value)}
+        placeholder="הדבק כאן את תוכן הדף..."
+        className="w-full min-h-[120px] p-3 text-sm rounded-xl resize-none bg-transparent outline-none border"
+        style={{
+          color: 'var(--theme-text)',
+          borderColor: 'var(--theme-border)',
+          background: 'var(--theme-bg)',
+        }}
+        dir="rtl"
+        disabled={loading}
+      />
+
+      <button
+        onClick={() => {
+          if (manualHtml.trim()) {
+            onSubmit(manualHtml.trim());
+          }
+        }}
+        disabled={loading || !manualHtml.trim()}
+        className="mt-2 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50"
+        style={{
+          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+        }}
+      >
+        {loading ? '⏳ מעבד...' : '📋 עבד תוכן מודבק'}
+      </button>
     </div>
   );
 }
