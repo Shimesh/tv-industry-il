@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
@@ -25,6 +25,7 @@ const navLinks = [
 
 export default function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -105,7 +106,7 @@ export default function Navigation() {
               </button>
 
               {themeMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border p-2 shadow-xl z-50" style={{
+                <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border p-2 shadow-xl z-[100]" style={{
                   background: 'var(--theme-bg-secondary)',
                   borderColor: 'var(--theme-border)',
                 }}>
@@ -149,7 +150,7 @@ export default function Navigation() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-50 overflow-hidden" style={{
+                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-[100]" style={{
                     background: 'var(--theme-bg-secondary)',
                     borderColor: 'var(--theme-border)',
                   }}>
@@ -190,7 +191,7 @@ export default function Navigation() {
                       <div className="my-1 border-t" style={{ borderColor: 'var(--theme-border)' }} />
 
                       <button
-                        onClick={() => { logout(); setUserMenuOpen(false); }}
+                        onClick={async () => { setUserMenuOpen(false); await logout(); router.push('/login'); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
                       >
                         <LogOut className="w-4 h-4" />

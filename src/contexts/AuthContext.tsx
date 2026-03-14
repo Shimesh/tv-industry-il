@@ -178,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     await signOut(auth);
+    setUser(null);
     setProfile(null);
   };
 

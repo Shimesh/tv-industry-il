@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Search, Users, User, Hash } from 'lucide-react';
-import UserAvatar from '@/components/UserAvatar';
-import { UserProfile } from '@/contexts/AuthContext';
+import { X, Search, Users, User } from 'lucide-react';
+import type { UserProfile } from '@/contexts/AuthContext';
 
 interface NewChatModalProps {
   users: UserProfile[];
@@ -21,9 +20,11 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
 
   const filteredUsers = users
     .filter(u => u.uid !== currentUserId)
-    .filter(u => u.displayName.toLowerCase().includes(search.toLowerCase()) ||
-                 u.role?.toLowerCase().includes(search.toLowerCase()) ||
-                 u.department?.toLowerCase().includes(search.toLowerCase()));
+    .filter(u =>
+      u.displayName.toLowerCase().includes(search.toLowerCase()) ||
+      u.role?.toLowerCase().includes(search.toLowerCase()) ||
+      u.department?.toLowerCase().includes(search.toLowerCase())
+    );
 
   const toggleUser = (userId: string) => {
     setSelectedUsers(prev =>
@@ -38,25 +39,28 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden"
-        style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+        className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden border border-[#2A3942]"
+        style={{ backgroundColor: '#202C33' }}
+        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--theme-border)]">
-          <h2 className="text-lg font-bold text-[var(--theme-text)]">שיחה חדשה</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--theme-accent-glow)] transition-all">
-            <X className="w-5 h-5 text-[var(--theme-text-secondary)]" />
+        <div className="flex items-center justify-between px-5 py-4 bg-[#00A884]">
+          <h2 className="text-[17px] font-bold text-white">שיחה חדשה</h2>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-white/20 transition-colors">
+            <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
         {/* Mode Toggle */}
-        <div className="flex gap-1 p-3 border-b border-[var(--theme-border)]">
+        <div className="flex gap-1 p-3 border-b border-[#2A3942]">
           <button
             onClick={() => { setMode('private'); setSelectedUsers([]); }}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-              mode === 'private' ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mode === 'private'
+                ? 'bg-[#00A884] text-white'
+                : 'text-[#8696a0] hover:bg-[#2A3942]'
             }`}
           >
             <User className="w-4 h-4" />
@@ -64,8 +68,10 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
           </button>
           <button
             onClick={() => setMode('group')}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-              mode === 'group' ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mode === 'group'
+                ? 'bg-[#00A884] text-white'
+                : 'text-[#8696a0] hover:bg-[#2A3942]'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -75,14 +81,13 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
 
         {/* Group Name */}
         {mode === 'group' && (
-          <div className="p-3 border-b border-[var(--theme-border)]">
+          <div className="p-3 border-b border-[#2A3942]">
             <input
               type="text"
               value={groupName}
               onChange={e => setGroupName(e.target.value)}
               placeholder="שם הקבוצה..."
-              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
-              style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696a0] focus:ring-1 focus:ring-[#00A884] transition"
             />
           </div>
         )}
@@ -90,14 +95,13 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
         {/* Search */}
         <div className="p-3">
           <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--theme-text-secondary)]" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="חיפוש משתמשים..."
-              className="w-full pr-10 pl-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
+              className="w-full pr-10 pl-3 py-2 rounded-lg text-sm outline-none bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696a0] focus:ring-1 focus:ring-[#00A884] transition"
             />
           </div>
         </div>
@@ -111,10 +115,10 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
               return (
                 <span
                   key={uid}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-[var(--theme-accent-glow)] text-[var(--theme-accent)]"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-[#00A884] text-white"
                 >
-                  {u.displayName}
-                  <button onClick={() => toggleUser(uid)} className="hover:text-red-400">
+                  {u.displayName.split(' ')[0]}
+                  <button onClick={() => toggleUser(uid)} className="hover:text-red-200 transition-colors">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -124,36 +128,39 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
         )}
 
         {/* User List */}
-        <div className="max-h-64 overflow-y-auto border-t border-[var(--theme-border)]">
+        <div className="max-h-[300px] overflow-y-auto border-t border-[#2A3942]">
           {filteredUsers.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-sm text-[var(--theme-text-secondary)]">לא נמצאו משתמשים</p>
+            <div className="p-8 text-center">
+              <p className="text-sm text-[#8696a0]">לא נמצאו משתמשים</p>
             </div>
           ) : (
             filteredUsers.map(u => (
               <button
                 key={u.uid}
-                onClick={() => {
-                  if (mode === 'private') {
-                    onCreatePrivate(u.uid);
-                  } else {
-                    toggleUser(u.uid);
-                  }
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 transition-all hover:bg-[var(--theme-accent-glow)] ${
-                  selectedUsers.includes(u.uid) ? 'bg-[var(--theme-accent-glow)]' : ''
+                onClick={() => mode === 'private' ? onCreatePrivate(u.uid) : toggleUser(u.uid)}
+                className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[#2A3942] ${
+                  selectedUsers.includes(u.uid) ? 'bg-[#2A394280]' : ''
                 }`}
               >
-                <UserAvatar name={u.displayName} photoURL={u.photoURL} size="sm" isOnline={u.isOnline} />
+                {u.photoURL ? (
+                  <img src={u.photoURL} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-[#6B7C85] flex items-center justify-center shrink-0 text-white font-bold">
+                    {u.displayName.charAt(0)}
+                  </div>
+                )}
                 <div className="flex-1 text-right min-w-0">
-                  <p className="text-sm font-medium text-[var(--theme-text)] truncate">{u.displayName}</p>
-                  <p className="text-xs text-[var(--theme-text-secondary)] truncate">
+                  <p className="text-[14px] font-medium text-[#E9EDEF] truncate">{u.displayName}</p>
+                  <p className="text-[12px] text-[#8696a0] truncate">
                     {u.role}{u.role && u.department ? ' • ' : ''}{u.department}
                   </p>
                 </div>
+                {u.isOnline && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#00A884] shrink-0" />
+                )}
                 {mode === 'group' && selectedUsers.includes(u.uid) && (
-                  <div className="w-5 h-5 rounded-full bg-[var(--theme-accent)] flex items-center justify-center">
-                    <span className="text-white text-xs">✓</span>
+                  <div className="w-5 h-5 rounded-full bg-[#00A884] flex items-center justify-center shrink-0">
+                    <span className="text-white text-xs font-bold">✓</span>
                   </div>
                 )}
               </button>
@@ -163,11 +170,11 @@ export default function NewChatModal({ users, currentUserId, onCreatePrivate, on
 
         {/* Create Group Button */}
         {mode === 'group' && (
-          <div className="p-3 border-t border-[var(--theme-border)]">
+          <div className="p-3 border-t border-[#2A3942]">
             <button
               onClick={handleCreateGroup}
               disabled={!groupName.trim() || selectedUsers.length === 0}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white text-sm font-bold hover:shadow-lg transition-all disabled:opacity-30"
+              className="w-full py-3 rounded-xl bg-[#00A884] text-white text-sm font-bold hover:bg-[#06CF9C] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               צור קבוצה ({selectedUsers.length} חברים)
             </button>
