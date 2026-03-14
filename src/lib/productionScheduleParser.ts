@@ -1,17 +1,6 @@
 // Parser for Herzliya production schedule system
-// Handles pasted text from Ctrl+A, Ctrl+C of the schedule web page
-//
-// Herzliya format (when pasted):
-//   שלום [worker name]
-//   לוח עבודה לתאריכים DD/MM/YYYY - DD/MM/YYYY
-//
-//   DD/MM/YYYY                          ← date header
-//   END_TIME  START_TIME  PROD_NAME  STUDIO   ← production (2 time values)
-//   CrewName - Role                     ← crew member (dash separator)
-//   CrewName - Role - StartTime - EndTime
-//
-//   DD/MM/YYYY                          ← next date
-//   ...
+// Primary: DOMParser-based HTML parser for the real Herzliya calendar structure
+// Fallback: Text parser for Ctrl+A, Ctrl+C pasted plain text
 
 import { Production, CrewMember, ParsedSchedule, generateProductionId, getHebrewDay } from './productionDiff';
 
@@ -27,54 +16,270 @@ function convertDateToISO(dateStr: string): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Check if a line is a date header. Returns DD/MM/YYYY string or null. */
-function extractDateHeader(line: string): string | null {
-  const trimmed = line.trim();
-  // Must NOT contain time patterns (HH:MM) – that would be a production line
-  if (/\d{1,2}:\d{2}/.test(trimmed)) return null;
-
-  // Match DD/MM/YYYY possibly followed by day name, whitespace, etc.
-  const dateMatch = trimmed.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
-  if (dateMatch) return dateMatch[1];
-
-  return null;
+/** Sort two time strings: returns [earlier, later] */
+function sortTimes(t1: string, t2: string): [string, string] {
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  return toMinutes(t1) <= toMinutes(t2) ? [t1, t2] : [t2, t1];
 }
+
+/** Extract studio from production name */
+function extractStudioFromName(name: string): { studio: string; remaining: string } {
+  const match = name.match(/(?:אולפן|סטודיו|studio|st\.?)\s*(\d+\w?)/i);
+  if (match) {
+    return {
+      studio: match[0].trim(),
+      remaining: name.replace(match[0], '').replace(/\s{2,}/g, ' ').trim(),
+    };
+  }
+  return { studio: '', remaining: name };
+}
+
+/** Check if HTML string is from the Herzliya schedule system */
+export function isHerzliyaHTML(text: string): boolean {
+  return (
+    text.includes('calendar-body') ||
+    text.includes('calendar-header') ||
+    text.includes('openmd2') ||
+    text.includes('day-cell') ||
+    text.includes('sat-cell')
+  );
+}
+
+// ════════════════════════════════════════════
+// PRIMARY PARSER: DOMParser-based HTML parser
+// ════════════════════════════════════════════
+
+/** Parse Herzliya schedule HTML using browser DOMParser */
+export function parseHerzliyaHTML(html: string, currentUserName?: string): ParsedSchedule {
+  // Guard: DOMParser only available in browser
+  if (typeof DOMParser === 'undefined') {
+    return parseScheduleHTML(html, '');
+  }
+
+  // Quick check: is this actually Herzliya HTML?
+  if (!isHerzliyaHTML(html)) {
+    return parseScheduleHTML(html, '');
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // ── Step 1: Extract dates from calendar header ──
+  const headerDivs = doc.querySelectorAll('.calendar-header > div');
+  const weekDays: { dayName: string; isoDate: string }[] = [];
+
+  headerDivs.forEach(div => {
+    const text = div.textContent || '';
+    const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dateMatch) {
+      const dayName = text.replace(/\d{1,2}\/\d{1,2}\/\d{4}/, '').trim();
+      const day = dateMatch[1].padStart(2, '0');
+      const month = dateMatch[2].padStart(2, '0');
+      const year = dateMatch[3];
+      weekDays.push({
+        dayName,
+        isoDate: `${year}-${month}-${day}`,
+      });
+    }
+  });
+
+  if (weekDays.length === 0) {
+    // No calendar header found – fall back to text parser
+    return parseScheduleHTML(html, '');
+  }
+
+  // ── Step 2: Extract worker name ──
+  let workerName = '';
+  const bodyText = doc.body?.textContent || '';
+  const nameMatch = bodyText.match(/שלום\s+([^\n,]+)/) || bodyText.match(/עובד[:\s]+([^\n]+)/);
+  if (nameMatch) {
+    workerName = nameMatch[1].trim();
+  }
+
+  // ── Step 3: Extract productions from day cells ──
+  const calendarBody = doc.querySelector('.calendar-body');
+  if (!calendarBody) {
+    return parseScheduleHTML(html, '');
+  }
+
+  const dayCells = calendarBody.querySelectorAll('.day-cell, .sat-cell');
+  const productions: Production[] = [];
+
+  dayCells.forEach((cell, dayIndex) => {
+    const dayInfo = weekDays[dayIndex];
+    if (!dayInfo) return;
+
+    const eventDivs = cell.querySelectorAll('.event, .sat');
+
+    eventDivs.forEach(eventDiv => {
+      // Get production ID from onclick
+      const onclickAttr = eventDiv.getAttribute('onclick') || '';
+      const idMatch = onclickAttr.match(/openmd2\((\d+)\)/);
+      const herzliyaId = idMatch ? parseInt(idMatch[1]) : 0;
+
+      // Skip empty placeholders (id=0)
+      if (herzliyaId === 0) return;
+
+      // Check if this is current user's highlighted shift (.sat class on the event)
+      const isHighlightedShift = eventDiv.classList.contains('sat');
+
+      // Get production name from red font
+      const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
+      const rawProductionName = nameFont?.textContent?.trim() || '';
+      if (!rawProductionName) return;
+
+      // Parse crew from innerHTML (split by <br>)
+      const innerHTML = eventDiv.innerHTML;
+      const parts = innerHTML.split(/<br\s*\/?>/i);
+
+      const crew: CrewMember[] = [];
+      let productionStartTime = '';
+      let productionEndTime = '';
+
+      // Skip first part (production name in <font> tag)
+      for (let i = 1; i < parts.length; i++) {
+        const text = parts[i].replace(/<[^>]+>/g, '').trim();
+        if (!text) continue;
+
+        // Try full crew format: "name - role time1 time2"
+        // or "name - role time1 -time2"
+        const crewWithTimes = text.match(
+          /^(.+?)\s*-\s*(.+?)\s+(\d{1,2}:\d{2})\s*-?\s*(\d{1,2}:\d{2})/
+        );
+
+        if (crewWithTimes) {
+          const memberName = crewWithTimes[1].trim();
+          const role = crewWithTimes[2].trim();
+          const time1 = crewWithTimes[3];
+          const time2 = crewWithTimes[4];
+          const [s, e] = sortTimes(time1, time2);
+
+          // Set production times from first crew member
+          if (!productionStartTime) {
+            productionStartTime = s;
+            productionEndTime = e;
+          }
+
+          // Check if this is the current user
+          const isCrewCurrentUser = matchesUserName(memberName, currentUserName);
+
+          crew.push({
+            name: memberName,
+            role,
+            roleDetail: '',
+            phone: '',
+            startTime: s,
+            endTime: e,
+            isCurrentUser: isCrewCurrentUser,
+          });
+          continue;
+        }
+
+        // Try crew without times: "name - role"
+        const crewNoTimes = text.match(/^(.+?)\s*-\s*(.+)$/);
+        if (crewNoTimes) {
+          const memberName = crewNoTimes[1].trim();
+          const role = crewNoTimes[2].trim();
+
+          if (memberName.length >= 2 && /[א-ת]/.test(memberName)) {
+            crew.push({
+              name: memberName,
+              role,
+              roleDetail: '',
+              phone: '',
+              startTime: '',
+              endTime: '',
+              isCurrentUser: matchesUserName(memberName, currentUserName),
+            });
+          }
+        }
+      }
+
+      // Extract studio from name
+      const { studio, remaining: cleanName } = extractStudioFromName(rawProductionName);
+      const finalName = cleanName || rawProductionName;
+
+      // Determine isCurrentUserShift
+      const isCurrentUserShift = isHighlightedShift || crew.some(c => c.isCurrentUser);
+
+      productions.push({
+        id: generateProductionId(finalName, dayInfo.isoDate, studio),
+        herzliyaId,
+        name: finalName,
+        studio,
+        date: dayInfo.isoDate,
+        day: dayInfo.dayName || getHebrewDay(dayInfo.isoDate),
+        startTime: productionStartTime,
+        endTime: productionEndTime,
+        status: 'scheduled',
+        crew,
+        isCurrentUserShift,
+      });
+    });
+  });
+
+  const weekStart = weekDays[0]?.isoDate || '';
+  const weekEnd = weekDays[weekDays.length - 1]?.isoDate || '';
+
+  return { workerName, weekStart, weekEnd, productions };
+}
+
+/** Fuzzy match crew member name against current user name */
+function matchesUserName(crewName: string, currentUserName?: string): boolean {
+  if (!currentUserName) return false;
+  if (crewName === currentUserName) return true;
+  // Check partial match (first name)
+  const crewFirst = crewName.split(' ')[0];
+  const userFirst = currentUserName.split(' ')[0];
+  if (crewFirst.length >= 2 && userFirst.length >= 2) {
+    if (crewName.includes(userFirst) || currentUserName.includes(crewFirst)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ════════════════════════════════════════
+// FALLBACK: Text-based parser
+// ════════════════════════════════════════
 
 /** Find all HH:MM time patterns in a string */
 function findTimes(line: string): string[] {
   return [...line.matchAll(/\b(\d{1,2}:\d{2})\b/g)].map(m => m[1]);
 }
 
-/** Extract studio from text. Returns studio name and remaining text. */
+/** Extract studio from text */
 function extractStudio(text: string): { studio: string; remaining: string } {
-  // "אולפן 5" / "אולפן 5B" / "סטודיו 7" / "studio 5" / "st. 5"
   const match = text.match(/(?:אולפן|סטודיו|studio|st\.?)\s*(\d+\w?)/i);
   if (match) {
-    return {
-      studio: match[0].trim(),
-      remaining: text.replace(match[0], '').trim(),
-    };
+    return { studio: match[0].trim(), remaining: text.replace(match[0], '').trim() };
   }
   return { studio: '', remaining: text };
 }
 
-/** Check if a line is a crew member (has dash/en-dash separator, starts with a name) */
+/** Check if line is a date header */
+function extractDateHeader(line: string): string | null {
+  const trimmed = line.trim();
+  if (/\d{1,2}:\d{2}/.test(trimmed)) return null;
+  const dateMatch = trimmed.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+  return dateMatch ? dateMatch[1] : null;
+}
+
+/** Check if line is a crew member */
 function isCrewLine(line: string): boolean {
   const trimmed = line.trim();
-  // Must NOT start with a time pattern (production lines start with times)
   if (/^\d{1,2}:\d{2}/.test(trimmed)) return false;
-  // Must have a dash separator surrounded by whitespace
   if (!/\s+[-–—]\s+/.test(trimmed) && !/\t[-–—]\t/.test(trimmed)) return false;
-
   const parts = trimmed.split(/\s+[-–—]\s+|\t[-–—]\t/);
   if (parts.length < 2) return false;
-
   const name = parts[0].trim();
-  // Name must be ≥ 2 chars and contain Hebrew letters
   return name.length >= 2 && /[א-ת]/.test(name);
 }
 
-/** Parse a crew member from a line like "שם - תפקיד" or "שם - תפקיד - 08:00 - 16:00" */
+/** Parse crew member from text line */
 function parseCrewMember(line: string): CrewMember | null {
   const parts = line.split(/\s+[-–—]\s+|\t[-–—]\t/);
   const name = parts[0]?.trim();
@@ -84,7 +289,6 @@ function parseCrewMember(line: string): CrewMember | null {
   let startTime = '';
   let endTime = '';
 
-  // Look for times in remaining parts
   for (let i = 2; i < parts.length; i++) {
     const timeMatch = parts[i].trim().match(/^(\d{1,2}:\d{2})$/);
     if (timeMatch) {
@@ -93,40 +297,33 @@ function parseCrewMember(line: string): CrewMember | null {
     }
   }
 
-  // Also try extracting phone
   const phoneMatch = line.match(/(0\d{1,2}[-\s]?\d{3}[-\s]?\d{4})/);
   const phone = phoneMatch ? phoneMatch[1].replace(/[-\s]/g, '') : '';
 
   return { name, role, roleDetail: '', phone, startTime, endTime };
 }
 
-/** Check if line is a header/noise line to skip */
+/** Check if line is header/noise */
 function isHeaderLine(line: string): boolean {
   if (line.match(/שלום\s+/)) return true;
   if (line.match(/עובד[:\s]+/)) return true;
   if (line.match(/לוח\s*עבודה/)) return true;
-  // Week range line "DD/MM/YYYY - DD/MM/YYYY"
   if (line.match(/\d{1,2}\/\d{1,2}\/\d{4}\s*[-–]\s*\d{1,2}\/\d{1,2}\/\d{4}/)) return true;
-  // Pure separator lines
   if (/^[-–=_\s*]+$/.test(line)) return true;
-  // Very short non-meaningful lines
   if (line.length <= 1) return true;
   return false;
 }
 
-// ────────── Main Parsers ──────────
-
-/** Parse pasted text from the Herzliya schedule system */
+/** Parse pasted plain text from the schedule system */
 export function parseManualText(text: string): ParsedSchedule {
   let workerName = '';
   let weekStart = '';
   let weekEnd = '';
 
-  // Normalize line endings
   const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = normalizedText.split('\n');
 
-  // ── Pre-pass: extract worker name & week range ──
+  // Pre-pass: extract worker name & week range
   for (const line of lines) {
     if (!workerName) {
       const nameMatch = line.match(/שלום\s+([^\n,<]+)/) || line.match(/עובד[:\s]+([^\n<]+)/);
@@ -142,7 +339,7 @@ export function parseManualText(text: string): ParsedSchedule {
     if (workerName && weekStart) break;
   }
 
-  // ── Main pass: parse productions line by line ──
+  // Main pass: parse productions
   let currentDate = '';
   let currentProduction: Production | null = null;
   const productions: Production[] = [];
@@ -157,11 +354,9 @@ export function parseManualText(text: string): ParsedSchedule {
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
-
-    // Skip known header/noise lines
     if (isHeaderLine(line)) continue;
 
-    // ── 1. Date header? ──
+    // 1. Date header?
     const dateStr = extractDateHeader(line);
     if (dateStr) {
       flushProduction();
@@ -169,45 +364,30 @@ export function parseManualText(text: string): ParsedSchedule {
       continue;
     }
 
-    // ── 2. Crew member? (dash separator, starts with Hebrew name, NOT a time) ──
+    // 2. Crew member?
     if (isCrewLine(line) && currentProduction) {
       const crew = parseCrewMember(line);
       if (crew) {
-        // Avoid duplicate crew members in the same production
         const exists = currentProduction.crew.find(c => c.name === crew.name);
-        if (!exists) {
-          currentProduction.crew.push(crew);
-        }
+        if (!exists) currentProduction.crew.push(crew);
       }
       continue;
     }
 
-    // ── 3. Production line? (has 2+ time values under a known date) ──
+    // 3. Production line (2+ times)?
     const times = findTimes(line);
     if (times.length >= 2 && currentDate) {
       flushProduction();
 
-      // Herzliya format: first time = end, second = start
       const endTime = times[0];
       const startTime = times[1];
 
-      // Remove ALL time patterns to get production name + studio
       let rest = line;
-      for (const t of times) {
-        rest = rest.replace(t, '');
-      }
-      // Clean up leftover separators/whitespace
+      for (const t of times) rest = rest.replace(t, '');
       rest = rest.replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-      // Extract studio
       const { studio, remaining } = extractStudio(rest);
-
-      // Clean up name
-      let name = remaining
-        .replace(/^[\s\-–|,.:]+|[\s\-–|,.:]+$/g, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-
+      let name = remaining.replace(/^[\s\-–|,.:]+|[\s\-–|,.:]+$/g, '').replace(/\s{2,}/g, ' ').trim();
       if (!name) name = 'הפקה';
 
       currentProduction = {
@@ -224,7 +404,7 @@ export function parseManualText(text: string): ParsedSchedule {
       continue;
     }
 
-    // ── 4. Single-time line (fallback: production with only one time shown) ──
+    // 4. Single-time fallback
     if (times.length === 1 && currentDate && !currentProduction) {
       const time = times[0];
       let rest = line.replace(time, '').replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
@@ -243,16 +423,12 @@ export function parseManualText(text: string): ParsedSchedule {
           crew: [],
         };
       }
-      continue;
     }
-
-    // Lines that don't match any pattern are silently skipped
   }
 
-  // Flush remaining production
   flushProduction();
 
-  // ── Infer week range if not found ──
+  // Infer week range
   if (!weekStart && productions.length > 0) {
     const dates = productions.map(p => p.date).sort();
     const firstDate = new Date(dates[0]);
@@ -268,23 +444,25 @@ export function parseManualText(text: string): ParsedSchedule {
   return { workerName, weekStart, weekEnd, productions };
 }
 
-/** Parse HTML from the schedule system (strips tags → delegates to text parser) */
+/** Parse HTML by stripping tags → text parser (server-side compatible) */
 export function parseScheduleHTML(personalHtml: string, deptHtml: string): ParsedSchedule {
-  // If not HTML, use text parser directly
   if (!personalHtml.includes('<') || !personalHtml.includes('>')) {
     return parseManualText(personalHtml);
   }
 
-  // Strip HTML → plain text → parse
+  // Try DOMParser first (browser only)
+  if (typeof DOMParser !== 'undefined' && isHerzliyaHTML(personalHtml)) {
+    const result = parseHerzliyaHTML(personalHtml);
+    if (result.productions.length > 0) return result;
+  }
+
+  // Fallback: strip HTML → text parser
   const textContent = stripHtml(personalHtml);
   const result = parseManualText(textContent);
 
-  // If we got productions and there's a dept HTML, enhance with dept crew data
   if (result.productions.length > 0 && deptHtml) {
     const deptText = stripHtml(deptHtml);
     const deptResult = parseManualText(deptText);
-
-    // Merge crew from dept view into matching productions
     for (const deptProd of deptResult.productions) {
       const matchingProd = result.productions.find(
         p => p.name === deptProd.name && p.date === deptProd.date
@@ -292,9 +470,7 @@ export function parseScheduleHTML(personalHtml: string, deptHtml: string): Parse
       if (matchingProd && deptProd.crew.length > 0) {
         for (const crew of deptProd.crew) {
           const exists = matchingProd.crew.find(c => c.name === crew.name);
-          if (!exists) {
-            matchingProd.crew.push(crew);
-          }
+          if (!exists) matchingProd.crew.push(crew);
         }
       }
     }

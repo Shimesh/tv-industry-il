@@ -16,7 +16,7 @@ import {
   generateProductionId,
   getHebrewDay,
 } from '@/lib/productionDiff';
-import { parseScheduleHTML, parseManualText } from '@/lib/productionScheduleParser';
+import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
   doc,
@@ -328,23 +328,46 @@ function ProductionsContent() {
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
   // Main fetch handler - browser-side with CORS proxy
-  const handleFetch = useCallback(async (url: string | null, manualText: string | null) => {
+  const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
     setLoading(true);
     setStatusMessage(null);
     setLastDiff(null);
     setShowSummary(false);
     setShowManualFallback(false);
 
+    const userName = profile?.displayName || '';
+
     try {
+      // Raw HTML from clipboard (Herzliya page Ctrl+A Ctrl+C)
+      if (rawHtml) {
+        setFetchProgress({ step: 'parsing', message: '⚙️ מעבד HTML של לוח הרצליה...' });
+        const parsed = parseHerzliyaHTML(rawHtml, userName);
+        if (parsed.productions.length > 0) {
+          setFetchProgress({ step: 'done', message: getStepMessage('done') });
+          await processSchedule(parsed);
+          return;
+        }
+        // Fall through to text parsing
+      }
+
       // Manual text input
       if (manualText && !url) {
         setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+
+        // Check if text is Herzliya HTML
+        if (isHerzliyaHTML(manualText)) {
+          const htmlParsed = parseHerzliyaHTML(manualText, userName);
+          if (htmlParsed.productions.length > 0) {
+            setFetchProgress({ step: 'done', message: getStepMessage('done') });
+            await processSchedule(htmlParsed);
+            return;
+          }
+        }
+
         const parsed = parseManualText(manualText);
 
         if (parsed.productions.length === 0) {
-          // Check if it looks like HTML
           if (manualText.includes('<') && manualText.includes('>')) {
-            // Try parsing as HTML
             const htmlParsed = parseScheduleHTML(manualText, '');
             if (htmlParsed.productions.length > 0) {
               setFetchProgress({ step: 'done', message: getStepMessage('done') });
@@ -402,10 +425,21 @@ function ProductionsContent() {
         return;
       }
 
-      // Successfully fetched HTML - parse it
+      // Successfully fetched HTML - try Herzliya DOMParser first, then fallback
       setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
-      const parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
+      let parsed: ParsedSchedule;
+
+      if (isHerzliyaHTML(result.personalHtml)) {
+        parsed = parseHerzliyaHTML(result.personalHtml, userName);
+      } else {
+        parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
+      }
+
+      // If primary parse got nothing, try the other parser
+      if (parsed.productions.length === 0) {
+        parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
+      }
 
       if (parsed.productions.length === 0) {
         setStatusMessage('לא נמצאו הפקות. ייתכן שהפורמט של הדף שונה ממה שציפיתי.');
@@ -422,10 +456,9 @@ function ProductionsContent() {
       throw error;
     } finally {
       setLoading(false);
-      // Clear progress after 3 seconds
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule]);
+  }, [processSchedule, profile]);
 
   // Handle manual HTML paste
   const handleManualHtmlPaste = useCallback(async (html: string) => {
@@ -433,8 +466,20 @@ function ProductionsContent() {
     setShowManualFallback(false);
     setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
+    const userName = profile?.displayName || '';
+
     try {
-      // Try HTML parse first
+      // Try Herzliya HTML parser first (DOMParser)
+      if (isHerzliyaHTML(html)) {
+        const herzliyaParsed = parseHerzliyaHTML(html, userName);
+        if (herzliyaParsed.productions.length > 0) {
+          setFetchProgress({ step: 'done', message: getStepMessage('done') });
+          await processSchedule(herzliyaParsed);
+          return;
+        }
+      }
+
+      // Try generic HTML parse
       const parsed = parseScheduleHTML(html, '');
       if (parsed.productions.length > 0) {
         setFetchProgress({ step: 'done', message: getStepMessage('done') });
@@ -459,7 +504,7 @@ function ProductionsContent() {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule]);
+  }, [processSchedule, profile]);
 
   // Reload from Firestore
   const handleReload = async () => {

@@ -148,7 +148,7 @@ export default function WeeklyCalendar({
                       const userCrewMember = prod.crew.find(
                         c => c.name === currentUserName || c.name === workerName
                       );
-                      const isCurrentUser = !!userCrewMember;
+                      const isCurrentUser = prod.isCurrentUserShift ?? !!userCrewMember;
                       return (
                         <ProductionBlock
                           key={prod.id}

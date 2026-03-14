@@ -3,6 +3,7 @@
 import { useState, useRef, ClipboardEvent } from 'react';
 import { Link2, User, Calendar, Loader2, Send, X, Clipboard, AlertTriangle } from 'lucide-react';
 import { FetchProgress } from '@/lib/browserFetch';
+import { isHerzliyaHTML } from '@/lib/productionScheduleParser';
 
 interface DetectedInfo {
   url: string | null;
@@ -10,10 +11,11 @@ interface DetectedInfo {
   weekStart: string | null;
   weekEnd: string | null;
   rawText: string;
+  rawHtml?: string | null;
 }
 
 interface MessageInputProps {
-  onFetch: (url: string | null, manualText: string | null) => Promise<void>;
+  onFetch: (url: string | null, manualText: string | null, rawHtml?: string | null) => Promise<void>;
   loading: boolean;
   existingWeekId?: string | null;
   fetchProgress?: FetchProgress | null;
@@ -57,7 +59,22 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
   };
 
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    // Try to get HTML version (available when copying from web pages)
+    const pastedHtml = e.clipboardData.getData('text/html');
     const pastedText = e.clipboardData.getData('text');
+
+    // Check if clipboard HTML is Herzliya schedule
+    if (pastedHtml && isHerzliyaHTML(pastedHtml)) {
+      e.preventDefault();
+      const info = detectInfo(pastedText);
+      info.rawHtml = pastedHtml;
+      setDetected(info);
+      setText(pastedText.substring(0, 200) + (pastedText.length > 200 ? '...' : ''));
+      setError(null);
+      return;
+    }
+
+    // Normal text handling
     if (pastedText.trim()) {
       const info = detectInfo(pastedText);
       if (info.url || info.weekStart) {
@@ -88,7 +105,10 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
     setError(null);
 
     try {
-      if (detected?.url) {
+      if (detected?.rawHtml) {
+        // HTML from clipboard - parse directly
+        await onFetch(null, null, detected.rawHtml);
+      } else if (detected?.url) {
         await onFetch(detected.url, null);
       } else if (text.trim()) {
         await onFetch(null, text.trim());
@@ -109,6 +129,13 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
   // Loading step message from progress
   const loadingMessage = fetchProgress?.message || 'טוען לוח עבודה...';
 
+  // Detected source label
+  const detectedSource = detected?.rawHtml
+    ? '📋 זיהיתי לוח הרצליה מהלוח'
+    : detected?.url
+      ? 'זיהיתי הודעת לוח עבודה'
+      : 'זיהיתי תוכן לוח עבודה';
+
   return (
     <div className="space-y-3">
       {/* Input area */}
@@ -122,7 +149,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
           onPaste={handlePaste}
-          placeholder="הדבק כאן הודעת WhatsApp עם לינק ללוח העבודה, או הזן לינק ישירות..."
+          placeholder="הדבק כאן הודעת WhatsApp עם לינק ללוח העבודה, או Ctrl+A Ctrl+C מדף הרצליה..."
           className="w-full min-h-[100px] p-4 text-sm resize-none bg-transparent outline-none"
           style={{ color: 'var(--theme-text)' }}
           dir="rtl"
@@ -150,7 +177,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
               <span className="text-green-400 text-sm">✓</span>
             </div>
             <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-              זיהיתי הודעת לוח עבודה
+              {detectedSource}
             </span>
           </div>
 
@@ -175,6 +202,11 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
                 <span className="text-emerald-400 truncate max-w-[280px]" dir="ltr">
                   {detected.url.length > 50 ? detected.url.substring(0, 50) + '...' : detected.url}
                 </span>
+              </div>
+            )}
+            {detected.rawHtml && (
+              <div className="flex items-center gap-2 text-xs px-2 py-1 rounded-lg bg-green-500/10 text-green-400">
+                <span>✨ זוהה HTML של לוח הרצליה - פרסינג מדויק</span>
               </div>
             )}
           </div>

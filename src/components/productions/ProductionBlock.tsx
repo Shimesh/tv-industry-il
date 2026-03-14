@@ -20,28 +20,34 @@ export default function ProductionBlock({
   onClick,
   onInfoClick,
 }: ProductionBlockProps) {
-  // Bright amber for current user's shifts, muted gray for others
-  const colors = isCurrentUser
-    ? { bg: 'rgba(245, 158, 11, 0.2)', border: 'rgba(245, 158, 11, 0.5)', text: '#f59e0b' }
-    : { bg: 'rgba(148, 163, 184, 0.08)', border: 'rgba(148, 163, 184, 0.2)', text: '#94a3b8' };
-
   const isCancelled = production.status === 'cancelled';
+
+  // Highlighted = current user's shift → solid amber, bold
+  // Muted = other productions → dark gray
+  const isHighlighted = isCurrentUser;
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-right rounded-xl border p-3 transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] ${isCancelled ? 'opacity-50' : ''}`}
+      className={`w-full text-right rounded-xl p-3 transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] ${isCancelled ? 'opacity-50' : ''}`}
       style={{
-        background: colors.bg,
-        borderColor: colors.border,
+        background: isHighlighted
+          ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.85), rgba(217, 119, 6, 0.85))'
+          : 'rgba(55, 65, 81, 0.5)',
+        borderRight: isHighlighted
+          ? '4px solid #fbbf24'
+          : '4px solid rgba(107, 114, 128, 0.5)',
+        borderTop: 'none',
+        borderBottom: 'none',
+        borderLeft: 'none',
       }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {/* Production name */}
           <h4
-            className={`text-sm font-bold truncate ${isCancelled ? 'line-through' : ''}`}
-            style={{ color: colors.text }}
+            className={`text-sm truncate ${isCancelled ? 'line-through' : ''} ${isHighlighted ? 'font-black' : 'font-bold'}`}
+            style={{ color: isHighlighted ? '#1f2937' : '#d1d5db' }}
           >
             {production.name}
           </h4>
@@ -49,24 +55,35 @@ export default function ProductionBlock({
           {/* Studio */}
           {production.studio && (
             <div className="flex items-center gap-1 mt-1">
-              <MapPin className="w-3 h-3" style={{ color: 'var(--theme-text-secondary)' }} />
-              <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              <MapPin className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }} />
+              <span className="text-xs" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }}>
                 {production.studio}
               </span>
             </div>
           )}
 
           {/* Times */}
-          <div className="flex items-center gap-1 mt-1">
-            <Clock className="w-3 h-3" style={{ color: 'var(--theme-text-secondary)' }} />
-            <span className="text-xs font-medium" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">
-              {production.startTime}{production.endTime ? ` - ${production.endTime}` : ''}
-            </span>
-          </div>
+          {(production.startTime || production.endTime) && (
+            <div className="flex items-center gap-1 mt-1">
+              <Clock className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }} />
+              <span
+                className={`text-xs ${isHighlighted ? 'font-bold' : 'font-medium'}`}
+                style={{ color: isHighlighted ? '#78350f' : '#9ca3af' }}
+                dir="ltr"
+              >
+                {production.startTime}{production.endTime ? ` - ${production.endTime}` : ''}
+              </span>
+            </div>
+          )}
 
-          {/* User role badge (shown when current user is in crew) */}
+          {/* User role badge */}
           {isCurrentUser && userRole && (
-            <div className="mt-1.5 inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/20 text-amber-300">
+            <div className="mt-1.5 inline-block px-2 py-0.5 rounded-md text-xs font-bold"
+              style={{
+                background: isHighlighted ? 'rgba(120, 53, 15, 0.3)' : 'rgba(251, 191, 36, 0.2)',
+                color: isHighlighted ? '#78350f' : '#fbbf24',
+              }}
+            >
               {userRole}
             </div>
           )}
@@ -83,10 +100,12 @@ export default function ProductionBlock({
         <div className="flex flex-col items-end gap-1">
           {/* Crew count */}
           {production.crew.length > 0 && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs" style={{
-              background: 'color-mix(in srgb, var(--theme-text) 10%, transparent)',
-              color: 'var(--theme-text-secondary)',
-            }}>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs"
+              style={{
+                background: isHighlighted ? 'rgba(120, 53, 15, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                color: isHighlighted ? '#78350f' : '#9ca3af',
+              }}
+            >
               <Users className="w-3 h-3" />
               <span>{production.crew.length}</span>
             </div>

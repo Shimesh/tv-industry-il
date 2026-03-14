@@ -98,6 +98,11 @@ function buildDeptUrl(personalUrl: string): string[] {
     const url2 = new URL(personalUrl);
     url2.searchParams.set('showdept', '1');
     urls.push(url2.toString());
+
+    // Try allDep parameter
+    const url3 = new URL(personalUrl);
+    url3.searchParams.set('allDep', '1');
+    urls.push(url3.toString());
   } catch {
     // Invalid URL - return empty
   }

@@ -9,6 +9,7 @@ export interface CrewMember {
   endTime: string;
   addedBy?: string;
   addedAt?: string;
+  isCurrentUser?: boolean;
 }
 
 export interface Production {
@@ -24,6 +25,8 @@ export interface Production {
   lastUpdatedBy?: string;
   lastUpdatedAt?: string;
   versions?: VersionEntry[];
+  isCurrentUserShift?: boolean;
+  herzliyaId?: number;
 }
 
 export interface VersionEntry {
