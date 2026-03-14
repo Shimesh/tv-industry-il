@@ -146,7 +146,7 @@ function ChatContent() {
   }, [activeChat, user]);
 
   const createGeneralChat = async () => {
-    if (!user || !profile) return;
+    if (!user) return;
     try {
       const chatsRef = collection(db, 'chats');
       const q = query(chatsRef, where('type', '==', 'general'));
@@ -157,7 +157,7 @@ function ChatContent() {
           name: 'צ\'אט כללי 📺',
           members: [user.uid],
           admins: [user.uid],
-          membersInfo: [{ displayName: profile.displayName, photoURL: profile.photoURL }],
+          membersInfo: [{ displayName: displayName, photoURL: displayPhoto }],
           createdAt: serverTimestamp(),
         });
       }
@@ -167,7 +167,7 @@ function ChatContent() {
   };
 
   const handleSendMessage = async (text: string, type: 'text' | 'image' | 'file' = 'text', file?: File) => {
-    if (!user || !profile || !activeChat) return;
+    if (!user || !activeChat) return;
 
     let fileURL = null;
     let fileSize = null;
@@ -186,8 +186,8 @@ function ChatContent() {
 
     const messageData: Record<string, unknown> = {
       senderId: user.uid,
-      senderName: profile.displayName,
-      senderPhoto: profile.photoURL,
+      senderName: displayName,
+      senderPhoto: displayPhoto,
       text,
       type,
       fileURL,
@@ -205,7 +205,7 @@ function ChatContent() {
       await updateDoc(doc(db, 'chats', activeChat), {
         lastMessage: {
           text: type === 'text' ? text : `📎 ${file?.name || 'קובץ'}`,
-          senderName: profile.displayName,
+          senderName: displayName,
           senderId: user.uid,
           timestamp: serverTimestamp(),
         },
@@ -216,7 +216,7 @@ function ChatContent() {
       // Clear typing indicator
       await setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
         isTyping: false,
-        name: profile.displayName,
+        name: displayName,
         timestamp: serverTimestamp(),
       });
     } catch (err) {
@@ -240,7 +240,7 @@ function ChatContent() {
   };
 
   const handleCreatePrivateChat = async (otherUserId: string) => {
-    if (!user || !profile) return;
+    if (!user) return;
 
     // Check if private chat already exists
     const existing = chats.find(
@@ -263,7 +263,7 @@ function ChatContent() {
         name: '',
         members: [user.uid, otherUserId],
         membersInfo: [
-          { displayName: profile.displayName, photoURL: profile.photoURL },
+          { displayName: displayName, photoURL: displayPhoto },
           { displayName: otherUser.displayName, photoURL: otherUser.photoURL },
         ],
         isOnline: otherUser.isOnline,
@@ -279,7 +279,7 @@ function ChatContent() {
   };
 
   const handleCreateGroup = async (name: string, memberIds: string[]) => {
-    if (!user || !profile) return;
+    if (!user) return;
 
     const allMembers = [user.uid, ...memberIds];
     const membersInfo = allMembers.map(uid => {
@@ -301,7 +301,7 @@ function ChatContent() {
       await addDoc(collection(db, 'chats', chatRef.id, 'messages'), {
         senderId: 'system',
         senderName: 'מערכת',
-        text: `${profile.displayName} יצר/ה את הקבוצה "${name}"`,
+        text: `${displayName} יצר/ה את הקבוצה "${name}"`,
         type: 'system',
         createdAt: serverTimestamp(),
       });
@@ -316,7 +316,11 @@ function ChatContent() {
 
   const activeChatData = chats.find(c => c.id === activeChat);
 
-  if (!user || !profile) return null;
+  // Use Firebase user data as fallback when Firestore profile is unavailable
+  const displayName = profile?.displayName || user?.displayName || 'משתמש';
+  const displayPhoto = profile?.photoURL || user?.photoURL || null;
+
+  if (!user) return null;
 
   return (
     <div className="h-[calc(100vh-4rem)] flex overflow-hidden">
