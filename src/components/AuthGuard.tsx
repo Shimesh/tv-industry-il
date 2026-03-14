@@ -14,12 +14,8 @@ export default function AuthGuard({ children, fallback }: AuthGuardProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  console.log('[AUTHGUARD] render - loading:', loading, 'user:', user?.email ?? 'null');
-
   useEffect(() => {
-    console.log('[AUTHGUARD] useEffect - loading:', loading, 'user:', user?.email ?? 'null');
     if (!loading && !user) {
-      console.log('[AUTHGUARD] redirecting to /login (no user after loading complete)');
       router.push('/login');
     }
   }, [user, loading, router]);

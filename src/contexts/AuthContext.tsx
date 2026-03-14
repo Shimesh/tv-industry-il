@@ -53,21 +53,15 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | null> {
-  console.log('[AUTH] fetchOrCreateProfile - start for uid:', firebaseUser.uid, 'email:', firebaseUser.email);
   try {
     const profileRef = doc(db, 'users', firebaseUser.uid);
-    console.log('[AUTH] fetchOrCreateProfile - calling getDoc...');
     const profileSnap = await getDoc(profileRef);
-    console.log('[AUTH] fetchOrCreateProfile - getDoc result: exists =', profileSnap.exists());
 
     if (profileSnap.exists()) {
-      // Update online status (non-blocking)
       updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
       return { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
     }
 
-    // Profile doesn't exist yet - create it
-    console.log('[AUTH] fetchOrCreateProfile - creating new profile...');
     const profileData: Omit<UserProfile, 'uid'> = {
       displayName: firebaseUser.displayName || 'משתמש חדש',
       email: firebaseUser.email || '',
@@ -88,11 +82,10 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
       createdAt: serverTimestamp(),
       lastSeen: serverTimestamp(),
     });
-    console.log('[AUTH] fetchOrCreateProfile - profile created successfully');
 
     return { uid: firebaseUser.uid, ...profileData };
   } catch (error) {
-    console.error('[AUTH] fetchOrCreateProfile - ERROR:', error);
+    console.error('Firestore profile error:', error);
     return null;
   }
 }
@@ -104,17 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to auth state changes
   useEffect(() => {
-    console.log('[AUTH] Setting up onAuthStateChanged listener');
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('[AUTH] onAuthStateChanged fired, user:', firebaseUser?.email ?? 'null');
       setUser(firebaseUser);
       if (firebaseUser) {
-        console.log('[AUTH] User exists, fetching profile...');
         const userProfile = await fetchOrCreateProfile(firebaseUser);
-        console.log('[AUTH] Profile result:', userProfile ? 'loaded' : 'null');
         setProfile(userProfile);
       } else {
-        console.log('[AUTH] No user, clearing profile');
         setProfile(null);
       }
       setLoading(false);
@@ -165,8 +153,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchOrCreateProfile(result.user);
     } catch (error: unknown) {
       const authError = error as { code?: string };
+      // If auth actually succeeded despite the error (e.g. iframe error after
+      // popup completed), don't re-throw — onAuthStateChanged will handle it
+      if (auth.currentUser) {
+        console.warn('[AUTH] Google sign-in threw error but user is authenticated, ignoring');
+        return;
+      }
       if (authError.code !== 'auth/popup-closed-by-user') {
-        console.error('[AUTH] Google sign in error:', error);
+        console.error('[AUTH] Google sign-in error code:', authError.code);
         throw error;
       }
     }

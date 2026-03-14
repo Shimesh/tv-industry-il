@@ -30,12 +30,9 @@ export default function LoginPage() {
   const { user, loading: authLoading, signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
 
-  // Redirect to home if already logged in (handles redirect flow from Google)
-  console.log('[LOGIN] render - authLoading:', authLoading, 'user:', user?.email ?? 'null');
+  // Redirect to home if already logged in
   useEffect(() => {
-    console.log('[LOGIN] useEffect - authLoading:', authLoading, 'user:', user?.email ?? 'null');
     if (user && !authLoading) {
-      console.log('[LOGIN] user found after loading, redirecting to /');
       router.push('/');
     }
   }, [user, authLoading, router]);
@@ -87,20 +84,25 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     try {
-      // This redirects the page to Google - won't return here
       await signInWithGoogle();
+      // Popup succeeded - onAuthStateChanged will handle redirect
     } catch (err: unknown) {
-      const firebaseError = err as { code?: string; message?: string };
+      const firebaseError = err as { code?: string };
+      // SECURITY: Never show raw Firebase error messages (they contain API keys/URLs)
+      // Only show safe, user-friendly Hebrew messages based on error code
       if (firebaseError.code === 'auth/unauthorized-domain') {
-        setError('הדומיין הנוכחי לא מורשה ב-Firebase. יש להוסיף אותו בהגדרות Firebase → Authentication → Authorized domains');
-      } else if (firebaseError.code === 'auth/configuration-not-found' || firebaseError.code === 'auth/invalid-api-key') {
-        setError('Firebase לא מוגדר כראוי. יש להגדיר קובץ .env.local עם פרטי Firebase אמיתיים');
+        setError('הדומיין הנוכחי לא מורשה. פנו למנהל המערכת.');
+      } else if (firebaseError.code === 'auth/popup-blocked') {
+        setError('הדפדפן חסם את החלון. אנא אפשרו חלונות קופצים ונסו שוב.');
+      } else if (firebaseError.code === 'auth/popup-closed-by-user') {
+        // User closed popup intentionally - no error to show
+        setError('');
       } else {
-        setError(`שגיאה בהתחברות: ${firebaseError.code || firebaseError.message || 'שגיאה לא ידועה'}`);
+        console.error('[LOGIN] Google sign-in error code:', firebaseError.code);
+        setError('שגיאה בהתחברות עם Google. נסו שוב.');
       }
       setIsLoading(false);
     }
-    // Don't setIsLoading(false) on success - page is redirecting to Google
   };
 
   return (
