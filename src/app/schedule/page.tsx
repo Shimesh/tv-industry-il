@@ -3,12 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { channels, generateSchedule, getCurrentProgram, getNextProgram, type ScheduleItem } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
-import { Tv, Play, Clock, Radio, Monitor, ExternalLink, Lock, Unlock, Globe, AlertCircle } from 'lucide-react';
+import { Play, Clock, Radio, Monitor, ExternalLink, Lock, Unlock, Globe, AlertCircle } from 'lucide-react';
 
 export default function SchedulePage() {
   const [selectedChannel, setSelectedChannel] = useState(channels[0].id);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [showStream, setShowStream] = useState(false);
   const currentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -18,7 +17,6 @@ export default function SchedulePage() {
   }, []);
 
   useEffect(() => {
-    setShowStream(false);
     setTimeout(() => {
       currentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
@@ -40,12 +38,10 @@ export default function SchedulePage() {
   const isPast = (time: string) => time < timeStr;
   const isCurrent = (item: ScheduleItem) => item === currentProgram;
 
-  // Can embed directly in iframe?
-  const canEmbed = stream && (stream.type === 'iframe' || stream.type === 'youtube') && !stream.requiresAuth;
-  // Free external channels (Keshet 12, Reshet 13, Now 14)
-  const isFreeExternal = stream && stream.type === 'external-free';
-  // Paid channels
-  const isPaid = stream && stream.type === 'external-paid';
+  // Free channels (public/free-external)
+  const isFree = stream && !stream.requiresAuth;
+  // Paid channels (requires subscription)
+  const isPaid = stream && stream.requiresAuth;
 
   return (
     <div className="min-h-screen">
@@ -150,97 +146,86 @@ export default function SchedulePage() {
           {/* Live Viewer */}
           <div className="lg:col-span-3">
             <div className="rounded-2xl border overflow-hidden transition-colors" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-              {/* Video Area */}
-              <div className="relative aspect-video" style={{ background: `linear-gradient(135deg, ${channel.color}15, var(--theme-bg-secondary))` }}>
-                {showStream && canEmbed && stream?.embedUrl ? (
-                  /* Live iframe/youtube embed */
-                  <iframe
-                    src={stream.embedUrl}
-                    className="absolute inset-0 w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title={`צפייה ישירה - ${channel.name}`}
-                  />
-                ) : (
-                  /* Placeholder / Stream info */
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center px-4">
-                      <Tv className="w-16 h-16 mx-auto mb-4 opacity-30" style={{ color: channel.color }} />
-                      <div className="flex items-center justify-center gap-2 mb-2">
-                        <span className="w-3 h-3 rounded-full pulse-live" style={{ backgroundColor: channel.color }} />
-                        <span className="font-bold text-lg" style={{ color: 'var(--theme-text)' }}>{channel.name}</span>
-                      </div>
-                      {currentProgram && (
-                        <p className="text-sm mb-4 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>
-                          כרגע: {currentProgram.title}
-                        </p>
-                      )}
+              {/* Watch Live Area */}
+              <div className="relative aspect-video overflow-hidden" style={{ background: `radial-gradient(ellipse at center, ${channel.color}18 0%, var(--theme-bg-secondary) 70%)` }}>
+                {/* Decorative background elements */}
+                <div className="absolute inset-0 opacity-5">
+                  <div className="absolute top-4 right-4 text-[120px] leading-none" style={{ color: channel.color }}>{channel.logo}</div>
+                </div>
 
-                      {/* Stream availability */}
-                      {stream && (
-                        <div className="mt-4 space-y-3">
-                          {canEmbed ? (
-                            /* Free embeddable stream - show play button */
-                            <button
-                              onClick={() => setShowStream(true)}
-                              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all hover:scale-105 hover:shadow-lg"
-                              style={{ background: `linear-gradient(135deg, ${channel.color}, ${channel.color}cc)`, boxShadow: `0 4px 15px ${channel.color}40` }}
-                            >
-                              <Play className="w-5 h-5" />
-                              צפה בשידור חי
-                            </button>
-                          ) : isFreeExternal ? (
-                            /* Free external stream - link to site with green styling */
-                            <div className="space-y-2">
-                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                                <Unlock className="w-3.5 h-3.5" />
-                                <span>{stream.note}</span>
-                              </div>
-                              <div>
-                                <a
-                                  href={stream.websiteUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-bold text-sm transition-all hover:scale-105"
-                                  style={{ background: `linear-gradient(135deg, ${channel.color}, ${channel.color}cc)` }}
-                                >
-                                  <Play className="w-4 h-4" />
-                                  צפה בשידור חי באתר
-                                </a>
-                              </div>
-                            </div>
-                          ) : (
-                            /* Paid stream - show lock and external link */
-                            <div className="space-y-2">
-                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-                                <Lock className="w-3.5 h-3.5" />
-                                <span>{stream.note}</span>
-                              </div>
-                              <div>
-                                <a
-                                  href={stream.websiteUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-bold text-sm transition-all hover:scale-105"
-                                  style={{ background: `linear-gradient(135deg, ${channel.color}, ${channel.color}cc)` }}
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                  צפה באתר {stream.provider || channel.name}
-                                </a>
-                              </div>
-                            </div>
-                          )}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center px-6">
+                    {/* Channel Logo */}
+                    <div className="text-6xl sm:text-7xl mb-4 drop-shadow-lg animate-pulse-slow">{channel.logo}</div>
 
-                          {isPaid && (
-                            <p className="text-[10px] max-w-xs mx-auto" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
-                              צפייה ישירה דרך ספק הטלוויזיה שלך (HOT, YES, Partner)
-                            </p>
-                          )}
-                        </div>
-                      )}
+                    {/* Channel Name with live indicator */}
+                    <div className="flex items-center justify-center gap-2.5 mb-2">
+                      <span className="w-3 h-3 rounded-full pulse-live" style={{ backgroundColor: channel.color }} />
+                      <span className="font-black text-xl" style={{ color: 'var(--theme-text)' }}>{channel.name}</span>
                     </div>
+
+                    {/* Current program */}
+                    {currentProgram && (
+                      <p className="text-sm mb-5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>
+                        כרגע: {currentProgram.title}
+                      </p>
+                    )}
+
+                    {/* Watch Live Button or no-stream message */}
+                    {stream ? (
+                      <div className="space-y-3">
+                        {/* Availability badge */}
+                        {isPaid ? (
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>{stream.note}</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                            <Unlock className="w-3.5 h-3.5" />
+                            <span>{stream.note}</span>
+                          </div>
+                        )}
+
+                        {/* Large Watch Button */}
+                        <div>
+                          <a
+                            href={stream.websiteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group inline-flex items-center gap-3 px-8 py-4 rounded-2xl text-white font-bold text-base transition-all duration-200 hover:scale-105 hover:shadow-2xl active:scale-100"
+                            style={{
+                              background: isPaid
+                                ? `linear-gradient(135deg, ${channel.color}, ${channel.color}cc)`
+                                : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                              boxShadow: isPaid
+                                ? `0 8px 30px ${channel.color}35`
+                                : '0 8px 30px rgba(239, 68, 68, 0.35)',
+                            }}
+                          >
+                            <span className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                              <Play className="w-5 h-5 ml-0.5" fill="white" />
+                            </span>
+                            {isPaid
+                              ? `צפה באתר ${stream.provider || channel.name}`
+                              : 'צפה בשידור חי'}
+                            <ExternalLink className="w-4 h-4 opacity-60" />
+                          </a>
+                        </div>
+
+                        {isPaid && (
+                          <p className="text-[10px] max-w-xs mx-auto" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
+                            צפייה ישירה דרך ספק הטלוויזיה שלך (HOT, YES, Partner)
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm mt-2" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
+                        אין שידור חי זמין כרגע
+                      </p>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Now Playing */}
@@ -249,7 +234,7 @@ export default function SchedulePage() {
                   <div className="flex items-center gap-2 mb-2">
                     <Play className="w-4 h-4" style={{ color: channel.color }} />
                     <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>עכשיו משדרים</span>
-                    {(canEmbed || isFreeExternal) && (
+                    {isFree && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20">
                         <Unlock className="w-3 h-3" />
                         צפייה חופשית
