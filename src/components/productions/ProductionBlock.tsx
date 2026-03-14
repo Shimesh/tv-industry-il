@@ -3,25 +3,9 @@
 import { Production } from '@/lib/productionDiff';
 import { Users, Clock, Info, MapPin } from 'lucide-react';
 
-// Studio color mapping
-const studioColors: Record<string, { bg: string; border: string; text: string }> = {
-  '5': { bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.4)', text: '#60a5fa' },
-  '6': { bg: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)', text: '#4ade80' },
-  '7': { bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.4)', text: '#fb923c' },
-  '8': { bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.4)', text: '#c084fc' },
-  '9': { bg: 'rgba(236, 72, 153, 0.15)', border: 'rgba(236, 72, 153, 0.4)', text: '#f472b6' },
-  '10': { bg: 'rgba(20, 184, 166, 0.15)', border: 'rgba(20, 184, 166, 0.4)', text: '#2dd4bf' },
-  default: { bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.4)', text: '#fbbf24' },
-};
-
-function getStudioColor(studio: string) {
-  const num = studio.match(/\d+/)?.[0] || '';
-  return studioColors[num] || studioColors.default;
-}
-
 interface ProductionBlockProps {
   production: Production;
-  isPersonal?: boolean;
+  isCurrentUser?: boolean;
   userRole?: string;
   hasUpdates?: boolean;
   onClick: () => void;
@@ -30,15 +14,16 @@ interface ProductionBlockProps {
 
 export default function ProductionBlock({
   production,
-  isPersonal = false,
+  isCurrentUser = false,
   userRole,
   hasUpdates = false,
   onClick,
   onInfoClick,
 }: ProductionBlockProps) {
-  const colors = isPersonal
-    ? { bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.4)', text: '#fbbf24' }
-    : getStudioColor(production.studio);
+  // Bright amber for current user's shifts, muted gray for others
+  const colors = isCurrentUser
+    ? { bg: 'rgba(245, 158, 11, 0.2)', border: 'rgba(245, 158, 11, 0.5)', text: '#f59e0b' }
+    : { bg: 'rgba(148, 163, 184, 0.08)', border: 'rgba(148, 163, 184, 0.2)', text: '#94a3b8' };
 
   const isCancelled = production.status === 'cancelled';
 
@@ -75,12 +60,12 @@ export default function ProductionBlock({
           <div className="flex items-center gap-1 mt-1">
             <Clock className="w-3 h-3" style={{ color: 'var(--theme-text-secondary)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">
-              {production.startTime} - {production.endTime}
+              {production.startTime}{production.endTime ? ` - ${production.endTime}` : ''}
             </span>
           </div>
 
-          {/* User role (personal view) */}
-          {isPersonal && userRole && (
+          {/* User role badge (shown when current user is in crew) */}
+          {isCurrentUser && userRole && (
             <div className="mt-1.5 inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/20 text-amber-300">
               {userRole}
             </div>

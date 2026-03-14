@@ -148,11 +148,12 @@ export default function WeeklyCalendar({
                       const userCrewMember = prod.crew.find(
                         c => c.name === currentUserName || c.name === workerName
                       );
+                      const isCurrentUser = !!userCrewMember;
                       return (
                         <ProductionBlock
                           key={prod.id}
                           production={prod}
-                          isPersonal={viewMode === 'personal'}
+                          isCurrentUser={isCurrentUser}
                           userRole={userCrewMember?.role}
                           hasUpdates={(prod.versions?.length || 0) > 0}
                           onClick={() => setSelectedProduction(prod)}
@@ -197,11 +198,12 @@ export default function WeeklyCalendar({
                     const userCrewMember = prod.crew.find(
                       c => c.name === currentUserName || c.name === workerName
                     );
+                    const isCurrentUser = !!userCrewMember;
                     return (
                       <ProductionBlock
                         key={prod.id}
                         production={prod}
-                        isPersonal={viewMode === 'personal'}
+                        isCurrentUser={isCurrentUser}
                         userRole={userCrewMember?.role}
                         hasUpdates={(prod.versions?.length || 0) > 0}
                         onClick={() => setSelectedProduction(prod)}

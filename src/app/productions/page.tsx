@@ -27,7 +27,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Clapperboard, RefreshCw, ChevronDown, ChevronUp, Bug } from 'lucide-react';
+import { Clapperboard, RefreshCw } from 'lucide-react';
 
 export default function ProductionsPage() {
   return (
@@ -49,8 +49,6 @@ function ProductionsContent() {
   const [showSummary, setShowSummary] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
-  const [debugHtml, setDebugHtml] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
   const [showManualFallback, setShowManualFallback] = useState(false);
 
   // Load existing week data from Firestore
@@ -335,7 +333,6 @@ function ProductionsContent() {
     setStatusMessage(null);
     setLastDiff(null);
     setShowSummary(false);
-    setDebugHtml(null);
     setShowManualFallback(false);
 
     try {
@@ -355,7 +352,6 @@ function ProductionsContent() {
               return;
             }
           }
-          setDebugHtml(manualText.substring(0, 2000));
           setStatusMessage('לא הצלחתי לחלץ הפקות מהטקסט. נסה להדביק את תוכן הדף המלא.');
           setShowManualFallback(true);
           return;
@@ -409,9 +405,6 @@ function ProductionsContent() {
       // Successfully fetched HTML - parse it
       setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
-      // Save raw HTML for debug
-      setDebugHtml(result.personalHtml.substring(0, 5000));
-
       const parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
 
       if (parsed.productions.length === 0) {
@@ -441,8 +434,6 @@ function ProductionsContent() {
     setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
     try {
-      setDebugHtml(html.substring(0, 5000));
-
       // Try HTML parse first
       const parsed = parseScheduleHTML(html, '');
       if (parsed.productions.length > 0) {
@@ -590,33 +581,6 @@ function ProductionsContent() {
         </div>
       )}
 
-      {/* Debug section */}
-      {debugHtml && (
-        <div className="mt-6">
-          <button
-            onClick={() => setShowDebug(!showDebug)}
-            className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl transition-all hover:bg-[var(--theme-accent-glow)]"
-            style={{ color: 'var(--theme-text-secondary)' }}
-          >
-            <Bug className="w-3.5 h-3.5" />
-            <span>תוכן HTML גולמי (דיבאג)</span>
-            {showDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-
-          {showDebug && (
-            <div className="mt-2 p-4 rounded-xl overflow-x-auto max-h-[400px] overflow-y-auto" style={{
-              background: 'var(--theme-bg)',
-              border: '1px solid var(--theme-border)',
-            }}>
-              <pre className="text-xs whitespace-pre-wrap break-all font-mono" dir="ltr" style={{
-                color: 'var(--theme-text-secondary)',
-              }}>
-                {debugHtml}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
