@@ -3,11 +3,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import {
   User,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -102,52 +102,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Handle Google redirect result FIRST, then listen to auth state
+  // Listen to auth state changes
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const init = async () => {
-      console.log('[AUTH] 1. init() started');
-      // Process pending Google redirect result BEFORE listening to auth state.
-      // Without this, onAuthStateChanged fires with null (user not yet resolved),
-      // sets loading=false, and the login page thinks no one is logged in.
-      try {
-        console.log('[AUTH] 2. calling getRedirectResult...');
-        const result = await getRedirectResult(auth);
-        console.log('[AUTH] 3. getRedirectResult returned:', result ? `user=${result.user?.email}` : 'null (not a redirect)');
-        if (result?.user) {
-          console.log('[AUTH] 3a. redirect user found, fetching profile...');
-          await fetchOrCreateProfile(result.user);
-          // Don't redirect here - onAuthStateChanged will fire and handle it
-        }
-      } catch (error) {
-        console.error('[AUTH] 3-ERROR. getRedirectResult failed:', error);
+    console.log('[AUTH] Setting up onAuthStateChanged listener');
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[AUTH] onAuthStateChanged fired, user:', firebaseUser?.email ?? 'null');
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        console.log('[AUTH] User exists, fetching profile...');
+        const userProfile = await fetchOrCreateProfile(firebaseUser);
+        console.log('[AUTH] Profile result:', userProfile ? 'loaded' : 'null');
+        setProfile(userProfile);
+      } else {
+        console.log('[AUTH] No user, clearing profile');
+        setProfile(null);
       }
-
-      // NOW listen to auth state changes (fires immediately with current state)
-      console.log('[AUTH] 4. setting up onAuthStateChanged listener...');
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        console.log('[AUTH] 5. onAuthStateChanged fired, user:', firebaseUser?.email ?? 'null');
-        setUser(firebaseUser);
-        if (firebaseUser) {
-          console.log('[AUTH] 6. user exists, fetching profile...');
-          const userProfile = await fetchOrCreateProfile(firebaseUser);
-          console.log('[AUTH] 7. profile result:', userProfile ? 'loaded' : 'null');
-          setProfile(userProfile);
-        } else {
-          console.log('[AUTH] 6. no user, clearing profile');
-          setProfile(null);
-        }
-        console.log('[AUTH] 8. setLoading(false) - auth flow complete');
-        setLoading(false);
-      });
-    };
-
-    init();
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -187,8 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    // Always use redirect - popups are blocked in production/iframes
-    await signInWithRedirect(auth, googleProvider);
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      await fetchOrCreateProfile(result.user);
+    } catch (error: unknown) {
+      const authError = error as { code?: string };
+      if (authError.code !== 'auth/popup-closed-by-user') {
+        console.error('[AUTH] Google sign in error:', error);
+        throw error;
+      }
+    }
   };
 
   const logout = async () => {
