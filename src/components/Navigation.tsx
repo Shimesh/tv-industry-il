@@ -181,7 +181,7 @@ export default function Navigation() {
                         <span className="font-medium">הפרופיל שלי</span>
                       </Link>
                       <Link
-                        href="/profile"
+                        href="/settings"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { contacts, departments, type Contact } from '@/data/contacts';
-import { Search, Phone, User, X, Briefcase, Users, LayoutGrid, List, MessageCircle } from 'lucide-react';
+import { Search, Phone, User, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star } from 'lucide-react';
+import { DirectorySkeleton } from '@/components/SkeletonLoader';
 
 const deptColors: Record<string, string> = {
   'צילום': 'from-blue-500 to-blue-600',
@@ -21,11 +23,26 @@ const deptBadgeColors: Record<string, string> = {
 };
 
 export default function DirectoryPage() {
+  const { profile, loading: authLoading } = useAuth();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+
+  // Check if a contact matches the logged-in user
+  const isCurrentUser = (contact: Contact): boolean => {
+    if (!profile) return false;
+    const fullName = `${contact.firstName} ${contact.lastName}`;
+    // Match by display name or phone
+    if (profile.displayName === fullName) return true;
+    if (profile.phone && contact.phone) {
+      const cleanProfile = profile.phone.replace(/[-\s]/g, '');
+      const cleanContact = contact.phone.replace(/[-\s]/g, '');
+      if (cleanProfile === cleanContact) return true;
+    }
+    return false;
+  };
 
   const filtered = useMemo(() => {
     return contacts.filter(c => {
@@ -38,6 +55,17 @@ export default function DirectoryPage() {
     });
   }, [search, deptFilter, availFilter]);
 
+  // Sort: current user first
+  const sortedFiltered = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aIsMe = isCurrentUser(a);
+      const bIsMe = isCurrentUser(b);
+      if (aIsMe && !bIsMe) return -1;
+      if (!aIsMe && bIsMe) return 1;
+      return 0;
+    });
+  }, [filtered, profile]);
+
   const availableCount = contacts.filter(c => c.availability === 'available').length;
 
   const formatWhatsApp = (phone?: string) => {
@@ -45,6 +73,8 @@ export default function DirectoryPage() {
     const cleaned = phone.replace(/[-\s]/g, '');
     return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
   };
+
+  if (authLoading) return <DirectorySkeleton />;
 
   return (
     <div className="min-h-screen">
@@ -139,70 +169,90 @@ export default function DirectoryPage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(contact => (
-              <div key={contact.id} onClick={() => setSelectedContact(contact)}
-                className="rounded-xl border p-5 cursor-pointer card-glow transition-colors" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
-                    {contact.firstName[0]}{contact.lastName[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold truncate transition-colors" style={{ color: 'var(--theme-text)' }}>{contact.firstName} {contact.lastName}</h3>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
-                        {contact.department}
-                      </span>
+            {sortedFiltered.map(contact => {
+              const isMeCard = isCurrentUser(contact);
+              return (
+                <div key={contact.id} onClick={() => setSelectedContact(contact)}
+                  className={`rounded-xl border p-5 cursor-pointer card-glow transition-colors relative ${isMeCard ? 'ring-2 ring-[var(--theme-accent)]' : ''}`}
+                  style={{
+                    background: isMeCard ? 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-card))' : 'var(--theme-bg-card)',
+                    borderColor: isMeCard ? 'var(--theme-accent)' : 'var(--theme-border)',
+                  }}>
+                  {isMeCard && (
+                    <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] text-[10px] font-bold">
+                      <Star className="w-3 h-3" />
+                      זה אני
+                    </div>
+                  )}
+                  <div className="flex items-start gap-3">
+                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 ${isMeCard ? 'ring-2 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg-card)]' : ''}`}>
+                      {contact.firstName[0]}{contact.lastName[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold truncate transition-colors" style={{ color: 'var(--theme-text)' }}>{contact.firstName} {contact.lastName}</h3>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
+                          {contact.department}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${
-                      contact.availability === 'available' ? 'bg-green-400' :
-                      contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'
-                    }`} />
-                    <span className={`text-xs ${
-                      contact.availability === 'available' ? 'text-green-400' :
-                      contact.availability === 'unavailable' ? 'text-red-400' : 'text-gray-500'
-                    }`}>
-                      {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : 'לא צוין'}
-                    </span>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${
+                        contact.availability === 'available' ? 'bg-green-400' :
+                        contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'
+                      }`} />
+                      <span className={`text-xs ${
+                        contact.availability === 'available' ? 'text-green-400' :
+                        contact.availability === 'unavailable' ? 'text-red-400' : 'text-gray-500'
+                      }`}>
+                        {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : 'לא צוין'}
+                      </span>
+                    </div>
+                    {contact.phone && (
+                      <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 text-xs hover:text-green-400 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>
+                        <Phone className="w-3 h-3" />
+                        <span dir="ltr">{contact.phone}</span>
+                      </a>
+                    )}
                   </div>
-                  {contact.phone && (
-                    <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1 text-xs hover:text-green-400 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>
-                      <Phone className="w-3 h-3" />
-                      <span dir="ltr">{contact.phone}</span>
-                    </a>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="rounded-xl border overflow-hidden transition-colors" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-            {filtered.map((contact, i) => (
-              <div key={contact.id} onClick={() => setSelectedContact(contact)}
-                className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:opacity-80 transition-colors"
-                style={i > 0 ? { borderTop: '1px solid var(--theme-border)' } : undefined}>
-                <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
-                  {contact.firstName[0]}{contact.lastName[0]}
+            {sortedFiltered.map((contact, i) => {
+              const isMeRow = isCurrentUser(contact);
+              return (
+                <div key={contact.id} onClick={() => setSelectedContact(contact)}
+                  className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:opacity-80 transition-colors ${isMeRow ? 'bg-[var(--theme-accent-glow)]' : ''}`}
+                  style={i > 0 ? { borderTop: '1px solid var(--theme-border)' } : undefined}>
+                  {isMeRow && <Star className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />}
+                  <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
+                    {contact.firstName[0]}{contact.lastName[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm" style={{ color: isMeRow ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
+                      {contact.firstName} {contact.lastName}
+                      {isMeRow && <span className="text-[10px] mr-1 font-bold">(אני)</span>}
+                    </span>
+                  </div>
+                  <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
+                    {contact.department}
+                  </span>
+                  <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'}`} />
+                  {contact.phone && (
+                    <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
+                      className="text-xs hover:text-green-400 hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">{contact.phone}</a>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium text-sm" style={{ color: 'var(--theme-text)' }}>{contact.firstName} {contact.lastName}</span>
-                </div>
-                <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
-                  {contact.department}
-                </span>
-                <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'}`} />
-                {contact.phone && (
-                  <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
-                    className="text-xs hover:text-green-400 hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">{contact.phone}</a>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -248,10 +298,15 @@ export default function DirectoryPage() {
             </div>
 
             <div className="text-center mb-6">
-              <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-2xl mx-auto mb-3`}>
+              <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-2xl mx-auto mb-3 ${isCurrentUser(selectedContact) ? 'ring-3 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg)]' : ''}`}>
                 {selectedContact.firstName[0]}{selectedContact.lastName[0]}
               </div>
-              <h2 className="text-xl font-black" style={{ color: 'var(--theme-text)' }}>{selectedContact.firstName} {selectedContact.lastName}</h2>
+              <h2 className="text-xl font-black" style={{ color: 'var(--theme-text)' }}>
+                {selectedContact.firstName} {selectedContact.lastName}
+                {isCurrentUser(selectedContact) && (
+                  <span className="text-xs text-[var(--theme-accent)] mr-2 font-bold">(זה אני)</span>
+                )}
+              </h2>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <span className="text-sm px-3 py-1 rounded-full" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}><Briefcase className="w-3 h-3 inline ml-1" />{selectedContact.role}</span>
                 <span className={`text-sm px-3 py-1 rounded-full ${deptBadgeColors[selectedContact.department]}`}>{selectedContact.department}</span>
