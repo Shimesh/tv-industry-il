@@ -298,6 +298,177 @@ async function fetchSchedule(browser, url) {
     schedule.workerName = workerName || schedule.workerName;
     schedule.fetchedAt = new Date().toISOString();
 
+    // ── Phase 2: Click each production to get detailed crew with phone numbers ──
+    console.log(`Fetching details for ${schedule.productions.length} productions...`);
+
+    for (let i = 0; i < schedule.productions.length; i++) {
+      const prod = schedule.productions[i];
+      if (!prod.herzliyaId) continue;
+
+      try {
+        // Click the production to open detail popup
+        const detailedCrew = await page.evaluate(async (hId) => {
+          return new Promise((resolve) => {
+            // Call the Herzliya openmd2 function
+            if (typeof openmd2 === 'function') {
+              openmd2(hId);
+            } else {
+              resolve(null);
+              return;
+            }
+
+            // Wait for the popup/table to appear
+            setTimeout(() => {
+              try {
+                // Find the popup table - look for the detail modal/table
+                const tables = document.querySelectorAll('table');
+                let crewData = [];
+                let studioName = '';
+
+                for (const table of tables) {
+                  // Check if this table is visible and contains crew data
+                  const rect = table.getBoundingClientRect();
+                  if (rect.width === 0 || rect.height === 0) continue;
+
+                  const rows = table.querySelectorAll('tr');
+                  if (rows.length < 2) continue;
+
+                  // Check header to identify the crew table
+                  const headerText = rows[0]?.textContent || '';
+                  if (!headerText.includes('תפקיד') && !headerText.includes('שם')) continue;
+
+                  // Parse each row (skip header)
+                  for (let r = 1; r < rows.length; r++) {
+                    const cells = rows[r].querySelectorAll('td');
+                    if (cells.length < 3) continue;
+
+                    // Table structure varies, try to extract fields
+                    // Common: phone | details | name | role | production
+                    // or: name | role | times | phone
+                    const cellTexts = Array.from(cells).map(c => c.textContent.trim());
+
+                    // Find which cell has phone (starts with 05)
+                    let phone = '';
+                    let name = '';
+                    let role = '';
+                    let times = '';
+
+                    for (const ct of cellTexts) {
+                      if (/^0\d{8,9}$/.test(ct.replace(/-/g, ''))) {
+                        phone = ct;
+                      } else if (/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(ct)) {
+                        times = ct;
+                      }
+                    }
+
+                    // Name and role are typically the middle cells
+                    // Try to identify by position relative to phone
+                    const phoneIdx = cellTexts.findIndex(ct => /^0\d{8,9}$/.test(ct.replace(/-/g, '')));
+
+                    if (cells.length >= 5) {
+                      // Format: phone | details | name | role | production/studio
+                      phone = cellTexts[0] || phone;
+                      name = cellTexts[2] || '';
+                      role = cellTexts[3] || '';
+                      if (cellTexts[4]) studioName = cellTexts[4];
+                    } else if (cells.length >= 4) {
+                      // Format: phone | name | role | times
+                      phone = cellTexts[0] || phone;
+                      name = cellTexts[1] || '';
+                      role = cellTexts[2] || '';
+                    } else if (cells.length >= 3) {
+                      name = cellTexts[0] || '';
+                      role = cellTexts[1] || '';
+                      phone = cellTexts[2] || phone;
+                    }
+
+                    if (name && name.length >= 2) {
+                      crewData.push({ name, role, phone: phone || '' });
+                    }
+                  }
+
+                  if (crewData.length > 0) break; // Found the right table
+                }
+
+                // Try to get studio from popup title/header
+                const popupTitle = document.querySelector('.modal-title, .popup-title, [class*="title"]');
+                if (popupTitle) {
+                  const titleText = popupTitle.textContent || '';
+                  const stMatch = titleText.match(/(?:אולפן|סטודיו)\s*\d+\w?/i);
+                  if (stMatch) studioName = stMatch[0];
+                }
+
+                // Close the popup
+                const closeBtn = document.querySelector('.close, .modal-close, [onclick*="close"], button[class*="close"]');
+                if (closeBtn) closeBtn.click();
+                // Also try clicking backdrop
+                const backdrop = document.querySelector('.modal-backdrop, .overlay');
+                if (backdrop) backdrop.click();
+                // Try pressing Escape
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+                resolve({ crew: crewData, studio: studioName });
+              } catch (e) {
+                resolve(null);
+              }
+            }, 2000); // Wait 2s for popup to load
+          });
+        }, prod.herzliyaId);
+
+        if (detailedCrew && detailedCrew.crew && detailedCrew.crew.length > 0) {
+          console.log(`  Production ${prod.name}: ${detailedCrew.crew.length} crew with phones`);
+
+          // Merge detailed data into existing crew
+          const existingCrew = prod.crew;
+          const mergedCrew = [];
+
+          for (const detail of detailedCrew.crew) {
+            // Find matching crew member by name
+            const existing = existingCrew.find(c =>
+              c.name === detail.name ||
+              c.name.includes(detail.name) ||
+              detail.name.includes(c.name)
+            );
+
+            mergedCrew.push({
+              name: detail.name,
+              role: detail.role || (existing ? existing.role : ''),
+              roleDetail: '',
+              phone: detail.phone || '',
+              startTime: existing ? existing.startTime : '',
+              endTime: existing ? existing.endTime : '',
+            });
+          }
+
+          // Add any crew from calendar that weren't in the detail popup
+          for (const cal of existingCrew) {
+            const inMerged = mergedCrew.find(m =>
+              m.name === cal.name ||
+              m.name.includes(cal.name) ||
+              cal.name.includes(m.name)
+            );
+            if (!inMerged) {
+              mergedCrew.push(cal);
+            }
+          }
+
+          schedule.productions[i].crew = mergedCrew;
+
+          // Update studio if found
+          if (detailedCrew.studio && !prod.studio) {
+            schedule.productions[i].studio = detailedCrew.studio;
+          }
+        }
+
+        // Small delay between clicks to avoid overloading
+        await new Promise(r => setTimeout(r, 500));
+
+      } catch (err) {
+        console.log(`  Skipping detail for ${prod.name}: ${err.message}`);
+      }
+    }
+
+    console.log('Finished fetching all production details');
     return schedule;
   } finally {
     await page.close();

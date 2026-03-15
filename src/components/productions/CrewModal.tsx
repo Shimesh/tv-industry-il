@@ -95,13 +95,22 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
             </p>
           ) : (
             <div className="space-y-2">
-              {production.crew.map((member, idx) => (
-                <CrewRow
-                  key={`${member.name}-${idx}`}
-                  member={member}
-                  isCurrentUser={currentUserName ? member.name === currentUserName : false}
-                />
-              ))}
+              {production.crew.map((member, idx) => {
+                // Fuzzy name matching for current user
+                const isCurrent = currentUserName ? (
+                  member.name === currentUserName ||
+                  member.name.includes(currentUserName) ||
+                  currentUserName.includes(member.name) ||
+                  member.name.split(/\s+/)[0] === currentUserName.split(/\s+/)[0]
+                ) : false;
+                return (
+                  <CrewRow
+                    key={`${member.name}-${idx}`}
+                    member={member}
+                    isCurrentUser={isCurrent}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

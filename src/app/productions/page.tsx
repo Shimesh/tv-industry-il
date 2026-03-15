@@ -32,7 +32,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, ensureOnline } from '@/lib/firebase';
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
 
 export default function ProductionsPage() {
@@ -72,41 +72,89 @@ function ProductionsContent() {
     };
   }, []);
 
-  // Load existing week data from Firestore
-  const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
+  // REST API helper: list documents in a collection
+  const restListDocs = useCallback(async (collectionPath: string): Promise<Array<{ id: string; fields: Record<string, unknown> }>> => {
+    if (!user) return [];
     try {
-      const prodsRef = collection(db, 'productions', 'global', 'weeks', weekId, 'productions');
-      const snapshot = await getDocs(prodsRef);
+      const token = await user.getIdToken();
+      const projectId = 'tv-industry-il';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!data.documents) return [];
+
+      return data.documents.map((doc: Record<string, unknown>) => {
+        const name = doc.name as string;
+        const id = name.split('/').pop() || '';
+        const rawFields = (doc.fields || {}) as Record<string, Record<string, unknown>>;
+        const fields: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(rawFields)) {
+          if ('stringValue' in val) fields[key] = val.stringValue;
+          else if ('integerValue' in val) fields[key] = Number(val.integerValue);
+          else if ('booleanValue' in val) fields[key] = val.booleanValue;
+          else if ('timestampValue' in val) fields[key] = val.timestampValue;
+          else if ('nullValue' in val) fields[key] = null;
+          else if ('arrayValue' in val) fields[key] = val.arrayValue;
+          else if ('mapValue' in val) fields[key] = val.mapValue;
+        }
+        return { id, fields };
+      });
+    } catch (error) {
+      console.error('restListDocs error:', error);
+      return [];
+    }
+  }, [user]);
+
+  // Load existing week data via REST API
+  const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
+    console.log('[REST] Loading week:', weekId);
+    try {
+      const prodDocs = await restListDocs(`productions/global/weeks/${weekId}/productions`);
       const existing: Production[] = [];
 
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        const crewRef = collection(db, 'productions', 'global', 'weeks', weekId, 'productions', docSnap.id, 'crew');
-        const crewSnapshot = await getDocs(crewRef);
-        const crew = crewSnapshot.docs.map(c => c.data() as Production['crew'][0]);
+      for (const prodDoc of prodDocs) {
+        const d = prodDoc.fields;
+        // Load crew for this production
+        const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
+        const crew = crewDocs.map(c => ({
+          name: (c.fields.name as string) || '',
+          role: (c.fields.role as string) || '',
+          roleDetail: (c.fields.roleDetail as string) || '',
+          phone: (c.fields.phone as string) || '',
+          startTime: (c.fields.startTime as string) || '',
+          endTime: (c.fields.endTime as string) || '',
+          addedBy: (c.fields.addedBy as string) || '',
+          addedAt: (c.fields.addedAt as string) || '',
+        }));
 
         existing.push({
-          id: docSnap.id,
-          name: data.name,
-          studio: data.studio,
-          date: data.date,
-          day: data.day,
-          startTime: data.startTime,
-          endTime: data.endTime,
-          status: data.status,
+          id: prodDoc.id,
+          name: (d.name as string) || '',
+          studio: (d.studio as string) || '',
+          date: (d.date as string) || '',
+          day: (d.day as string) || '',
+          startTime: (d.startTime as string) || '',
+          endTime: (d.endTime as string) || '',
+          status: ((d.status as string) || 'scheduled') as Production['status'],
           crew,
-          lastUpdatedBy: data.lastUpdatedBy,
-          lastUpdatedAt: data.lastUpdatedAt,
-          versions: data.versions || [],
+          isCurrentUserShift: d.isCurrentUserShift === true || d.isCurrentUserShift === 'true',
+          lastUpdatedBy: (d.lastUpdatedBy as string) || '',
+          lastUpdatedAt: (d.lastUpdatedAt as string) || '',
+          versions: [],
         });
       }
 
+      console.log('[REST] Loaded', existing.length, 'productions for week', weekId);
+      console.log('[REST] Sample crew:', existing[0]?.crew?.length, 'members, first:', existing[0]?.crew?.[0]);
       return existing;
     } catch (error) {
       console.error('Error loading existing week:', error);
       return [];
     }
-  }, []);
+  }, [restListDocs]);
 
   // Save productions to Firestore
   const saveToFirestore = useCallback(async (
@@ -115,13 +163,28 @@ function ProductionsContent() {
     wStart: string,
     wEnd: string,
   ) => {
-    if (!user) return;
+    console.log('=== saveToFirestore called ===');
+    console.log('weekId:', weekId, 'prods:', prods.length, 'user:', user?.uid);
+    if (!user) {
+      console.error('saveToFirestore: NO USER - aborting');
+      return;
+    }
 
     try {
+      await ensureOnline();
       const batch = writeBatch(db);
 
       const metaRef = doc(db, 'productions', 'global', 'weeks', weekId);
-      const metaSnap = await getDoc(metaRef);
+      let metaSnap;
+      try {
+        metaSnap = await Promise.race([
+          getDoc(metaRef),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getDoc timeout')), 10000)),
+        ]);
+      } catch {
+        console.warn('getDoc timed out, treating as new document');
+        metaSnap = { exists: () => false, data: () => null } as any;
+      }
 
       if (metaSnap.exists()) {
         const existing = metaSnap.data();
@@ -181,6 +244,7 @@ function ProductionsContent() {
       }, { merge: true });
 
       await batch.commit();
+      console.log('✅ Firestore batch committed successfully');
 
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
@@ -268,6 +332,9 @@ function ProductionsContent() {
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
+    console.log('=== processSchedule called ===');
+    console.log('productions:', parsed.productions.length);
+    console.log('weekStart:', parsed.weekStart);
     if (!parsed.weekStart) {
       const now = new Date();
       const day = now.getDay();
@@ -342,13 +409,100 @@ function ProductionsContent() {
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
   // ══════════════════════════════════════════════
-  // Submit schedule request to Firestore for GitHub Action
+  // Firestore REST API helper (bypasses broken SDK)
+  // ══════════════════════════════════════════════
+  const firestoreRestWrite = useCallback(async (
+    collectionPath: string,
+    fields: Record<string, unknown>,
+  ): Promise<string> => {
+    if (!user) throw new Error('No user');
+    const token = await user.getIdToken(true);
+    const projectId = 'tv-industry-il';
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}`;
+
+    // Convert JS values to Firestore REST API format
+    const firestoreFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === 'string') {
+        firestoreFields[key] = { stringValue: value };
+      } else if (typeof value === 'number') {
+        firestoreFields[key] = { integerValue: String(value) };
+      } else if (typeof value === 'boolean') {
+        firestoreFields[key] = { booleanValue: value };
+      } else if (value === null) {
+        firestoreFields[key] = { nullValue: null };
+      } else if (value instanceof Date) {
+        firestoreFields[key] = { timestampValue: value.toISOString() };
+      } else if (value === 'SERVER_TIMESTAMP') {
+        firestoreFields[key] = { timestampValue: new Date().toISOString() };
+      }
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields: firestoreFields }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Firestore REST error ${res.status}`);
+    }
+
+    const docName = data.name || '';
+    return docName.split('/').pop() || '';
+  }, [user]);
+
+  // Read a document via REST API
+  const firestoreRestRead = useCallback(async (
+    docPath: string,
+  ): Promise<Record<string, unknown> | null> => {
+    if (!user) return null;
+    const token = await user.getIdToken();
+    const projectId = 'tv-industry-il';
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}`;
+
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    // Convert Firestore REST format to plain values
+    const result: Record<string, unknown> = {};
+    if (data.fields) {
+      for (const [key, val] of Object.entries(data.fields)) {
+        const v = val as Record<string, unknown>;
+        if ('stringValue' in v) result[key] = v.stringValue;
+        else if ('integerValue' in v) result[key] = Number(v.integerValue);
+        else if ('booleanValue' in v) result[key] = v.booleanValue;
+        else if ('timestampValue' in v) result[key] = v.timestampValue;
+        else if ('nullValue' in v) result[key] = null;
+      }
+    }
+    return result;
+  }, [user]);
+
+  // ══════════════════════════════════════════════
+  // Submit schedule request via REST API for GitHub Action
   // ══════════════════════════════════════════════
   const submitScheduleRequest = useCallback(async (messageText: string) => {
-    if (!user) return;
+    console.log('=== submitScheduleRequest called ===');
+    console.log('user:', user?.uid);
+
+    if (!user) {
+      console.error('submitScheduleRequest: NO USER - aborting');
+      return;
+    }
 
     // Extract URL from WhatsApp message
     const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
+    console.log('extracted URL:', urlMatch?.[0]);
     if (!urlMatch) {
       setStatusMessage('לא מצאתי לינק בהודעה');
       return;
@@ -365,44 +519,41 @@ function ProductionsContent() {
     setRequestError(null);
     setStatusMessage(null);
 
+    console.log('saving to Firestore via REST API...');
     try {
-      // Save request to Firestore
-      const docRef = await addDoc(collection(db, 'scheduleRequests'), {
+      // Write via REST API (bypasses broken SDK)
+      const docId = await firestoreRestWrite('scheduleRequests', {
         userId: user.uid,
         workerName: extractedWorkerName,
         url: urlMatch[0],
         weekStart: dateMatch?.[1] || '',
         weekEnd: dateMatch?.[2] || '',
         status: 'pending',
-        createdAt: serverTimestamp(),
+        createdAt: 'SERVER_TIMESTAMP',
       });
 
+      console.log('✅ scheduleRequest saved via REST, docId:', docId);
       setWorkerName(extractedWorkerName);
 
-      // Listen for request status updates
-      unsubRequestRef.current?.();
-      unsubRequestRef.current = onSnapshot(doc(db, 'scheduleRequests', docRef.id), (snap) => {
-        const data = snap.data();
-        if (!data) return;
+      // Poll for status updates (REST-based, since SDK onSnapshot is broken)
+      const pollInterval = setInterval(async () => {
+        try {
+          const data = await firestoreRestRead(`scheduleRequests/${docId}`);
+          if (!data) return;
 
-        const status = data.status as RequestStatus;
-        setRequestStatus(status);
+          const status = data.status as RequestStatus;
+          setRequestStatus(status);
 
-        if (status === 'done') {
-          // Request completed - load the productions
-          setRequestStatus('done');
-          unsubRequestRef.current?.();
+          if (status === 'done') {
+            clearInterval(pollInterval);
 
-          // Load the week that was just fetched
-          if (data.productionCount > 0) {
-            // Calculate weekId from dates
-            const wStart = dateMatch?.[1];
-            if (wStart) {
-              const [d, m, y] = wStart.split('/').map(Number);
+            // Load the week that was just fetched
+            if (dateMatch) {
+              const [d, m, y] = dateMatch[1].split('/').map(Number);
               const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
               const weekId = getWeekId(isoDate);
-
-              loadExistingWeek(weekId).then(prods => {
+              try {
+                const prods = await loadExistingWeek(weekId);
                 if (prods.length > 0) {
                   setProductions(prods);
                   setWeekStart(isoDate);
@@ -411,35 +562,32 @@ function ProductionsContent() {
                   setCurrentWeekId(weekId);
                   setStatusMessage(`נטענו ${prods.length} הפקות`);
                 }
-              });
+              } catch {
+                handleReloadLatest();
+              }
             } else {
-              // No dates available, try to find the latest week
-              handleReloadLatest();
+              setStatusMessage('הלוח עודכן - רענן את הדף');
             }
+
+            setTimeout(() => setRequestStatus('idle'), 5000);
+          } else if (status === 'error') {
+            clearInterval(pollInterval);
+            setRequestError((data.error as string) || 'שגיאה בטעינת הלוח');
+            setTimeout(() => setRequestStatus('idle'), 8000);
           }
-
-          // Clear status after a few seconds
-          setTimeout(() => setRequestStatus('idle'), 5000);
-        } else if (status === 'error') {
-          setRequestError(data.error || 'שגיאה בטעינת הלוח');
-          unsubRequestRef.current?.();
-          setTimeout(() => setRequestStatus('idle'), 8000);
+        } catch (pollErr) {
+          console.warn('Poll error:', pollErr);
         }
-      });
+      }, 10000); // Poll every 10 seconds
 
-      // Also set up onSnapshot on the productions week to catch real-time updates
-      if (dateMatch) {
-        const [d, m, y] = dateMatch[1].split('/').map(Number);
-        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const weekId = getWeekId(isoDate);
-        listenToWeek(weekId);
-      }
-    } catch (error) {
-      console.error('Error submitting schedule request:', error);
+      // Stop polling after 5 minutes max
+      setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+    } catch (error: unknown) {
+      console.error('❌ Error submitting schedule request:', error);
       setRequestStatus('error');
-      setRequestError('שגיאה בשליחת הבקשה');
+      setRequestError(error instanceof Error ? error.message : 'שגיאה בשליחת הבקשה');
     }
-  }, [user, profile, loadExistingWeek]);
+  }, [user, profile, firestoreRestWrite, firestoreRestRead, loadExistingWeek]);
 
   // Listen to a week's productions for real-time updates
   const listenToWeek = useCallback((weekId: string) => {
@@ -463,81 +611,83 @@ function ProductionsContent() {
     });
   }, [loadExistingWeek]);
 
-  // Load the latest week from user's schedules
+  // Load the latest week - try known current week first, then user schedules via REST
   const handleReloadLatest = useCallback(async () => {
     if (!user) return;
+    console.log('[REST] handleReloadLatest called');
     try {
-      const schedulesRef = collection(db, 'users', user.uid, 'schedules');
-      const q = query(schedulesRef, orderBy('fetchedAt', 'desc'), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const data = snap.docs[0].data();
-        const weekId = snap.docs[0].id;
-        const prods = await loadExistingWeek(weekId);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(data.weekStart || '');
-          setWeekEnd(data.weekEnd || '');
-          setWorkerName(data.workerName || '');
-          setCurrentWeekId(weekId);
-          setStatusMessage(`נטענו ${prods.length} הפקות`);
+      // Try current week first (Sunday-based week ID)
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - dayOfWeek);
+      const weekId = getWeekId(sunday.toISOString().split('T')[0]);
+      console.log('[REST] Trying current weekId:', weekId);
+
+      const prods = await loadExistingWeek(weekId);
+      if (prods.length > 0) {
+        // Also fetch the user's schedule to get workerName
+        const scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+        const userSchedule = scheduleDocs.find(s => s.id === weekId);
+        const wName = (userSchedule?.fields?.workerName as string) || profile?.displayName || '';
+        console.log('[REST] workerName from schedule:', wName);
+
+        setProductions(prods);
+        setWorkerName(wName);
+        const satDate = new Date(sunday);
+        satDate.setDate(sunday.getDate() + 6);
+        setWeekStart(sunday.toISOString().split('T')[0]);
+        setWeekEnd(satDate.toISOString().split('T')[0]);
+        setCurrentWeekId(weekId);
+        setStatusMessage(`נטענו ${prods.length} הפקות`);
+        return;
+      }
+
+      // Fallback: try user schedules via REST
+      const scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+      if (scheduleDocs.length > 0) {
+        const latest = scheduleDocs[scheduleDocs.length - 1];
+        const latestWeekId = latest.id;
+        const latestProds = await loadExistingWeek(latestWeekId);
+        if (latestProds.length > 0) {
+          setProductions(latestProds);
+          setWeekStart((latest.fields.weekStart as string) || '');
+          setWeekEnd((latest.fields.weekEnd as string) || '');
+          setWorkerName((latest.fields.workerName as string) || '');
+          setCurrentWeekId(latestWeekId);
+          setStatusMessage(`נטענו ${latestProds.length} הפקות`);
         }
       }
     } catch (error) {
       console.error('Error loading latest week:', error);
     }
-  }, [user, loadExistingWeek]);
+  }, [user, profile, loadExistingWeek, restListDocs]);
 
-  // Check for recent pending requests on mount
+  // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
     if (!user) return;
 
     const checkPending = async () => {
       try {
-        const q = query(
-          collection(db, 'scheduleRequests'),
-          where('userId', '==', user.uid),
-          where('status', 'in', ['pending', 'processing']),
-          orderBy('createdAt', 'desc'),
-          limit(1),
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          setRequestStatus(data.status as RequestStatus);
-          setWorkerName(data.workerName || '');
-
-          // Resume listening
-          unsubRequestRef.current?.();
-          unsubRequestRef.current = onSnapshot(doc(db, 'scheduleRequests', snap.docs[0].id), (docSnap) => {
-            const d = docSnap.data();
-            if (!d) return;
-            setRequestStatus(d.status as RequestStatus);
-
-            if (d.status === 'done') {
-              unsubRequestRef.current?.();
-              handleReloadLatest();
-              setTimeout(() => setRequestStatus('idle'), 5000);
-            } else if (d.status === 'error') {
-              setRequestError(d.error || 'שגיאה');
-              unsubRequestRef.current?.();
-              setTimeout(() => setRequestStatus('idle'), 8000);
-            }
-          });
-        } else {
-          // No pending requests - try to load latest schedule
-          await handleReloadLatest();
-        }
-      } catch {
-        // Firestore index might not be ready yet
+        // Load latest schedule directly via REST
+        await handleReloadLatest();
+      } catch (err) {
+        console.warn('checkPending/handleReloadLatest failed:', err);
+        try { await handleReloadLatest(); } catch { /* ignore */ }
       }
     };
 
     checkPending();
   }, [user, handleReloadLatest]);
 
-  // Main fetch handler - browser-side with CORS proxy + GitHub Action fallback
+  // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
+    console.log('=== handleFetch called ===');
+    console.log('url:', url);
+    console.log('manualText:', manualText?.substring(0, 100));
+    console.log('rawHtml:', rawHtml ? `${rawHtml.length} chars` : null);
+    console.log('user:', user?.uid);
+
     setLoading(true);
     setStatusMessage(null);
     setLastDiff(null);
@@ -558,7 +708,7 @@ function ProductionsContent() {
         }
       }
 
-      // Manual text input
+      // Manual text input (no URL detected)
       if (manualText && !url) {
         setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
@@ -586,6 +736,7 @@ function ProductionsContent() {
           // Check if text contains a URL - submit as GitHub Action request
           const urlInText = manualText.match(/https?:\/\/[^\s]+/);
           if (urlInText) {
+            console.log('📤 Manual text has URL but parsing failed - submitting to GitHub Action');
             setFetchProgress(null);
             setLoading(false);
             await submitScheduleRequest(manualText);
@@ -606,69 +757,14 @@ function ProductionsContent() {
         throw new Error('לא סופק לינק');
       }
 
-      // Browser-side fetch via CORS proxy
-      setFetchProgress({ step: 'detecting', message: getStepMessage('detecting') });
+      // URL detected - skip CORS proxy attempts, go directly to GitHub Action
+      // The Herzliya server blocks external proxies, only GitHub servers can access it
+      console.log('🤖 URL detected - submitting directly to GitHub Action (skip proxy)');
+      setFetchProgress({ step: 'connecting', message: '🤖 שולח לעיבוד ברקע...' });
+      setLoading(false);
 
-      const result = await fetchScheduleFromBrowser(url, (progress) => {
-        setFetchProgress(progress);
-      });
-
-      if (result.error || !result.personalHtml) {
-        // Browser fetch failed - try server-side API as fallback
-        setFetchProgress({ step: 'connecting', message: '📡 מנסה דרך השרת...' });
-
-        try {
-          const apiResponse = await fetch('/api/productions/fetch-schedule', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url }),
-          });
-
-          const apiResult = await apiResponse.json();
-
-          if (apiResponse.ok && apiResult.success && apiResult.data.productions.length > 0) {
-            setFetchProgress({ step: 'done', message: getStepMessage('done') });
-            await processSchedule(apiResult.data);
-            return;
-          }
-        } catch {
-          // Server fallback also failed
-        }
-
-        // Both failed - submit to GitHub Action as last resort
-        setFetchProgress({ step: 'connecting', message: '🤖 שולח לעיבוד ברקע...' });
-        setLoading(false);
-
-        // Build a fake WhatsApp-like message with the URL
-        const fakeMessage = `שלום ${userName}\nלוח עבודה\n${url}`;
-        await submitScheduleRequest(fakeMessage);
-        return;
-      }
-
-      // Successfully fetched HTML - try Herzliya DOMParser first, then fallback
-      setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
-
-      let parsed: ParsedSchedule;
-
-      if (isHerzliyaHTML(result.personalHtml)) {
-        parsed = parseHerzliyaHTML(result.personalHtml, userName);
-      } else {
-        parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
-      }
-
-      if (parsed.productions.length === 0) {
-        parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
-      }
-
-      if (parsed.productions.length === 0) {
-        setStatusMessage('לא נמצאו הפקות. ייתכן שהפורמט של הדף שונה ממה שציפיתי.');
-        setShowManualFallback(true);
-        setFetchProgress({ step: 'error', message: '⚠️ לא נמצאו הפקות' });
-        return;
-      }
-
-      setFetchProgress({ step: 'done', message: getStepMessage('done') });
-      await processSchedule(parsed);
+      const fakeMessage = `שלום ${userName}\nלוח עבודה\n${url}`;
+      await submitScheduleRequest(fakeMessage);
     } catch (error) {
       console.error('Fetch error:', error);
       setFetchProgress({ step: 'error', message: '❌ שגיאה' });
@@ -721,6 +817,8 @@ function ProductionsContent() {
       setTimeout(() => setFetchProgress(null), 3000);
     }
   }, [processSchedule, profile]);
+
+  // (Test button removed - REST API confirmed working)
 
   // Reload from Firestore
   const handleReload = async () => {

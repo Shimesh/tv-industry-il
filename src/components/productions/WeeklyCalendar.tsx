@@ -31,10 +31,28 @@ export default function WeeklyCalendar({
   // Build week days array
   const weekDays = getWeekDays(weekStart);
 
+  // Fuzzy name matching helper - handles partial names, Hebrew variations
+  const isUserCrew = (crewName: string): boolean => {
+    if (!crewName) return false;
+    const names = [currentUserName, workerName].filter(Boolean) as string[];
+    for (const name of names) {
+      if (!name) continue;
+      // Exact match
+      if (crewName === name) return true;
+      // One contains the other (handles "ירון" matching "ירון אורבך")
+      if (crewName.includes(name) || name.includes(crewName)) return true;
+      // First name match (split by space, compare first parts)
+      const crewFirst = crewName.split(/\s+/)[0];
+      const nameFirst = name.split(/\s+/)[0];
+      if (crewFirst && nameFirst && crewFirst === nameFirst && crewFirst.length >= 2) return true;
+    }
+    return false;
+  };
+
   // Filter productions based on view mode
   const filteredProductions = viewMode === 'personal'
     ? productions.filter(p =>
-      p.crew.some(c => c.name === currentUserName || c.name === workerName) &&
+      (p.isCurrentUserShift || p.crew.some(c => isUserCrew(c.name))) &&
       p.status !== 'cancelled'
     )
     : productions;
@@ -145,10 +163,8 @@ export default function WeeklyCalendar({
                 ) : (
                   <div className="space-y-2 pr-2">
                     {dayProductions.map(prod => {
-                      const userCrewMember = prod.crew.find(
-                        c => c.name === currentUserName || c.name === workerName
-                      );
-                      const isCurrentUser = prod.isCurrentUserShift ?? !!userCrewMember;
+                      const userCrewMember = prod.crew.find(c => isUserCrew(c.name));
+                      const isCurrentUser = prod.isCurrentUserShift || !!userCrewMember;
                       return (
                         <ProductionBlock
                           key={prod.id}
@@ -195,10 +211,8 @@ export default function WeeklyCalendar({
                 {/* Productions */}
                 <div className="space-y-2">
                   {dayProductions.map(prod => {
-                    const userCrewMember = prod.crew.find(
-                      c => c.name === currentUserName || c.name === workerName
-                    );
-                    const isCurrentUser = !!userCrewMember;
+                    const userCrewMember = prod.crew.find(c => isUserCrew(c.name));
+                    const isCurrentUser = prod.isCurrentUserShift || !!userCrewMember;
                     return (
                       <ProductionBlock
                         key={prod.id}
