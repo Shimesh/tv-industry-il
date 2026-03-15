@@ -147,8 +147,12 @@ function ProductionsContent() {
         });
       }
 
-      // Productions loaded
-      return existing;
+      // Deduplicate by production ID
+      const dedupMap = new Map<string, Production>();
+      for (const prod of existing) {
+        dedupMap.set(prod.id, prod);
+      }
+      return Array.from(dedupMap.values());
     } catch (error) {
       // Error loading week
       return [];
@@ -516,6 +520,9 @@ function ProductionsContent() {
       });
 
       setWorkerName(extractedWorkerName);
+
+      // Trigger GitHub Action immediately via API route (reduces wait from 5min to ~30s)
+      fetch('/api/trigger-action', { method: 'POST' }).catch(() => {});
 
       // Poll for status updates (REST-based, since SDK onSnapshot is broken)
       const pollInterval = setInterval(async () => {

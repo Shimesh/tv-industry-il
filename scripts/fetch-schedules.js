@@ -32,7 +32,14 @@ async function main() {
 
   // Launch Puppeteer
   const browser = await puppeteer.launch({
-    args: chromium.args,
+    args: [
+      ...chromium.args,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--no-first-run',
+      '--disable-extensions',
+    ],
     defaultViewport: chromium.defaultViewport,
     executablePath: await chromium.executablePath(),
     headless: true,
@@ -342,48 +349,46 @@ async function fetchSchedule(browser, url) {
                     const cells = rows[r].querySelectorAll('td');
                     if (cells.length < 3) continue;
 
-                    // Table structure varies, try to extract fields
-                    // Common: phone | details | name | role | production
-                    // or: name | role | times | phone
+                    // Herzliya popup table columns:
+                    // תפקיד (role) | שם (name) | פרטים (roleDetail) | מס' (phone) | שעות (times)
                     const cellTexts = Array.from(cells).map(c => c.textContent.trim());
 
-                    // Find which cell has phone (starts with 05)
                     let phone = '';
                     let name = '';
                     let role = '';
-                    let times = '';
-
-                    for (const ct of cellTexts) {
-                      if (/^0\d{8,9}$/.test(ct.replace(/-/g, ''))) {
-                        phone = ct;
-                      } else if (/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(ct)) {
-                        times = ct;
-                      }
-                    }
-
-                    // Name and role are typically the middle cells
-                    // Try to identify by position relative to phone
-                    const phoneIdx = cellTexts.findIndex(ct => /^0\d{8,9}$/.test(ct.replace(/-/g, '')));
+                    let roleDetail = '';
+                    let startTime = '';
+                    let endTime = '';
 
                     if (cells.length >= 5) {
-                      // Format: phone | details | name | role | production/studio
-                      phone = cellTexts[0] || phone;
-                      name = cellTexts[2] || '';
-                      role = cellTexts[3] || '';
-                      if (cellTexts[4]) studioName = cellTexts[4];
-                    } else if (cells.length >= 4) {
-                      // Format: phone | name | role | times
-                      phone = cellTexts[0] || phone;
+                      // Standard Herzliya format: role | name | roleDetail | phone | times
+                      role = cellTexts[0] || '';
                       name = cellTexts[1] || '';
-                      role = cellTexts[2] || '';
+                      roleDetail = cellTexts[2] || '';
+                      phone = (cellTexts[3] || '').replace(/\D/g, '');
+                      const timeMatch = (cellTexts[4] || '').match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+                      if (timeMatch) {
+                        startTime = timeMatch[1];
+                        endTime = timeMatch[2];
+                      }
+                    } else if (cells.length >= 4) {
+                      role = cellTexts[0] || '';
+                      name = cellTexts[1] || '';
+                      roleDetail = cellTexts[2] || '';
+                      phone = (cellTexts[3] || '').replace(/\D/g, '');
                     } else if (cells.length >= 3) {
-                      name = cellTexts[0] || '';
-                      role = cellTexts[1] || '';
-                      phone = cellTexts[2] || phone;
+                      role = cellTexts[0] || '';
+                      name = cellTexts[1] || '';
+                      phone = (cellTexts[2] || '').replace(/\D/g, '');
+                    }
+
+                    // Format phone: add leading 0 if needed
+                    if (phone && phone.length === 9 && !phone.startsWith('0')) {
+                      phone = '0' + phone;
                     }
 
                     if (name && name.length >= 2) {
-                      crewData.push({ name, role, phone: phone || '' });
+                      crewData.push({ name, role, roleDetail, phone: phone || '', startTime, endTime });
                     }
                   }
 
@@ -433,10 +438,10 @@ async function fetchSchedule(browser, url) {
             mergedCrew.push({
               name: detail.name,
               role: detail.role || (existing ? existing.role : ''),
-              roleDetail: '',
+              roleDetail: detail.roleDetail || (existing ? existing.roleDetail : ''),
               phone: detail.phone || '',
-              startTime: existing ? existing.startTime : '',
-              endTime: existing ? existing.endTime : '',
+              startTime: detail.startTime || (existing ? existing.startTime : ''),
+              endTime: detail.endTime || (existing ? existing.endTime : ''),
             });
           }
 
@@ -460,8 +465,8 @@ async function fetchSchedule(browser, url) {
           }
         }
 
-        // Small delay between clicks to avoid overloading
-        await new Promise(r => setTimeout(r, 500));
+        // Small delay between clicks
+        await new Promise(r => setTimeout(r, 200));
 
       } catch (err) {
         console.log(`  Skipping detail for ${prod.name}: ${err.message}`);
