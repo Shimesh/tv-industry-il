@@ -84,8 +84,7 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
     });
 
     return { uid: firebaseUser.uid, ...profileData };
-  } catch (error) {
-    console.error('Firestore profile error:', error);
+  } catch {
     return null;
   }
 }
@@ -140,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastSeen: serverTimestamp(),
       });
     } catch {
-      console.warn('Firestore profile creation failed');
+      // Firestore write failed - still proceed with local profile
     }
 
     setProfile({ uid: result.user.uid, ...profileData });
@@ -156,11 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If auth actually succeeded despite the error (e.g. iframe error after
       // popup completed), don't re-throw — onAuthStateChanged will handle it
       if (auth.currentUser) {
-        console.warn('[AUTH] Google sign-in threw error but user is authenticated, ignoring');
         return;
       }
       if (authError.code !== 'auth/popup-closed-by-user') {
-        console.error('[AUTH] Google sign-in error code:', authError.code);
         throw error;
       }
     }

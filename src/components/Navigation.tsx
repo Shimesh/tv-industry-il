@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
@@ -77,6 +79,7 @@ export default function Navigation() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
@@ -172,27 +175,38 @@ export default function Navigation() {
                     </div>
 
                     <div className="p-2">
-                      <Link
-                        href="/profile"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                      <button
+                        onClick={() => { setUserMenuOpen(false); router.push('/profile'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <UserIcon className="w-4 h-4" />
                         <span className="font-medium">הפרופיל שלי</span>
-                      </Link>
-                      <Link
-                        href="/settings"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                      </button>
+                      <button
+                        onClick={() => { setUserMenuOpen(false); router.push('/settings'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <Settings className="w-4 h-4" />
                         <span className="font-medium">הגדרות</span>
-                      </Link>
+                      </button>
 
                       <div className="my-1 border-t" style={{ borderColor: 'var(--theme-border)' }} />
 
                       <button
-                        onClick={async () => { setUserMenuOpen(false); await logout(); router.push('/login'); }}
+                        onClick={async () => {
+                          setUserMenuOpen(false);
+                          try {
+                            if (typeof window !== 'undefined') {
+                              localStorage.removeItem('lastOpenedChat');
+                              localStorage.removeItem('lastScheduleWeek');
+                              sessionStorage.clear();
+                            }
+                            await signOut(auth);
+                            window.location.href = '/login';
+                          } catch {
+                            window.location.href = '/login';
+                          }
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
                       >
                         <LogOut className="w-4 h-4" />

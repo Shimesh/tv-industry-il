@@ -98,7 +98,6 @@ export default function LoginPage() {
         // User closed popup intentionally - no error to show
         setError('');
       } else {
-        console.error('[LOGIN] Google sign-in error code:', firebaseError.code);
         setError('שגיאה בהתחברות עם Google. נסו שוב.');
       }
       setIsLoading(false);

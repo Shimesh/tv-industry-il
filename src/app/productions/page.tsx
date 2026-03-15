@@ -103,14 +103,14 @@ function ProductionsContent() {
         return { id, fields };
       });
     } catch (error) {
-      console.error('restListDocs error:', error);
+      // REST API error - return empty
       return [];
     }
   }, [user]);
 
   // Load existing week data via REST API
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
-    console.log('[REST] Loading week:', weekId);
+    // Load week data
     try {
       const prodDocs = await restListDocs(`productions/global/weeks/${weekId}/productions`);
       const existing: Production[] = [];
@@ -147,11 +147,10 @@ function ProductionsContent() {
         });
       }
 
-      console.log('[REST] Loaded', existing.length, 'productions for week', weekId);
-      console.log('[REST] Sample crew:', existing[0]?.crew?.length, 'members, first:', existing[0]?.crew?.[0]);
+      // Productions loaded
       return existing;
     } catch (error) {
-      console.error('Error loading existing week:', error);
+      // Error loading week
       return [];
     }
   }, [restListDocs]);
@@ -163,10 +162,7 @@ function ProductionsContent() {
     wStart: string,
     wEnd: string,
   ) => {
-    console.log('=== saveToFirestore called ===');
-    console.log('weekId:', weekId, 'prods:', prods.length, 'user:', user?.uid);
     if (!user) {
-      console.error('saveToFirestore: NO USER - aborting');
       return;
     }
 
@@ -182,7 +178,6 @@ function ProductionsContent() {
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getDoc timeout')), 10000)),
         ]);
       } catch {
-        console.warn('getDoc timed out, treating as new document');
         metaSnap = { exists: () => false, data: () => null } as any;
       }
 
@@ -244,12 +239,10 @@ function ProductionsContent() {
       }, { merge: true });
 
       await batch.commit();
-      console.log('✅ Firestore batch committed successfully');
 
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
     } catch (error) {
-      console.error('Error saving to Firestore:', error);
     }
   }, [user, workerName]);
 
@@ -323,18 +316,13 @@ function ProductionsContent() {
 
       if (matchCount > 0) {
         await batch2.commit();
-        console.log(`Auto-updated ${matchCount} crew member profiles`);
       }
     } catch (error) {
-      console.error('Error syncing crew profiles:', error);
     }
   }, [user]);
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
-    console.log('=== processSchedule called ===');
-    console.log('productions:', parsed.productions.length);
-    console.log('weekStart:', parsed.weekStart);
     if (!parsed.weekStart) {
       const now = new Date();
       const day = now.getDay();
@@ -492,17 +480,13 @@ function ProductionsContent() {
   // Submit schedule request via REST API for GitHub Action
   // ══════════════════════════════════════════════
   const submitScheduleRequest = useCallback(async (messageText: string) => {
-    console.log('=== submitScheduleRequest called ===');
-    console.log('user:', user?.uid);
 
     if (!user) {
-      console.error('submitScheduleRequest: NO USER - aborting');
       return;
     }
 
     // Extract URL from WhatsApp message
     const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
-    console.log('extracted URL:', urlMatch?.[0]);
     if (!urlMatch) {
       setStatusMessage('לא מצאתי לינק בהודעה');
       return;
@@ -519,7 +503,6 @@ function ProductionsContent() {
     setRequestError(null);
     setStatusMessage(null);
 
-    console.log('saving to Firestore via REST API...');
     try {
       // Write via REST API (bypasses broken SDK)
       const docId = await firestoreRestWrite('scheduleRequests', {
@@ -532,7 +515,6 @@ function ProductionsContent() {
         createdAt: 'SERVER_TIMESTAMP',
       });
 
-      console.log('✅ scheduleRequest saved via REST, docId:', docId);
       setWorkerName(extractedWorkerName);
 
       // Poll for status updates (REST-based, since SDK onSnapshot is broken)
@@ -576,14 +558,12 @@ function ProductionsContent() {
             setTimeout(() => setRequestStatus('idle'), 8000);
           }
         } catch (pollErr) {
-          console.warn('Poll error:', pollErr);
         }
       }, 10000); // Poll every 10 seconds
 
       // Stop polling after 5 minutes max
       setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
     } catch (error: unknown) {
-      console.error('❌ Error submitting schedule request:', error);
       setRequestStatus('error');
       setRequestError(error instanceof Error ? error.message : 'שגיאה בשליחת הבקשה');
     }
@@ -614,7 +594,6 @@ function ProductionsContent() {
   // Load the latest week - try known current week first, then user schedules via REST
   const handleReloadLatest = useCallback(async () => {
     if (!user) return;
-    console.log('[REST] handleReloadLatest called');
     try {
       // Try current week first (Sunday-based week ID)
       const now = new Date();
@@ -622,7 +601,6 @@ function ProductionsContent() {
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - dayOfWeek);
       const weekId = getWeekId(sunday.toISOString().split('T')[0]);
-      console.log('[REST] Trying current weekId:', weekId);
 
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
@@ -630,7 +608,6 @@ function ProductionsContent() {
         const scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
         const userSchedule = scheduleDocs.find(s => s.id === weekId);
         const wName = (userSchedule?.fields?.workerName as string) || profile?.displayName || '';
-        console.log('[REST] workerName from schedule:', wName);
 
         setProductions(prods);
         setWorkerName(wName);
@@ -659,7 +636,6 @@ function ProductionsContent() {
         }
       }
     } catch (error) {
-      console.error('Error loading latest week:', error);
     }
   }, [user, profile, loadExistingWeek, restListDocs]);
 
@@ -672,7 +648,6 @@ function ProductionsContent() {
         // Load latest schedule directly via REST
         await handleReloadLatest();
       } catch (err) {
-        console.warn('checkPending/handleReloadLatest failed:', err);
         try { await handleReloadLatest(); } catch { /* ignore */ }
       }
     };
@@ -682,11 +657,6 @@ function ProductionsContent() {
 
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
-    console.log('=== handleFetch called ===');
-    console.log('url:', url);
-    console.log('manualText:', manualText?.substring(0, 100));
-    console.log('rawHtml:', rawHtml ? `${rawHtml.length} chars` : null);
-    console.log('user:', user?.uid);
 
     setLoading(true);
     setStatusMessage(null);
@@ -736,7 +706,6 @@ function ProductionsContent() {
           // Check if text contains a URL - submit as GitHub Action request
           const urlInText = manualText.match(/https?:\/\/[^\s]+/);
           if (urlInText) {
-            console.log('📤 Manual text has URL but parsing failed - submitting to GitHub Action');
             setFetchProgress(null);
             setLoading(false);
             await submitScheduleRequest(manualText);
@@ -759,14 +728,12 @@ function ProductionsContent() {
 
       // URL detected - skip CORS proxy attempts, go directly to GitHub Action
       // The Herzliya server blocks external proxies, only GitHub servers can access it
-      console.log('🤖 URL detected - submitting directly to GitHub Action (skip proxy)');
       setFetchProgress({ step: 'connecting', message: '🤖 שולח לעיבוד ברקע...' });
       setLoading(false);
 
       const fakeMessage = `שלום ${userName}\nלוח עבודה\n${url}`;
       await submitScheduleRequest(fakeMessage);
     } catch (error) {
-      console.error('Fetch error:', error);
       setFetchProgress({ step: 'error', message: '❌ שגיאה' });
       throw error;
     } finally {
@@ -810,7 +777,6 @@ function ProductionsContent() {
       setStatusMessage('לא הצלחתי לחלץ הפקות. נסה להדביק את כל תוכן הדף (Ctrl+A, Ctrl+C).');
       setFetchProgress({ step: 'error', message: '⚠️ לא נמצאו הפקות' });
     } catch (error) {
-      console.error('Manual parse error:', error);
       setStatusMessage('שגיאה בעיבוד הטקסט');
     } finally {
       setLoading(false);
@@ -965,65 +931,90 @@ function ScheduleRequestStatus({
   error: string | null;
   workerName: string;
 }) {
-  const progressPercent = status === 'pending' ? 30 : status === 'processing' ? 65 : status === 'done' ? 100 : 0;
+  const steps = [
+    { id: 1, text: 'ההודעה התקבלה', icon: '✅' },
+    { id: 2, text: 'מתחבר לשרת הרצליה...', icon: '🔗' },
+    { id: 3, text: 'קורא לוח שידורים', icon: '📋' },
+    { id: 4, text: 'מעבד נתוני צוות', icon: '👥' },
+    { id: 5, text: 'שומר ביומן', icon: '💾' },
+  ];
+
+  const activeStep = status === 'pending' ? 2 : status === 'processing' ? 3 : status === 'done' ? 6 : 0;
+
+  if (status === 'error') {
+    return (
+      <div className="mb-6 rounded-xl border overflow-hidden p-4" style={{
+        background: 'var(--theme-bg-secondary)',
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+      }}>
+        <div className="flex items-center gap-3">
+          <AlertTriangleIcon className="w-5 h-5 text-red-400" />
+          <div>
+            <h3 className="text-sm font-bold text-red-400">שגיאה בעיבוד</h3>
+            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              {error || 'נסה שוב מאוחר יותר'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-6 rounded-xl border overflow-hidden" style={{
       background: 'var(--theme-bg-secondary)',
-      borderColor: status === 'error'
-        ? 'rgba(239, 68, 68, 0.3)'
-        : status === 'done'
-          ? 'rgba(34, 197, 94, 0.3)'
-          : 'rgba(251, 191, 36, 0.3)',
+      borderColor: status === 'done' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(251, 191, 36, 0.3)',
     }}>
       <div className="p-4">
-        <div className="flex items-center gap-3 mb-3">
-          {status === 'pending' && (
-            <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
-          )}
-          {status === 'processing' && (
-            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-          )}
-          {status === 'done' && (
-            <CheckCircle className="w-5 h-5 text-green-400" />
-          )}
-          {status === 'error' && (
-            <AlertTriangleIcon className="w-5 h-5 text-red-400" />
-          )}
-
-          <div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            {status === 'done' ? (
+              <CheckCircle className="w-5 h-5 text-green-400" />
+            ) : (
+              <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
+            )}
             <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-              {status === 'pending' && 'ממתין לעיבוד...'}
-              {status === 'processing' && 'מעבד את לוח העבודה...'}
-              {status === 'done' && 'הלוח עודכן!'}
-              {status === 'error' && 'שגיאה בעיבוד'}
+              {status === 'done' ? 'הלוח עודכן!' : `טוען את הלוח של ${workerName || 'העובד'}...`}
             </h3>
-            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              {status === 'pending' && 'הבקשה נשלחה, בדרך כלל לוקח 1-2 דקות'}
-              {status === 'processing' && `טוען את הלוח של ${workerName || 'העובד'}...`}
-              {status === 'done' && 'לוח העבודה נטען בהצלחה'}
-              {status === 'error' && (error || 'נסה שוב מאוחר יותר')}
-            </p>
           </div>
+          {status !== 'done' && (
+            <span className="text-[10px] px-2 py-1 rounded-full" style={{
+              background: 'rgba(251, 191, 36, 0.1)',
+              color: 'var(--theme-text-secondary)',
+            }}>
+              בדרך כלל 1-3 דקות
+            </span>
+          )}
         </div>
 
-        {/* Progress bar */}
-        {(status === 'pending' || status === 'processing') && (
-          <div className="w-full h-2 rounded-full overflow-hidden" style={{
-            background: 'rgba(255,255,255,0.1)',
-          }}>
-            <div
-              className="h-full rounded-full transition-all duration-1000"
-              style={{
-                width: `${progressPercent}%`,
-                background: status === 'processing'
-                  ? 'linear-gradient(90deg, #3b82f6, #8b5cf6)'
-                  : 'linear-gradient(90deg, #f59e0b, #ef4444)',
-                animation: 'pulse 2s ease-in-out infinite',
-              }}
-            />
-          </div>
-        )}
+        {/* Steps */}
+        <div className="space-y-2">
+          {steps.map(step => {
+            const isDone = step.id < activeStep;
+            const isActive = step.id === activeStep;
+            const isPending = step.id > activeStep;
+
+            return (
+              <div key={step.id} className="flex items-center gap-3">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
+                  isDone ? 'bg-green-500/20' : isActive ? 'bg-amber-500/20' : 'bg-white/5'
+                }`}>
+                  {isDone ? '✓' : isActive ? (
+                    <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+                  ) : (
+                    <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>{step.id}</span>
+                  )}
+                </div>
+                <span className={`text-xs font-medium ${
+                  isDone ? 'text-green-400' : isActive ? 'text-amber-300' : ''
+                }`} style={isPending ? { color: 'var(--theme-text-secondary)', opacity: 0.5 } : isDone ? {} : {}}>
+                  {step.icon} {step.text}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
