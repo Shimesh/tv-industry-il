@@ -516,99 +516,110 @@ function getWeekId(dateStr) {
   return sunday.toISOString().split('T')[0];
 }
 
+// Delete all existing productions for a week before saving fresh data
+async function cleanupWeek(weekId) {
+  console.log(`Cleaning up existing data for week ${weekId}...`);
+  const prodsSnap = await db
+    .collection(`productions/global/weeks/${weekId}/productions`)
+    .get();
+
+  if (prodsSnap.empty) {
+    console.log('No existing productions to clean up');
+    return;
+  }
+
+  // Delete crew subcollections first, then productions
+  for (const prodDoc of prodsSnap.docs) {
+    const crewSnap = await db
+      .collection(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`)
+      .get();
+    const batch = db.batch();
+    for (const crewDoc of crewSnap.docs) {
+      batch.delete(crewDoc.ref);
+    }
+    batch.delete(prodDoc.ref);
+    await batch.commit();
+  }
+
+  console.log(`Deleted ${prodsSnap.size} old productions and their crew`);
+}
+
+// Deduplicate crew array by name (keep last/best entry)
+function deduplicateCrew(crew) {
+  const seen = new Map();
+  for (const member of crew) {
+    const key = member.name.trim().toLowerCase();
+    if (!key || key.length < 2) continue;
+    // Keep the entry with more data (phone, role, etc.)
+    const existing = seen.get(key);
+    if (!existing || member.phone || member.role) {
+      seen.set(key, member);
+    }
+  }
+  return Array.from(seen.values());
+}
+
 async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
+
+  // STEP 1: Wipe existing week data to prevent duplicates
+  await cleanupWeek(weekId);
+
+  // STEP 2: Save fresh data with SET (not merge)
   const batch = db.batch();
 
-  // Save week metadata
+  // Save week metadata (SET, not merge - fresh data)
   const weekRef = db.doc(`productions/global/weeks/${weekId}`);
-  batch.set(
-    weekRef,
-    {
-      weekId,
-      weekStart: schedule.weekStart,
-      weekEnd: schedule.weekEnd,
-      lastUpdated: FieldValue.serverTimestamp(),
-      contributors: FieldValue.arrayUnion(userId),
-    },
-    { merge: true }
-  );
+  batch.set(weekRef, {
+    weekId,
+    weekStart: schedule.weekStart,
+    weekEnd: schedule.weekEnd,
+    lastUpdated: FieldValue.serverTimestamp(),
+    contributors: [userId],
+  });
 
-  // Save each production
+  // Save each production using herzliyaId as stable document ID
   for (const prod of schedule.productions) {
-    const prodId =
-      generateProductionId(prod.name, prod.date, prod.studio) ||
-      String(prod.herzliyaId);
+    // Use herzliyaId as the document ID - it's the stable identifier from Herzliya
+    const prodId = String(prod.herzliyaId);
+    if (!prodId || prodId === '0') continue;
+
     const prodRef = db.doc(
       `productions/global/weeks/${weekId}/productions/${prodId}`
     );
 
-    // Get existing to merge crew
-    const existing = await prodRef.get();
-    let mergedCrew = prod.crew;
+    // Deduplicate crew by name before saving
+    const cleanCrew = deduplicateCrew(prod.crew);
 
-    if (existing.exists) {
-      const existingCrew = existing.data().crew || [];
-      mergedCrew = [...existingCrew];
-      for (const newMember of prod.crew) {
-        const found = mergedCrew.find((m) => m.name === newMember.name);
-        if (!found) mergedCrew.push(newMember);
-      }
-    }
-
-    batch.set(
-      prodRef,
-      {
-        name: prod.name,
-        studio: prod.studio,
-        date: prod.date,
-        day: prod.day || getHebrewDay(prod.date),
-        startTime: prod.startTime,
-        endTime: prod.endTime,
-        status: prod.status,
-        herzliyaId: prod.herzliyaId,
-        isCurrentUserShift: prod.isCurrentUserShift || false,
-        lastUpdatedBy: userId,
-        lastUpdatedAt: new Date().toISOString(),
-        versions: [],
-      },
-      { merge: true }
-    );
-
-    // Save crew as subcollection
-    for (const crew of mergedCrew) {
-      const crewId = crew.name.replace(/\s+/g, '_').toLowerCase();
-      const crewRef = db.doc(
-        `productions/global/weeks/${weekId}/productions/${prodId}/crew/${crewId}`
-      );
-      batch.set(
-        crewRef,
-        {
-          ...crew,
-          addedBy: crew.addedBy || userId,
-          addedAt: crew.addedAt || new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    }
+    // SET (not merge) - replace entire document
+    batch.set(prodRef, {
+      name: prod.name,
+      studio: prod.studio,
+      date: prod.date,
+      day: prod.day || getHebrewDay(prod.date),
+      startTime: prod.startTime,
+      endTime: prod.endTime,
+      status: prod.status,
+      herzliyaId: prod.herzliyaId,
+      isCurrentUserShift: prod.isCurrentUserShift || false,
+      lastUpdatedBy: userId,
+      lastUpdatedAt: new Date().toISOString(),
+      crew: cleanCrew,
+    });
   }
 
   // Save user's schedule reference
   const userScheduleRef = db.doc(`users/${userId}/schedules/${weekId}`);
-  batch.set(
-    userScheduleRef,
-    {
-      workerName: schedule.workerName || requestedWorkerName,
-      weekStart: schedule.weekStart,
-      weekEnd: schedule.weekEnd,
-      fetchedAt: schedule.fetchedAt,
-      productionCount: schedule.productions.length,
-    },
-    { merge: true }
-  );
+  batch.set(userScheduleRef, {
+    workerName: schedule.workerName || requestedWorkerName,
+    weekStart: schedule.weekStart,
+    weekEnd: schedule.weekEnd,
+    fetchedAt: schedule.fetchedAt,
+    productionCount: schedule.productions.length,
+  });
 
   await batch.commit();
-  console.log(`Saved ${schedule.productions.length} productions to week ${weekId}`);
+  console.log(`Saved ${schedule.productions.length} productions to week ${weekId} (clean)`);
 }
 
 main().catch(console.error);
