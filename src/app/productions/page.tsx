@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
 import MessageInput from '@/components/productions/MessageInput';
@@ -23,11 +23,17 @@ import {
   getDoc,
   collection,
   getDocs,
+  addDoc,
   writeBatch,
   serverTimestamp,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Clapperboard, RefreshCw } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
 
 export default function ProductionsPage() {
   return (
@@ -36,6 +42,9 @@ export default function ProductionsPage() {
     </AuthGuard>
   );
 }
+
+// Request status type
+type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
 function ProductionsContent() {
   const { user, profile } = useAuth();
@@ -50,6 +59,18 @@ function ProductionsContent() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
   const [showManualFallback, setShowManualFallback] = useState(false);
+  const [requestStatus, setRequestStatus] = useState<RequestStatus>('idle');
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const unsubRequestRef = useRef<(() => void) | null>(null);
+  const unsubWeekRef = useRef<(() => void) | null>(null);
+
+  // Cleanup listeners on unmount
+  useEffect(() => {
+    return () => {
+      unsubRequestRef.current?.();
+      unsubWeekRef.current?.();
+    };
+  }, []);
 
   // Load existing week data from Firestore
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
@@ -176,7 +197,6 @@ function ProductionsContent() {
     wEnd: string,
   ) => {
     try {
-      // Collect all unique crew names from all productions
       const allCrewNames = new Set<string>();
       for (const prod of prods) {
         for (const crew of prod.crew) {
@@ -185,10 +205,9 @@ function ProductionsContent() {
       }
       if (allCrewNames.size === 0) return;
 
-      // Query all users to match by displayName
       const usersRef = collection(db, 'users');
       const usersSnap = await getDocs(usersRef);
-      const usersByName = new Map<string, string>(); // displayName -> uid
+      const usersByName = new Map<string, string>();
 
       usersSnap.docs.forEach(docSnap => {
         const data = docSnap.data();
@@ -197,7 +216,6 @@ function ProductionsContent() {
         }
       });
 
-      // Match crew names to registered users
       const batch2 = writeBatch(db);
       let matchCount = 0;
 
@@ -205,14 +223,12 @@ function ProductionsContent() {
         const matchedUid = usersByName.get(crewName);
         if (!matchedUid) continue;
 
-        // Find all productions this crew member is part of
         const memberProds = prods.filter(p =>
           p.crew.some(c => c.name === crewName) && p.status !== 'cancelled'
         );
 
         if (memberProds.length === 0) continue;
 
-        // Build production summaries for the user's schedule
         const productionEntries = memberProds.map(p => {
           const crewEntry = p.crew.find(c => c.name === crewName);
           return {
@@ -228,7 +244,6 @@ function ProductionsContent() {
           };
         });
 
-        // Save to user's personal schedule
         const userScheduleRef = doc(db, 'users', matchedUid, 'schedules', weekId);
         batch2.set(userScheduleRef, {
           workerName: crewName,
@@ -248,7 +263,6 @@ function ProductionsContent() {
       }
     } catch (error) {
       console.error('Error syncing crew profiles:', error);
-      // Non-critical - don't break the flow
     }
   }, [user]);
 
@@ -327,7 +341,202 @@ function ProductionsContent() {
     }
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
-  // Main fetch handler - browser-side with CORS proxy
+  // ══════════════════════════════════════════════
+  // Submit schedule request to Firestore for GitHub Action
+  // ══════════════════════════════════════════════
+  const submitScheduleRequest = useCallback(async (messageText: string) => {
+    if (!user) return;
+
+    // Extract URL from WhatsApp message
+    const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
+    if (!urlMatch) {
+      setStatusMessage('לא מצאתי לינק בהודעה');
+      return;
+    }
+
+    // Extract worker name
+    const nameMatch = messageText.match(/שלום\s+([^\n,]+)/);
+    const extractedWorkerName = nameMatch?.[1]?.trim() || profile?.displayName || '';
+
+    // Extract dates
+    const dateMatch = messageText.match(/(\d{2}\/\d{2}\/\d{4})\s*[-–]\s*(\d{2}\/\d{2}\/\d{4})/);
+
+    setRequestStatus('pending');
+    setRequestError(null);
+    setStatusMessage(null);
+
+    try {
+      // Save request to Firestore
+      const docRef = await addDoc(collection(db, 'scheduleRequests'), {
+        userId: user.uid,
+        workerName: extractedWorkerName,
+        url: urlMatch[0],
+        weekStart: dateMatch?.[1] || '',
+        weekEnd: dateMatch?.[2] || '',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      setWorkerName(extractedWorkerName);
+
+      // Listen for request status updates
+      unsubRequestRef.current?.();
+      unsubRequestRef.current = onSnapshot(doc(db, 'scheduleRequests', docRef.id), (snap) => {
+        const data = snap.data();
+        if (!data) return;
+
+        const status = data.status as RequestStatus;
+        setRequestStatus(status);
+
+        if (status === 'done') {
+          // Request completed - load the productions
+          setRequestStatus('done');
+          unsubRequestRef.current?.();
+
+          // Load the week that was just fetched
+          if (data.productionCount > 0) {
+            // Calculate weekId from dates
+            const wStart = dateMatch?.[1];
+            if (wStart) {
+              const [d, m, y] = wStart.split('/').map(Number);
+              const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const weekId = getWeekId(isoDate);
+
+              loadExistingWeek(weekId).then(prods => {
+                if (prods.length > 0) {
+                  setProductions(prods);
+                  setWeekStart(isoDate);
+                  const sat = new Date(y, m - 1, d + 6);
+                  setWeekEnd(sat.toISOString().split('T')[0]);
+                  setCurrentWeekId(weekId);
+                  setStatusMessage(`נטענו ${prods.length} הפקות`);
+                }
+              });
+            } else {
+              // No dates available, try to find the latest week
+              handleReloadLatest();
+            }
+          }
+
+          // Clear status after a few seconds
+          setTimeout(() => setRequestStatus('idle'), 5000);
+        } else if (status === 'error') {
+          setRequestError(data.error || 'שגיאה בטעינת הלוח');
+          unsubRequestRef.current?.();
+          setTimeout(() => setRequestStatus('idle'), 8000);
+        }
+      });
+
+      // Also set up onSnapshot on the productions week to catch real-time updates
+      if (dateMatch) {
+        const [d, m, y] = dateMatch[1].split('/').map(Number);
+        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const weekId = getWeekId(isoDate);
+        listenToWeek(weekId);
+      }
+    } catch (error) {
+      console.error('Error submitting schedule request:', error);
+      setRequestStatus('error');
+      setRequestError('שגיאה בשליחת הבקשה');
+    }
+  }, [user, profile, loadExistingWeek]);
+
+  // Listen to a week's productions for real-time updates
+  const listenToWeek = useCallback((weekId: string) => {
+    unsubWeekRef.current?.();
+
+    const weekRef = doc(db, 'productions', 'global', 'weeks', weekId);
+    unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      if (data.lastUpdated) {
+        // Week was updated - reload productions
+        const prods = await loadExistingWeek(weekId);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(data.weekStart || '');
+          setWeekEnd(data.weekEnd || '');
+          setCurrentWeekId(weekId);
+        }
+      }
+    });
+  }, [loadExistingWeek]);
+
+  // Load the latest week from user's schedules
+  const handleReloadLatest = useCallback(async () => {
+    if (!user) return;
+    try {
+      const schedulesRef = collection(db, 'users', user.uid, 'schedules');
+      const q = query(schedulesRef, orderBy('fetchedAt', 'desc'), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        const weekId = snap.docs[0].id;
+        const prods = await loadExistingWeek(weekId);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(data.weekStart || '');
+          setWeekEnd(data.weekEnd || '');
+          setWorkerName(data.workerName || '');
+          setCurrentWeekId(weekId);
+          setStatusMessage(`נטענו ${prods.length} הפקות`);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading latest week:', error);
+    }
+  }, [user, loadExistingWeek]);
+
+  // Check for recent pending requests on mount
+  useEffect(() => {
+    if (!user) return;
+
+    const checkPending = async () => {
+      try {
+        const q = query(
+          collection(db, 'scheduleRequests'),
+          where('userId', '==', user.uid),
+          where('status', 'in', ['pending', 'processing']),
+          orderBy('createdAt', 'desc'),
+          limit(1),
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const data = snap.docs[0].data();
+          setRequestStatus(data.status as RequestStatus);
+          setWorkerName(data.workerName || '');
+
+          // Resume listening
+          unsubRequestRef.current?.();
+          unsubRequestRef.current = onSnapshot(doc(db, 'scheduleRequests', snap.docs[0].id), (docSnap) => {
+            const d = docSnap.data();
+            if (!d) return;
+            setRequestStatus(d.status as RequestStatus);
+
+            if (d.status === 'done') {
+              unsubRequestRef.current?.();
+              handleReloadLatest();
+              setTimeout(() => setRequestStatus('idle'), 5000);
+            } else if (d.status === 'error') {
+              setRequestError(d.error || 'שגיאה');
+              unsubRequestRef.current?.();
+              setTimeout(() => setRequestStatus('idle'), 8000);
+            }
+          });
+        } else {
+          // No pending requests - try to load latest schedule
+          await handleReloadLatest();
+        }
+      } catch {
+        // Firestore index might not be ready yet
+      }
+    };
+
+    checkPending();
+  }, [user, handleReloadLatest]);
+
+  // Main fetch handler - browser-side with CORS proxy + GitHub Action fallback
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
     setLoading(true);
     setStatusMessage(null);
@@ -347,14 +556,12 @@ function ProductionsContent() {
           await processSchedule(parsed);
           return;
         }
-        // Fall through to text parsing
       }
 
       // Manual text input
       if (manualText && !url) {
         setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
-        // Check if text is Herzliya HTML
         if (isHerzliyaHTML(manualText)) {
           const htmlParsed = parseHerzliyaHTML(manualText, userName);
           if (htmlParsed.productions.length > 0) {
@@ -375,6 +582,16 @@ function ProductionsContent() {
               return;
             }
           }
+
+          // Check if text contains a URL - submit as GitHub Action request
+          const urlInText = manualText.match(/https?:\/\/[^\s]+/);
+          if (urlInText) {
+            setFetchProgress(null);
+            setLoading(false);
+            await submitScheduleRequest(manualText);
+            return;
+          }
+
           setStatusMessage('לא הצלחתי לחלץ הפקות מהטקסט. נסה להדביק את תוכן הדף המלא.');
           setShowManualFallback(true);
           return;
@@ -418,10 +635,13 @@ function ProductionsContent() {
           // Server fallback also failed
         }
 
-        // Both failed - show manual fallback
-        setFetchProgress({ step: 'error', message: '❌ לא הצלחתי להתחבר' });
-        setShowManualFallback(true);
-        setStatusMessage(result.error || 'לא הצלחתי לגשת ללינק');
+        // Both failed - submit to GitHub Action as last resort
+        setFetchProgress({ step: 'connecting', message: '🤖 שולח לעיבוד ברקע...' });
+        setLoading(false);
+
+        // Build a fake WhatsApp-like message with the URL
+        const fakeMessage = `שלום ${userName}\nלוח עבודה\n${url}`;
+        await submitScheduleRequest(fakeMessage);
         return;
       }
 
@@ -436,7 +656,6 @@ function ProductionsContent() {
         parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
       }
 
-      // If primary parse got nothing, try the other parser
       if (parsed.productions.length === 0) {
         parsed = parseScheduleHTML(result.personalHtml, result.deptHtml);
       }
@@ -458,7 +677,7 @@ function ProductionsContent() {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule, profile]);
+  }, [processSchedule, profile, submitScheduleRequest]);
 
   // Handle manual HTML paste
   const handleManualHtmlPaste = useCallback(async (html: string) => {
@@ -469,7 +688,6 @@ function ProductionsContent() {
     const userName = profile?.displayName || '';
 
     try {
-      // Try Herzliya HTML parser first (DOMParser)
       if (isHerzliyaHTML(html)) {
         const herzliyaParsed = parseHerzliyaHTML(html, userName);
         if (herzliyaParsed.productions.length > 0) {
@@ -479,7 +697,6 @@ function ProductionsContent() {
         }
       }
 
-      // Try generic HTML parse
       const parsed = parseScheduleHTML(html, '');
       if (parsed.productions.length > 0) {
         setFetchProgress({ step: 'done', message: getStepMessage('done') });
@@ -487,7 +704,6 @@ function ProductionsContent() {
         return;
       }
 
-      // Try text parse
       const textParsed = parseManualText(html);
       if (textParsed.productions.length > 0) {
         setFetchProgress({ step: 'done', message: getStepMessage('done') });
@@ -563,6 +779,15 @@ function ProductionsContent() {
         />
       </div>
 
+      {/* GitHub Action request status - waiting UI */}
+      {requestStatus !== 'idle' && (
+        <ScheduleRequestStatus
+          status={requestStatus}
+          error={requestError}
+          workerName={workerName}
+        />
+      )}
+
       {/* Fetch progress indicator */}
       {fetchProgress && loading && (
         <div className="mb-4 px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{
@@ -612,7 +837,7 @@ function ProductionsContent() {
       )}
 
       {/* Empty state */}
-      {!loading && productions.length === 0 && !statusMessage && !showManualFallback && (
+      {!loading && productions.length === 0 && !statusMessage && !showManualFallback && requestStatus === 'idle' && (
         <div className="text-center py-16">
           <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
             <Clapperboard className="w-10 h-10 text-orange-400/50" />
@@ -626,6 +851,82 @@ function ProductionsContent() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ══════════════════════════════════════
+// Schedule Request Status Component
+// ══════════════════════════════════════
+function ScheduleRequestStatus({
+  status,
+  error,
+  workerName,
+}: {
+  status: RequestStatus;
+  error: string | null;
+  workerName: string;
+}) {
+  const progressPercent = status === 'pending' ? 30 : status === 'processing' ? 65 : status === 'done' ? 100 : 0;
+
+  return (
+    <div className="mb-6 rounded-xl border overflow-hidden" style={{
+      background: 'var(--theme-bg-secondary)',
+      borderColor: status === 'error'
+        ? 'rgba(239, 68, 68, 0.3)'
+        : status === 'done'
+          ? 'rgba(34, 197, 94, 0.3)'
+          : 'rgba(251, 191, 36, 0.3)',
+    }}>
+      <div className="p-4">
+        <div className="flex items-center gap-3 mb-3">
+          {status === 'pending' && (
+            <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
+          )}
+          {status === 'processing' && (
+            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+          )}
+          {status === 'done' && (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          )}
+          {status === 'error' && (
+            <AlertTriangleIcon className="w-5 h-5 text-red-400" />
+          )}
+
+          <div>
+            <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+              {status === 'pending' && 'ממתין לעיבוד...'}
+              {status === 'processing' && 'מעבד את לוח העבודה...'}
+              {status === 'done' && 'הלוח עודכן!'}
+              {status === 'error' && 'שגיאה בעיבוד'}
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              {status === 'pending' && 'הבקשה נשלחה, בדרך כלל לוקח 1-2 דקות'}
+              {status === 'processing' && `טוען את הלוח של ${workerName || 'העובד'}...`}
+              {status === 'done' && 'לוח העבודה נטען בהצלחה'}
+              {status === 'error' && (error || 'נסה שוב מאוחר יותר')}
+            </p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {(status === 'pending' || status === 'processing') && (
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{
+            background: 'rgba(255,255,255,0.1)',
+          }}>
+            <div
+              className="h-full rounded-full transition-all duration-1000"
+              style={{
+                width: `${progressPercent}%`,
+                background: status === 'processing'
+                  ? 'linear-gradient(90deg, #3b82f6, #8b5cf6)'
+                  : 'linear-gradient(90deg, #f59e0b, #ef4444)',
+                animation: 'pulse 2s ease-in-out infinite',
+              }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
