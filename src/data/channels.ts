@@ -3,8 +3,9 @@ export interface Channel {
   name: string;
   number: number;
   logo: string;
-  category: 'main' | 'sport' | 'news';
+  category: 'main' | 'sport' | 'news' | 'public' | 'international';
   color: string;
+  group: string;
 }
 
 export interface ScheduleItem {
@@ -17,26 +18,36 @@ export interface ScheduleItem {
 }
 
 export const channels: Channel[] = [
-  { id: 'kan11', name: 'כאן 11', number: 11, logo: '📺', category: 'main', color: '#1e40af' },
-  { id: 'keshet12', name: 'קשת 12', number: 12, logo: '📺', category: 'main', color: '#dc2626' },
-  { id: 'reshet13', name: 'רשת 13', number: 13, logo: '📺', category: 'main', color: '#059669' },
-  { id: 'now14', name: 'עכשיו 14', number: 14, logo: '📺', category: 'main', color: '#7c3aed' },
-  { id: 'i24', name: 'i24NEWS', number: 15, logo: '📺', category: 'news', color: '#0891b2' },
-  { id: 'sport55', name: 'ספורט 5', number: 55, logo: '⚽', category: 'sport', color: '#ea580c' },
-  { id: 'sport56', name: 'ספורט 5+', number: 56, logo: '⚽', category: 'sport', color: '#d97706' },
-  { id: 'gold', name: 'ספורט 5 GOLD', number: 0, logo: '🏆', category: 'sport', color: '#ca8a04' },
-  { id: 'live', name: 'ספורט 5 LIVE', number: 0, logo: '🔴', category: 'sport', color: '#e11d48' },
-  { id: 'charlton1', name: "צ'רלטון ספורט 1", number: 0, logo: '🏅', category: 'sport', color: '#2563eb' },
-  { id: 'charlton2', name: "צ'רלטון ספורט 2", number: 0, logo: '🏅', category: 'sport', color: '#4f46e5' },
-  { id: 'charlton3', name: "צ'רלטון ספורט 3", number: 0, logo: '🏅', category: 'sport', color: '#6d28d9' },
-  { id: 'charlton4', name: "צ'רלטון ספורט 4", number: 0, logo: '🏅', category: 'sport', color: '#7e22ce' },
-  { id: 'charlton6', name: "צ'רלטון ספורט 6", number: 0, logo: '🏅', category: 'sport', color: '#9333ea' },
+  // ערוצים ראשיים
+  { id: 'kan11', name: 'כאן 11', number: 11, logo: '📺', category: 'main', color: '#1e40af', group: 'ערוצים ראשיים' },
+  { id: 'keshet12', name: 'קשת 12', number: 12, logo: '📺', category: 'main', color: '#dc2626', group: 'ערוצים ראשיים' },
+  { id: 'reshet13', name: 'רשת 13', number: 13, logo: '📺', category: 'main', color: '#059669', group: 'ערוצים ראשיים' },
+  { id: 'now14', name: 'עכשיו 14', number: 14, logo: '📺', category: 'main', color: '#7c3aed', group: 'ערוצים ראשיים' },
+  // חדשות ובינלאומי
+  { id: 'i24', name: 'i24NEWS', number: 15, logo: '🌐', category: 'news', color: '#0891b2', group: 'חדשות' },
+  // ציבורי
+  { id: 'knesset', name: 'ערוץ הכנסת', number: 99, logo: '🏛️', category: 'public', color: '#6366f1', group: 'ציבורי' },
+  { id: 'kan33', name: 'כאן 33', number: 33, logo: '🎭', category: 'public', color: '#8b5cf6', group: 'ציבורי' },
+  // ספורט
+  { id: 'sport55', name: 'ספורט 5', number: 55, logo: '⚽', category: 'sport', color: '#ea580c', group: 'ספורט' },
+  { id: 'sport56', name: 'ספורט 5+', number: 56, logo: '⚽', category: 'sport', color: '#d97706', group: 'ספורט' },
+  { id: 'gold', name: 'ספורט 5 GOLD', number: 0, logo: '🏆', category: 'sport', color: '#ca8a04', group: 'ספורט' },
+  { id: 'live', name: 'ספורט 5 LIVE', number: 0, logo: '🔴', category: 'sport', color: '#e11d48', group: 'ספורט' },
+  { id: 'charlton1', name: "צ'רלטון 1", number: 0, logo: '🏅', category: 'sport', color: '#2563eb', group: 'ספורט' },
+  { id: 'charlton2', name: "צ'רלטון 2", number: 0, logo: '🏅', category: 'sport', color: '#4f46e5', group: 'ספורט' },
+  { id: 'charlton3', name: "צ'רלטון 3", number: 0, logo: '🏅', category: 'sport', color: '#6d28d9', group: 'ספורט' },
+  { id: 'charlton4', name: "צ'רלטון 4", number: 0, logo: '🏅', category: 'sport', color: '#7e22ce', group: 'ספורט' },
+  { id: 'charlton6', name: "צ'רלטון 6", number: 0, logo: '🏅', category: 'sport', color: '#9333ea', group: 'ספורט' },
+];
+
+export const channelGroups = [
+  { id: 'main', label: 'ערוצים ראשיים', channels: ['kan11', 'keshet12', 'reshet13', 'now14'] },
+  { id: 'news', label: 'חדשות', channels: ['i24'] },
+  { id: 'public', label: 'ציבורי', channels: ['knesset', 'kan33'] },
+  { id: 'sport', label: 'ספורט', channels: ['sport55', 'sport56', 'gold', 'live', 'charlton1', 'charlton2', 'charlton3', 'charlton4', 'charlton6'] },
 ];
 
 export function generateSchedule(channelId: string): ScheduleItem[] {
-  const now = new Date();
-  const hour = now.getHours();
-
   const schedules: Record<string, ScheduleItem[]> = {
     kan11: [
       { time: '06:00', title: 'בוקר טוב ישראל', description: 'מגזין הבוקר של כאן', duration: '3 שעות', genre: 'מגזין' },
@@ -130,6 +141,26 @@ export function generateSchedule(channelId: string): ScheduleItem[] {
       { time: '20:00', title: 'i24 Debate', description: 'Evening debate', duration: '60 min', genre: 'אקטואליה' },
       { time: '22:00', title: 'i24 Late', description: 'Late night news', duration: '60 min', genre: 'חדשות' },
     ],
+    knesset: [
+      { time: '09:00', title: 'ישיבת מליאה', description: 'שידור חי מהכנסת', duration: '3 שעות', genre: 'פוליטיקה', isLive: true },
+      { time: '12:00', title: 'ועדת חוקה', description: 'דיון בוועדה', duration: '2 שעות', genre: 'פוליטיקה' },
+      { time: '14:00', title: 'ועדת הכספים', description: 'דיון תקציבי', duration: '2 שעות', genre: 'פוליטיקה' },
+      { time: '16:00', title: 'ועדת החינוך', description: 'דיון בוועדה', duration: '2 שעות', genre: 'פוליטיקה' },
+      { time: '18:00', title: 'סיכום יום פרלמנטרי', description: 'סיכום הפעילות', duration: '60 דקות', genre: 'פוליטיקה' },
+      { time: '19:00', title: 'ישיבת מליאה ערב', description: 'שידור חי', duration: '3 שעות', genre: 'פוליטיקה', isLive: true },
+    ],
+    kan33: [
+      { time: '08:00', title: 'מוזיקה ישראלית', description: 'קליפים ישראליים', duration: '2 שעות', genre: 'מוזיקה' },
+      { time: '10:00', title: 'תרבות עכשיו', description: 'מגזין תרבות', duration: '60 דקות', genre: 'תרבות' },
+      { time: '11:00', title: 'קולנוע דוקו', description: 'סרט תיעודי', duration: '90 דקות', genre: 'תיעודי' },
+      { time: '12:30', title: 'ערבית', description: 'שיעורי ערבית', duration: '30 דקות', genre: 'חינוך' },
+      { time: '14:00', title: 'אמנות ישראלית', description: 'תערוכות וגלריות', duration: '60 דקות', genre: 'תרבות' },
+      { time: '16:00', title: 'במה מקומית', description: 'תיאטרון ומחול', duration: '90 דקות', genre: 'תרבות' },
+      { time: '18:00', title: 'ג\'אז ועולם', description: 'מוזיקת ג\'אז', duration: '60 דקות', genre: 'מוזיקה' },
+      { time: '20:00', title: 'סדרה בינלאומית', description: 'דרמה מהעולם', duration: '55 דקות', genre: 'דרמה' },
+      { time: '21:00', title: 'פסטיבל הסרטים', description: 'קולנוע עולמי', duration: '2 שעות', genre: 'קולנוע' },
+      { time: '23:00', title: 'לילה מוזיקלי', description: 'הופעות חיות', duration: '60 דקות', genre: 'מוזיקה' },
+    ],
     sport55: [
       { time: '10:00', title: 'ספורט בוקר', description: 'סיכום ספורטיבי', duration: '60 דקות', genre: 'ספורט' },
       { time: '11:00', title: 'ליגת העל בכדורגל', description: 'שידור חי', duration: '2 שעות', genre: 'ספורט', isLive: true },
@@ -151,7 +182,6 @@ export function generateSchedule(channelId: string): ScheduleItem[] {
     ],
   };
 
-  // Use kan11 schedule as fallback for channels without specific schedule
   return schedules[channelId] || schedules['kan11'] || [];
 }
 

@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
-import { X, Phone, Share2, MapPin, Clock, Users } from 'lucide-react';
+import { contacts } from '@/data/contacts';
+import { X, MapPin, Clock, Users } from 'lucide-react';
 
 interface CrewModalProps {
   production: Production;
@@ -9,24 +11,122 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
+// Normalize and deduplicate crew by name
+function deduplicateCrew(crewArray: CrewMember[]): (CrewMember & { isCurrentUser?: boolean })[] {
+  const seen = new Map<string, CrewMember>();
+
+  for (const member of crewArray) {
+    const normalizedName = member.name
+      .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalizedName || normalizedName.length < 2) continue;
+
+    const key = normalizedName.toLowerCase();
+
+    if (!seen.has(key)) {
+      seen.set(key, { ...member, name: normalizedName });
+    } else {
+      const existing = seen.get(key)!;
+      seen.set(key, {
+        ...existing,
+        name: normalizedName,
+        phone: existing.phone || member.phone,
+        role: existing.role || member.role,
+        roleDetail: existing.roleDetail || member.roleDetail,
+        startTime: existing.startTime || member.startTime,
+        endTime: existing.endTime || member.endTime,
+      });
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
+// Enrich crew with phone numbers from contacts directory
+function enrichCrewWithPhones(crew: CrewMember[]): CrewMember[] {
+  return crew.map(member => {
+    if (member.phone) return member;
+
+    const nameParts = member.name.split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ');
+
+    const contact = contacts.find(c => {
+      const fullName = `${c.firstName} ${c.lastName}`;
+      if (fullName === member.name) return true;
+      if (firstName && lastName && c.firstName === firstName && c.lastName === lastName) return true;
+      if (firstName.length >= 2 && c.firstName === firstName &&
+          lastName && c.lastName.includes(lastName.split(' ')[0])) return true;
+      return false;
+    });
+
+    return {
+      ...member,
+      phone: contact?.phone || '',
+    };
+  });
+}
+
 export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
-  const shareProduction = () => {
-    const crewText = production.crew
-      .map(c => `${c.role}: ${c.name}${c.phone ? ` (${c.phone})` : ''}`)
+  const [showShareMenu, setShowShareMenu] = useState(false);
+
+  // Deduplicate and enrich crew
+  const rawDeduped = deduplicateCrew(production.crew);
+  const uniqueCrew = enrichCrewWithPhones(rawDeduped);
+
+  // Tag current user
+  const taggedCrew = uniqueCrew.map(member => {
+    const isCurrent = currentUserName ? (
+      member.name === currentUserName ||
+      member.name.includes(currentUserName) ||
+      currentUserName.includes(member.name) ||
+      (member.name.split(/\s+/)[0] === currentUserName.split(/\s+/)[0] &&
+       member.name.split(/\s+/)[0].length >= 2)
+    ) : false;
+    return { ...member, isCurrentUser: isCurrent };
+  });
+
+  // Sort: current user first, then alphabetically
+  const sortedCrew = [...taggedCrew].sort((a, b) => {
+    if (a.isCurrentUser && !b.isCurrentUser) return -1;
+    if (!a.isCurrentUser && b.isCurrentUser) return 1;
+    return a.name.localeCompare(b.name, 'he');
+  });
+
+  const shareMyDetails = () => {
+    const myEntry = sortedCrew.find(m => m.isCurrentUser);
+    if (!myEntry) return;
+
+    const text = [
+      `📺 *${production.name}*`,
+      `📅 ${production.day} ${formatDateShort(production.date)} | ${production.startTime}–${production.endTime}`,
+      production.studio ? `🎬 ${production.studio}` : '',
+      '',
+      `👤 *הפרטים שלי:*`,
+      `${myEntry.name} - ${myEntry.roleDetail || myEntry.role}`,
+      myEntry.phone ? `📞 ${myEntry.phone}` : '',
+    ].filter(Boolean).join('\n');
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const shareFullCrew = () => {
+    const crewText = sortedCrew
+      .map(m => `• ${m.name} - ${m.roleDetail || m.role}${m.phone ? ` | ${m.phone}` : ''}`)
       .join('\n');
 
     const text = [
-      `🎬 ${production.name}`,
-      `📍 ${production.studio}`,
-      `📅 ${production.day} ${formatDateShort(production.date)}`,
-      `🕐 ${production.startTime} - ${production.endTime}`,
+      `📺 *${production.name}*`,
+      `📅 ${production.day} ${formatDateShort(production.date)} | ${production.startTime}–${production.endTime}`,
+      production.studio ? `🎬 ${production.studio}` : '',
       '',
-      '👥 צוות:',
+      `👥 *צוות (${sortedCrew.length} איש):*`,
       crewText,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(whatsappUrl, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
@@ -64,13 +164,53 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
           </div>
 
           <div className="flex items-center gap-1 mr-2">
-            <button
-              onClick={shareProduction}
-              className="p-2 rounded-xl hover:bg-[var(--theme-accent-glow)] transition-colors"
-              title="שתף ב-WhatsApp"
-            >
-              <Share2 className="w-5 h-5 text-green-400" />
-            </button>
+            {/* Share dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowShareMenu(!showShareMenu)}
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-medium bg-green-600 hover:bg-green-700 text-white transition-colors"
+              >
+                <span>📤</span>
+                <span>שתף</span>
+                <span className="text-[10px]">▾</span>
+              </button>
+
+              {showShareMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowShareMenu(false)}
+                  />
+                  <div className="absolute left-0 bottom-full mb-1 w-52 rounded-xl shadow-xl z-20 overflow-hidden"
+                    style={{ background: 'var(--theme-bg)' }}>
+                    <button
+                      onClick={() => { shareMyDetails(); setShowShareMenu(false); }}
+                      className="w-full text-right px-4 py-3 hover:bg-white/5 text-sm flex items-center gap-2 transition-colors"
+                      style={{ color: 'var(--theme-text)' }}
+                    >
+                      <span>👤</span>
+                      <div>
+                        <div className="font-medium">הפרטים שלי בהפקה</div>
+                        <div className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>שלח רק את השיבוץ שלך</div>
+                      </div>
+                    </button>
+                    <hr style={{ borderColor: 'var(--theme-border)' }} />
+                    <button
+                      onClick={() => { shareFullCrew(); setShowShareMenu(false); }}
+                      className="w-full text-right px-4 py-3 hover:bg-white/5 text-sm flex items-center gap-2 transition-colors"
+                      style={{ color: 'var(--theme-text)' }}
+                    >
+                      <span>👥</span>
+                      <div>
+                        <div className="font-medium">כל הצוות</div>
+                        <div className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>{sortedCrew.length} אנשי צוות</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={onClose}
               className="p-2 rounded-xl hover:bg-[var(--theme-accent-glow)] transition-colors"
@@ -85,32 +225,81 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
           <div className="flex items-center gap-2 mb-3">
             <Users className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
             <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-              צוות ({production.crew.length})
+              צוות ({sortedCrew.length})
             </span>
           </div>
 
-          {production.crew.length === 0 ? (
+          {sortedCrew.length === 0 ? (
             <p className="text-sm text-center py-8" style={{ color: 'var(--theme-text-secondary)' }}>
               אין מידע על צוות להפקה זו
             </p>
           ) : (
-            <div className="space-y-2">
-              {production.crew.map((member, idx) => {
-                // Fuzzy name matching for current user
-                const isCurrent = currentUserName ? (
-                  member.name === currentUserName ||
-                  member.name.includes(currentUserName) ||
-                  currentUserName.includes(member.name) ||
-                  member.name.split(/\s+/)[0] === currentUserName.split(/\s+/)[0]
-                ) : false;
-                return (
-                  <CrewRow
-                    key={`${member.name}-${idx}`}
-                    member={member}
-                    isCurrentUser={isCurrent}
-                  />
-                );
-              })}
+            <div className="space-y-1.5">
+              {sortedCrew.map((member, idx) => (
+                <div
+                  key={`${member.name}-${idx}`}
+                  className={`flex items-center gap-3 py-3 px-3 rounded-xl transition-all ${member.isCurrentUser ? 'ring-1' : ''}`}
+                  style={{
+                    background: member.isCurrentUser ? 'rgba(34, 197, 94, 0.1)' : 'var(--theme-bg)',
+                    ...(member.isCurrentUser ? { ringColor: 'rgba(34, 197, 94, 0.4)' } : {}),
+                  }}
+                >
+                  {/* Avatar */}
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                    style={{
+                      background: member.isCurrentUser ? 'rgba(34, 197, 94, 0.25)' : 'var(--theme-bg-secondary)',
+                      color: member.isCurrentUser ? '#4ade80' : 'var(--theme-text-secondary)',
+                    }}
+                  >
+                    {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 text-right">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold truncate" style={{ color: member.isCurrentUser ? '#4ade80' : 'var(--theme-text)' }}>
+                        {member.name}
+                      </span>
+                      {member.isCurrentUser && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 shrink-0">
+                          אני
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-medium" style={{ color: 'var(--theme-accent)' }}>
+                        {member.roleDetail || member.role}
+                      </span>
+                      {(member.startTime || member.endTime) && (
+                        <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">
+                          • {member.startTime}–{member.endTime}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Phone button */}
+                  {member.phone ? (
+                    <a
+                      href={`tel:${member.phone}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-shrink-0 w-9 h-9 bg-green-600 hover:bg-green-700 rounded-full flex items-center justify-center text-white transition-colors"
+                      title={`חייג ל${member.name}: ${member.phone}`}
+                    >
+                      📞
+                    </a>
+                  ) : (
+                    <div
+                      className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+                      style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+                      title="אין מספר טלפון"
+                    >
+                      📵
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -122,58 +311,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function CrewRow({ member, isCurrentUser }: { member: CrewMember; isCurrentUser: boolean }) {
-  return (
-    <div
-      className={`flex items-center justify-between p-3 rounded-xl transition-all ${isCurrentUser ? 'ring-1' : ''}`}
-      style={{
-        background: isCurrentUser ? 'rgba(34, 197, 94, 0.1)' : 'var(--theme-bg)',
-        borderColor: isCurrentUser ? 'rgba(34, 197, 94, 0.4)' : 'var(--theme-border)',
-        ...(isCurrentUser ? { ringColor: 'rgba(34, 197, 94, 0.4)' } : {}),
-      }}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold" style={{ color: isCurrentUser ? '#4ade80' : 'var(--theme-text)' }}>
-            {member.name}
-          </span>
-          {isCurrentUser && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400">
-              אתה
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs font-medium" style={{ color: 'var(--theme-accent)' }}>
-            {member.role}
-          </span>
-          {member.roleDetail && (
-            <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              • {member.roleDetail}
-            </span>
-          )}
-        </div>
-        {(member.startTime || member.endTime) && (
-          <span className="text-xs mt-0.5 block" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">
-            {member.startTime} - {member.endTime}
-          </span>
-        )}
-      </div>
-
-      {member.phone && (
-        <a
-          href={`tel:${member.phone}`}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Phone className="w-3.5 h-3.5" />
-          <span>חייג</span>
-        </a>
-      )}
     </div>
   );
 }

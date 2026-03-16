@@ -3,6 +3,20 @@
 import { Production } from '@/lib/productionDiff';
 import { Users, Clock, Info, MapPin } from 'lucide-react';
 
+// Quick crew dedup by normalized name
+function getUniqueCrewCount(crew: Production['crew']): number {
+  const seen = new Set<string>();
+  for (const c of crew) {
+    const name = c.name
+      .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (name.length >= 2) seen.add(name);
+  }
+  return seen.size;
+}
+
 interface ProductionBlockProps {
   production: Production;
   isCurrentUser?: boolean;
@@ -99,7 +113,7 @@ export default function ProductionBlock({
         {/* Right side badges */}
         <div className="flex flex-col items-end gap-1">
           {/* Crew count */}
-          {production.crew.length > 0 && (
+          {getUniqueCrewCount(production.crew) > 0 && (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs"
               style={{
                 background: isHighlighted ? 'rgba(120, 53, 15, 0.25)' : 'rgba(255, 255, 255, 0.08)',
@@ -107,7 +121,7 @@ export default function ProductionBlock({
               }}
             >
               <Users className="w-3 h-3" />
-              <span>{production.crew.length}</span>
+              <span>{getUniqueCrewCount(production.crew)}</span>
             </div>
           )}
 

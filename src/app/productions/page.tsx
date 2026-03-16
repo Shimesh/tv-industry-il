@@ -141,10 +141,14 @@ function ProductionsContent() {
           // Deduplicate crew by name
           const crewMap = new Map<string, typeof crew[0]>();
           for (const c of rawCrew) {
-            const key = (c.name || '').trim().toLowerCase();
+            const cleanName = (c.name || '')
+              .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const key = cleanName.toLowerCase();
             if (key.length < 2) continue;
             crewMap.set(key, {
-              name: c.name || '',
+              name: cleanName || c.name || '',
               role: c.role || '',
               roleDetail: c.roleDetail || '',
               phone: c.phone || '',
@@ -160,10 +164,15 @@ function ProductionsContent() {
           const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
           const crewMap = new Map<string, typeof crew[0]>();
           for (const c of crewDocs) {
-            const key = ((c.fields.name as string) || '').trim().toLowerCase();
+            const rawName = (c.fields.name as string) || '';
+            const cleanName = rawName
+              .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const key = cleanName.toLowerCase();
             if (key.length < 2) continue;
             crewMap.set(key, {
-              name: (c.fields.name as string) || '',
+              name: cleanName || rawName,
               role: (c.fields.role as string) || '',
               roleDetail: (c.fields.roleDetail as string) || '',
               phone: (c.fields.phone as string) || '',
@@ -257,7 +266,11 @@ function ProductionsContent() {
         // Deduplicate crew by name before saving
         const crewMap = new Map<string, typeof prod.crew[0]>();
         for (const c of prod.crew) {
-          const key = c.name.trim().toLowerCase();
+          const cleanName = c.name
+            .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const key = cleanName.toLowerCase();
           if (key.length < 2) continue;
           if (!crewMap.has(key) || c.phone || c.role) {
             crewMap.set(key, c);
@@ -874,17 +887,49 @@ function ProductionsContent() {
           </div>
         </div>
 
-        {currentWeekId && (
-          <button
-            onClick={handleReload}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:bg-[var(--theme-accent-glow)]"
-            style={{ color: 'var(--theme-text-secondary)' }}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            רענן
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {productions.length > 0 && (
+            <button
+              onClick={() => {
+                const myShifts = productions.filter(p =>
+                  p.isCurrentUserShift || p.crew.some(c => {
+                    const names = [profile?.displayName, workerName].filter(Boolean) as string[];
+                    return names.some(n => c.name === n || c.name.includes(n) || n.includes(c.name));
+                  })
+                );
+                if (myShifts.length === 0) { alert('אין הפקות להצגה'); return; }
+                const byDay: Record<string, typeof myShifts> = {};
+                myShifts.forEach(p => {
+                  if (!byDay[p.date]) byDay[p.date] = [];
+                  byDay[p.date].push(p);
+                });
+                const lines = [`📺 *לוח עבודה שבועי*`, `📅 ${weekStart} – ${weekEnd}`, ''];
+                Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).forEach(([, prods]) => {
+                  lines.push(`*${prods[0].day} ${prods[0].date}:*`);
+                  prods.forEach(p => {
+                    lines.push(`  • ${p.name} | ${p.startTime}–${p.endTime}${p.studio ? ` | ${p.studio}` : ''}`);
+                  });
+                  lines.push('');
+                });
+                window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all bg-green-600 hover:bg-green-700 text-white"
+            >
+              📤 שתף שבוע
+            </button>
+          )}
+          {currentWeekId && (
+            <button
+              onClick={handleReload}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:bg-[var(--theme-accent-glow)]"
+              style={{ color: 'var(--theme-text-secondary)' }}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              רענן
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Message Input */}

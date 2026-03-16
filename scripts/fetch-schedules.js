@@ -544,18 +544,41 @@ async function cleanupWeek(weekId) {
   console.log(`Deleted ${prodsSnap.size} old productions and their crew`);
 }
 
-// Deduplicate crew array by name (keep last/best entry)
+// Deduplicate crew array by normalized name (handles role prefixes)
 function deduplicateCrew(crew) {
   const seen = new Map();
+
   for (const member of crew) {
-    const key = member.name.trim().toLowerCase();
-    if (!key || key.length < 2) continue;
-    // Keep the entry with more data (phone, role, etc.)
-    const existing = seen.get(key);
-    if (!existing || member.phone || member.role) {
-      seen.set(key, member);
+    // Normalize name: remove role prefixes like "צילום: " or "סאונד: "
+    const normalizedName = member.name
+      .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalizedName || normalizedName.length < 2) continue;
+
+    const key = normalizedName.toLowerCase();
+
+    if (!seen.has(key)) {
+      seen.set(key, {
+        ...member,
+        name: normalizedName,  // Use clean name
+      });
+    } else {
+      // Merge: prefer the entry with MORE data
+      const existing = seen.get(key);
+      seen.set(key, {
+        ...existing,
+        name: normalizedName,
+        phone: existing.phone || member.phone,
+        role: existing.role || member.role,
+        roleDetail: existing.roleDetail || member.roleDetail,
+        startTime: existing.startTime || member.startTime,
+        endTime: existing.endTime || member.endTime,
+      });
     }
   }
+
   return Array.from(seen.values());
 }
 
