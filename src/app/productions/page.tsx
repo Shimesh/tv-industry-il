@@ -15,7 +15,11 @@ import {
   applyDiff,
   generateProductionId,
   getHebrewDay,
+  getWeekIdsInRange,
+  getMonthRange,
+  getWeekRange,
 } from '@/lib/productionDiff';
+import { CalendarView } from '@/components/productions/CalendarNavigation';
 import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
@@ -63,6 +67,13 @@ function ProductionsContent() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const unsubRequestRef = useRef<(() => void) | null>(null);
   const unsubWeekRef = useRef<(() => void) | null>(null);
+
+  // Calendar navigation state
+  const [calendarView, setCalendarView] = useState<CalendarView>('week');
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
+  const [navLoading, setNavLoading] = useState(false);
+  const loadedWeeksRef = useRef<Set<string>>(new Set());
 
   // Cleanup listeners on unmount
   useEffect(() => {
@@ -706,6 +717,159 @@ function ProductionsContent() {
     }
   }, [user, profile, loadExistingWeek, restListDocs]);
 
+  // Load productions for a date range (multiple weeks from Firestore)
+  const loadProductionsForPeriod = useCallback(async (startDate: string, endDate: string): Promise<Production[]> => {
+    const weekIds = getWeekIdsInRange(startDate, endDate);
+    const allProductions: Production[] = [];
+
+    for (const weekId of weekIds) {
+      // Skip if already loaded in this session
+      if (loadedWeeksRef.current.has(weekId)) {
+        // Use existing productions for this week
+        const weekProds = productions.filter(p => {
+          const pWeekId = getWeekId(p.date);
+          return pWeekId === weekId;
+        });
+        allProductions.push(...weekProds);
+        continue;
+      }
+
+      const prods = await loadExistingWeek(weekId);
+      if (prods.length > 0) {
+        loadedWeeksRef.current.add(weekId);
+        allProductions.push(...prods);
+      }
+    }
+
+    return allProductions;
+  }, [loadExistingWeek, productions]);
+
+  // Handle calendar navigation
+  const handleCalendarNavigate = useCallback(async (direction: 'prev' | 'next' | 'today') => {
+    setNavLoading(true);
+
+    try {
+      if (calendarView === 'week') {
+        let targetDate: Date;
+        if (direction === 'today') {
+          targetDate = new Date();
+        } else {
+          const current = new Date(weekStart || new Date().toISOString().split('T')[0]);
+          const offset = direction === 'prev' ? -7 : 7;
+          targetDate = new Date(current);
+          targetDate.setDate(targetDate.getDate() + offset);
+        }
+
+        const { start, end } = getWeekRange(targetDate.toISOString().split('T')[0]);
+        const weekId = getWeekId(start);
+
+        const prods = await loadExistingWeek(weekId);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(start);
+          setWeekEnd(end);
+          setCurrentWeekId(weekId);
+          loadedWeeksRef.current.add(weekId);
+        } else {
+          setProductions([]);
+          setWeekStart(start);
+          setWeekEnd(end);
+          setCurrentWeekId(weekId);
+        }
+      } else if (calendarView === 'month') {
+        let targetYear = calendarYear;
+        let targetMonth = calendarMonth;
+
+        if (direction === 'today') {
+          targetYear = new Date().getFullYear();
+          targetMonth = new Date().getMonth();
+        } else if (direction === 'prev') {
+          targetMonth--;
+          if (targetMonth < 0) { targetMonth = 11; targetYear--; }
+        } else {
+          targetMonth++;
+          if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+        }
+
+        setCalendarYear(targetYear);
+        setCalendarMonth(targetMonth);
+
+        const { start, end } = getMonthRange(targetYear, targetMonth);
+        const prods = await loadProductionsForPeriod(start, end);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(start);
+          setWeekEnd(end);
+        } else {
+          setProductions([]);
+          setWeekStart(start);
+          setWeekEnd(end);
+        }
+      } else {
+        // List view uses same navigation as current view mode (week-based)
+        let targetDate: Date;
+        if (direction === 'today') {
+          targetDate = new Date();
+        } else {
+          const current = new Date(weekStart || new Date().toISOString().split('T')[0]);
+          const offset = direction === 'prev' ? -7 : 7;
+          targetDate = new Date(current);
+          targetDate.setDate(targetDate.getDate() + offset);
+        }
+
+        const { start, end } = getWeekRange(targetDate.toISOString().split('T')[0]);
+        const weekId = getWeekId(start);
+
+        const prods = await loadExistingWeek(weekId);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(start);
+          setWeekEnd(end);
+          setCurrentWeekId(weekId);
+          loadedWeeksRef.current.add(weekId);
+        } else {
+          setProductions([]);
+          setWeekStart(start);
+          setWeekEnd(end);
+          setCurrentWeekId(weekId);
+        }
+      }
+    } catch (error) {
+      // Navigation error - silently fail
+    } finally {
+      setNavLoading(false);
+    }
+  }, [calendarView, calendarYear, calendarMonth, weekStart, loadExistingWeek, loadProductionsForPeriod]);
+
+  // Handle view change
+  const handleViewChange = useCallback(async (view: CalendarView) => {
+    setCalendarView(view);
+
+    if (view === 'month') {
+      // When switching to month, load the full month of the current week
+      const currentDate = new Date(weekStart || new Date().toISOString().split('T')[0]);
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      setCalendarYear(year);
+      setCalendarMonth(month);
+
+      setNavLoading(true);
+      try {
+        const { start, end } = getMonthRange(year, month);
+        const prods = await loadProductionsForPeriod(start, end);
+        if (prods.length > 0) {
+          setProductions(prods);
+          setWeekStart(start);
+          setWeekEnd(end);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setNavLoading(false);
+      }
+    }
+  }, [weekStart, loadProductionsForPeriod]);
+
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
     if (!user) return;
@@ -988,14 +1152,20 @@ function ProductionsContent() {
         </div>
       )}
 
-      {/* Weekly Calendar */}
-      {productions.length > 0 && weekStart && weekEnd && (
+      {/* Calendar */}
+      {(productions.length > 0 || currentWeekId) && weekStart && weekEnd && (
         <WeeklyCalendar
           productions={productions}
           weekStart={weekStart}
           weekEnd={weekEnd}
           workerName={workerName}
           currentUserName={profile?.displayName || ''}
+          onNavigate={handleCalendarNavigate}
+          onViewChange={handleViewChange}
+          calendarView={calendarView}
+          calendarYear={calendarYear}
+          calendarMonth={calendarMonth}
+          navLoading={navLoading}
         />
       )}
 

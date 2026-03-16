@@ -102,6 +102,59 @@ export function getHebrewDay(dateStr: string): string {
   return hebrewDays[date.getDay()];
 }
 
+// Hebrew month names
+const hebrewMonths = [
+  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
+];
+
+export function getHebrewMonth(month: number): string {
+  return hebrewMonths[month] || '';
+}
+
+// Get all week IDs (Sundays) that overlap with a date range
+export function getWeekIdsInRange(startDate: string, endDate: string): string[] {
+  const weekIds: string[] = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  // Find first Sunday on or before start
+  const firstSunday = new Date(start);
+  firstSunday.setDate(firstSunday.getDate() - firstSunday.getDay());
+
+  const current = new Date(firstSunday);
+  while (current <= end) {
+    weekIds.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 7);
+  }
+
+  return weekIds;
+}
+
+// Get start/end of a month as YYYY-MM-DD strings
+export function getMonthRange(year: number, month: number): { start: string; end: string } {
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0); // Last day of month
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0],
+  };
+}
+
+// Get Sunday-based week start/end from a date
+export function getWeekRange(dateStr: string): { start: string; end: string } {
+  const date = new Date(dateStr);
+  const day = date.getDay();
+  const sunday = new Date(date);
+  sunday.setDate(date.getDate() - day);
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  return {
+    start: sunday.toISOString().split('T')[0],
+    end: saturday.toISOString().split('T')[0],
+  };
+}
+
 // Main diff algorithm
 export function diffSchedules(
   existing: Production[],
