@@ -87,6 +87,19 @@ async function fetchSchedule(browser, url) {
   const page = await browser.newPage();
 
   try {
+    // Mimic real browser to reduce bot detection
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+    });
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      window.chrome = { runtime: {} };
+      Object.defineProperty(navigator, 'languages', { get: () => ['he-IL', 'he', 'en-US', 'en'] });
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    });
+    page.setDefaultNavigationTimeout(45000);
+
     console.log('Navigating to:', url);
 
     // Bypass SSL errors (self-signed cert on Herzliya server)
@@ -774,6 +787,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
+
+
+
+
 
 
 
