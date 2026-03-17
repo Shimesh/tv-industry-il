@@ -101,6 +101,7 @@ function ProductionsContent() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const unsubRequestRef = useRef<(() => void) | null>(null);
   const unsubWeekRef = useRef<(() => void) | null>(null);
+  const loadTokenRef = useRef(0);
 
     // Calendar navigation state
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
@@ -815,10 +816,11 @@ function ProductionsContent() {
     setNavLoading(true);
   }, []);
 
-  // Load productions whenever currentDate or view changes
+    // Load productions whenever currentDate or view changes
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
+    const token = ++loadTokenRef.current;
 
     const loadForPeriod = async () => {
       setNavLoading(true);
@@ -842,14 +844,17 @@ function ProductionsContent() {
 
       const startStr = toLocalDate(start);
       const endStr = toLocalDate(end);
-      const prods = await loadProductionsForPeriod(startStr, endStr);
 
-      if (cancelled) return;
-
-      setProductions(prods);
+      // Update header immediately to avoid UI jumps
       setWeekStart(startStr);
       setWeekEnd(endStr);
       setCurrentWeekId(calendarView === 'week' ? getWeekId(startStr) : null);
+
+      const prods = await loadProductionsForPeriod(startStr, endStr);
+
+      if (cancelled || token !== loadTokenRef.current) return;
+
+      setProductions(prods);
       setNavLoading(false);
     };
 
@@ -1357,6 +1362,8 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
+
 
 
 

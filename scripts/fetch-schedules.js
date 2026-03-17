@@ -654,22 +654,27 @@ function normalizeName(name) {
   if (!name) return '';
 
   let cleaned = name
-    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
-    .trim()
-    .replace(/\s+/g, ' ');
+    .replace(/[()\[\]{}]/g, ' ')
+    .replace(/[,:;|]/g, ' ')
+    .replace(/[–-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   const rolePhrases = [
+    'צלם רחף',
+    'סטדי קאם',
+    'סטדי-קאם',
+    'ע. במאי',
+    'ע. במאית',
+    'ע. צילום',
+    'ע. סאונד',
     'צילום',
     'צלם',
     'צלמת',
-    'צלם רחף',
     'רחף',
     'רחפן',
     'רחפנית',
     'סטדיקאם',
-    'סטדי קאם',
-    'סטדי-קאם',
     'סאונד',
     'במאי',
     'במאית',
@@ -678,10 +683,6 @@ function normalizeName(name) {
     'מפיקת',
     'עורך',
     'עורכת',
-    'ע. במאי',
-    'ע. במאית',
-    'ע. צילום',
-    'ע. סאונד',
     'קול',
     'מקליט',
     'מקליטה',
@@ -697,21 +698,13 @@ function normalizeName(name) {
   while (changed) {
     changed = false;
     for (const phrase of rolePhrases) {
-      const prefix = new RegExp('^' + phrase + '\\s+', 'u');
-      const suffix = new RegExp('\\s+' + phrase + '$', 'u');
-      if (prefix.test(cleaned)) {
-        cleaned = cleaned.replace(prefix, '').trim();
-        changed = true;
-      }
-      if (suffix.test(cleaned)) {
-        cleaned = cleaned.replace(suffix, '').trim();
+      const re = new RegExp('(^|\\s)' + phrase + '(\\s|$)', 'u');
+      if (re.test(cleaned)) {
+        cleaned = cleaned.replace(re, ' ').replace(/\s+/g, ' ').trim();
         changed = true;
       }
     }
   }
-
-  cleaned = cleaned.replace(/^[–-]\\s*/u, '').replace(/\\s*[–-]$/u, '').trim();
-  cleaned = cleaned.replace(/\\s+/g, ' ');
 
   return cleaned;
 }
