@@ -98,21 +98,39 @@ async function fetchSchedule(browser, url) {
     });
 
     // Wait for calendar to load (page or iframe)
-    let context = page;
-    try {
-      await page.waitForSelector('.calendar-body, .calendar', { timeout: 8000 });
-    } catch {
-      const frame = page.frames().find((f) =>
-        f.url().includes('sendwa') || f.url().includes('herzliya')
-      );
-      if (frame) {
+    const findCalendarContext = async () => {
+      const selector = '.calendar-body, .calendar';
+      try {
+        await page.waitForSelector(selector, { timeout: 4000 });
+        return page;
+      } catch {
+        // Ignore
+      }
+
+      for (const frame of page.frames()) {
         try {
-          await frame.waitForSelector('.calendar-body, .calendar', { timeout: 8000 });
-          context = frame;
+          const handle = await frame.$(selector);
+          if (handle) return frame;
         } catch {
-          // Keep page as fallback
+          // Ignore
         }
       }
+
+      for (const frame of page.frames()) {
+        try {
+          await frame.waitForSelector(selector, { timeout: 4000 });
+          return frame;
+        } catch {
+          // Ignore
+        }
+      }
+
+      return null;
+    };
+
+    let context = await findCalendarContext();
+    if (!context) {
+      throw new Error('Calendar not found in page or iframe');
     }
 
     console.log('Calendar context:', context === page ? 'page' : 'iframe');
@@ -143,6 +161,9 @@ async function fetchSchedule(browser, url) {
         });
     }
 
+    const refreshed = await findCalendarContext();
+    if (refreshed) context = refreshed;
+    console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
     // Get the full HTML
     const html = await context.content();
 
@@ -696,6 +717,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
 
 
 
