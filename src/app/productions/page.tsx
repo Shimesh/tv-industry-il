@@ -22,6 +22,7 @@ import {
 import { CalendarView } from '@/components/productions/CalendarNavigation';
 import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
 import { normalizeContactName } from '@/lib/contactsUtils';
+import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
   doc,
@@ -84,6 +85,7 @@ function deduplicateCrew(crew: Production['crew']) {
 \nfunction sanitizeCrewForFirestore(crew: Production['crew']) {\n  return (crew || []).map(member => ({\n    name: member.name || '',\n    role: member.role || '',\n    roleDetail: member.roleDetail || '',\n    phone: member.phone || '',\n    startTime: member.startTime || '',\n    endTime: member.endTime || '',\n    addedBy: member.addedBy || '',\n    addedAt: member.addedAt || '',\n  }));\n}\n
 function ProductionsContent() {
   const { user, profile } = useAuth();
+  const { ensureFromCrew } = useContacts();
   const [loading, setLoading] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -114,7 +116,6 @@ function ProductionsContent() {
       unsubWeekRef.current?.();
     };
   }, []);
-
   useEffect(() => {
     setCalendarYear(currentDate.getFullYear());
     setCalendarMonth(currentDate.getMonth());
@@ -858,6 +859,11 @@ function ProductionsContent() {
       cancelled = true;
     };
   }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
+  useEffect(() => {
+    if (!productions.length) return;
+    const allCrew = productions.flatMap(p => p.crew || []);
+    void ensureFromCrew(allCrew);
+  }, [productions, ensureFromCrew]);
 
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
@@ -1351,6 +1357,11 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
+
+
+
+
 
 
 

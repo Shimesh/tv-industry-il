@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
@@ -178,4 +178,5 @@ export function useContacts(): ContactsHookResult {
 
   return { contacts, loading, ensureFromCrew };
 }
+
 
