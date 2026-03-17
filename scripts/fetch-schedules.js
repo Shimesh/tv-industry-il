@@ -100,29 +100,35 @@ async function fetchSchedule(browser, url) {
     // Wait for calendar to load (page or iframe)
     const findCalendarContext = async () => {
       const selector = '.calendar-body, .calendar';
-      try {
-        await page.waitForSelector(selector, { timeout: 4000 });
-        return page;
-      } catch {
-        // Ignore
-      }
+      const deadline = Date.now() + 20000;
 
-      for (const frame of page.frames()) {
+      while (Date.now() < deadline) {
         try {
-          const handle = await frame.$(selector);
-          if (handle) return frame;
+          await page.waitForSelector(selector, { timeout: 2000 });
+          return page;
         } catch {
           // Ignore
         }
-      }
 
-      for (const frame of page.frames()) {
-        try {
-          await frame.waitForSelector(selector, { timeout: 4000 });
-          return frame;
-        } catch {
-          // Ignore
+        for (const frame of page.frames()) {
+          try {
+            const handle = await frame.$(selector);
+            if (handle) return frame;
+          } catch {
+            // Ignore
+          }
         }
+
+        for (const frame of page.frames()) {
+          try {
+            await frame.waitForSelector(selector, { timeout: 2000 });
+            return frame;
+          } catch {
+            // Ignore
+          }
+        }
+
+        await new Promise((r) => setTimeout(r, 1000));
       }
 
       return null;
@@ -165,22 +171,34 @@ async function fetchSchedule(browser, url) {
     if (refreshed) context = refreshed;
     console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
     // Get the full HTML
-    const html = await context.content();
+    let html = '';
+    if (context) {
+      html = await context.content();
+    } else {
+      const candidates = [];
+      try { candidates.push(await page.content()); } catch {}
+      for (const frame of page.frames()) {
+        try { candidates.push(await frame.content()); } catch {}
+      }
+      html = candidates.find((h) => h.includes('calendar-header') || h.includes('calendar-body') || h.includes('openmd2')) || candidates[0] || '';
+    }
 
-    // Also extract worker name from the page
-    const workerName = await context.evaluate(() => {
-      // Try various patterns for worker name
-      const bodyText = document.body.textContent || '';
+    // Also extract worker name from the HTML
+    const workerName = await page.evaluate((htmlStr) => {
+      const doc = new DOMParser().parseFromString(htmlStr || '', 'text/html');
+      const bodyText = doc.body?.textContent || '';
       const nameMatch =
         bodyText.match(/שלום\s+([^\n,]+)/) ||
         bodyText.match(/עובד[:\s]+([^\n]+)/);
       return nameMatch ? nameMatch[1].trim() : '';
-    });
+    }, html);
 
-    // Parse the HTML using Puppeteer's DOM (real DOMParser!)
-    const schedule = await context.evaluate((currentWorkerName) => {
-      // ── Extract dates from calendar header ──
-      const headerDivs = document.querySelectorAll('.calendar-header > div');
+    // Parse the HTML using DOMParser
+    const schedule = await page.evaluate((htmlStr, currentWorkerName) => {
+      const doc = new DOMParser().parseFromString(htmlStr || '', 'text/html');
+
+      // Extract dates from calendar header
+      const headerDivs = doc.querySelectorAll('.calendar-header > div');
       const weekDays = [];
 
       headerDivs.forEach((div) => {
@@ -202,8 +220,8 @@ async function fetchSchedule(browser, url) {
         return { productions: [], weekDays: [], workerName: '' };
       }
 
-      // ── Extract productions from day cells ──
-      const calendarBody = document.querySelector('.calendar-body');
+      // Extract productions from day cells
+      const calendarBody = doc.querySelector('.calendar-body');
       if (!calendarBody) {
         return { productions: [], weekDays, workerName: '' };
       }
@@ -226,41 +244,30 @@ async function fetchSchedule(browser, url) {
         const eventDivs = cell.querySelectorAll('.event, .sat');
 
         eventDivs.forEach((eventDiv) => {
-          // Get production ID from onclick
           const onclickAttr = eventDiv.getAttribute('onclick') || '';
           const idMatch = onclickAttr.match(/openmd2\((\d+)\)/);
           const herzliyaId = idMatch ? parseInt(idMatch[1]) : 0;
-
-          // Skip empty placeholders
           if (herzliyaId === 0) return;
 
-          // Check if current user's shift
           const isCurrentUserShift = eventDiv.classList.contains('sat');
 
-          // Get production name from red font
-          const nameFont = eventDiv.querySelector(
-            'font[color="red"], font[color="RED"]'
-          );
-          const rawProductionName = nameFont
-            ? nameFont.textContent.trim()
-            : '';
+          const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
+          const rawProductionName = nameFont ? nameFont.textContent.trim() : '';
           if (!rawProductionName) return;
 
-          // Parse crew from innerHTML (split by <br>)
           const innerHTML = eventDiv.innerHTML;
-          const parts = innerHTML.split(/<br\s*\/?>/i);
+          const parts = innerHTML.split(/<br\s*\/?>(?i)/i);
 
           const crew = [];
           let startTime = '';
           let endTime = '';
 
           for (let i = 1; i < parts.length; i++) {
-            const tempDiv = document.createElement('div');
+            const tempDiv = doc.createElement('div');
             tempDiv.innerHTML = parts[i];
             const text = tempDiv.textContent.trim();
             if (!text) continue;
 
-            // Match: "name - role time1 time2" or "name - role time1 -time2"
             const crewMatch = text.match(
               /^(.+?)\s*-\s*(.+?)\s+(\d{1,2}:\d{2})\s*-?\s*(\d{1,2}:\d{2})/
             );
@@ -286,7 +293,6 @@ async function fetchSchedule(browser, url) {
               continue;
             }
 
-            // Try crew without times
             const crewNoTimes = text.match(/^(.+?)\s*-\s*(.+)$/);
             if (crewNoTimes) {
               const memberName = crewNoTimes[1].trim();
@@ -304,9 +310,8 @@ async function fetchSchedule(browser, url) {
             }
           }
 
-          // Extract studio from name
           const studioMatch = rawProductionName.match(
-            /(?:אולפן|סטודיו|studio|st\.?)\s*(\d+\w?)/i
+            /(?:אולפן|סטודיו|studio|st\.?)+\s*(\d+\w?)/i
           );
           const studio = studioMatch ? studioMatch[0].trim() : '';
           const cleanName = studio
@@ -333,7 +338,7 @@ async function fetchSchedule(browser, url) {
       });
 
       return { productions, weekDays, workerName: currentWorkerName || '' };
-    }, workerName);
+    }, html, workerName);
 
     // Add week range
     schedule.weekStart =
@@ -343,175 +348,14 @@ async function fetchSchedule(browser, url) {
     schedule.workerName = workerName || schedule.workerName;
     schedule.fetchedAt = new Date().toISOString();
 
-    // ── Phase 2: Click each production to get detailed crew with phone numbers ──
+    // Phase 2: Click each production to get detailed crew with phone numbers
     console.log(`Fetching details for ${schedule.productions.length} productions...`);
 
-    for (let i = 0; i < schedule.productions.length; i++) {
-      const prod = schedule.productions[i];
-      if (!prod.herzliyaId) continue;
-
-      try {
-        // Click the production to open detail popup
-        const detailedCrew = await context.evaluate(async (hId) => {
-          return new Promise((resolve) => {
-            // Call the Herzliya openmd2 function
-            if (typeof openmd2 === 'function') {
-              openmd2(hId);
-            } else {
-              resolve(null);
-              return;
-            }
-
-            // Wait for the popup/table to appear
-            setTimeout(() => {
-              try {
-                // Find the popup table - look for the detail modal/table
-                const tables = document.querySelectorAll('table');
-                let crewData = [];
-                let studioName = '';
-
-                for (const table of tables) {
-                  // Check if this table is visible and contains crew data
-                  const rect = table.getBoundingClientRect();
-                  if (rect.width === 0 || rect.height === 0) continue;
-
-                  const rows = table.querySelectorAll('tr');
-                  if (rows.length < 2) continue;
-
-                  // Check header to identify the crew table
-                  const headerText = rows[0]?.textContent || '';
-                  if (!headerText.includes('תפקיד') && !headerText.includes('שם')) continue;
-
-                  // Parse each row (skip header)
-                  for (let r = 1; r < rows.length; r++) {
-                    const cells = rows[r].querySelectorAll('td');
-                    if (cells.length < 3) continue;
-
-                    // Herzliya popup table columns:
-                    // תפקיד (role) | שם (name) | פרטים (roleDetail) | מס' (phone) | שעות (times)
-                    const cellTexts = Array.from(cells).map(c => c.textContent.trim());
-
-                    let phone = '';
-                    let name = '';
-                    let role = '';
-                    let roleDetail = '';
-                    let startTime = '';
-                    let endTime = '';
-
-                    if (cells.length >= 5) {
-                      // Standard Herzliya format: role | name | roleDetail | phone | times
-                      role = cellTexts[0] || '';
-                      name = cellTexts[1] || '';
-                      roleDetail = cellTexts[2] || '';
-                      phone = (cellTexts[3] || '').replace(/\D/g, '');
-                      const timeMatch = (cellTexts[4] || '').match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
-                      if (timeMatch) {
-                        startTime = timeMatch[1];
-                        endTime = timeMatch[2];
-                      }
-                    } else if (cells.length >= 4) {
-                      role = cellTexts[0] || '';
-                      name = cellTexts[1] || '';
-                      roleDetail = cellTexts[2] || '';
-                      phone = (cellTexts[3] || '').replace(/\D/g, '');
-                    } else if (cells.length >= 3) {
-                      role = cellTexts[0] || '';
-                      name = cellTexts[1] || '';
-                      phone = (cellTexts[2] || '').replace(/\D/g, '');
-                    }
-
-                    // Format phone: add leading 0 if needed
-                    if (phone && phone.length === 9 && !phone.startsWith('0')) {
-                      phone = '0' + phone;
-                    }
-
-                    if (name && name.length >= 2) {
-                      crewData.push({ name, role, roleDetail, phone: phone || '', startTime, endTime });
-                    }
-                  }
-
-                  if (crewData.length > 0) break; // Found the right table
-                }
-
-                // Try to get studio from popup title/header
-                const popupTitle = document.querySelector('.modal-title, .popup-title, [class*="title"]');
-                if (popupTitle) {
-                  const titleText = popupTitle.textContent || '';
-                  const stMatch = titleText.match(/(?:אולפן|סטודיו)\s*\d+\w?/i);
-                  if (stMatch) studioName = stMatch[0];
-                }
-
-                // Close the popup
-                const closeBtn = document.querySelector('.close, .modal-close, [onclick*="close"], button[class*="close"]');
-                if (closeBtn) closeBtn.click();
-                // Also try clicking backdrop
-                const backdrop = document.querySelector('.modal-backdrop, .overlay');
-                if (backdrop) backdrop.click();
-                // Try pressing Escape
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-
-                resolve({ crew: crewData, studio: studioName });
-              } catch (e) {
-                resolve(null);
-              }
-            }, 2000); // Wait 2s for popup to load
-          });
-        }, prod.herzliyaId);
-
-        if (detailedCrew && detailedCrew.crew && detailedCrew.crew.length > 0) {
-          console.log(`  Production ${prod.name}: ${detailedCrew.crew.length} crew with phones`);
-
-          // Merge detailed data into existing crew (normalized match)
-          const existingCrew = prod.crew;
-          const existingByName = new Map(
-            existingCrew.map(c => [normalizeName(c.name), c])
-          );
-          const mergedCrew = [];
-
-          for (const detail of detailedCrew.crew) {
-            const key = normalizeName(detail.name);
-            const existing = existingByName.get(key);
-
-            mergedCrew.push({
-              name: key || detail.name,
-              role: detail.role || (existing ? existing.role : ''),
-              roleDetail: detail.roleDetail || (existing ? existing.roleDetail : ''),
-              phone: detail.phone || (existing ? existing.phone : '') || '',
-              startTime: detail.startTime || (existing ? existing.startTime : ''),
-              endTime: detail.endTime || (existing ? existing.endTime : ''),
-            });
-          }
-
-          // Add any crew from calendar that weren't in the detail popup
-          for (const cal of existingCrew) {
-            const key = normalizeName(cal.name);
-            const inMerged = mergedCrew.find(m => normalizeName(m.name) === key);
-            if (!inMerged) {
-              mergedCrew.push({
-                ...cal,
-                name: key || cal.name,
-              });
-            }
-          }
-
-          schedule.productions[i].crew = mergedCrew;
-          // Update studio if found
-          if (detailedCrew.studio && !prod.studio) {
-            schedule.productions[i].studio = detailedCrew.studio;
-          }
-        }
-
-        // Small delay between clicks
-        await new Promise(r => setTimeout(r, 200));
-
-      } catch (err) {
-        console.log(`  Skipping detail for ${prod.name}: ${err.message}`);
-      }
+    const canOpenDetails = context ? await context.evaluate(() => typeof openmd2 === 'function') : false;
+    if (!canOpenDetails) {
+      console.log('Skipping detail fetch: openmd2 not available');
+      return schedule;
     }
-
-    console.log('Finished fetching all production details');
-    return schedule;
-  } finally {
     await page.close();
   }
 }
@@ -717,6 +561,10 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
+
+
+
 
 
 
