@@ -1,4 +1,4 @@
-"use client";
+ן»¿'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -20,7 +20,6 @@ function mergeContacts(base: Contact[], extra: Contact[]): Contact[] {
   const upsert = (c: Contact) => {
     const fullName = `${c.firstName} ${c.lastName}`.trim();
     const nameKey = normalizeContactName(fullName);
-    const phoneKey = normalizePhone(c.phone || '');
     const key = nameKey || fullName || String(c.id);
     const existing = map.get(key);
 
@@ -41,7 +40,6 @@ function mergeContacts(base: Contact[], extra: Contact[]): Contact[] {
 
   base.forEach(upsert);
   extra.forEach(upsert);
-
   return Array.from(map.values());
 }
 
@@ -49,11 +47,12 @@ export function useContacts(): ContactsHookResult {
   const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>(staticContacts);
   const [loading, setLoading] = useState(false);
+
   const loadedRef = useRef(false);
-  const duplicateAlertedRef = useRef(false);
   const firestoreByNameRef = useRef<Map<string, { id: string; phone?: string }>>(new Map());
   const firestoreByPhoneRef = useRef<Map<string, { id: string; name: string }>>(new Map());
   const knownKeysRef = useRef<Set<string>>(new Set());
+  const duplicateAlertedRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -69,7 +68,8 @@ export function useContacts(): ContactsHookResult {
 
       try {
         const snap = await getDocs(collection(db, 'contacts'));
-                const firestoreContacts: Contact[] = snap.docs.map((d) => {
+
+        const firestoreContacts: Contact[] = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
           const firstName = String(data.firstName || '');
           const lastName = String(data.lastName || '');
@@ -77,8 +77,10 @@ export function useContacts(): ContactsHookResult {
           const fullName = `${firstName} ${lastName}`.trim();
           const nameKey = normalizeContactName(fullName);
           const phoneKey = normalizePhone(phone || '');
+
           if (nameKey) firestoreByNameRef.current.set(nameKey, { id: d.id, phone });
           if (phoneKey) firestoreByPhoneRef.current.set(phoneKey, { id: d.id, name: fullName });
+
           return {
             id: d.id,
             firstName,
@@ -93,35 +95,42 @@ export function useContacts(): ContactsHookResult {
         });
 
         const merged = mergeContacts(staticContacts, firestoreContacts);
+
         if (mounted) {
           setContacts(merged);
+
           const keys = new Set<string>();
-          merged.forEach((c) => {
-            const fullName = `${c.firstName} ${c.lastName}`.trim();
-            const nameKey = normalizeContactName(fullName);
-            if (nameKey) keys.add(nameKey);
-            const phoneKey = normalizePhone(c.phone || '');
-            if (phoneKey) keys.add(phoneKey);
-          });
-          knownKeysRef.current = keys;
-          loadedRef.current = true;
-          const dupes: string[] = [];
           const nameCount = new Map<string, number>();
           const phoneCount = new Map<string, number>();
+
           merged.forEach((c) => {
             const fullName = normalizeContactName(`${c.firstName} ${c.lastName}`.trim());
-            if (fullName) nameCount.set(fullName, (nameCount.get(fullName) || 0) + 1);
             const p = normalizePhone(c.phone || '');
-            if (p) phoneCount.set(p, (phoneCount.get(p) || 0) + 1);
-          });
-          nameCount.forEach((count, key) => { if (count > 1) dupes.push(`שם כפול: ${key}`); });
-          phoneCount.forEach((count, key) => { if (count > 1) dupes.push(`טלפון כפול: ${key}`); });
 
-          if (dupes.length > 0 && !duplicateAlertedRef.current) {
-            duplicateAlertedRef.current = true;
-            if (typeof window !== 'undefined') {
-              window.alert(`נמצאו כפילויות באלפון:\n${dupes.slice(0, 10).join('\n')}`);
+            if (fullName) {
+              keys.add(fullName);
+              nameCount.set(fullName, (nameCount.get(fullName) || 0) + 1);
             }
+            if (p) {
+              keys.add(p);
+              phoneCount.set(p, (phoneCount.get(p) || 0) + 1);
+            }
+          });
+
+          knownKeysRef.current = keys;
+          loadedRef.current = true;
+
+          const dupes: string[] = [];
+          nameCount.forEach((count, key) => {
+            if (count > 1) dupes.push(`duplicate name: ${key}`);
+          });
+          phoneCount.forEach((count, key) => {
+            if (count > 1) dupes.push(`duplicate phone: ${key}`);
+          });
+
+          if (dupes.length > 0 && !duplicateAlertedRef.current && typeof window !== 'undefined') {
+            duplicateAlertedRef.current = true;
+            window.alert(`Duplicate contacts found:\n${dupes.slice(0, 12).join('\n')}`);
           }
         }
       } catch {
@@ -139,27 +148,33 @@ export function useContacts(): ContactsHookResult {
   }, [user]);
 
   const ensureFromCrew = useCallback(async (crew: CrewMember[]) => {
-    if (!user || !crew || crew.length === 0) return;
+    if (!user || !crew?.length) return;
 
     for (const member of crew) {
       const fullName = normalizeContactName(member.name || '');
       if (!fullName || fullName.length < 2) continue;
 
-      const phoneKey = normalizePhone(member.phone || '');
+      const phone = member.phone || '';
+      const phoneKey = normalizePhone(phone);
       const nameKey = fullName;
-            const known = knownKeysRef.current;
+      const known = knownKeysRef.current;
+
       const existingByName = firestoreByNameRef.current.get(nameKey);
       const existingByPhone = phoneKey ? firestoreByPhoneRef.current.get(phoneKey) : undefined;
 
       if (existingByName || existingByPhone || known.has(nameKey) || (phoneKey && known.has(phoneKey))) {
-        if (existingByName && phoneKey && !existingByName.phone) {
+        if (existingByName && phone && !existingByName.phone) {
           try {
             await updateDoc(doc(db, 'contacts', existingByName.id), {
-              phone: member.phone || '',
+              phone,
               updatedAt: serverTimestamp(),
             });
-            setContacts(prev => prev.map(c => (String(c.id) === String(existingByName.id) ? { ...c, phone: member.phone || c.phone } : c)));
-            existingByName.phone = member.phone || '';
+
+            setContacts((prev) =>
+              prev.map((c) => (String(c.id) === String(existingByName.id) ? { ...c, phone } : c))
+            );
+
+            existingByName.phone = phone;
             firestoreByNameRef.current.set(nameKey, existingByName);
             if (phoneKey) firestoreByPhoneRef.current.set(phoneKey, { id: existingByName.id, name: nameKey });
             known.add(nameKey);
@@ -179,7 +194,7 @@ export function useContacts(): ContactsHookResult {
         const docRef = await addDoc(collection(db, 'contacts'), {
           firstName,
           lastName,
-          phone: member.phone || '',
+          phone,
           role,
           department,
           availability: 'available',
@@ -188,9 +203,19 @@ export function useContacts(): ContactsHookResult {
           updatedAt: serverTimestamp(),
         });
 
-        const newContact = { id: docRef.id, firstName, lastName, phone: member.phone || '', role, department, availability: 'available' } as Contact;
-        setContacts(prev => mergeContacts(prev, [newContact]));
-        if (nameKey) firestoreByNameRef.current.set(nameKey, { id: docRef.id, phone: member.phone || '' });
+        const newContact: Contact = {
+          id: docRef.id,
+          firstName,
+          lastName,
+          phone,
+          role,
+          department,
+          availability: 'available',
+        };
+
+        setContacts((prev) => mergeContacts(prev, [newContact]));
+
+        if (nameKey) firestoreByNameRef.current.set(nameKey, { id: docRef.id, phone });
         if (phoneKey) firestoreByPhoneRef.current.set(phoneKey, { id: docRef.id, name: nameKey });
         if (nameKey) known.add(nameKey);
         if (phoneKey) known.add(phoneKey);
@@ -202,6 +227,3 @@ export function useContacts(): ContactsHookResult {
 
   return { contacts, loading, ensureFromCrew };
 }
-
-
-

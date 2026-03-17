@@ -101,6 +101,7 @@ function ProfileContent() {
         {showOnboarding && (
           <OnboardingModal
             profile={profile}
+            contacts={contactsList}
             onComplete={handleOnboardingComplete}
             onDismiss={() => setShowOnboarding(false)}
           />
@@ -315,10 +316,12 @@ function ProfileContent() {
 // ════════════════════════════════════
 function OnboardingModal({
   profile,
+  contacts,
   onComplete,
   onDismiss,
 }: {
   profile: { displayName: string; email: string; phone: string; department: string; role: string };
+  contacts: { id: number | string; firstName: string; lastName: string; role: string; department: string; phone?: string }[];
   onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number }) => void;
   onDismiss: () => void;
 }) {
@@ -333,7 +336,7 @@ function OnboardingModal({
   });
 
   const matchedContacts = searchQuery.length >= 2
-    ? contactsList.filter(c => {
+    ? contacts.filter(c => {
         const fullName = `${c.firstName} ${c.lastName}`;
         return fullName.includes(searchQuery) || (c.phone && c.phone.includes(searchQuery));
       })

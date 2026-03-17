@@ -1,52 +1,47 @@
-export function normalizeContactName(name: string): string {
+ο»Ώexport function normalizeContactName(name: string): string {
   if (!name) return '';
 
   let cleaned = name
     .replace(/[()\[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
-    .replace(/[–-]/g, ' ')
+    .replace(/[\u2013\u2014-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const rolePhrases = [
-    'φμν ψησ',
-    'ρθγι χΰν',
-    'ρθγι-χΰν',
-    'ς. αξΰι',
-    'ς. αξΰιϊ',
-    'ς. φιμεν',
-    'ς. ρΰεπγ',
-    'φιμεν',
-    'φμν',
-    'φμξϊ',
-    'ψησ',
-    'ψητο',
-    'ψητπιϊ',
-    'ρθγιχΰν',
-    'ρΰεπγ',
-    'αξΰι',
-    'αξΰιϊ',
-    'αιξει',
-    'ξτιχ',
-    'ξτιχϊ',
-    'ςεψκ',
-    'ςεψλϊ',
-    'χεμ',
-    'ξχμιθ',
-    'ξχμιθδ',
-    'ϊΰεψδ',
-    'ϊΰεψο',
-    'ΰιτεψ',
-    'ρθιιμιπβ',
-    'ΰψθ',
-    'ϊτΰεψδ',
+  const roleWords = [
+    '\u05e6\u05d9\u05dc\u05d5\u05dd', // Χ¦Χ™ΧΧ•Χ
+    '\u05e6\u05dc\u05dd', // Χ¦ΧΧ
+    '\u05e6\u05dc\u05de\u05ea', // Χ¦ΧΧΧª
+    '\u05e8\u05d7\u05e3', // Χ¨Χ—Χ£
+    '\u05e8\u05d7\u05e4\u05df', // Χ¨Χ—Χ¤Χ
+    '\u05e8\u05d7\u05e4\u05e0\u05d9\u05ea', // Χ¨Χ—Χ¤Χ Χ™Χª
+    '\u05e1\u05d8\u05d3\u05d9\u05e7\u05d0\u05dd', // Χ΅ΧΧ“Χ™Χ§ΧΧ
+    '\u05e1\u05d8\u05d3\u05d9', // Χ΅ΧΧ“Χ™
+    '\u05e7\u05d0\u05dd', // Χ§ΧΧ
+    '\u05e1\u05d0\u05d5\u05e0\u05d3', // Χ΅ΧΧ•Χ Χ“
+    '\u05d1\u05de\u05d0\u05d9', // Χ‘ΧΧΧ™
+    '\u05d1\u05de\u05d0\u05d9\u05ea', // Χ‘ΧΧΧ™Χª
+    '\u05d1\u05d9\u05de\u05d5\u05d9', // Χ‘Χ™ΧΧ•Χ™
+    '\u05de\u05e4\u05d9\u05e7', // ΧΧ¤Χ™Χ§
+    '\u05de\u05e4\u05d9\u05e7\u05ea', // ΧΧ¤Χ™Χ§Χª
+    '\u05e2\u05d5\u05e8\u05da', // ΧΆΧ•Χ¨Χ
+    '\u05e2\u05d5\u05e8\u05db\u05ea', // ΧΆΧ•Χ¨Χ›Χª
+    '\u05e7\u05d5\u05dc', // Χ§Χ•Χ
+    '\u05de\u05e7\u05dc\u05d9\u05d8', // ΧΧ§ΧΧ™Χ
+    '\u05de\u05e7\u05dc\u05d9\u05d8\u05d4', // ΧΧ§ΧΧ™ΧΧ”
+    '\u05ea\u05d0\u05d5\u05e8\u05d4', // ΧªΧΧ•Χ¨Χ”
+    '\u05ea\u05d0\u05d5\u05e8\u05df', // ΧªΧΧ•Χ¨Χ
+    '\u05d0\u05d9\u05e4\u05d5\u05e8', // ΧΧ™Χ¤Χ•Χ¨
+    '\u05e1\u05d8\u05d9\u05d9\u05dc\u05d9\u05e0\u05d2', // Χ΅ΧΧ™Χ™ΧΧ™Χ Χ’
+    '\u05d0\u05e8\u05d8', // ΧΧ¨Χ
+    '\u05ea\u05e4\u05d0\u05d5\u05e8\u05d4', // ΧªΧ¤ΧΧ•Χ¨Χ”
   ];
 
   let changed = true;
   while (changed) {
     changed = false;
-    for (const phrase of rolePhrases) {
-      const re = new RegExp(`(^|\\s)${phrase}(\\s|$)`, 'u');
+    for (const word of roleWords) {
+      const re = new RegExp(`(^|\\s)${word}(\\s|$)`, 'u');
       if (re.test(cleaned)) {
         cleaned = cleaned.replace(re, ' ').replace(/\s+/g, ' ').trim();
         changed = true;
@@ -72,10 +67,9 @@ export function splitName(fullName: string): { firstName: string; lastName: stri
 
 export function inferDepartment(role: string): string {
   const r = role || '';
-  if (/φμν|φιμεν|ψησ|ψητο|ρθγιχΰν|ρθγι/.test(r)) return 'φιμεν';
-  if (/ρΰεπγ|χεμ|ξχμιθ/.test(r)) return 'ρΰεπγ';
-  if (/αξΰι|αιξει/.test(r)) return 'δτχδ';
-  if (/ϊΰεψ|ΰεψ|ϊΰεψδ/.test(r)) return 'ϊΰεψδ';
-  if (/ςψιλδ|ςεψκ/.test(r)) return 'δτχδ';
-  return 'λμμι';
+  if (/\u05e6\u05dc\u05dd|\u05e6\u05d9\u05dc\u05d5\u05dd|\u05e8\u05d7\u05e3|\u05e8\u05d7\u05e4\u05df|\u05e1\u05d8\u05d3\u05d9\u05e7\u05d0\u05dd|\u05e1\u05d8\u05d3\u05d9/u.test(r)) return '\u05e6\u05d9\u05dc\u05d5\u05dd';
+  if (/\u05e1\u05d0\u05d5\u05e0\u05d3|\u05e7\u05d5\u05dc|\u05de\u05e7\u05dc\u05d9\u05d8/u.test(r)) return '\u05e1\u05d0\u05d5\u05e0\u05d3';
+  if (/\u05d1\u05de\u05d0\u05d9|\u05d1\u05d9\u05de\u05d5\u05d9/u.test(r)) return '\u05d4\u05e4\u05e7\u05d4';
+  if (/\u05ea\u05d0\u05d5\u05e8|\u05ea\u05d0\u05d5\u05e8\u05d4/u.test(r)) return '\u05ea\u05d0\u05d5\u05e8\u05d4';
+  return '\u05db\u05dc\u05dc\u05d9';
 }
