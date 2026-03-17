@@ -98,7 +98,7 @@ async function fetchSchedule(browser, url) {
     });
 
     // Wait for calendar to load (page or iframe)
-        const findCalendarContext = async () => {
+    const findCalendarContext = async () => {
       const selector = '.calendar-body, .calendar, #calendar, .calendar-body *';
       const deadline = Date.now() + 20000;
 
@@ -133,6 +133,19 @@ async function fetchSchedule(browser, url) {
         await new Promise((r) => setTimeout(r, 1000));
       }
 
+      // Fallback: check main page HTML for calendar-like content
+      try {
+        const html = await page.content();
+        const dateMatches = (html.match(dateRegex) || []).length;
+        const hasCalendar = /calendar/i.test(html);
+        if (dateMatches >= 5 || hasCalendar) {
+          console.log('Calendar heuristic match in main page:', page.url(), 'dates:', dateMatches, 'calendarWord:', hasCalendar);
+          return page;
+        }
+      } catch {
+        // Ignore
+      }
+
       // Fallback: scan frames for calendar-like content
       try {
         const frames = page.frames();
@@ -158,6 +171,22 @@ async function fetchSchedule(browser, url) {
 
     let context = await findCalendarContext();
     if (!context) {
+      try {
+        console.log('Calendar not found. Dumping frame URLs for debug...');
+        const frames = page.frames();
+        for (const frame of frames) {
+          try {
+            const url = frame.url();
+            const html = await frame.content();
+            const dateMatches = (html.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g) || []).length;
+            console.log('Frame:', url, 'dateMatches:', dateMatches, 'htmlSnippet:', html.slice(0, 300).replace(/\s+/g, ' '));
+          } catch (e) {
+            console.log('Frame debug failed:', e?.message || e);
+          }
+        }
+      } catch (e) {
+        console.log('Frame dump failed:', e?.message || e);
+      }
       throw new Error('Calendar not found in page or iframe');
     }
 
@@ -745,6 +774,12 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
+
+
+
+
+
 
 
 
