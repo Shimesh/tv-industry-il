@@ -88,7 +88,7 @@ function deduplicateCrew(crew: Production['crew']) {
 
   return Array.from(seen.values());
 }
-
+\nfunction sanitizeCrewForFirestore(crew: Production['crew']) {\n  return (crew || []).map(member => ({\n    name: member.name || '',\n    role: member.role || '',\n    roleDetail: member.roleDetail || '',\n    phone: member.phone || '',\n    startTime: member.startTime || '',\n    endTime: member.endTime || '',\n    addedBy: member.addedBy || '',\n    addedAt: member.addedAt || '',\n  }));\n}\n
 function ProductionsContent() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -299,7 +299,7 @@ function ProductionsContent() {
         const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
 
         // Deduplicate crew by name before saving
-        const cleanCrew = deduplicateCrew(prod.crew);
+        const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
 
         // SET (not merge) - crew stored as array field on production document
         batch.set(prodRef, {
@@ -1335,6 +1335,7 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
 
 
 

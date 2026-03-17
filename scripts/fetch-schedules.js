@@ -584,7 +584,7 @@ function deduplicateCrew(crew) {
 
   return Array.from(seen.values());
 }
-async function saveSchedule(schedule, userId, requestedWorkerName) {
+\nfunction sanitizeCrewForFirestore(crew) {\n  return (crew || []).map((member) => ({\n    name: member.name || '',\n    role: member.role || '',\n    roleDetail: member.roleDetail || '',\n    phone: member.phone || '',\n    startTime: member.startTime || '',\n    endTime: member.endTime || '',\n    isCurrentUser: !!member.isCurrentUser,\n    userId: member.userId || '',\n  }));\n}\nasync function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
   // STEP 1: Wipe existing week data to prevent duplicates
@@ -614,7 +614,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     );
 
     // Deduplicate crew by name before saving
-    const cleanCrew = deduplicateCrew(prod.crew);
+    const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
 
     // SET (not merge) - replace entire document
     batch.set(prodRef, {
@@ -666,6 +666,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
 
 
 
