@@ -640,6 +640,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 
   console.log('Saving userSchedule for userId:', userId);
   console.log('My productions:', myProductionIds.length);
+
   const userScheduleRef = db.doc(`users/${userId}/schedules/${weekId}`);
   batch.set(userScheduleRef, {
     workerName: schedule.workerName || requestedWorkerName,
@@ -649,11 +650,25 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     productionCount: schedule.productions.length,
   });
 
+  // Also write to userSchedules collection (new path)
+  const userSchedulesRef = db.doc(`userSchedules/${userId}/weeks/${weekId}`);
+  batch.set(userSchedulesRef, {
+    workerName: schedule.workerName || requestedWorkerName,
+    weekStart: schedule.weekStart,
+    weekEnd: schedule.weekEnd,
+    fetchedAt: schedule.fetchedAt,
+    productionCount: schedule.productions.length,
+    myProductionIds,
+  });
+
   await batch.commit();
   console.log(`Saved ${schedule.productions.length} productions to week ${weekId} (clean)`);
 }
 
 main().catch(console.error);
+
+
+
 
 
 

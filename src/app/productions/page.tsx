@@ -718,7 +718,10 @@ function ProductionsContent() {
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
         // Also fetch the user's schedule to get workerName
-        const scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+        let scheduleDocs = await restListDocs(`userSchedules/${user.uid}/weeks`);
+        if (scheduleDocs.length === 0) {
+          scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+        }
         const userSchedule = scheduleDocs.find(s => s.id === weekId);
         const wName = (userSchedule?.fields?.workerName as string) || profile?.displayName || '';
 
@@ -735,7 +738,10 @@ function ProductionsContent() {
       }
 
       // Fallback: try user schedules via REST
-      const scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+      let scheduleDocs = await restListDocs(`userSchedules/${user.uid}/weeks`);
+      if (scheduleDocs.length === 0) {
+        scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+      }
       if (scheduleDocs.length > 0) {
         const latest = scheduleDocs[scheduleDocs.length - 1];
         const latestWeekId = latest.id;
