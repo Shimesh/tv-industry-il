@@ -960,6 +960,19 @@ function ProductionsContent() {
     }
   }, [processSchedule, profile, submitScheduleRequest]);
 
+  const handleActionRequest = useCallback(async (
+    url: string,
+    workerName?: string | null,
+    weekStartLabel?: string | null,
+    weekEndLabel?: string | null,
+  ) => {
+    const nameLine = workerName || profile?.displayName || '';
+    const dateLine = weekStartLabel && weekEndLabel ? `${weekStartLabel} - ${weekEndLabel}` : '';
+    const parts = [nameLine ? `שלום ${nameLine}` : '', dateLine, url].filter(Boolean);
+    const message = parts.join('\n');
+    await submitScheduleRequest(message);
+  }, [profile, submitScheduleRequest]);
+
   // Handle manual HTML paste
   const handleManualHtmlPaste = useCallback(async (html: string) => {
     setLoading(true);
@@ -1088,6 +1101,7 @@ function ProductionsContent() {
       <div className="mb-6">
         <MessageInput
           onFetch={handleFetch}
+          onSubmitActionRequest={handleActionRequest}
           loading={loading}
           existingWeekId={currentWeekId}
           fetchProgress={fetchProgress}
