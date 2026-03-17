@@ -11,39 +11,44 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
+function normalizeName(name: string) {
+  return name
+    // Remove role prefixes like "�����: " "�����: " etc
+    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
+    // Remove role suffixes
+    .replace(/\s*[-�]\s*[\u05d0-\u05ea\s]+$/, '')
+    // Trim whitespace
+    .trim()
+    // Remove extra spaces
+    .replace(/\s+/g, ' ');
+}
+
 // Normalize and deduplicate crew by name
 function deduplicateCrew(crewArray: CrewMember[]): (CrewMember & { isCurrentUser?: boolean })[] {
   const seen = new Map<string, CrewMember>();
 
   for (const member of crewArray) {
-    const normalizedName = member.name
-      .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!normalizedName || normalizedName.length < 2) continue;
-
-    const key = normalizedName.toLowerCase();
+    const key = normalizeName(member.name);
+    if (!key || key.length < 2) continue;
 
     if (!seen.has(key)) {
-      seen.set(key, { ...member, name: normalizedName });
+      seen.set(key, { ...member, name: key });
     } else {
       const existing = seen.get(key)!;
       seen.set(key, {
-        ...existing,
-        name: normalizedName,
-        phone: existing.phone || member.phone,
+        name: key,
         role: existing.role || member.role,
         roleDetail: existing.roleDetail || member.roleDetail,
+        phone: existing.phone || member.phone,
         startTime: existing.startTime || member.startTime,
         endTime: existing.endTime || member.endTime,
+        isCurrentUser: (existing as any).isCurrentUser || (member as any).isCurrentUser,
       });
     }
   }
 
   return Array.from(seen.values());
 }
-
 // Enrich crew with phone numbers from contacts directory
 function enrichCrewWithPhones(crew: CrewMember[]): CrewMember[] {
   return crew.map(member => {
@@ -314,3 +319,4 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
     </div>
   );
 }
+

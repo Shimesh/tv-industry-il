@@ -22,6 +22,7 @@ export interface UserProfile {
   department: string;
   role: string;
   phone: string;
+  linkedContactId?: number;
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';

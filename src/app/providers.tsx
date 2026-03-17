@@ -12,10 +12,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <AuthProvider>
         <CallProvider>
-          {children}
-          <IncomingCall />
-          <CallScreen />
-          <OnboardingWrapper />
+          <OnboardingWrapper>
+            {children}
+            <IncomingCall />
+            <CallScreen />
+          </OnboardingWrapper>
         </CallProvider>
       </AuthProvider>
     </ThemeProvider>

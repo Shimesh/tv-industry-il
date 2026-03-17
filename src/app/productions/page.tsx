@@ -50,6 +50,45 @@ export default function ProductionsPage() {
 // Request status type
 type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
+function normalizeCrewName(name: string) {
+  return name
+    // Remove role prefixes like "צילום: " "סאונד: " etc
+    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
+    // Remove role suffixes
+    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/, '')
+    // Trim whitespace
+    .trim()
+    // Remove extra spaces
+    .replace(/\s+/g, ' ');
+}
+
+function deduplicateCrew(crew: Production['crew']) {
+  const seen = new Map<string, typeof crew[0]>();
+
+  for (const member of crew) {
+    const key = normalizeCrewName(member.name || '');
+    if (!key || key.length < 2) continue;
+
+    if (!seen.has(key)) {
+      seen.set(key, { ...member, name: key });
+    } else {
+      const existing = seen.get(key)!;
+      seen.set(key, {
+        name: key,
+        role: existing.role || member.role,
+        roleDetail: existing.roleDetail || member.roleDetail,
+        phone: existing.phone || member.phone,
+        startTime: existing.startTime || member.startTime,
+        endTime: existing.endTime || member.endTime,
+        addedBy: existing.addedBy || member.addedBy,
+        addedAt: existing.addedAt || member.addedAt,
+      });
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
 function ProductionsContent() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -68,13 +107,13 @@ function ProductionsContent() {
   const unsubRequestRef = useRef<(() => void) | null>(null);
   const unsubWeekRef = useRef<(() => void) | null>(null);
 
-  // Calendar navigation state
+    // Calendar navigation state
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [navLoading, setNavLoading] = useState(false);
-  const loadedWeeksRef = useRef<Set<string>>(new Set());
-
+  const productionsByWeekRef = useRef<Map<string, Production[]>>(new Map());
   // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
@@ -82,6 +121,11 @@ function ProductionsContent() {
       unsubWeekRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    setCalendarYear(currentDate.getFullYear());
+    setCalendarMonth(currentDate.getMonth());
+  }, [currentDate]);
 
   // REST API helper: list documents in a collection
   const restListDocs = useCallback(async (collectionPath: string): Promise<Array<{ id: string; fields: Record<string, unknown> }>> => {
@@ -149,51 +193,31 @@ function ProductionsContent() {
         let crew: Production['crew'] = [];
         if (d.crew) {
           const rawCrew = parseFirestoreArray(d.crew);
-          // Deduplicate crew by name
-          const crewMap = new Map<string, typeof crew[0]>();
-          for (const c of rawCrew) {
-            const cleanName = (c.name || '')
-              .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-            const key = cleanName.toLowerCase();
-            if (key.length < 2) continue;
-            crewMap.set(key, {
-              name: cleanName || c.name || '',
-              role: c.role || '',
-              roleDetail: c.roleDetail || '',
-              phone: c.phone || '',
-              startTime: c.startTime || '',
-              endTime: c.endTime || '',
-              addedBy: c.addedBy || '',
-              addedAt: c.addedAt || '',
-            });
-          }
-          crew = Array.from(crewMap.values());
+          const mappedCrew = rawCrew.map(c => ({
+            name: c.name || '',
+            role: c.role || '',
+            roleDetail: c.roleDetail || '',
+            phone: c.phone || '',
+            startTime: c.startTime || '',
+            endTime: c.endTime || '',
+            addedBy: c.addedBy || '',
+            addedAt: c.addedAt || '',
+          }));
+          crew = deduplicateCrew(mappedCrew);
         } else {
           // Fallback: try loading from subcollection (for old data format)
           const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
-          const crewMap = new Map<string, typeof crew[0]>();
-          for (const c of crewDocs) {
-            const rawName = (c.fields.name as string) || '';
-            const cleanName = rawName
-              .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-            const key = cleanName.toLowerCase();
-            if (key.length < 2) continue;
-            crewMap.set(key, {
-              name: cleanName || rawName,
-              role: (c.fields.role as string) || '',
-              roleDetail: (c.fields.roleDetail as string) || '',
-              phone: (c.fields.phone as string) || '',
-              startTime: (c.fields.startTime as string) || '',
-              endTime: (c.fields.endTime as string) || '',
-              addedBy: (c.fields.addedBy as string) || '',
-              addedAt: (c.fields.addedAt as string) || '',
-            });
-          }
-          crew = Array.from(crewMap.values());
+          const mappedCrew = crewDocs.map(c => ({
+            name: (c.fields.name as string) || '',
+            role: (c.fields.role as string) || '',
+            roleDetail: (c.fields.roleDetail as string) || '',
+            phone: (c.fields.phone as string) || '',
+            startTime: (c.fields.startTime as string) || '',
+            endTime: (c.fields.endTime as string) || '',
+            addedBy: (c.fields.addedBy as string) || '',
+            addedAt: (c.fields.addedAt as string) || '',
+          }));
+          crew = deduplicateCrew(mappedCrew);
         }
 
         // Use herzliyaId as the dedup key
@@ -275,19 +299,7 @@ function ProductionsContent() {
         const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
 
         // Deduplicate crew by name before saving
-        const crewMap = new Map<string, typeof prod.crew[0]>();
-        for (const c of prod.crew) {
-          const cleanName = c.name
-            .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          const key = cleanName.toLowerCase();
-          if (key.length < 2) continue;
-          if (!crewMap.has(key) || c.phone || c.role) {
-            crewMap.set(key, c);
-          }
-        }
-        const cleanCrew = Array.from(crewMap.values());
+        const cleanCrew = deduplicateCrew(prod.crew);
 
         // SET (not merge) - crew stored as array field on production document
         batch.set(prodRef, {
@@ -415,6 +427,7 @@ function ProductionsContent() {
     setWorkerName(wName);
     setWeekStart(parsed.weekStart);
     setWeekEnd(parsed.weekEnd);
+    setCurrentDate(new Date(parsed.weekStart));
 
     if (currentWeekId === weekId && productions.length > 0) {
       const diff = diffSchedules(productions, parsed.productions);
@@ -422,6 +435,7 @@ function ProductionsContent() {
       if (diff.hasChanges) {
         const updated = applyDiff(productions, parsed.productions, diff, user?.uid || '', wName);
         setProductions(updated);
+        productionsByWeekRef.current.set(weekId, updated);
         setLastDiff(diff);
         setShowSummary(true);
         await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
@@ -438,11 +452,13 @@ function ProductionsContent() {
         if (diff.hasChanges) {
           const updated = applyDiff(existingProds, parsed.productions, diff, user?.uid || '', wName);
           setProductions(updated);
+        productionsByWeekRef.current.set(weekId, updated);
           setLastDiff(diff);
           setShowSummary(true);
           await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
         } else {
           setProductions(existingProds);
+          productionsByWeekRef.current.set(weekId, existingProds);
           setStatusMessage('הלוח כבר עדכני');
         }
       } else {
@@ -463,6 +479,7 @@ function ProductionsContent() {
           }],
         }));
         setProductions(prodsWithIds);
+        productionsByWeekRef.current.set(weekId, prodsWithIds);
         await saveToFirestore(weekId, prodsWithIds, parsed.weekStart, parsed.weekEnd);
         setStatusMessage(`נטען לוח עבודה עם ${prodsWithIds.length} הפקות`);
       }
@@ -617,6 +634,7 @@ function ProductionsContent() {
                 if (prods.length > 0) {
                   setProductions(prods);
                   setWeekStart(isoDate);
+                  setCurrentDate(new Date(isoDate));
                   const sat = new Date(y, m - 1, d + 6);
                   setWeekEnd(sat.toISOString().split('T')[0]);
                   setCurrentWeekId(weekId);
@@ -669,6 +687,23 @@ function ProductionsContent() {
     });
   }, [loadExistingWeek]);
 
+  const getWeekStartDate = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay(); // 0=Sunday
+    d.setDate(d.getDate() - day);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const getWeekEndDate = (date: Date) => {
+    const start = getWeekStartDate(date);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return end;
+  };
+
+  const toIsoDate = (date: Date) => date.toISOString().split('T')[0];
+
   // Load the latest week - try known current week first, then user schedules via REST
   const handleReloadLatest = useCallback(async () => {
     if (!user) return;
@@ -692,6 +727,7 @@ function ProductionsContent() {
         const satDate = new Date(sunday);
         satDate.setDate(sunday.getDate() + 6);
         setWeekStart(sunday.toISOString().split('T')[0]);
+        setCurrentDate(new Date(sunday));
         setWeekEnd(satDate.toISOString().split('T')[0]);
         setCurrentWeekId(weekId);
         setStatusMessage(`נטענו ${prods.length} הפקות`);
@@ -707,6 +743,9 @@ function ProductionsContent() {
         if (latestProds.length > 0) {
           setProductions(latestProds);
           setWeekStart((latest.fields.weekStart as string) || '');
+          if (latest.fields.weekStart) {
+            setCurrentDate(new Date(latest.fields.weekStart as string));
+          }
           setWeekEnd((latest.fields.weekEnd as string) || '');
           setWorkerName((latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
@@ -723,152 +762,94 @@ function ProductionsContent() {
     const allProductions: Production[] = [];
 
     for (const weekId of weekIds) {
-      // Skip if already loaded in this session
-      if (loadedWeeksRef.current.has(weekId)) {
-        // Use existing productions for this week
-        const weekProds = productions.filter(p => {
-          const pWeekId = getWeekId(p.date);
-          return pWeekId === weekId;
-        });
-        allProductions.push(...weekProds);
+      const cached = productionsByWeekRef.current.get(weekId);
+      if (cached) {
+        allProductions.push(...cached);
         continue;
       }
 
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
-        loadedWeeksRef.current.add(weekId);
+        productionsByWeekRef.current.set(weekId, prods);
         allProductions.push(...prods);
       }
     }
 
     return allProductions;
-  }, [loadExistingWeek, productions]);
+  }, [loadExistingWeek]);
 
-  // Handle calendar navigation
-  const handleCalendarNavigate = useCallback(async (direction: 'prev' | 'next' | 'today') => {
+    // Handle calendar navigation
+  const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
     setNavLoading(true);
 
-    try {
-      if (calendarView === 'week') {
-        let targetDate: Date;
-        if (direction === 'today') {
-          targetDate = new Date();
-        } else {
-          const current = new Date(weekStart || new Date().toISOString().split('T')[0]);
-          const offset = direction === 'prev' ? -7 : 7;
-          targetDate = new Date(current);
-          targetDate.setDate(targetDate.getDate() + offset);
-        }
+    let target = new Date(currentDate);
 
-        const { start, end } = getWeekRange(targetDate.toISOString().split('T')[0]);
-        const weekId = getWeekId(start);
-
-        const prods = await loadExistingWeek(weekId);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(start);
-          setWeekEnd(end);
-          setCurrentWeekId(weekId);
-          loadedWeeksRef.current.add(weekId);
-        } else {
-          setProductions([]);
-          setWeekStart(start);
-          setWeekEnd(end);
-          setCurrentWeekId(weekId);
-        }
-      } else if (calendarView === 'month') {
-        let targetYear = calendarYear;
-        let targetMonth = calendarMonth;
-
-        if (direction === 'today') {
-          targetYear = new Date().getFullYear();
-          targetMonth = new Date().getMonth();
-        } else if (direction === 'prev') {
-          targetMonth--;
-          if (targetMonth < 0) { targetMonth = 11; targetYear--; }
-        } else {
-          targetMonth++;
-          if (targetMonth > 11) { targetMonth = 0; targetYear++; }
-        }
-
-        setCalendarYear(targetYear);
-        setCalendarMonth(targetMonth);
-
-        const { start, end } = getMonthRange(targetYear, targetMonth);
-        const prods = await loadProductionsForPeriod(start, end);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(start);
-          setWeekEnd(end);
-        } else {
-          setProductions([]);
-          setWeekStart(start);
-          setWeekEnd(end);
-        }
-      } else {
-        // List view uses same navigation as current view mode (week-based)
-        let targetDate: Date;
-        if (direction === 'today') {
-          targetDate = new Date();
-        } else {
-          const current = new Date(weekStart || new Date().toISOString().split('T')[0]);
-          const offset = direction === 'prev' ? -7 : 7;
-          targetDate = new Date(current);
-          targetDate.setDate(targetDate.getDate() + offset);
-        }
-
-        const { start, end } = getWeekRange(targetDate.toISOString().split('T')[0]);
-        const weekId = getWeekId(start);
-
-        const prods = await loadExistingWeek(weekId);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(start);
-          setWeekEnd(end);
-          setCurrentWeekId(weekId);
-          loadedWeeksRef.current.add(weekId);
-        } else {
-          setProductions([]);
-          setWeekStart(start);
-          setWeekEnd(end);
-          setCurrentWeekId(weekId);
-        }
-      }
-    } catch (error) {
-      // Navigation error - silently fail
-    } finally {
-      setNavLoading(false);
+    if (direction === 'today') {
+      target = new Date();
+    } else if (calendarView === 'week') {
+      target.setDate(target.getDate() + (direction === 'prev' ? -7 : 7));
+    } else if (calendarView === 'month') {
+      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
+      target.setDate(1);
+    } else {
+      // List view: navigate by month
+      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
+      target.setDate(1);
     }
-  }, [calendarView, calendarYear, calendarMonth, weekStart, loadExistingWeek, loadProductionsForPeriod]);
 
-  // Handle view change
-  const handleViewChange = useCallback(async (view: CalendarView) => {
+    setCurrentDate(target);
+  }, [calendarView, currentDate]);
+
+    // Handle view change
+  const handleViewChange = useCallback((view: CalendarView) => {
     setCalendarView(view);
+    setNavLoading(true);
+  }, []);
 
-    if (view === 'month') {
-      // When switching to month, load the full month of the current week
-      const currentDate = new Date(weekStart || new Date().toISOString().split('T')[0]);
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-      setCalendarYear(year);
-      setCalendarMonth(month);
+  // Load productions whenever currentDate or view changes
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
 
+    const loadForPeriod = async () => {
       setNavLoading(true);
-      try {
-        const { start, end } = getMonthRange(year, month);
-        const prods = await loadProductionsForPeriod(start, end);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(start);
-          setWeekEnd(end);
-        }
-      } catch {
-        // ignore
-      } finally {
-        setNavLoading(false);
+
+      let start: Date;
+      let end: Date;
+
+      if (calendarView === 'week') {
+        start = getWeekStartDate(currentDate);
+        end = getWeekEndDate(currentDate);
+      } else if (calendarView === 'month') {
+        start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      } else {
+        // List: load 3 months around current
+        start = new Date(currentDate);
+        start.setMonth(start.getMonth() - 1);
+        end = new Date(currentDate);
+        end.setMonth(end.getMonth() + 2);
       }
-    }
-  }, [weekStart, loadProductionsForPeriod]);
+
+      const startStr = toIsoDate(start);
+      const endStr = toIsoDate(end);
+      const prods = await loadProductionsForPeriod(startStr, endStr);
+
+      if (cancelled) return;
+
+      setProductions(prods);
+      setWeekStart(startStr);
+      setWeekEnd(endStr);
+      setCurrentWeekId(calendarView === 'week' ? getWeekId(startStr) : null);
+      setNavLoading(false);
+    };
+
+    loadForPeriod();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
 
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
@@ -1025,6 +1006,7 @@ function ProductionsContent() {
       const existing = await loadExistingWeek(currentWeekId);
       if (existing.length > 0) {
         setProductions(existing);
+        productionsByWeekRef.current.set(currentWeekId, existing);
         setStatusMessage('נטען מחדש מהשרת');
       }
     } catch {
@@ -1347,3 +1329,15 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+

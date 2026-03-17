@@ -21,6 +21,7 @@ interface DayCell {
   dayNum: number;
   isCurrentMonth: boolean;
   isToday: boolean;
+  isCurrentWeek: boolean;
   productions: Production[];
   hasUserShift: boolean;
 }
@@ -30,6 +31,28 @@ function toDateStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function formatDate(d: Date): string {
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sunday
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getWeekEnd(date: Date): Date {
+  const start = getWeekStart(date);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return end;
 }
 
 export default function MonthView({
@@ -43,7 +66,9 @@ export default function MonthView({
 }: MonthViewProps) {
   const { cells } = useMemo(() => {
     const today = new Date();
-    const todayStr = toDateStr(today);
+    const todayStr = formatDate(today);
+    const currentWeekStart = getWeekStart(today);
+    const currentWeekEnd = getWeekEnd(today);
 
     // Build a map of date -> productions
     const prodMap = new Map<string, Production[]>();
@@ -80,12 +105,16 @@ export default function MonthView({
           p.crew.some((c) => c.name === nameToCheck)
       );
 
+      const isCurrentWeek = cursor >= currentWeekStart && cursor <= currentWeekEnd;
+      const isToday = formatDate(cursor) === todayStr;
+
       cells.push({
         date: new Date(cursor),
         dateStr,
         dayNum: cursor.getDate(),
         isCurrentMonth: cursor.getMonth() === month,
-        isToday: dateStr === todayStr,
+        isToday,
+        isCurrentWeek,
         productions: dayProds,
         hasUserShift,
       });
@@ -156,16 +185,21 @@ function DayCellComponent({
   onProductionClick: (p: Production) => void;
   onInfoClick?: (p: Production) => void;
 }) {
-  const { isCurrentMonth, isToday, hasUserShift, productions, dayNum } = cell;
+  const { isCurrentMonth, isToday, isCurrentWeek, hasUserShift, productions, dayNum } = cell;
 
   let bgColor = 'var(--theme-bg)';
   let borderColor = 'transparent';
+  let boxShadow = 'none';
 
   if (!isCurrentMonth) {
     bgColor = 'var(--theme-bg-secondary)';
   }
+  if (isCurrentWeek) {
+    bgColor = 'rgba(23, 37, 84, 0.3)';
+  }
   if (isToday) {
     borderColor = 'var(--theme-accent)';
+    boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.6)';
   }
   if (hasUserShift && isCurrentMonth) {
     bgColor = 'rgba(245, 158, 11, 0.08)';
@@ -183,6 +217,7 @@ function DayCellComponent({
         borderTop: isToday ? `2px solid ${borderColor}` : '2px solid transparent',
         position: 'relative',
         overflow: 'hidden',
+        boxShadow,
       }}
     >
       {/* Day number + production count */}
