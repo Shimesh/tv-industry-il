@@ -15,9 +15,7 @@ function normalizeName(name: string) {
   if (!name) return '';
 
   let cleaned = name
-    // Remove role prefixes like "צילום: " "סאונד: " etc
     .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    // Remove role suffixes separated by dash
     .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
     .trim()
     .replace(/\s+/g, ' ');
@@ -60,21 +58,8 @@ function normalizeName(name: string) {
   while (changed) {
     changed = false;
     for (const phrase of rolePhrases) {
-      const prefix = new RegExp(`^${phrase}\\s+`, 'u');
-      const suffix = new RegExp(`\\s+${phrase}'use client';
-
-import { useState } from 'react';
-import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
-import { contacts } from '@/data/contacts';
-import { X, MapPin, Clock, Users } from 'lucide-react';
-
-interface CrewModalProps {
-  production: Production;
-  currentUserName?: string;
-  onClose: () => void;
-}
-
-, 'u');
+      const prefix = new RegExp('^' + phrase + '\\s+', 'u');
+      const suffix = new RegExp('\\s+' + phrase + '$', 'u');
       if (prefix.test(cleaned)) {
         cleaned = cleaned.replace(prefix, '').trim();
         changed = true;
@@ -388,5 +373,4 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
     </div>
   );
 }
-
 

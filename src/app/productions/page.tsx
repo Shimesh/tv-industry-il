@@ -54,9 +54,7 @@ function normalizeCrewName(name: string) {
   if (!name) return '';
 
   let cleaned = name
-    // Remove role prefixes like "צילום: " "סאונד: " etc
     .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    // Remove role suffixes separated by dash
     .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
     .trim()
     .replace(/\s+/g, ' ');
@@ -99,60 +97,8 @@ function normalizeCrewName(name: string) {
   while (changed) {
     changed = false;
     for (const phrase of rolePhrases) {
-      const prefix = new RegExp(`^${phrase}\\s+`, 'u');
-      const suffix = new RegExp(`\\s+${phrase}'use client';
-
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import AuthGuard from '@/components/AuthGuard';
-import MessageInput from '@/components/productions/MessageInput';
-import WeeklyCalendar from '@/components/productions/WeeklyCalendar';
-import UpdateSummary from '@/components/productions/UpdateSummary';
-import {
-  Production,
-  ParsedSchedule,
-  ScheduleDiff,
-  getWeekId,
-  diffSchedules,
-  applyDiff,
-  generateProductionId,
-  getHebrewDay,
-  getWeekIdsInRange,
-  getMonthRange,
-  getWeekRange,
-} from '@/lib/productionDiff';
-import { CalendarView } from '@/components/productions/CalendarNavigation';
-import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
-import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
-import {
-  doc,
-  getDoc,
-  collection,
-  getDocs,
-  addDoc,
-  writeBatch,
-  serverTimestamp,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  limit,
-} from 'firebase/firestore';
-import { db, ensureOnline } from '@/lib/firebase';
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
-
-export default function ProductionsPage() {
-  return (
-    <AuthGuard>
-      <ProductionsContent />
-    </AuthGuard>
-  );
-}
-
-// Request status type
-type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
-
-, 'u');
+      const prefix = new RegExp('^' + phrase + '\\s+', 'u');
+      const suffix = new RegExp('\\s+' + phrase + '$', 'u');
       if (prefix.test(cleaned)) {
         cleaned = cleaned.replace(prefix, '').trim();
         changed = true;
@@ -898,7 +844,7 @@ function ProductionsContent() {
   }, [loadExistingWeek]);
 
     // Handle calendar navigation
-  const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
+    const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
     setNavLoading(true);
 
     let target = new Date(currentDate);
@@ -907,13 +853,12 @@ function ProductionsContent() {
       target = new Date();
     } else if (calendarView === 'week') {
       target.setDate(target.getDate() + (direction === 'prev' ? -7 : 7));
-    } else if (calendarView === 'month') {
-      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
-      target.setDate(1);
     } else {
-      // List view: navigate by month
-      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
+      const day = target.getDate();
       target.setDate(1);
+      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
+      const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+      target.setDate(Math.min(day, lastDay));
     }
 
     setCurrentDate(target);
@@ -1462,7 +1407,6 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
-
 
 
 
