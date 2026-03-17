@@ -584,7 +584,20 @@ function deduplicateCrew(crew) {
 
   return Array.from(seen.values());
 }
-\nfunction sanitizeCrewForFirestore(crew) {\n  return (crew || []).map((member) => ({\n    name: member.name || '',\n    role: member.role || '',\n    roleDetail: member.roleDetail || '',\n    phone: member.phone || '',\n    startTime: member.startTime || '',\n    endTime: member.endTime || '',\n    isCurrentUser: !!member.isCurrentUser,\n    userId: member.userId || '',\n  }));\n}\nasync function saveSchedule(schedule, userId, requestedWorkerName) {
+function sanitizeCrewForFirestore(crew) {
+  return (crew || []).map((member) => ({
+    name: member.name || '',
+    role: member.role || '',
+    roleDetail: member.roleDetail || '',
+    phone: member.phone || '',
+    startTime: member.startTime || '',
+    endTime: member.endTime || '',
+    isCurrentUser: !!member.isCurrentUser,
+    userId: member.userId || '',
+  }));
+}
+
+async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
   // STEP 1: Wipe existing week data to prevent duplicates
@@ -666,6 +679,8 @@ function deduplicateCrew(crew) {
 }
 
 main().catch(console.error);
+
+
 
 
 
