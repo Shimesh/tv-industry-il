@@ -98,9 +98,11 @@ async function fetchSchedule(browser, url) {
     });
 
     // Wait for calendar to load (page or iframe)
-    const findCalendarContext = async () => {
-      const selector = '.calendar-body, .calendar';
+        const findCalendarContext = async () => {
+      const selector = '.calendar-body, .calendar, #calendar, .calendar-body *';
       const deadline = Date.now() + 20000;
+
+      const dateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g;
 
       while (Date.now() < deadline) {
         try {
@@ -129,6 +131,26 @@ async function fetchSchedule(browser, url) {
         }
 
         await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      // Fallback: scan frames for calendar-like content
+      try {
+        const frames = page.frames();
+        for (const frame of frames) {
+          try {
+            const html = await frame.content();
+            const dateMatches = (html.match(dateRegex) || []).length;
+            const hasCalendar = /calendar/i.test(html);
+            if (dateMatches >= 5 || hasCalendar) {
+              console.log('Calendar heuristic match in frame:', frame.url(), 'dates:', dateMatches, 'calendarWord:', hasCalendar);
+              return frame;
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      } catch {
+        // Ignore
       }
 
       return null;
@@ -169,7 +191,6 @@ async function fetchSchedule(browser, url) {
 
     const refreshed = await findCalendarContext();
     if (refreshed) context = refreshed;
-    console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
     console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
     // Get the full HTML
     const html = await context.content();
@@ -724,6 +745,8 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
+
 
 
 
