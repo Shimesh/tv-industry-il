@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
-import { contacts } from '@/data/contacts';
+import { useContacts } from '@/hooks/useContacts';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import {
@@ -32,6 +32,7 @@ export default function ProfilePage() {
 
 function ProfileContent() {
   const { profile, updateUserProfile, logout } = useAuth();
+  const { contacts: contactsList } = useContacts();
   const { theme, setTheme } = useTheme();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -323,7 +324,7 @@ function OnboardingModal({
 }) {
   const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedContact, setSelectedContact] = useState<typeof contacts[0] | null>(null);
+  const [selectedContact, setSelectedContact] = useState<any | null>(null);
   const [form, setForm] = useState({
     displayName: profile.displayName,
     department: profile.department || '',
@@ -332,13 +333,13 @@ function OnboardingModal({
   });
 
   const matchedContacts = searchQuery.length >= 2
-    ? contacts.filter(c => {
+    ? contactsList.filter(c => {
         const fullName = `${c.firstName} ${c.lastName}`;
         return fullName.includes(searchQuery) || (c.phone && c.phone.includes(searchQuery));
       })
     : [];
 
-  const handleLinkContact = (contact: typeof contacts[0]) => {
+  const handleLinkContact = (contact: any) => {
     setSelectedContact(contact);
     setForm({
       displayName: `${contact.firstName} ${contact.lastName}`,
@@ -536,3 +537,6 @@ function SidebarBtn({ icon, label }: { icon: React.ReactNode; label: string }) {
     </button>
   );
 }
+
+
+

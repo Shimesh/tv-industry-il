@@ -1,5 +1,5 @@
 export interface Contact {
-  id: number;
+  id: number | string;
   firstName: string;
   lastName: string;
   email?: string;
@@ -127,3 +127,4 @@ export const contacts: Contact[] = [
   { id: 90, firstName: 'רז', lastName: 'כהן', department: 'סאונד', role: 'קול', phone: '054-5640211' },
   { id: 91, firstName: 'סמיון', lastName: 'קציב', department: 'צילום', role: 'צלם', phone: '054-7737401' },
 ];
+

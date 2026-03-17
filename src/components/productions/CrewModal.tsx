@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
-import { contacts } from '@/data/contacts';
+import { useContacts } from '@/hooks/useContacts';
+import { normalizeContactName } from '@/lib/contactsUtils';
 import { X, MapPin, Clock, Users } from 'lucide-react';
 
 interface CrewModalProps {
@@ -11,78 +12,13 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
-function normalizeName(name: string) {
-  if (!name) return '';
-
-  let cleaned = name
-    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
-    .trim()
-    .replace(/\s+/g, ' ');
-
-  const rolePhrases = [
-    'צילום',
-    'צלם',
-    'צלמת',
-    'צלם רחף',
-    'רחף',
-    'רחפן',
-    'רחפנית',
-    'סטדיקאם',
-    'סטדי קאם',
-    'סטדי-קאם',
-    'סאונד',
-    'במאי',
-    'במאית',
-    'בימוי',
-    'מפיק',
-    'מפיקת',
-    'עורך',
-    'עורכת',
-    'ע. במאי',
-    'ע. במאית',
-    'ע. צילום',
-    'ע. סאונד',
-    'קול',
-    'מקליט',
-    'מקליטה',
-    'תאורה',
-    'תאורן',
-    'איפור',
-    'סטיילינג',
-    'ארט',
-    'תפאורה',
-  ];
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const phrase of rolePhrases) {
-      const prefix = new RegExp('^' + phrase + '\\s+', 'u');
-      const suffix = new RegExp('\\s+' + phrase + '$', 'u');
-      if (prefix.test(cleaned)) {
-        cleaned = cleaned.replace(prefix, '').trim();
-        changed = true;
-      }
-      if (suffix.test(cleaned)) {
-        cleaned = cleaned.replace(suffix, '').trim();
-        changed = true;
-      }
-    }
-  }
-
-  cleaned = cleaned.replace(/^[–-]\\s*/u, '').replace(/\\s*[–-]$/u, '').trim();
-  cleaned = cleaned.replace(/\\s+/g, ' ');
-
-  return cleaned;
-}
 
 // Normalize and deduplicate crew by name
 function deduplicateCrew(crewArray: CrewMember[]): (CrewMember & { isCurrentUser?: boolean })[] {
   const seen = new Map<string, CrewMember>();
 
   for (const member of crewArray) {
-    const key = normalizeName(member.name);
+    const key = normalizeContactName(member.name);
     if (!key || key.length < 2) continue;
 
     if (!seen.has(key)) {
@@ -104,17 +40,19 @@ function deduplicateCrew(crewArray: CrewMember[]): (CrewMember & { isCurrentUser
   return Array.from(seen.values());
 }
 // Enrich crew with phone numbers from contacts directory
-function enrichCrewWithPhones(crew: CrewMember[]): CrewMember[] {
+function enrichCrewWithPhones(crew: CrewMember[], contactList: { firstName: string; lastName: string; phone?: string }[]): CrewMember[] {
   return crew.map(member => {
     if (member.phone) return member;
 
-    const nameParts = member.name.split(/\s+/);
+    const normalized = normalizeContactName(member.name || '');
+
+    const nameParts = normalized.split(/\\s+/);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ');
 
-    const contact = contacts.find(c => {
+    const contact = contactList.find(c => {
       const fullName = `${c.firstName} ${c.lastName}`;
-      if (fullName === member.name) return true;
+      if (normalizeContactName(fullName) === normalized) return true;
       if (firstName && lastName && c.firstName === firstName && c.lastName === lastName) return true;
       if (firstName.length >= 2 && c.firstName === firstName &&
           lastName && c.lastName.includes(lastName.split(' ')[0])) return true;
@@ -130,10 +68,15 @@ function enrichCrewWithPhones(crew: CrewMember[]): CrewMember[] {
 
 export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const { contacts, ensureFromCrew } = useContacts();
 
   // Deduplicate and enrich crew
   const rawDeduped = deduplicateCrew(production.crew);
-  const uniqueCrew = enrichCrewWithPhones(rawDeduped);
+  const uniqueCrew = enrichCrewWithPhones\(rawDeduped, contacts\);
+
+  useEffect(() => {
+    void ensureFromCrew(rawDeduped);
+  }, [rawDeduped, ensureFromCrew]);
 
   // Tag current user
   const taggedCrew = uniqueCrew.map(member => {
@@ -373,4 +316,7 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
     </div>
   );
 }
+
+
+
 

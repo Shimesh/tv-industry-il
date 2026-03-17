@@ -21,6 +21,7 @@ import {
 } from '@/lib/productionDiff';
 import { CalendarView } from '@/components/productions/CalendarNavigation';
 import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
+import { normalizeContactName } from '@/lib/contactsUtils';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
   doc,
@@ -51,69 +52,7 @@ export default function ProductionsPage() {
 type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
 function normalizeCrewName(name: string) {
-  if (!name) return '';
-
-  let cleaned = name
-    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
-    .trim()
-    .replace(/\s+/g, ' ');
-
-  const rolePhrases = [
-    'צילום',
-    'צלם',
-    'צלמת',
-    'צלם רחף',
-    'רחף',
-    'רחפן',
-    'רחפנית',
-    'סטדיקאם',
-    'סטדי קאם',
-    'סטדי-קאם',
-    'סאונד',
-    'במאי',
-    'במאית',
-    'בימוי',
-    'מפיק',
-    'מפיקת',
-    'עורך',
-    'עורכת',
-    'ע. במאי',
-    'ע. במאית',
-    'ע. צילום',
-    'ע. סאונד',
-    'קול',
-    'מקליט',
-    'מקליטה',
-    'תאורה',
-    'תאורן',
-    'איפור',
-    'סטיילינג',
-    'ארט',
-    'תפאורה',
-  ];
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const phrase of rolePhrases) {
-      const prefix = new RegExp('^' + phrase + '\\s+', 'u');
-      const suffix = new RegExp('\\s+' + phrase + '$', 'u');
-      if (prefix.test(cleaned)) {
-        cleaned = cleaned.replace(prefix, '').trim();
-        changed = true;
-      }
-      if (suffix.test(cleaned)) {
-        cleaned = cleaned.replace(suffix, '').trim();
-        changed = true;
-      }
-    }
-  }
-
-  cleaned = cleaned.replace(/^[–-]\\s*/u, '').replace(/\\s*[–-]$/u, '').trim();
-  cleaned = cleaned.replace(/\\s+/g, ' ');
-
-  return cleaned;
+  return normalizeContactName(name);
 }
 
 function deduplicateCrew(crew: Production['crew']) {
@@ -481,7 +420,7 @@ function ProductionsContent() {
     setWorkerName(wName);
     setWeekStart(parsed.weekStart);
     setWeekEnd(parsed.weekEnd);
-    setCurrentDate(new Date(parsed.weekStart));
+    setCurrentDate(fromLocalDate(parsed.weekStart));
 
     if (currentWeekId === weekId && productions.length > 0) {
       const diff = diffSchedules(productions, parsed.productions);
@@ -756,11 +695,16 @@ function ProductionsContent() {
     return end;
   };
 
+  const fromLocalDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
   const toLocalDate = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
-    return ${y}--;
+    return `${y}-${m}-${d}`;
   };
 
   // Load the latest week - try known current week first, then user schedules via REST
@@ -809,7 +753,7 @@ function ProductionsContent() {
           setProductions(latestProds);
           setWeekStart((latest.fields.weekStart as string) || '');
           if (latest.fields.weekStart) {
-            setCurrentDate(new Date(latest.fields.weekStart as string));
+            setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
           }
           setWeekEnd((latest.fields.weekEnd as string) || '');
           setWorkerName((latest.fields.workerName as string) || '');
@@ -1407,6 +1351,8 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
+
 
 
 

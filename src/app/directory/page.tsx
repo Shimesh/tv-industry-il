@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { contacts, departments, type Contact } from '@/data/contacts';
+import { departments, type Contact } from '@/data/contacts';
+import { useContacts } from '@/hooks/useContacts';
 import { Search, Phone, User, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 
@@ -24,6 +25,7 @@ const deptBadgeColors: Record<string, string> = {
 
 export default function DirectoryPage() {
   const { profile, loading: authLoading } = useAuth();
+  const { contacts: contactsList, loading: contactsLoading } = useContacts();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
@@ -45,7 +47,7 @@ export default function DirectoryPage() {
   };
 
   const filtered = useMemo(() => {
-    return contacts.filter(c => {
+    return contactsList.filter(c => {
       const matchSearch = !search || `${c.firstName} ${c.lastName} ${c.role} ${c.department}`.includes(search);
       const matchDept = !deptFilter || c.department === deptFilter;
       const matchAvail = !availFilter ||
@@ -66,7 +68,7 @@ export default function DirectoryPage() {
     });
   }, [filtered, profile]);
 
-  const availableCount = contacts.filter(c => c.availability === 'available').length;
+  const availableCount = contactsList.filter(c => c.availability === 'available').length;
 
   const formatWhatsApp = (phone?: string) => {
     if (!phone) return '';
@@ -74,7 +76,7 @@ export default function DirectoryPage() {
     return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
   };
 
-  if (authLoading) return <DirectorySkeleton />;
+  if (authLoading || contactsLoading) return <DirectorySkeleton />;
 
   return (
     <div className="min-h-screen">
@@ -92,7 +94,7 @@ export default function DirectoryPage() {
             </div>
           </div>
           <div className="flex items-center gap-4 mt-4 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-            <span>{contacts.length} אנשי מקצוע</span>
+            <span>{contactsList.length} אנשי מקצוע</span>
             <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>|</span>
             <span className="text-green-400">{availableCount} פנויים</span>
           </div>
@@ -270,7 +272,7 @@ export default function DirectoryPage() {
         <h3 className="text-lg font-bold mb-4 transition-colors" style={{ color: 'var(--theme-text)' }}>לפי מחלקה</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {departments.map(dept => {
-            const count = contacts.filter(c => c.department === dept.label).length;
+            const count = contactsList.filter(c => c.department === dept.label).length;
             return (
               <button key={dept.id} onClick={() => setDeptFilter(deptFilter === dept.label ? '' : dept.label)}
                 className={`p-4 rounded-xl border text-center transition-all ${
@@ -350,3 +352,5 @@ export default function DirectoryPage() {
     </div>
   );
 }
+
+

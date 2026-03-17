@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { contacts } from '@/data/contacts';
+import { useContacts } from '@/hooks/useContacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, X, Search, Link2, UserCheck } from 'lucide-react';
 
@@ -57,8 +57,9 @@ function OnboardingModal({
   onDismiss: () => void;
 }) {
   const [step, setStep] = useState(1);
+  const { contacts: contactsList } = useContacts();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedContact, setSelectedContact] = useState<typeof contacts[0] | null>(null);
+  const [selectedContact, setSelectedContact] = useState<any | null>(null);
   const [form, setForm] = useState({
     displayName: profile.displayName,
     department: profile.department || '',
@@ -67,13 +68,13 @@ function OnboardingModal({
   });
 
   const matchedContacts = searchQuery.length >= 2
-    ? contacts.filter(c => {
+    ? contactsList.filter(c => {
         const fullName = `${c.firstName} ${c.lastName}`;
         return fullName.includes(searchQuery) || (c.phone && c.phone.includes(searchQuery));
       })
     : [];
 
-  const handleLinkContact = (contact: typeof contacts[0]) => {
+  const handleLinkContact = (contact: any) => {
     setSelectedContact(contact);
     setForm({
       displayName: `${contact.firstName} ${contact.lastName}`,
@@ -252,3 +253,5 @@ function OnboardingModal({
     </motion.div>
   );
 }
+
+

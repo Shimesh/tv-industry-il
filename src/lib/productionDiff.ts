@@ -79,13 +79,24 @@ export function generateProductionId(name: string, date: string, studio: string)
   return Math.abs(hash).toString(36);
 }
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function toLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 // Generate weekId from a date (Sunday of that week)
 export function getWeekId(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   const day = date.getDay();
   const diff = date.getDate() - day; // Sunday
   const sunday = new Date(date.setDate(diff));
-  return sunday.toISOString().split('T')[0];
+  return toLocalDateStr(sunday);
 }
 
 // Format date for display: "16/03"
@@ -98,7 +109,7 @@ export function formatDateShort(dateStr: string): string {
 const hebrewDays = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
 
 export function getHebrewDay(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   return hebrewDays[date.getDay()];
 }
 
@@ -115,8 +126,8 @@ export function getHebrewMonth(month: number): string {
 // Get all week IDs (Sundays) that overlap with a date range
 export function getWeekIdsInRange(startDate: string, endDate: string): string[] {
   const weekIds: string[] = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
 
   // Find first Sunday on or before start
   const firstSunday = new Date(start);
@@ -124,7 +135,7 @@ export function getWeekIdsInRange(startDate: string, endDate: string): string[] 
 
   const current = new Date(firstSunday);
   while (current <= end) {
-    weekIds.push(current.toISOString().split('T')[0]);
+    weekIds.push(toLocalDateStr(current));
     current.setDate(current.getDate() + 7);
   }
 
@@ -136,22 +147,22 @@ export function getMonthRange(year: number, month: number): { start: string; end
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0); // Last day of month
   return {
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
+    start: toLocalDateStr(start),
+    end: toLocalDateStr(end),
   };
 }
 
 // Get Sunday-based week start/end from a date
 export function getWeekRange(dateStr: string): { start: string; end: string } {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   const day = date.getDay();
   const sunday = new Date(date);
   sunday.setDate(date.getDate() - day);
   const saturday = new Date(sunday);
   saturday.setDate(sunday.getDate() + 6);
   return {
-    start: sunday.toISOString().split('T')[0],
-    end: saturday.toISOString().split('T')[0],
+    start: toLocalDateStr(sunday),
+    end: toLocalDateStr(saturday),
   };
 }
 
@@ -344,3 +355,4 @@ export function applyDiff(
 
   return result;
 }
+
