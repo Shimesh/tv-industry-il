@@ -170,8 +170,6 @@ async function fetchSchedule(browser, url) {
     const refreshed = await findCalendarContext();
     if (refreshed) context = refreshed;
     console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
-    const refreshed = await findCalendarContext();
-    if (refreshed) context = refreshed;
     console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
     // Get the full HTML
     const html = await context.content();
