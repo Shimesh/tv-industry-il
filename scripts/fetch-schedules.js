@@ -97,11 +97,28 @@ async function fetchSchedule(browser, url) {
       timeout: 30000,
     });
 
-    // Wait for calendar to load
-    await page.waitForSelector('.calendar-body, .calendar', { timeout: 10000 });
+    // Wait for calendar to load (page or iframe)
+    let context = page;
+    try {
+      await page.waitForSelector('.calendar-body, .calendar', { timeout: 8000 });
+    } catch {
+      const frame = page.frames().find((f) =>
+        f.url().includes('sendwa') || f.url().includes('herzliya')
+      );
+      if (frame) {
+        try {
+          await frame.waitForSelector('.calendar-body, .calendar', { timeout: 8000 });
+          context = frame;
+        } catch {
+          // Keep page as fallback
+        }
+      }
+    }
+
+    console.log('Calendar context:', context === page ? 'page' : 'iframe');
 
     // Check if "department view" checkbox exists and click it
-    const checkboxClicked = await page.evaluate(() => {
+    const checkboxClicked = await context.evaluate(() => {
       const checkbox =
         document.getElementById('allDep') ||
         document.querySelector('input[type="checkbox"]');
@@ -127,10 +144,10 @@ async function fetchSchedule(browser, url) {
     }
 
     // Get the full HTML
-    const html = await page.content();
+    const html = await context.content();
 
     // Also extract worker name from the page
-    const workerName = await page.evaluate(() => {
+    const workerName = await context.evaluate(() => {
       // Try various patterns for worker name
       const bodyText = document.body.textContent || '';
       const nameMatch =
@@ -140,7 +157,7 @@ async function fetchSchedule(browser, url) {
     });
 
     // Parse the HTML using Puppeteer's DOM (real DOMParser!)
-    const schedule = await page.evaluate((currentWorkerName) => {
+    const schedule = await context.evaluate((currentWorkerName) => {
       // ── Extract dates from calendar header ──
       const headerDivs = document.querySelectorAll('.calendar-header > div');
       const weekDays = [];
@@ -314,7 +331,7 @@ async function fetchSchedule(browser, url) {
 
       try {
         // Click the production to open detail popup
-        const detailedCrew = await page.evaluate(async (hId) => {
+        const detailedCrew = await context.evaluate(async (hId) => {
           return new Promise((resolve) => {
             // Call the Herzliya openmd2 function
             if (typeof openmd2 === 'function') {
@@ -679,6 +696,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 }
 
 main().catch(console.error);
+
 
 
 
