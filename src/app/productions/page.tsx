@@ -51,15 +51,123 @@ export default function ProductionsPage() {
 type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
 function normalizeCrewName(name: string) {
-  return name
-    // Remove role prefixes like "׳¦׳™׳׳•׳: " "׳¡׳׳•׳ ׳“: " etc
+  if (!name) return '';
+
+  let cleaned = name
+    // Remove role prefixes like "צילום: " "סאונד: " etc
     .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    // Remove role suffixes
-    .replace(/\s*[-ג€“]\s*[\u05d0-\u05ea\s]+$/, '')
-    // Trim whitespace
+    // Remove role suffixes separated by dash
+    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
     .trim()
-    // Remove extra spaces
     .replace(/\s+/g, ' ');
+
+  const rolePhrases = [
+    'צילום',
+    'צלם',
+    'צלמת',
+    'צלם רחף',
+    'רחף',
+    'רחפן',
+    'רחפנית',
+    'סטדיקאם',
+    'סטדי קאם',
+    'סטדי-קאם',
+    'סאונד',
+    'במאי',
+    'במאית',
+    'בימוי',
+    'מפיק',
+    'מפיקת',
+    'עורך',
+    'עורכת',
+    'ע. במאי',
+    'ע. במאית',
+    'ע. צילום',
+    'ע. סאונד',
+    'קול',
+    'מקליט',
+    'מקליטה',
+    'תאורה',
+    'תאורן',
+    'איפור',
+    'סטיילינג',
+    'ארט',
+    'תפאורה',
+  ];
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const phrase of rolePhrases) {
+      const prefix = new RegExp(`^${phrase}\\s+`, 'u');
+      const suffix = new RegExp(`\\s+${phrase}'use client';
+
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import AuthGuard from '@/components/AuthGuard';
+import MessageInput from '@/components/productions/MessageInput';
+import WeeklyCalendar from '@/components/productions/WeeklyCalendar';
+import UpdateSummary from '@/components/productions/UpdateSummary';
+import {
+  Production,
+  ParsedSchedule,
+  ScheduleDiff,
+  getWeekId,
+  diffSchedules,
+  applyDiff,
+  generateProductionId,
+  getHebrewDay,
+  getWeekIdsInRange,
+  getMonthRange,
+  getWeekRange,
+} from '@/lib/productionDiff';
+import { CalendarView } from '@/components/productions/CalendarNavigation';
+import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
+import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  addDoc,
+  writeBatch,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
+import { db, ensureOnline } from '@/lib/firebase';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
+
+export default function ProductionsPage() {
+  return (
+    <AuthGuard>
+      <ProductionsContent />
+    </AuthGuard>
+  );
+}
+
+// Request status type
+type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
+
+, 'u');
+      if (prefix.test(cleaned)) {
+        cleaned = cleaned.replace(prefix, '').trim();
+        changed = true;
+      }
+      if (suffix.test(cleaned)) {
+        cleaned = cleaned.replace(suffix, '').trim();
+        changed = true;
+      }
+    }
+  }
+
+  cleaned = cleaned.replace(/^[–-]\\s*/u, '').replace(/\\s*[–-]$/u, '').trim();
+  cleaned = cleaned.replace(/\\s+/g, ' ');
+
+  return cleaned;
 }
 
 function deduplicateCrew(crew: Production['crew']) {
@@ -415,10 +523,10 @@ function ProductionsContent() {
       const day = now.getDay();
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - day);
-      parsed.weekStart = sunday.toISOString().split('T')[0];
+      parsed.weekStart = toLocalDate(sunday);
       const saturday = new Date(sunday);
       saturday.setDate(sunday.getDate() + 6);
-      parsed.weekEnd = saturday.toISOString().split('T')[0];
+      parsed.weekEnd = toLocalDate(saturday);
     }
 
     const weekId = getWeekId(parsed.weekStart);
@@ -636,7 +744,7 @@ function ProductionsContent() {
                   setWeekStart(isoDate);
                   setCurrentDate(new Date(isoDate));
                   const sat = new Date(y, m - 1, d + 6);
-                  setWeekEnd(sat.toISOString().split('T')[0]);
+                  setWeekEnd(toLocalDate(sat));
                   setCurrentWeekId(weekId);
                   setStatusMessage(`׳ ׳˜׳¢׳ ׳• ${prods.length} ׳”׳₪׳§׳•׳×`);
                 }
@@ -702,7 +810,12 @@ function ProductionsContent() {
     return end;
   };
 
-  const toIsoDate = (date: Date) => date.toISOString().split('T')[0];
+  const toLocalDate = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return ${y}--;
+  };
 
   // Load the latest week - try known current week first, then user schedules via REST
   const handleReloadLatest = useCallback(async () => {
@@ -713,7 +826,7 @@ function ProductionsContent() {
       const dayOfWeek = now.getDay();
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - dayOfWeek);
-      const weekId = getWeekId(sunday.toISOString().split('T')[0]);
+      const weekId = getWeekId(toLocalDate(sunday));
 
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
@@ -729,9 +842,9 @@ function ProductionsContent() {
         setWorkerName(wName);
         const satDate = new Date(sunday);
         satDate.setDate(sunday.getDate() + 6);
-        setWeekStart(sunday.toISOString().split('T')[0]);
+        setWeekStart(toLocalDate(sunday));
         setCurrentDate(new Date(sunday));
-        setWeekEnd(satDate.toISOString().split('T')[0]);
+        setWeekEnd(toLocalDate(satDate));
         setCurrentWeekId(weekId);
         setStatusMessage(`׳ ׳˜׳¢׳ ׳• ${prods.length} ׳”׳₪׳§׳•׳×`);
         return;
@@ -837,8 +950,8 @@ function ProductionsContent() {
         end.setMonth(end.getMonth() + 2);
       }
 
-      const startStr = toIsoDate(start);
-      const endStr = toIsoDate(end);
+      const startStr = toLocalDate(start);
+      const endStr = toLocalDate(end);
       const prods = await loadProductionsForPeriod(startStr, endStr);
 
       if (cancelled) return;
@@ -1349,6 +1462,10 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     </div>
   );
 }
+
+
+
+
 
 
 
