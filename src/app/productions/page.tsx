@@ -16,12 +16,16 @@ import {
   generateProductionId,
   getHebrewDay,
   getWeekIdsInRange,
-  getMonthRange,
-  getWeekRange,
 } from '@/lib/productionDiff';
 import { CalendarView } from '@/components/productions/CalendarNavigation';
 import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
 import { normalizeContactName } from '@/lib/contactsUtils';
+import {
+  deduplicateCrewEntries,
+  normalizePhone,
+  normalizeName,
+  normalizeRole,
+} from '@/lib/crewNormalization';
 import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
@@ -53,49 +57,28 @@ export default function ProductionsPage() {
 type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
 function normalizeCrewName(name: string) {
-  return normalizeContactName(name);
+  return normalizeName(name) || normalizeContactName(name);
 }
 
 function deduplicateCrew(crew: Production['crew']) {
-  const seen = new Map<string, typeof crew[0]>();
-  const byPhone = new Map<string, string>();
-
-  for (const member of crew) {
-    const normalizedName = normalizeCrewName(member.name || '');
-    const phoneDigits = (member.phone || '').replace(/\D/g, '');
-    const phoneKey = phoneDigits.length >= 9 ? phoneDigits.slice(-9) : '';
-    const existingByPhone = phoneKey ? byPhone.get(phoneKey) : undefined;
-    const key = existingByPhone || normalizedName;
-    if (!key || key.length < 2) continue;
-
-    if (!seen.has(key)) {
-      seen.set(key, { ...member, name: normalizedName || member.name });
-      if (phoneKey) byPhone.set(phoneKey, key);
-    } else {
-      const existing = seen.get(key)!;
-      seen.set(key, {
-        name: normalizedName || existing.name,
-        role: existing.role || member.role,
-        roleDetail: existing.roleDetail || member.roleDetail,
-        phone: existing.phone || member.phone,
-        startTime: existing.startTime || member.startTime,
-        endTime: existing.endTime || member.endTime,
-        addedBy: existing.addedBy || member.addedBy,
-        addedAt: existing.addedAt || member.addedAt,
-      });
-      if (phoneKey) byPhone.set(phoneKey, key);
-    }
-  }
-
-  return Array.from(seen.values());
+  return deduplicateCrewEntries(crew || []).map((member) => ({
+    ...member,
+    name: normalizeCrewName(member.name),
+    role: normalizeRole(member.role || ''),
+    roleDetail: normalizeRole(member.roleDetail || ''),
+    phone: normalizePhone(member.phone),
+  }));
 }
 
 function sanitizeCrewForFirestore(crew: Production['crew']) {
   return (crew || []).map((member) => ({
-    name: member.name || '',
-    role: member.role || '',
-    roleDetail: member.roleDetail || '',
-    phone: member.phone || '',
+    name: normalizeCrewName(member.name || ''),
+    role: normalizeRole(member.role || ''),
+    roleDetail: normalizeRole(member.roleDetail || ''),
+    phone: normalizePhone(member.phone),
+    normalizedName: normalizeCrewName(member.name || ''),
+    normalizedPhone: normalizePhone(member.phone),
+    identityKey: member.identityKey || normalizeCrewName(member.name || ''),
     startTime: member.startTime || '',
     endTime: member.endTime || '',
     addedBy: member.addedBy || '',
@@ -105,7 +88,7 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 
 function ProductionsContent() {
   const { user, profile } = useAuth();
-  const { ensureFromCrew } = useContacts();
+  const { ensureFromCrew, duplicateContactsReport } = useContacts();
   const [loading, setLoading] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -122,6 +105,7 @@ function ProductionsContent() {
   const unsubRequestRef = useRef<(() => void) | null>(null);
   const unsubWeekRef = useRef<(() => void) | null>(null);
   const loadTokenRef = useRef(0);
+  const duplicateAlertShownRef = useRef(false);
 
     // Calendar navigation state
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
@@ -209,10 +193,13 @@ function ProductionsContent() {
         if (d.crew) {
           const rawCrew = parseFirestoreArray(d.crew);
           const mappedCrew = rawCrew.map(c => ({
-            name: c.name || '',
-            role: c.role || '',
-            roleDetail: c.roleDetail || '',
-            phone: c.phone || '',
+            name: normalizeCrewName(c.name || ''),
+            role: normalizeRole(c.role || ''),
+            roleDetail: normalizeRole(c.roleDetail || ''),
+            phone: normalizePhone(c.phone || ''),
+            normalizedName: normalizeCrewName(c.normalizedName || c.name || ''),
+            normalizedPhone: normalizePhone(c.normalizedPhone || c.phone || ''),
+            identityKey: c.identityKey || normalizeCrewName(c.name || ''),
             startTime: c.startTime || '',
             endTime: c.endTime || '',
             addedBy: c.addedBy || '',
@@ -223,10 +210,13 @@ function ProductionsContent() {
           // Fallback: try loading from subcollection (for old data format)
           const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
           const mappedCrew = crewDocs.map(c => ({
-            name: (c.fields.name as string) || '',
-            role: (c.fields.role as string) || '',
-            roleDetail: (c.fields.roleDetail as string) || '',
-            phone: (c.fields.phone as string) || '',
+            name: normalizeCrewName((c.fields.name as string) || ''),
+            role: normalizeRole((c.fields.role as string) || ''),
+            roleDetail: normalizeRole((c.fields.roleDetail as string) || ''),
+            phone: normalizePhone((c.fields.phone as string) || ''),
+            normalizedName: normalizeCrewName((c.fields.normalizedName as string) || (c.fields.name as string) || ''),
+            normalizedPhone: normalizePhone((c.fields.normalizedPhone as string) || (c.fields.phone as string) || ''),
+            identityKey: (c.fields.identityKey as string) || normalizeCrewName((c.fields.name as string) || ''),
             startTime: (c.fields.startTime as string) || '',
             endTime: (c.fields.endTime as string) || '',
             addedBy: (c.fields.addedBy as string) || '',
@@ -788,29 +778,51 @@ function ProductionsContent() {
   }, [user, profile, loadExistingWeek, restListDocs]);
 
   // Load productions for a date range (multiple weeks from Firestore)
-  const loadProductionsForPeriod = useCallback(async (startDate: string, endDate: string): Promise<Production[]> => {
+  const loadProductionsForPeriod = useCallback(async (
+    startDate: string,
+    endDate: string,
+    signal?: AbortSignal,
+  ): Promise<Production[]> => {
     const weekIds = getWeekIdsInRange(startDate, endDate);
-    const allProductions: Production[] = [];
+    const cached: Production[] = [];
+    const missingWeekIds: string[] = [];
 
     for (const weekId of weekIds) {
-      const cached = productionsByWeekRef.current.get(weekId);
-      if (cached) {
-        allProductions.push(...cached);
-        continue;
-      }
-
-      const prods = await loadExistingWeek(weekId);
-      if (prods.length > 0) {
-        productionsByWeekRef.current.set(weekId, prods);
-        allProductions.push(...prods);
+      const local = productionsByWeekRef.current.get(weekId);
+      if (local) {
+        cached.push(...local);
+      } else {
+        missingWeekIds.push(weekId);
       }
     }
 
-    return allProductions;
+    const fetched: Production[] = [];
+    const concurrency = 5;
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < missingWeekIds.length) {
+        if (signal?.aborted) return;
+        const index = cursor++;
+        const weekId = missingWeekIds[index];
+        const prods = await loadExistingWeek(weekId);
+        if (signal?.aborted) return;
+        if (prods.length > 0) {
+          productionsByWeekRef.current.set(weekId, prods);
+          fetched.push(...prods);
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, missingWeekIds.length) }, () => worker()),
+    );
+
+    return [...cached, ...fetched];
   }, [loadExistingWeek]);
 
-    // Handle calendar navigation
-    const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
+  // Handle calendar navigation
+  const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
     setNavLoading(true);
 
     let target = new Date(currentDate);
@@ -819,69 +831,76 @@ function ProductionsContent() {
       target = new Date();
     } else if (calendarView === 'week') {
       target.setDate(target.getDate() + (direction === 'prev' ? -7 : 7));
-    } else {
-      const day = target.getDate();
+    } else if (calendarView === 'month') {
       target.setDate(1);
       target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
-      const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
-      target.setDate(Math.min(day, lastDay));
+    } else {
+      target.setMonth(target.getMonth() + (direction === 'prev' ? -1 : 1));
     }
 
     setCurrentDate(target);
   }, [calendarView, currentDate]);
 
-    // Handle view change
+  // Handle view change
   const handleViewChange = useCallback((view: CalendarView) => {
     setCalendarView(view);
     setNavLoading(true);
   }, []);
 
-    // Load productions whenever currentDate or view changes
+  // Load productions whenever currentDate or view changes
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
     const token = ++loadTokenRef.current;
+    const controller = new AbortController();
 
     const loadForPeriod = async () => {
       setNavLoading(true);
+      try {
+        let start: Date;
+        let end: Date;
 
-      let start: Date;
-      let end: Date;
+        if (calendarView === 'week') {
+          start = getWeekStartDate(currentDate);
+          end = getWeekEndDate(currentDate);
+        } else if (calendarView === 'month') {
+          start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+          end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        } else {
+          // List: load 3 months around current
+          start = new Date(currentDate);
+          start.setMonth(start.getMonth() - 1);
+          end = new Date(currentDate);
+          end.setMonth(end.getMonth() + 2);
+        }
 
-      if (calendarView === 'week') {
-        start = getWeekStartDate(currentDate);
-        end = getWeekEndDate(currentDate);
-      } else if (calendarView === 'month') {
-        start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-      } else {
-        // List: load 3 months around current
-        start = new Date(currentDate);
-        start.setMonth(start.getMonth() - 1);
-        end = new Date(currentDate);
-        end.setMonth(end.getMonth() + 2);
+        const startStr = toLocalDate(start);
+        const endStr = toLocalDate(end);
+
+        // Update header immediately to avoid UI jumps
+        setWeekStart(startStr);
+        setWeekEnd(endStr);
+        setCurrentWeekId(calendarView === 'week' ? getWeekId(startStr) : null);
+
+        const prods = await loadProductionsForPeriod(startStr, endStr, controller.signal);
+
+        if (cancelled || token !== loadTokenRef.current) return;
+
+        setProductions(prods);
+      } catch {
+        if (cancelled || token !== loadTokenRef.current) return;
+      } finally {
+        if (!cancelled && token === loadTokenRef.current) {
+          setNavLoading(false);
+        }
       }
-
-      const startStr = toLocalDate(start);
-      const endStr = toLocalDate(end);
-
-      // Update header immediately to avoid UI jumps
-      setWeekStart(startStr);
-      setWeekEnd(endStr);
-      setCurrentWeekId(calendarView === 'week' ? getWeekId(startStr) : null);
-
-      const prods = await loadProductionsForPeriod(startStr, endStr);
-
-      if (cancelled || token !== loadTokenRef.current) return;
-
-      setProductions(prods);
-      setNavLoading(false);
     };
 
     loadForPeriod();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
   useEffect(() => {
@@ -889,6 +908,17 @@ function ProductionsContent() {
     const allCrew = productions.flatMap(p => p.crew || []);
     void ensureFromCrew(allCrew);
   }, [productions, ensureFromCrew]);
+
+  useEffect(() => {
+    if (!duplicateContactsReport.length || duplicateAlertShownRef.current) return;
+    duplicateAlertShownRef.current = true;
+    if (typeof window !== 'undefined') {
+      window.alert(
+        `נמצאו כפילויות באלפון (${duplicateContactsReport.length}). ` +
+        `דוגמאות: ${duplicateContactsReport.slice(0, 4).map((d) => d.key).join(', ')}`,
+      );
+    }
+  }, [duplicateContactsReport]);
 
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Production, formatDateShort, getHebrewDay, getHebrewMonth, getWeekRange } from '@/lib/productionDiff';
+import { useState, useMemo, useEffect } from 'react';
+import { Production, formatDateShort, getHebrewDay, getHebrewMonth } from '@/lib/productionDiff';
 import ProductionBlock from './ProductionBlock';
 import CrewModal from './CrewModal';
 import ChangeHistory from './ChangeHistory';
@@ -44,6 +44,13 @@ export default function WeeklyCalendar({
   const [selectedProduction, setSelectedProduction] = useState<Production | null>(null);
   const [historyProduction, setHistoryProduction] = useState<Production | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const todayLocal = useMemo(() => localDateString(new Date()), []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 180);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Build week days array
   const weekDays = getWeekDays(weekStart);
@@ -73,8 +80,8 @@ export default function WeeklyCalendar({
       : productions;
 
     // Apply search filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       prods = prods.filter(p =>
         p.name.toLowerCase().includes(q) ||
         p.studio.toLowerCase().includes(q) ||
@@ -83,7 +90,7 @@ export default function WeeklyCalendar({
     }
 
     return prods;
-  }, [productions, viewMode, searchQuery]);
+  }, [productions, viewMode, debouncedSearch]);
 
   // Group productions by date
   const productionsByDate = useMemo(() => {
@@ -117,9 +124,8 @@ export default function WeeklyCalendar({
     if (calendarView === 'month' && calendarYear !== undefined && calendarMonth !== undefined) {
       return now.getFullYear() === calendarYear && now.getMonth() === calendarMonth;
     }
-    const todayStr = now.toISOString().split('T')[0];
-    return todayStr >= weekStart && todayStr <= weekEnd;
-  }, [calendarView, calendarYear, calendarMonth, weekStart, weekEnd]);
+    return todayLocal >= weekStart && todayLocal <= weekEnd;
+  }, [calendarView, calendarYear, calendarMonth, weekStart, weekEnd, todayLocal]);
 
   return (
     <div>
@@ -183,7 +189,7 @@ export default function WeeklyCalendar({
           <div className="block lg:hidden space-y-3">
             {weekDays.map(day => {
               const dayProductions = productionsByDate.get(day.date) || [];
-              const isToday = day.date === new Date().toISOString().split('T')[0];
+              const isToday = day.date === todayLocal;
 
               return (
                 <div key={day.date}>
@@ -242,7 +248,7 @@ export default function WeeklyCalendar({
           <div className="hidden lg:grid lg:grid-cols-7 gap-2">
             {weekDays.map(day => {
               const dayProductions = productionsByDate.get(day.date) || [];
-              const isToday = day.date === new Date().toISOString().split('T')[0];
+              const isToday = day.date === todayLocal;
 
               return (
                 <div key={day.date} className="min-h-[200px]">
@@ -334,12 +340,13 @@ export default function WeeklyCalendar({
 function getWeekDays(weekStart: string): { date: string; display: string; hebrewDay: string }[] {
   const days: { date: string; display: string; hebrewDay: string }[] = [];
   if (!weekStart) return days;
-  const start = new Date(weekStart);
+  const [y, m, d] = weekStart.split('-').map(Number);
+  const start = new Date(y, (m || 1) - 1, d || 1);
 
   for (let i = 0; i < 7; i++) {
     const d = new Date(start);
     d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = localDateString(d);
     days.push({
       date: dateStr,
       display: formatDateShort(dateStr),
@@ -348,4 +355,11 @@ function getWeekDays(weekStart: string): { date: string; display: string; hebrew
   }
 
   return days;
+}
+
+function localDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

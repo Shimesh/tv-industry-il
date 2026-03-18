@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
 import { useContacts } from '@/hooks/useContacts';
 import { normalizeContactName } from '@/lib/contactsUtils';
+import { deduplicateCrewEntries, normalizePhone } from '@/lib/crewNormalization';
 import { X, MapPin, Clock, Users } from 'lucide-react';
 
 interface CrewModalProps {
@@ -12,45 +13,15 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
-function deduplicateCrew(crewArray: CrewMember[]): (CrewMember & { isCurrentUser?: boolean })[] {
-  const seen = new Map<string, CrewMember>();
-  const byPhone = new Map<string, string>();
-
-  for (const member of crewArray) {
-    const normalizedName = normalizeContactName(member.name || '');
-    const phoneDigits = (member.phone || '').replace(/\D/g, '');
-    const phoneKey = phoneDigits.length >= 9 ? phoneDigits.slice(-9) : '';
-    const existingByPhone = phoneKey ? byPhone.get(phoneKey) : undefined;
-    const key = existingByPhone || normalizedName;
-    if (!key || key.length < 2) continue;
-
-    if (!seen.has(key)) {
-      seen.set(key, { ...member, name: normalizedName || member.name });
-      if (phoneKey) byPhone.set(phoneKey, key);
-    } else {
-      const existing = seen.get(key)!;
-      seen.set(key, {
-        name: normalizedName || existing.name,
-        role: existing.role || member.role,
-        roleDetail: existing.roleDetail || member.roleDetail,
-        phone: existing.phone || member.phone,
-        startTime: existing.startTime || member.startTime,
-        endTime: existing.endTime || member.endTime,
-        isCurrentUser: (existing as { isCurrentUser?: boolean }).isCurrentUser || (member as { isCurrentUser?: boolean }).isCurrentUser,
-      });
-      if (phoneKey) byPhone.set(phoneKey, key);
-    }
-  }
-
-  return Array.from(seen.values());
-}
-
 function enrichCrewWithPhones(
   crew: CrewMember[],
   contactList: { firstName: string; lastName: string; phone?: string }[]
 ): CrewMember[] {
   return crew.map((member) => {
-    if (member.phone) return member;
+    const memberPhone = normalizePhone(member.phone);
+    if (memberPhone) {
+      return { ...member, phone: memberPhone };
+    }
 
     const normalized = normalizeContactName(member.name || '');
     const nameParts = normalized.split(/\s+/);
@@ -67,7 +38,7 @@ function enrichCrewWithPhones(
 
     return {
       ...member,
-      phone: contact?.phone || '',
+      phone: normalizePhone(contact?.phone || '') || null,
     };
   });
 }
@@ -76,7 +47,7 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
   const [showShareMenu, setShowShareMenu] = useState(false);
   const { contacts, ensureFromCrew } = useContacts();
 
-  const rawDeduped = deduplicateCrew(production.crew);
+  const rawDeduped = deduplicateCrewEntries(production.crew);
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, contacts);
 
   useEffect(() => {
@@ -110,7 +81,7 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
       '',
       '*My details:*',
       `${myEntry.name} - ${myEntry.roleDetail || myEntry.role}`,
-      myEntry.phone ? `${myEntry.phone}` : '',
+        myEntry.phone ? `${myEntry.phone}` : '',
     ]
       .filter(Boolean)
       .join('\n');

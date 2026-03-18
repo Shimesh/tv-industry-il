@@ -4,9 +4,12 @@ export interface CrewMember {
   name: string;
   role: string;
   roleDetail: string;
-  phone: string;
+  phone: string | null;
   startTime: string;
   endTime: string;
+  normalizedName?: string;
+  normalizedPhone?: string | null;
+  identityKey?: string;
   addedBy?: string;
   addedAt?: string;
   isCurrentUser?: boolean;
