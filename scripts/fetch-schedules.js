@@ -13,9 +13,6 @@ initializeApp({
 
 const db = getFirestore();
 
-const PHONE_REGEX = /(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g;
-const TIME_RANGE_REGEX = /(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/;
-
 function normalizeName(name) {
   if (!name) return '';
 
@@ -185,11 +182,6 @@ async function cleanupWeek(weekId) {
   console.log(`Deleted ${prodsSnap.size} old productions and their crew`);
 }
 
-function mergeCrew(calendarCrew, popupCrew) {
-  const merged = deduplicateCrew([...(popupCrew || []), ...(calendarCrew || [])]);
-  return merged;
-}
-
 async function findCalendarContext(page) {
   const selector = '.calendar-body, .calendar, #calendar, .calendar-body *';
   const deadline = Date.now() + 20000;
@@ -286,12 +278,6 @@ async function fetchSchedule(browser, url) {
       const dayCells = calendarBody.querySelectorAll('.day-cell, .sat-cell');
       const productions = [];
 
-      const parseTimePair = (value) => {
-        const m = value.match(/(\d{1,2}:\d{2})\s*[-–—]?\s*(\d{1,2}:\d{2})/);
-        if (!m) return { startTime: '', endTime: '' };
-        return { startTime: m[1], endTime: m[2] };
-      };
-
       dayCells.forEach((cell, dayIndex) => {
         const dayInfo = weekDays[dayIndex];
         if (!dayInfo) return;
@@ -304,14 +290,12 @@ async function fetchSchedule(browser, url) {
           if (!herzliyaId) return;
 
           const isCurrentUserShift = eventDiv.classList.contains('sat');
-
           const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
           const rawProductionName = nameFont ? (nameFont.textContent || '').trim() : '';
           if (!rawProductionName) return;
 
           const innerHTML = eventDiv.innerHTML || '';
           const parts = innerHTML.split(/<br\s*\/?>/i);
-
           const crew = [];
           let startTime = '';
           let endTime = '';
@@ -322,48 +306,41 @@ async function fetchSchedule(browser, url) {
             const text = (tempDiv.textContent || '').trim();
             if (!text) continue;
 
-            const crewMatch = text.match(/^(.+?)\s*-\s*(.+?)\s+(\d{1,2}:\d{2})\s*-?\s*(\d{1,2}:\d{2})/);
-            if (crewMatch) {
-              const memberName = crewMatch[1].trim();
-              const role = crewMatch[2].trim();
-              const t = parseTimePair(`${crewMatch[3]}-${crewMatch[4]}`);
+            const m = text.match(/^(.+?)\s*-\s*(.+?)\s+(\d{1,2}:\d{2})\s*-?\s*(\d{1,2}:\d{2})/);
+            if (m) {
+              const s = m[3];
+              const e = m[4];
               if (!startTime) {
-                startTime = t.startTime;
-                endTime = t.endTime;
+                startTime = s;
+                endTime = e;
               }
               crew.push({
-                name: memberName,
-                role,
+                name: m[1].trim(),
+                role: m[2].trim(),
                 roleDetail: '',
                 phone: null,
-                startTime: t.startTime,
-                endTime: t.endTime,
+                startTime: s,
+                endTime: e,
               });
               continue;
             }
 
-            const crewNoTimes = text.match(/^(.+?)\s*-\s*(.+)$/);
-            if (crewNoTimes) {
-              const memberName = crewNoTimes[1].trim();
-              const role = crewNoTimes[2].trim();
-              if (memberName.length >= 2) {
-                crew.push({
-                  name: memberName,
-                  role,
-                  roleDetail: '',
-                  phone: null,
-                  startTime: '',
-                  endTime: '',
-                });
-              }
+            const m2 = text.match(/^(.+?)\s*-\s*(.+)$/);
+            if (m2) {
+              crew.push({
+                name: m2[1].trim(),
+                role: m2[2].trim(),
+                roleDetail: '',
+                phone: null,
+                startTime: '',
+                endTime: '',
+              });
             }
           }
 
           const studioMatch = rawProductionName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
-          const cleanName = studio
-            ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim()
-            : rawProductionName;
+          const cleanName = studio ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : rawProductionName;
 
           productions.push({
             herzliyaId,
@@ -399,7 +376,7 @@ async function fetchSchedule(browser, url) {
       const prod = schedule.productions[i];
       if (!prod.herzliyaId) continue;
 
-      const detailed = await context.evaluate(async (hId) => {
+      const detailed = await context.evaluate(async (hId, expectedProductionName) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
         const extractPhone = (text) => {
           const matches = text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
@@ -411,6 +388,7 @@ async function fetchSchedule(browser, url) {
           if (!m) return { startTime: '', endTime: '' };
           return { startTime: m[1], endTime: m[2] };
         };
+        const normalizeLookup = (value) => cleanText(value).toLowerCase().replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
         return new Promise((resolve) => {
           if (typeof openmd2 !== 'function') {
@@ -420,7 +398,7 @@ async function fetchSchedule(browser, url) {
 
           openmd2(hId);
 
-          const deadline = Date.now() + 6000;
+          const deadline = Date.now() + 7000;
           const timer = setInterval(() => {
             try {
               const tables = Array.from(document.querySelectorAll('table'));
@@ -429,61 +407,71 @@ async function fetchSchedule(browser, url) {
                 return rect.width > 0 && rect.height > 0;
               });
 
-              const candidates = visibleTables.filter((table) => {
-                const text = cleanText(table.textContent || '');
-                return /תפקיד|שם|טלפון|פרטים|שעות/.test(text) && table.querySelectorAll('tr').length >= 2;
-              });
+              const keywords = ['תפקיד', 'שם', 'נייד', 'טלפון', 'פרטים', 'שעות'];
+              const expectedKey = normalizeLookup(expectedProductionName || '');
 
-              if (!candidates.length && Date.now() < deadline) {
+              const scored = visibleTables
+                .map((table) => {
+                  const rowsCount = table.querySelectorAll('tr').length;
+                  if (rowsCount < 2) return null;
+
+                  const headerCells = Array.from(table.querySelectorAll('tr:first-child th, tr:first-child td')).map((cell) => cleanText(cell.textContent || ''));
+                  const headerText = cleanText(headerCells.join(' | '));
+                  const headerHits = keywords.reduce((sum, key) => (headerText.includes(key) ? sum + 1 : sum), 0);
+                  if (headerHits < 2) return null;
+
+                  const fullText = normalizeLookup(table.textContent || '');
+                  let score = headerHits * 10 + Math.min(rowsCount, 25);
+                  if (expectedKey && fullText.includes(expectedKey)) score += 100;
+
+                  return { table, score };
+                })
+                .filter(Boolean)
+                .sort((a, b) => b.score - a.score);
+
+              if (!scored.length && Date.now() < deadline) {
                 return;
               }
 
               clearInterval(timer);
 
-              const table = candidates[0];
+              const table = scored.length ? scored[0].table : null;
               if (!table) {
                 resolve({ crew: [], studio: '' });
                 return;
               }
 
               const rows = Array.from(table.querySelectorAll('tr'));
+              const headerCells = Array.from(rows[0].querySelectorAll('th, td')).map((cell) => cleanText(cell.textContent || ''));
+
+              const findIndex = (keys) => headerCells.findIndex((h) => keys.some((k) => h.includes(k)));
+              const timeIdx = findIndex(['שעות']);
+              const roleIdx = findIndex(['תפקיד']);
+              const nameIdx = findIndex(['שם']);
+              const detailsIdx = findIndex(['פרטים']);
+              const phoneIdx = findIndex(['נייד', 'טלפון']);
+
+              if (nameIdx < 0) {
+                resolve({ crew: [], studio: '' });
+                return;
+              }
+
               const crew = [];
-
-              for (const row of rows) {
-                const cells = Array.from(row.querySelectorAll('td')).map((td) => cleanText(td.textContent || ''));
+              for (let r = 1; r < rows.length; r++) {
+                const cells = Array.from(rows[r].querySelectorAll('td')).map((td) => cleanText(td.textContent || ''));
                 if (!cells.length) continue;
+
                 const joined = cleanText(cells.join(' | '));
-                if (!joined || /תפקיד|שם|טלפון|שעות/.test(joined)) continue;
-
-                const phone = extractPhone(joined);
-                const { startTime, endTime } = extractTimeRange(joined);
-
-                const strippedCells = cells
-                  .map((cell) => cleanText(cell.replace(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g, '').replace(/\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}/g, '')))
-                  .filter(Boolean);
-
-                let name = '';
-                let role = '';
-                let roleDetail = '';
-
-                const hebrewLike = strippedCells.filter((cell) => /[\u05d0-\u05ea]{2,}/u.test(cell));
-                if (hebrewLike.length >= 2) {
-                  role = hebrewLike[0];
-                  name = hebrewLike[1];
-                  roleDetail = hebrewLike[2] || '';
-                } else if (hebrewLike.length === 1) {
-                  name = hebrewLike[0];
-                  role = strippedCells.find((cell) => cell !== name) || '';
-                } else {
-                  name = strippedCells[1] || strippedCells[0] || '';
-                  role = strippedCells[0] || '';
-                }
-
-                name = cleanText(name.replace(/^[:\-]+|[:\-]+$/g, ''));
-                role = cleanText(role);
-                roleDetail = cleanText(roleDetail);
-
+                const name = cleanText((cells[nameIdx] || '').replace(/^[:\-]+|[:\-]+$/g, ''));
                 if (!name || name.length < 2) continue;
+
+                const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
+                const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
+                const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
+                const phone = extractPhone(phoneRaw) || extractPhone(joined);
+
+                const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
+                const { startTime, endTime } = extractTimeRange(timeSource);
 
                 crew.push({
                   name,
@@ -520,7 +508,7 @@ async function fetchSchedule(browser, url) {
             }
           }, 250);
         });
-      }, prod.herzliyaId);
+      }, prod.herzliyaId, prod.name);
 
       if (detailed && detailed.crew && detailed.crew.length) {
         const withNormalized = detailed.crew.map((member) => ({
@@ -528,16 +516,30 @@ async function fetchSchedule(browser, url) {
           phone: normalizePhone(member.phone),
         }));
 
-        const merged = mergeCrew(prod.crew || [], withNormalized);
-        const before = (prod.crew || []).length + withNormalized.length;
-        const after = merged.length;
+        const calendarByName = new Map(
+          deduplicateCrew(prod.crew || []).map((member) => [normalizeName(member.name), member]),
+        );
+
+        const popupAuthoritative = deduplicateCrew(withNormalized).map((member) => {
+          if (member.phone) return member;
+          const calendarMember = calendarByName.get(normalizeName(member.name));
+          return {
+            ...member,
+            phone: member.phone || calendarMember?.phone || null,
+            startTime: member.startTime || calendarMember?.startTime || '',
+            endTime: member.endTime || calendarMember?.endTime || '',
+          };
+        });
+
+        const before = withNormalized.length;
+        const after = popupAuthoritative.length;
 
         crewParsed += withNormalized.length;
-        phonesFound += merged.filter((member) => member.phone).length;
+        phonesFound += popupAuthoritative.filter((member) => member.phone).length;
         dedupRemoved += Math.max(0, before - after);
-        missingPhones += merged.filter((member) => !member.phone).length;
+        missingPhones += popupAuthoritative.filter((member) => !member.phone).length;
 
-        schedule.productions[i].crew = merged;
+        schedule.productions[i].crew = popupAuthoritative;
         if (detailed.studio && !prod.studio) {
           schedule.productions[i].studio = detailed.studio;
         }
