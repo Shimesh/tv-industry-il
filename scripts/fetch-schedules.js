@@ -389,6 +389,22 @@ async function fetchSchedule(browser, url) {
           return { startTime: m[1], endTime: m[2] };
         };
         const normalizeLookup = (value) => cleanText(value).toLowerCase().replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const normalizeNameLoose = (value) =>
+          normalizeLookup(value)
+            .replace(/\b(פרק|עונה|תכנית|תוכנית|שידור|לייב|אולפן|סטודיו)\b/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const productionLooksMatching = (actualText, expectedText) => {
+          const actual = normalizeNameLoose(actualText);
+          const expected = normalizeNameLoose(expectedText);
+          if (!actual || !expected) return false;
+          if (actual.includes(expected) || expected.includes(actual)) return true;
+
+          const expectedTokens = expected.split(' ').filter((t) => t.length >= 2);
+          if (expectedTokens.length === 0) return false;
+          const hitCount = expectedTokens.filter((t) => actual.includes(t)).length;
+          return hitCount >= Math.min(2, expectedTokens.length);
+        };
 
         return new Promise((resolve) => {
           if (typeof openmd2 !== 'function') {
@@ -430,6 +446,23 @@ async function fetchSchedule(browser, url) {
                 .sort((a, b) => b.score - a.score);
 
               if (!scored.length && Date.now() < deadline) {
+                return;
+              }
+
+              const titleEl =
+                document.querySelector('.modal-title') ||
+                document.querySelector('.popup-title') ||
+                document.querySelector('[class*="title"]') ||
+                document.querySelector('font[color="red"]');
+              const titleText = cleanText(titleEl?.textContent || '');
+
+              // Guard: only parse when popup belongs to the current production.
+              if (
+                expectedProductionName &&
+                titleText &&
+                !productionLooksMatching(titleText, expectedProductionName) &&
+                Date.now() < deadline
+              ) {
                 return;
               }
 
@@ -483,11 +516,6 @@ async function fetchSchedule(browser, url) {
                 });
               }
 
-              const titleEl =
-                document.querySelector('.modal-title') ||
-                document.querySelector('.popup-title') ||
-                document.querySelector('[class*="title"]');
-              const titleText = cleanText(titleEl?.textContent || '');
               const studioMatch = titleText.match(/(?:אולפן|סטודיו)\s*\d+\w?/i);
               const studio = studioMatch ? studioMatch[0] : '';
 
