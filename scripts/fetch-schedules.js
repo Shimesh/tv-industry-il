@@ -443,7 +443,7 @@ async function fetchSchedule(browser, url) {
       );
 
       const evaluateCrewFromPopup = async () =>
-        evaluateWithContext(async (hId, expectedProductionName) => {
+        evaluateWithContext(async (hId, expectedProductionName, expectedCrewNames) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
         const extractPhone = (text) => {
           const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
@@ -459,6 +459,11 @@ async function fetchSchedule(browser, url) {
           cleanText(value)
             .toLowerCase()
             .replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const normalizeNameKey = (value) =>
+          normalizeLookup(value)
+            .replace(/\b(\u05e6\u05dc\u05dd|\u05e6\u05d9\u05dc\u05d5\u05dd|\u05e8\u05d7\u05e3|\u05de\u05e0\u05d4\u05dc|\u05d1\u05de\u05d0\u05d9|\u05ea\u05d0\u05d5\u05e8\u05d4|\u05e7\u05d5\u05dc)\b/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
@@ -637,13 +642,30 @@ async function fetchSchedule(browser, url) {
           document.querySelector('[class*="title"]') ||
           document.querySelector('font[color="red"]');
         const titleText = cleanText(titleEl?.textContent || '');
-        const studioMatch = titleText.match(/(?:אולפן|studio|st.?)s*d+w?/i);
+        const studioMatch = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
         const studio = studioMatch ? studioMatch[0] : '';
+        const expected = normalizeLookup(expectedProductionName || '');
+        const titleNorm = normalizeLookup(titleText || '');
+        const expectedToken = expected.split(' ').find((token) => token.length > 2) || '';
+        const titleMatch = !expectedToken || titleNorm.includes(expectedToken);
+        const expectedNameKeys = (expectedCrewNames || [])
+          .map((name) => normalizeNameKey(name))
+          .filter((name) => name.length >= 2);
+        const overlapCount = expectedNameKeys.length
+          ? bestCrew.filter((member) => {
+            const key = normalizeNameKey(member.name);
+            return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
+          }).length
+          : 1;
 
         closePopup();
 
+        if (!titleMatch || overlapCount === 0) {
+          return { crew: [], studio, title: titleText };
+        }
+
         return { crew: bestCrew, studio, title: titleText };
-        }, prod.herzliyaId, prod.name);
+        }, prod.herzliyaId, prod.name, (prod.crew || []).map((member) => member.name));
 
       const detailed = await evaluateCrewFromPopup();
 
