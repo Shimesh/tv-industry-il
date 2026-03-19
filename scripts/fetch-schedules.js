@@ -388,22 +388,28 @@ async function fetchSchedule(browser, url) {
           if (!m) return { startTime: '', endTime: '' };
           return { startTime: m[1], endTime: m[2] };
         };
-        const normalizeLookup = (value) => cleanText(value).toLowerCase().replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        const normalizeNameLoose = (value) =>
-          normalizeLookup(value)
-            .replace(/\b(פרק|עונה|תכנית|תוכנית|שידור|לייב|אולפן|סטודיו)\b/g, ' ')
+        const normalizeLookup = (value) =>
+          cleanText(value)
+            .toLowerCase()
+            .replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-        const productionLooksMatching = (actualText, expectedText) => {
-          const actual = normalizeNameLoose(actualText);
-          const expected = normalizeNameLoose(expectedText);
-          if (!actual || !expected) return false;
-          if (actual.includes(expected) || expected.includes(actual)) return true;
-
-          const expectedTokens = expected.split(' ').filter((t) => t.length >= 2);
-          if (expectedTokens.length === 0) return false;
-          const hitCount = expectedTokens.filter((t) => actual.includes(t)).length;
-          return hitCount >= Math.min(2, expectedTokens.length);
+        const closeExistingPopup = () => {
+          const closeBtn =
+            document.querySelector('.close') ||
+            document.querySelector('.modal-close') ||
+            document.querySelector('[onclick*="close"]') ||
+            document.querySelector('button[class*="close"]');
+          if (closeBtn) closeBtn.click();
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        };
+        const tableFingerprint = (table) => {
+          if (!table) return '';
+          const rows = Array.from(table.querySelectorAll('tr'))
+            .slice(0, 6)
+            .map((row) => cleanText(row.textContent || ''))
+            .join('||');
+          return rows;
         };
 
         return new Promise((resolve) => {
@@ -412,9 +418,11 @@ async function fetchSchedule(browser, url) {
             return;
           }
 
+          closeExistingPopup();
           openmd2(hId);
 
           const deadline = Date.now() + 7000;
+          let baselineFingerprint = '';
           const timer = setInterval(() => {
             try {
               const tables = Array.from(document.querySelectorAll('table'));
@@ -437,7 +445,8 @@ async function fetchSchedule(browser, url) {
                   if (headerHits < 2) return null;
 
                   const fullText = normalizeLookup(table.textContent || '');
-                  let score = headerHits * 10 + Math.min(rowsCount, 25);
+                  const phonesCount = (table.textContent || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g)?.length || 0;
+                  let score = headerHits * 10 + Math.min(rowsCount, 25) + Math.min(phonesCount, 30);
                   if (expectedKey && fullText.includes(expectedKey)) score += 100;
 
                   return { table, score };
@@ -449,30 +458,24 @@ async function fetchSchedule(browser, url) {
                 return;
               }
 
-              const titleEl =
-                document.querySelector('.modal-title') ||
-                document.querySelector('.popup-title') ||
-                document.querySelector('[class*="title"]') ||
-                document.querySelector('font[color="red"]');
-              const titleText = cleanText(titleEl?.textContent || '');
+              const table = scored.length ? scored[0].table : null;
+              if (!table) {
+                if (Date.now() < deadline) return;
+                clearInterval(timer);
+                resolve({ crew: [], studio: '' });
+                return;
+              }
 
-              // Guard: only parse when popup belongs to the current production.
-              if (
-                expectedProductionName &&
-                titleText &&
-                !productionLooksMatching(titleText, expectedProductionName) &&
-                Date.now() < deadline
-              ) {
+              // Wait until table content changes from previous popup to avoid stale parse.
+              const currentFingerprint = tableFingerprint(table);
+              if (!baselineFingerprint) {
+                baselineFingerprint = currentFingerprint;
+                if (Date.now() < deadline) return;
+              } else if (currentFingerprint === baselineFingerprint && Date.now() < deadline) {
                 return;
               }
 
               clearInterval(timer);
-
-              const table = scored.length ? scored[0].table : null;
-              if (!table) {
-                resolve({ crew: [], studio: '' });
-                return;
-              }
 
               const rows = Array.from(table.querySelectorAll('tr'));
               const headerCells = Array.from(rows[0].querySelectorAll('th, td')).map((cell) => cleanText(cell.textContent || ''));
@@ -516,6 +519,12 @@ async function fetchSchedule(browser, url) {
                 });
               }
 
+              const titleEl =
+                document.querySelector('.modal-title') ||
+                document.querySelector('.popup-title') ||
+                document.querySelector('[class*="title"]') ||
+                document.querySelector('font[color="red"]');
+              const titleText = cleanText(titleEl?.textContent || '');
               const studioMatch = titleText.match(/(?:אולפן|סטודיו)\s*\d+\w?/i);
               const studio = studioMatch ? studioMatch[0] : '';
 
@@ -573,6 +582,8 @@ async function fetchSchedule(browser, url) {
         }
 
         console.log(`  Production ${prod.name}: ${withNormalized.length} crew rows parsed`);
+      } else {
+        console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
       }
 
       await new Promise((r) => setTimeout(r, 90));
