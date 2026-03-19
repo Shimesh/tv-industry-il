@@ -226,10 +226,35 @@ async function fetchSchedule(browser, url) {
 
     page.setDefaultNavigationTimeout(45000);
 
-    console.log('Navigating to:', url);
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: 35000 });
+    const isContextLostError = (error) => {
+      const message = String(error?.message || error || '');
+      return (
+        message.includes('Execution context was destroyed') ||
+        message.includes('Cannot find context') ||
+        message.includes('Target closed')
+      );
+    };
 
-    const blockingError = await page.evaluate(() => {
+    const evaluateOnPageWithRetry = async (fn, ...args) => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await page.evaluate(fn, ...args);
+        } catch (error) {
+          if (!isContextLostError(error) || attempt === 2) {
+            throw error;
+          }
+          console.log('Page context lost, retrying page evaluate...');
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+      throw new Error('Failed page evaluation');
+    };
+
+    console.log('Navigating to:', url);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    await new Promise((r) => setTimeout(r, 900));
+
+    const blockingError = await evaluateOnPageWithRetry(() => {
       const text = (document.body?.innerText || '').toLowerCase();
       if (text.includes('no more licenses available') || text.includes('magic xpa partitioning message')) {
         return 'Herzliya server has no free license slot right now';
@@ -244,15 +269,6 @@ async function fetchSchedule(browser, url) {
     if (!context) throw new Error('Calendar not found in page or iframe');
 
     console.log('Calendar context:', context === page ? 'page' : 'iframe');
-
-    const isContextLostError = (error) => {
-      const message = String(error?.message || error || '');
-      return (
-        message.includes('Execution context was destroyed') ||
-        message.includes('Cannot find context') ||
-        message.includes('Target closed')
-      );
-    };
 
     const evaluateWithContext = async (fn, ...args) => {
       for (let attempt = 0; attempt < 3; attempt++) {
