@@ -396,7 +396,8 @@ async function fetchSchedule(browser, url) {
         prod.name,
       );
 
-      const detailed = await context.evaluate(async (hId, expectedProductionName) => {
+      const evaluateCrewFromPopup = async () =>
+        context.evaluate(async (hId, expectedProductionName) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
         const extractPhone = (text) => {
           const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
@@ -596,7 +597,33 @@ async function fetchSchedule(browser, url) {
         closePopup();
 
         return { crew: bestCrew, studio, title: titleText };
-      }, prod.herzliyaId, prod.name);
+        }, prod.herzliyaId, prod.name);
+
+      let detailed = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          detailed = await evaluateCrewFromPopup();
+          break;
+        } catch (err) {
+          const message = String(err?.message || err);
+          const contextLost =
+            message.includes('Execution context was destroyed') ||
+            message.includes('Cannot find context') ||
+            message.includes('Target closed');
+
+          if (!contextLost || attempt === 1) {
+            throw err;
+          }
+
+          console.log('  Context lost while parsing popup, retrying with fresh context...');
+          await new Promise((r) => setTimeout(r, 500));
+          const refreshed = await findCalendarContext(page);
+          if (!refreshed) {
+            throw new Error('Calendar context lost during extraction');
+          }
+          context = refreshed;
+        }
+      }
 
       if (detailed && detailed.crew && detailed.crew.length) {
         const withNormalized = detailed.crew.map((member) => ({
