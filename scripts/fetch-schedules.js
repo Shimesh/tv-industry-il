@@ -443,7 +443,7 @@ async function fetchSchedule(browser, url) {
       );
 
       const evaluateCrewFromPopup = async () =>
-        evaluateWithContext(async (hId, expectedProductionName, expectedCrewNames) => {
+        evaluateWithContext(async (hId, expectedProductionName, expectedCrewNames, expectedStartTime, expectedEndTime) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
         const extractPhone = (text) => {
           const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
@@ -466,6 +466,11 @@ async function fetchSchedule(browser, url) {
             .replace(/\b(\u05e6\u05dc\u05dd|\u05e6\u05d9\u05dc\u05d5\u05dd|\u05e8\u05d7\u05e3|\u05de\u05e0\u05d4\u05dc|\u05d1\u05de\u05d0\u05d9|\u05ea\u05d0\u05d5\u05e8\u05d4|\u05e7\u05d5\u05dc)\b/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+        const toMinutes = (t) => {
+          if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
+          const [h, m] = t.split(':').map(Number);
+          return h * 60 + m;
+        };
 
         const closePopup = () => {
           const closeBtn =
@@ -646,8 +651,13 @@ async function fetchSchedule(browser, url) {
         const studio = studioMatch ? studioMatch[0] : '';
         const expected = normalizeLookup(expectedProductionName || '');
         const titleNorm = normalizeLookup(titleText || '');
-        const expectedToken = expected.split(' ').find((token) => token.length > 2) || '';
-        const titleMatch = !expectedToken || titleNorm.includes(expectedToken);
+        const expectedTokens = expected.split(' ').filter((token) => token.length > 2);
+        const expectedTokenHits = expectedTokens.filter((token) => titleNorm.includes(token)).length;
+        const titleMatch =
+          expectedTokens.length === 0 ||
+          titleNorm.includes(expected) ||
+          expected.includes(titleNorm) ||
+          expectedTokenHits >= Math.min(2, expectedTokens.length);
         const expectedNameKeys = (expectedCrewNames || [])
           .map((name) => normalizeNameKey(name))
           .filter((name) => name.length >= 2);
@@ -657,15 +667,21 @@ async function fetchSchedule(browser, url) {
             return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
           }).length
           : 1;
+        const expectedStartMin = toMinutes(expectedStartTime);
+        const expectedEndMin = toMinutes(expectedEndTime);
+        const expectedTimeMatchCount =
+          expectedStartMin !== null && expectedEndMin !== null
+            ? bestCrew.filter((member) => member.startTime === expectedStartTime && member.endTime === expectedEndTime).length
+            : 1;
 
         closePopup();
 
-        if (!titleMatch || overlapCount === 0) {
-          return { crew: [], studio, title: titleText };
+        if (!titleMatch || overlapCount === 0 || expectedTimeMatchCount === 0) {
+          return { crew: [], studio, title: titleText, rejected: true };
         }
 
-        return { crew: bestCrew, studio, title: titleText };
-        }, prod.herzliyaId, prod.name, (prod.crew || []).map((member) => member.name));
+        return { crew: bestCrew, studio, title: titleText, rejected: false };
+        }, prod.herzliyaId, prod.name, (prod.crew || []).map((member) => member.name), prod.startTime, prod.endTime);
 
       const detailed = await evaluateCrewFromPopup();
 
@@ -708,7 +724,11 @@ async function fetchSchedule(browser, url) {
         popupSuccessCount += 1;
         consecutivePopupMiss = 0;
       } else {
-        console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
+        if (detailed?.rejected) {
+          console.log(`  Production ${prod.name}: popup rejected by title/time/name validation (kept calendar fallback)`);
+        } else {
+          console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
+        }
         schedule.productions[i].popupParsed = false;
         popupFallbackCount += 1;
         consecutivePopupMiss += 1;
