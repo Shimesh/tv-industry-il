@@ -229,6 +229,17 @@ async function fetchSchedule(browser, url) {
     console.log('Navigating to:', url);
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 35000 });
 
+    const blockingError = await page.evaluate(() => {
+      const text = (document.body?.innerText || '').toLowerCase();
+      if (text.includes('no more licenses available') || text.includes('magic xpa partitioning message')) {
+        return 'Herzliya server has no free license slot right now';
+      }
+      return '';
+    });
+    if (blockingError) {
+      throw new Error(blockingError);
+    }
+
     let context = await findCalendarContext(page);
     if (!context) throw new Error('Calendar not found in page or iframe');
 
@@ -373,6 +384,7 @@ async function fetchSchedule(browser, url) {
     let missingPhones = 0;
     let popupSuccessCount = 0;
     let popupFallbackCount = 0;
+    let consecutivePopupMiss = 0;
 
     for (let i = 0; i < schedule.productions.length; i++) {
       const prod = schedule.productions[i];
@@ -623,10 +635,15 @@ async function fetchSchedule(browser, url) {
 
         console.log(`  Production ${prod.name}: ${withNormalized.length} crew rows parsed`);
         popupSuccessCount += 1;
+        consecutivePopupMiss = 0;
       } else {
         console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
         schedule.productions[i].popupParsed = false;
         popupFallbackCount += 1;
+        consecutivePopupMiss += 1;
+        if (popupSuccessCount === 0 && i >= 5 && consecutivePopupMiss >= 6) {
+          throw new Error('Popup extraction unavailable (likely Herzliya license/session limit) - stopped early');
+        }
       }
 
       await new Promise((r) => setTimeout(r, 40));
