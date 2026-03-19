@@ -371,6 +371,8 @@ async function fetchSchedule(browser, url) {
     let phonesFound = 0;
     let dedupRemoved = 0;
     let missingPhones = 0;
+    let popupSuccessCount = 0;
+    let popupFallbackCount = 0;
 
     for (let i = 0; i < schedule.productions.length; i++) {
       const prod = schedule.productions[i];
@@ -385,12 +387,12 @@ async function fetchSchedule(browser, url) {
       const detailed = await context.evaluate(async (hId, expectedProductionName) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
         const extractPhone = (text) => {
-          const matches = text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
+          const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
           if (!matches || !matches.length) return null;
           return matches[0];
         };
         const extractTimeRange = (text) => {
-          const m = text.match(/(\d{1,2}:\d{2})\s*[-ג€“ג€”]\s*(\d{1,2}:\d{2})/);
+          const m = String(text || '').match(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/);
           if (!m) return { startTime: '', endTime: '' };
           return { startTime: m[1], endTime: m[2] };
         };
@@ -400,7 +402,8 @@ async function fetchSchedule(browser, url) {
             .replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-        const closeExistingPopup = () => {
+
+        const closePopup = () => {
           const closeBtn =
             document.querySelector('.close') ||
             document.querySelector('.modal-close') ||
@@ -409,181 +412,187 @@ async function fetchSchedule(browser, url) {
           if (closeBtn) closeBtn.click();
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         };
-        const tableFingerprint = (table) => {
-          if (!table) return '';
-          const rows = Array.from(table.querySelectorAll('tr'))
-            .slice(0, 6)
-            .map((row) => cleanText(row.textContent || ''))
-            .join('||');
-          return rows;
+
+        const getVisibleTables = () =>
+          Array.from(document.querySelectorAll('table')).filter((table) => {
+            const rect = table.getBoundingClientRect();
+            return rect.width > 30 && rect.height > 30;
+          });
+
+        const findHeaderRow = (rows) => {
+          for (let i = 0; i < Math.min(rows.length, 6); i++) {
+            const cells = Array.from(rows[i].querySelectorAll('th,td')).map((c) => cleanText(c.textContent || ''));
+            if (!cells.length) continue;
+            const headerText = cells.join(' ');
+            const hits = [
+              /\u05e9\u05e2\u05d5\u05ea/u,
+              /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
+              /\u05e9\u05dd/u,
+              /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
+              /\u05e4\u05e8\u05d8\u05d9\u05dd/u,
+            ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
+            if (hits >= 2) return { index: i, cells };
+          }
+          return { index: -1, cells: [] };
         };
 
-        return new Promise((resolve) => {
-          if (typeof openmd2 !== 'function') {
-            resolve({ crew: [], studio: '' });
-            return;
+        const chooseIndexesByContent = (dataRows, columnCount) => {
+          const stats = Array.from({ length: columnCount }, () => ({
+            time: 0,
+            phone: 0,
+            empty: 0,
+            unique: new Set(),
+          }));
+
+          dataRows.forEach((row) => {
+            for (let i = 0; i < columnCount; i++) {
+              const txt = cleanText(row[i] || '');
+              if (!txt) {
+                stats[i].empty++;
+                continue;
+              }
+              stats[i].unique.add(txt);
+              if (extractPhone(txt)) stats[i].phone++;
+              if (extractTimeRange(txt).startTime) stats[i].time++;
+            }
+          });
+
+          const colIndexes = Array.from({ length: columnCount }, (_, i) => i);
+          const phoneIdx = colIndexes.slice().sort((a, b) => stats[b].phone - stats[a].phone)[0] ?? -1;
+          const timeIdx = colIndexes.slice().sort((a, b) => stats[b].time - stats[a].time)[0] ?? -1;
+
+          const nonName = new Set([phoneIdx, timeIdx]);
+          let nameIdx = -1;
+          let bestNameScore = -1;
+          colIndexes.forEach((i) => {
+            if (nonName.has(i)) return;
+            const uniqueCount = stats[i].unique.size;
+            const filled = dataRows.length - stats[i].empty;
+            const score = uniqueCount * 2 + filled - stats[i].phone * 3 - stats[i].time * 3;
+            if (score > bestNameScore) {
+              bestNameScore = score;
+              nameIdx = i;
+            }
+          });
+
+          const roleIdx = colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx) ?? -1;
+          const detailsIdx =
+            colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx && i !== roleIdx) ?? -1;
+
+          return { nameIdx, roleIdx, detailsIdx, timeIdx, phoneIdx };
+        };
+
+        const parseCrewTable = (table) => {
+          const rows = Array.from(table.querySelectorAll('tr'));
+          if (rows.length < 2) return [];
+
+          const header = findHeaderRow(rows);
+          if (header.index < 0) return [];
+
+          const headerCells = header.cells;
+          const findIndex = (pred) => headerCells.findIndex((h) => pred(h));
+          let timeIdx = findIndex((h) => /\u05e9\u05e2\u05d5\u05ea/u.test(h));
+          let roleIdx = findIndex((h) => /\u05ea\u05e4\u05e7\u05d9\u05d3/u.test(h));
+          let nameIdx = findIndex((h) => /\u05e9\u05dd/u.test(h));
+          let detailsIdx = findIndex((h) => /\u05e4\u05e8\u05d8\u05d9\u05dd/u.test(h));
+          let phoneIdx = findIndex((h) => /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u.test(h));
+
+          const rawRows = rows
+            .slice(header.index + 1)
+            .map((row) => Array.from(row.querySelectorAll('td')).map((td) => cleanText(td.textContent || '')))
+            .filter((cells) => cells.length >= 3);
+
+          if (!rawRows.length) return [];
+
+          const colCount = Math.max(...rawRows.map((r) => r.length));
+          if (nameIdx < 0 || nameIdx >= colCount || timeIdx < 0 || phoneIdx < 0) {
+            const byContent = chooseIndexesByContent(rawRows, colCount);
+            nameIdx = nameIdx >= 0 ? nameIdx : byContent.nameIdx;
+            roleIdx = roleIdx >= 0 ? roleIdx : byContent.roleIdx;
+            detailsIdx = detailsIdx >= 0 ? detailsIdx : byContent.detailsIdx;
+            timeIdx = timeIdx >= 0 ? timeIdx : byContent.timeIdx;
+            phoneIdx = phoneIdx >= 0 ? phoneIdx : byContent.phoneIdx;
           }
 
-          const preTables = Array.from(document.querySelectorAll('table')).filter((table) => {
-            const rect = table.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-          });
-          const preFingerprint = preTables.length ? tableFingerprint(preTables[0]) : '';
+          if (nameIdx < 0) return [];
 
-          closeExistingPopup();
-          openmd2(hId);
+          const parsed = [];
+          for (const cells of rawRows) {
+            const joined = cleanText(cells.join(' | '));
+            const name = cleanText((cells[nameIdx] || '').replace(/^[:\-]+|[:\-]+$/g, ''));
+            if (!name || name.length < 2) continue;
+            if (/\u05e9\u05dd|\u05ea\u05e4\u05e7\u05d9\u05d3|\u05e0\u05d9\u05d9\u05d3/u.test(name)) continue;
 
-          const deadline = Date.now() + 7000;
-          const timer = setInterval(() => {
-            try {
-              const tables = Array.from(document.querySelectorAll('table'));
-              const visibleTables = tables.filter((table) => {
-                const rect = table.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-              });
+            const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
+            const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
+            const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
+            const phone = extractPhone(phoneRaw) || extractPhone(joined);
+            const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
+            const { startTime, endTime } = extractTimeRange(timeSource);
 
-              const keywords = ['׳×׳₪׳§׳™׳“', '׳©׳', '׳ ׳™׳™׳“', '׳˜׳׳₪׳•׳', '׳₪׳¨׳˜׳™׳', '׳©׳¢׳•׳×'];
-              const expectedKey = normalizeLookup(expectedProductionName || '');
+            parsed.push({ name, role, roleDetail, phone, startTime, endTime });
+          }
 
-              const scored = visibleTables
-                .map((table) => {
-                  const rowsCount = table.querySelectorAll('tr').length;
-                  if (rowsCount < 2) return null;
+          return parsed;
+        };
 
-                  const headerCells = Array.from(table.querySelectorAll('tr:first-child th, tr:first-child td')).map((cell) => cleanText(cell.textContent || ''));
-                  const headerText = cleanText(headerCells.join(' | '));
-                  const headerHits = keywords.reduce((sum, key) => (headerText.includes(key) ? sum + 1 : sum), 0);
-                  if (headerHits < 2) return null;
+        const scoreTable = (table) => {
+          const text = cleanText(table.textContent || '');
+          const rowsCount = table.querySelectorAll('tr').length;
+          if (rowsCount < 3) return -1;
+          const phones = (text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g) || []).length;
+          const times = (text.match(/\d{1,2}:\d{2}\s*[-\u2013\u2014]\s*\d{1,2}:\d{2}/g) || []).length;
+          return rowsCount * 2 + phones * 3 + times * 2;
+        };
 
-                  const fullText = normalizeLookup(table.textContent || '');
-                  const phonesCount = (table.textContent || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g)?.length || 0;
-                  let score = headerHits * 10 + Math.min(rowsCount, 25) + Math.min(phonesCount, 30);
-                  if (expectedKey && fullText.includes(expectedKey)) score += 100;
+        if (typeof openmd2 !== 'function') {
+          return { crew: [], studio: '', title: '' };
+        }
 
-                  return { table, score };
-                })
-                .filter(Boolean)
-                .sort((a, b) => b.score - a.score);
+        closePopup();
+        openmd2(hId);
 
-              if (!scored.length && Date.now() < deadline) {
-                return;
-              }
-
-              const table = scored.length ? scored[0].table : null;
-              if (!table) {
-                if (Date.now() < deadline) return;
-                clearInterval(timer);
-                resolve({ crew: [], studio: '' });
-                return;
-              }
-
-              // Wait until table content differs from what was visible before opening this popup.
-              const currentFingerprint = tableFingerprint(table);
-              if (preFingerprint && currentFingerprint === preFingerprint && Date.now() < deadline) {
-                return;
-              }
-
-              clearInterval(timer);              const parseCrewTable = (candidateTable) => {
-                const rows = Array.from(candidateTable.querySelectorAll('tr'));
-                if (rows.length < 2) return [];
-
-                let headerRowIndex = -1;
-                let headerCells = [];
-
-                for (let h = 0; h < Math.min(rows.length, 4); h++) {
-                  const cells = Array.from(rows[h].querySelectorAll('th, td')).map((cell) => cleanText(cell.textContent || ''));
-                  if (!cells.length) continue;
-                  const headerText = cells.join(' ');
-                  const hits = [
-                    /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
-                    /\u05e9\u05dd/u,
-                    /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
-                    /\u05e9\u05e2\u05d5\u05ea/u,
-                  ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
-
-                  if (hits >= 2) {
-                    headerRowIndex = h;
-                    headerCells = cells;
-                    break;
-                  }
-                }
-
-                if (headerRowIndex < 0) return [];
-
-                const findIndex = (pred) => headerCells.findIndex((h) => pred(h));
-                const timeIdx = findIndex((h) => /\u05e9\u05e2\u05d5\u05ea/u.test(h));
-                const roleIdx = findIndex((h) => /\u05ea\u05e4\u05e7\u05d9\u05d3/u.test(h));
-                const nameIdx = findIndex((h) => /\u05e9\u05dd/u.test(h));
-                const detailsIdx = findIndex((h) => /\u05e4\u05e8\u05d8\u05d9\u05dd/u.test(h));
-                const phoneIdx = findIndex((h) => /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u.test(h));
-
-                if (nameIdx < 0) return [];
-
-                const parsed = [];
-                for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                  const cells = Array.from(rows[r].querySelectorAll('td')).map((td) => cleanText(td.textContent || ''));
-                  if (!cells.length) continue;
-
-                  const joined = cleanText(cells.join(' | '));
-                  const name = cleanText((cells[nameIdx] || '').replace(/^[:\\-]+|[:\\-]+$/g, ''));
-                  if (!name || name.length < 2) continue;
-
-                  const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
-                  const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
-                  const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
-                  const phone = extractPhone(phoneRaw) || extractPhone(joined);
-
-                  const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
-                  const { startTime, endTime } = extractTimeRange(timeSource);
-
-                  parsed.push({ name, role, roleDetail, phone, startTime, endTime });
-                }
-
-                return parsed;
-              };
-
-              let bestCrew = [];
-              for (const candidate of scored) {
-                const parsed = parseCrewTable(candidate.table);
-                if (parsed.length > bestCrew.length) {
-                  bestCrew = parsed;
-                }
-              }
-
-              if (bestCrew.length === 0 && Date.now() < deadline) {
-                return;
-              }
-
-              clearInterval(timer);
-
-              const crew = bestCrew;
-
-              const titleEl =
-                document.querySelector('.modal-title') ||
-                document.querySelector('.popup-title') ||
-                document.querySelector('[class*="title"]') ||
-                document.querySelector('font[color="red"]');
-              const titleText = cleanText(titleEl?.textContent || '');
-              const studioMatch = titleText.match(/(?:׳׳•׳׳₪׳|׳¡׳˜׳•׳“׳™׳•)\s*\d+\w?/i);
-              const studio = studioMatch ? studioMatch[0] : '';
-
-              const closeBtn =
-                document.querySelector('.close') ||
-                document.querySelector('.modal-close') ||
-                document.querySelector('[onclick*="close"]') ||
-                document.querySelector('button[class*="close"]');
-              if (closeBtn) closeBtn.click();
-              document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-
-              resolve({ crew, studio });
-            } catch {
-              if (Date.now() >= deadline) {
-                clearInterval(timer);
-                resolve({ crew: [], studio: '' });
-              }
+        const deadline = Date.now() + 1800;
+        let bestCrew = [];
+        let bestScore = -1;
+        while (Date.now() < deadline) {
+          const tables = getVisibleTables();
+          for (const table of tables) {
+            const score = scoreTable(table);
+            if (score < 6) continue;
+            const parsed = parseCrewTable(table);
+            if (parsed.length === 0) continue;
+            const combined = score + parsed.length * 5;
+            if (combined > bestScore) {
+              bestScore = combined;
+              bestCrew = parsed;
             }
-          }, 250);
-        });
+          }
+          if (bestCrew.length >= 4) break;
+          await new Promise((r) => setTimeout(r, 120));
+        }
+
+        const titleEl =
+          document.querySelector('.modal-title') ||
+          document.querySelector('.popup-title') ||
+          document.querySelector('[class*="title"]') ||
+          document.querySelector('font[color="red"]');
+        const titleText = cleanText(titleEl?.textContent || '');
+        const studioMatch = titleText.match(/(?:אולפן|studio|st.?)s*d+w?/i);
+        const studio = studioMatch ? studioMatch[0] : '';
+
+        const expected = normalizeLookup(expectedProductionName || '');
+        const titleNorm = normalizeLookup(titleText || '');
+        const expectedToken = expected.split(' ').find((t) => t.length > 2) || '';
+        const titleMatch = !expectedToken || titleNorm.includes(expectedToken);
+
+        closePopup();
+
+        if (!titleMatch && bestCrew.length < 4) {
+          return { crew: [], studio, title: titleText };
+        }
+
+        return { crew: bestCrew, studio, title: titleText };
       }, prod.herzliyaId, prod.name);
 
       if (detailed && detailed.crew && detailed.crew.length) {
@@ -621,11 +630,13 @@ async function fetchSchedule(browser, url) {
         }
 
         console.log(`  Production ${prod.name}: ${withNormalized.length} crew rows parsed`);
+        popupSuccessCount += 1;
       } else {
         console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
+        popupFallbackCount += 1;
       }
 
-      await new Promise((r) => setTimeout(r, 90));
+      await new Promise((r) => setTimeout(r, 40));
     }
 
     console.log('productions opened:', schedule.productions.length);
@@ -633,6 +644,15 @@ async function fetchSchedule(browser, url) {
     console.log('phones found:', phonesFound);
     console.log('dedup removed:', dedupRemoved);
     console.log('missing phones:', missingPhones);
+    console.log('popup success:', popupSuccessCount);
+    console.log('popup fallback:', popupFallbackCount);
+
+    const minPopupSuccess = Math.ceil(schedule.productions.length * 0.5);
+    if (schedule.productions.length > 0 && popupSuccessCount < minPopupSuccess) {
+      throw new Error(
+        `Popup parse quality too low (${popupSuccessCount}/${schedule.productions.length}) - aborting save to avoid bad crew data`,
+      );
+    }
 
     return schedule;
   } finally {
