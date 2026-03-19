@@ -581,16 +581,7 @@ async function fetchSchedule(browser, url) {
         const studioMatch = titleText.match(/(?:אולפן|studio|st.?)s*d+w?/i);
         const studio = studioMatch ? studioMatch[0] : '';
 
-        const expected = normalizeLookup(expectedProductionName || '');
-        const titleNorm = normalizeLookup(titleText || '');
-        const expectedToken = expected.split(' ').find((t) => t.length > 2) || '';
-        const titleMatch = !expectedToken || titleNorm.includes(expectedToken);
-
         closePopup();
-
-        if (!titleMatch && bestCrew.length < 4) {
-          return { crew: [], studio, title: titleText };
-        }
 
         return { crew: bestCrew, studio, title: titleText };
       }, prod.herzliyaId, prod.name);
@@ -625,6 +616,7 @@ async function fetchSchedule(browser, url) {
         missingPhones += popupAuthoritative.filter((member) => !member.phone).length;
 
         schedule.productions[i].crew = popupAuthoritative;
+        schedule.productions[i].popupParsed = true;
         if (detailed.studio && !prod.studio) {
           schedule.productions[i].studio = detailed.studio;
         }
@@ -633,6 +625,7 @@ async function fetchSchedule(browser, url) {
         popupSuccessCount += 1;
       } else {
         console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
+        schedule.productions[i].popupParsed = false;
         popupFallbackCount += 1;
       }
 
@@ -646,13 +639,13 @@ async function fetchSchedule(browser, url) {
     console.log('missing phones:', missingPhones);
     console.log('popup success:', popupSuccessCount);
     console.log('popup fallback:', popupFallbackCount);
-
-    const minPopupSuccess = Math.ceil(schedule.productions.length * 0.5);
-    if (schedule.productions.length > 0 && popupSuccessCount < minPopupSuccess) {
-      throw new Error(
-        `Popup parse quality too low (${popupSuccessCount}/${schedule.productions.length}) - aborting save to avoid bad crew data`,
-      );
-    }
+    schedule.parseStats = {
+      popupSuccessCount,
+      popupFallbackCount,
+      popupSuccessRate: schedule.productions.length
+        ? popupSuccessCount / schedule.productions.length
+        : 0,
+    };
 
     return schedule;
   } finally {
@@ -663,9 +656,24 @@ async function fetchSchedule(browser, url) {
 async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
-  await cleanupWeek(weekId);
+  const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
+  const cleanupAllowed = popupSuccessRate >= 0.5;
+  if (cleanupAllowed) {
+    await cleanupWeek(weekId);
+  } else {
+    console.log(
+      `Skipping destructive cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
+    );
+  }
 
   const batch = db.batch();
+  const existingMap = new Map();
+  if (!cleanupAllowed) {
+    const existingSnap = await db.collection(`productions/global/weeks/${weekId}/productions`).get();
+    existingSnap.docs.forEach((docSnap) => {
+      existingMap.set(docSnap.id, docSnap.data());
+    });
+  }
 
   const weekRef = db.doc(`productions/global/weeks/${weekId}`);
   batch.set(weekRef, {
@@ -681,7 +689,15 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     if (!prodId || prodId === '0') continue;
 
     const prodRef = db.doc(`productions/global/weeks/${weekId}/productions/${prodId}`);
-    const cleanCrew = sanitizeCrewForFirestore(prod.crew);
+    let cleanCrew = sanitizeCrewForFirestore(prod.crew);
+
+    if (!cleanupAllowed && !prod.popupParsed) {
+      const existing = existingMap.get(prodId);
+      const existingCrew = sanitizeCrewForFirestore(existing?.crew || []);
+      if (existingCrew.length > cleanCrew.length) {
+        cleanCrew = existingCrew;
+      }
+    }
 
     batch.set(prodRef, {
       name: prod.name,
