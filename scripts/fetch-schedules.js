@@ -375,6 +375,12 @@ async function fetchSchedule(browser, url) {
     for (let i = 0; i < schedule.productions.length; i++) {
       const prod = schedule.productions[i];
       if (!prod.herzliyaId) continue;
+      console.log(
+        `[${i + 1}/${schedule.productions.length}] parsing production`,
+        prod.herzliyaId,
+        prod.date,
+        prod.name,
+      );
 
       const detailed = await context.evaluate(async (hId, expectedProductionName) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
@@ -418,11 +424,16 @@ async function fetchSchedule(browser, url) {
             return;
           }
 
+          const preTables = Array.from(document.querySelectorAll('table')).filter((table) => {
+            const rect = table.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+          const preFingerprint = preTables.length ? tableFingerprint(preTables[0]) : '';
+
           closeExistingPopup();
           openmd2(hId);
 
           const deadline = Date.now() + 7000;
-          let baselineFingerprint = '';
           const timer = setInterval(() => {
             try {
               const tables = Array.from(document.querySelectorAll('table'));
@@ -466,12 +477,9 @@ async function fetchSchedule(browser, url) {
                 return;
               }
 
-              // Wait until table content changes from previous popup to avoid stale parse.
+              // Wait until table content differs from what was visible before opening this popup.
               const currentFingerprint = tableFingerprint(table);
-              if (!baselineFingerprint) {
-                baselineFingerprint = currentFingerprint;
-                if (Date.now() < deadline) return;
-              } else if (currentFingerprint === baselineFingerprint && Date.now() < deadline) {
+              if (preFingerprint && currentFingerprint === preFingerprint && Date.now() < deadline) {
                 return;
               }
 
