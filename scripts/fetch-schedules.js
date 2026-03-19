@@ -487,6 +487,25 @@ async function fetchSchedule(browser, url) {
             const rect = table.getBoundingClientRect();
             return rect.width > 30 && rect.height > 30;
           });
+        const getActiveModalRoot = () => {
+          const titleEl =
+            document.querySelector('.modal-title') ||
+            document.querySelector('.popup-title') ||
+            document.querySelector('font[color="red"]');
+          if (!titleEl) return null;
+          let node = titleEl;
+          let best = null;
+          for (let i = 0; i < 6 && node; i++) {
+            const parent = node.parentElement;
+            if (!parent) break;
+            const rect = parent.getBoundingClientRect();
+            if (rect.width > 200 && rect.height > 120) {
+              best = parent;
+            }
+            node = parent;
+          }
+          return best;
+        };
 
         const findHeaderRow = (rows) => {
           for (let i = 0; i < Math.min(rows.length, 6); i++) {
@@ -611,7 +630,15 @@ async function fetchSchedule(browser, url) {
           if (rowsCount < 3) return -1;
           const phones = (text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g) || []).length;
           const times = (text.match(/\d{1,2}:\d{2}\s*[-\u2013\u2014]\s*\d{1,2}:\d{2}/g) || []).length;
-          return rowsCount * 2 + phones * 3 + times * 2;
+          const header = findHeaderRow(Array.from(table.querySelectorAll('tr')));
+          const headerText = cleanText((header.cells || []).join(' '));
+          const headerHits = [
+            /\u05e9\u05dd/u,
+            /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
+            /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
+            /\u05e9\u05e2\u05d5\u05ea/u,
+          ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
+          return rowsCount * 2 + phones * 3 + times * 2 + headerHits * 8;
         };
 
         if (typeof openmd2 !== 'function') {
@@ -625,7 +652,14 @@ async function fetchSchedule(browser, url) {
         let bestCrew = [];
         let bestScore = -1;
         while (Date.now() < deadline) {
-          const tables = getVisibleTables();
+          const modalRoot = getActiveModalRoot();
+          const modalTables = modalRoot
+            ? Array.from(modalRoot.querySelectorAll('table')).filter((table) => {
+              const rect = table.getBoundingClientRect();
+              return rect.width > 30 && rect.height > 30;
+            })
+            : [];
+          const tables = modalTables.length ? modalTables : getVisibleTables();
           for (const table of tables) {
             const score = scoreTable(table);
             if (score < 6) continue;
