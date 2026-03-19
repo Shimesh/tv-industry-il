@@ -18,18 +18,18 @@ function normalizeName(name) {
 
   let cleaned = String(name)
     .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    .replace(/\s*[-–]\s*[\u05d0-\u05ea\s]+$/u, '')
+    .replace(/\s*[-ג€“]\s*[\u05d0-\u05ea\s]+$/u, '')
     .replace(/[()\[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
-    .replace(/[–—-]/g, ' ')
+    .replace(/[ג€“ג€”-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
   const rolePhrases = [
-    'צלם רחף', 'סטדי קאם', 'סטדי-קאם', 'ע. במאי', 'ע. במאית', 'ע. צילום',
-    'צילום', 'צלם', 'צלמת', 'רחף', 'רחפן', 'רחפנית', 'סטדיקאם', 'סאונד',
-    'במאי', 'במאית', 'בימוי', 'מפיק', 'מפיקת', 'עורך', 'עורכת', 'קול',
-    'מקליט', 'מקליטה', 'תאורה', 'תאורן', 'איפור', 'סטיילינג', 'ארט', 'תפאורה',
+    '׳¦׳׳ ׳¨׳—׳£', '׳¡׳˜׳“׳™ ׳§׳׳', '׳¡׳˜׳“׳™-׳§׳׳', '׳¢. ׳‘׳׳׳™', '׳¢. ׳‘׳׳׳™׳×', '׳¢. ׳¦׳™׳׳•׳',
+    '׳¦׳™׳׳•׳', '׳¦׳׳', '׳¦׳׳׳×', '׳¨׳—׳£', '׳¨׳—׳₪׳', '׳¨׳—׳₪׳ ׳™׳×', '׳¡׳˜׳“׳™׳§׳׳', '׳¡׳׳•׳ ׳“',
+    '׳‘׳׳׳™', '׳‘׳׳׳™׳×', '׳‘׳™׳׳•׳™', '׳׳₪׳™׳§', '׳׳₪׳™׳§׳×', '׳¢׳•׳¨׳', '׳¢׳•׳¨׳›׳×', '׳§׳•׳',
+    '׳׳§׳׳™׳˜', '׳׳§׳׳™׳˜׳”', '׳×׳׳•׳¨׳”', '׳×׳׳•׳¨׳', '׳׳™׳₪׳•׳¨', '׳¡׳˜׳™׳™׳׳™׳ ׳’', '׳׳¨׳˜', '׳×׳₪׳׳•׳¨׳”',
   ];
 
   let changed = true;
@@ -143,7 +143,7 @@ function sanitizeCrewForFirestore(crew) {
 }
 
 function getHebrewDay(dateStr) {
-  const days = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
+  const days = ['׳™׳•׳ ׳׳³', '׳™׳•׳ ׳‘׳³', '׳™׳•׳ ׳’׳³', '׳™׳•׳ ׳“׳³', '׳™׳•׳ ׳”׳³', '׳™׳•׳ ׳•׳³', '׳©׳‘׳×'];
   const date = new Date(dateStr);
   return days[date.getDay()];
 }
@@ -252,7 +252,7 @@ async function fetchSchedule(browser, url) {
 
     const workerName = await context.evaluate(() => {
       const text = document.body.textContent || '';
-      const match = text.match(/שלום\s+([^\n,]+)/) || text.match(/עובד[:\s]+([^\n]+)/);
+      const match = text.match(/׳©׳׳•׳\s+([^\n,]+)/) || text.match(/׳¢׳•׳‘׳“[:\s]+([^\n]+)/);
       return match ? match[1].trim() : '';
     });
 
@@ -338,7 +338,7 @@ async function fetchSchedule(browser, url) {
             }
           }
 
-          const studioMatch = rawProductionName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*(\d+\w?)/i);
+          const studioMatch = rawProductionName.match(/(?:׳׳•׳׳₪׳|׳¡׳˜׳•׳“׳™׳•|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
           const cleanName = studio ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : rawProductionName;
 
@@ -390,7 +390,7 @@ async function fetchSchedule(browser, url) {
           return matches[0];
         };
         const extractTimeRange = (text) => {
-          const m = text.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+          const m = text.match(/(\d{1,2}:\d{2})\s*[-ג€“ג€”]\s*(\d{1,2}:\d{2})/);
           if (!m) return { startTime: '', endTime: '' };
           return { startTime: m[1], endTime: m[2] };
         };
@@ -442,7 +442,7 @@ async function fetchSchedule(browser, url) {
                 return rect.width > 0 && rect.height > 0;
               });
 
-              const keywords = ['תפקיד', 'שם', 'נייד', 'טלפון', 'פרטים', 'שעות'];
+              const keywords = ['׳×׳₪׳§׳™׳“', '׳©׳', '׳ ׳™׳™׳“', '׳˜׳׳₪׳•׳', '׳₪׳¨׳˜׳™׳', '׳©׳¢׳•׳×'];
               const expectedKey = normalizeLookup(expectedProductionName || '');
 
               const scored = visibleTables
@@ -483,49 +483,80 @@ async function fetchSchedule(browser, url) {
                 return;
               }
 
-              clearInterval(timer);
+              clearInterval(timer);              const parseCrewTable = (candidateTable) => {
+                const rows = Array.from(candidateTable.querySelectorAll('tr'));
+                if (rows.length < 2) return [];
 
-              const rows = Array.from(table.querySelectorAll('tr'));
-              const headerCells = Array.from(rows[0].querySelectorAll('th, td')).map((cell) => cleanText(cell.textContent || ''));
+                let headerRowIndex = -1;
+                let headerCells = [];
 
-              const findIndex = (keys) => headerCells.findIndex((h) => keys.some((k) => h.includes(k)));
-              const timeIdx = findIndex(['שעות']);
-              const roleIdx = findIndex(['תפקיד']);
-              const nameIdx = findIndex(['שם']);
-              const detailsIdx = findIndex(['פרטים']);
-              const phoneIdx = findIndex(['נייד', 'טלפון']);
+                for (let h = 0; h < Math.min(rows.length, 4); h++) {
+                  const cells = Array.from(rows[h].querySelectorAll('th, td')).map((cell) => cleanText(cell.textContent || ''));
+                  if (!cells.length) continue;
+                  const headerText = cells.join(' ');
+                  const hits = [
+                    /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
+                    /\u05e9\u05dd/u,
+                    /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
+                    /\u05e9\u05e2\u05d5\u05ea/u,
+                  ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
 
-              if (nameIdx < 0) {
-                resolve({ crew: [], studio: '' });
+                  if (hits >= 2) {
+                    headerRowIndex = h;
+                    headerCells = cells;
+                    break;
+                  }
+                }
+
+                if (headerRowIndex < 0) return [];
+
+                const findIndex = (pred) => headerCells.findIndex((h) => pred(h));
+                const timeIdx = findIndex((h) => /\u05e9\u05e2\u05d5\u05ea/u.test(h));
+                const roleIdx = findIndex((h) => /\u05ea\u05e4\u05e7\u05d9\u05d3/u.test(h));
+                const nameIdx = findIndex((h) => /\u05e9\u05dd/u.test(h));
+                const detailsIdx = findIndex((h) => /\u05e4\u05e8\u05d8\u05d9\u05dd/u.test(h));
+                const phoneIdx = findIndex((h) => /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u.test(h));
+
+                if (nameIdx < 0) return [];
+
+                const parsed = [];
+                for (let r = headerRowIndex + 1; r < rows.length; r++) {
+                  const cells = Array.from(rows[r].querySelectorAll('td')).map((td) => cleanText(td.textContent || ''));
+                  if (!cells.length) continue;
+
+                  const joined = cleanText(cells.join(' | '));
+                  const name = cleanText((cells[nameIdx] || '').replace(/^[:\\-]+|[:\\-]+$/g, ''));
+                  if (!name || name.length < 2) continue;
+
+                  const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
+                  const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
+                  const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
+                  const phone = extractPhone(phoneRaw) || extractPhone(joined);
+
+                  const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
+                  const { startTime, endTime } = extractTimeRange(timeSource);
+
+                  parsed.push({ name, role, roleDetail, phone, startTime, endTime });
+                }
+
+                return parsed;
+              };
+
+              let bestCrew = [];
+              for (const candidate of scored) {
+                const parsed = parseCrewTable(candidate.table);
+                if (parsed.length > bestCrew.length) {
+                  bestCrew = parsed;
+                }
+              }
+
+              if (bestCrew.length === 0 && Date.now() < deadline) {
                 return;
               }
 
-              const crew = [];
-              for (let r = 1; r < rows.length; r++) {
-                const cells = Array.from(rows[r].querySelectorAll('td')).map((td) => cleanText(td.textContent || ''));
-                if (!cells.length) continue;
+              clearInterval(timer);
 
-                const joined = cleanText(cells.join(' | '));
-                const name = cleanText((cells[nameIdx] || '').replace(/^[:\-]+|[:\-]+$/g, ''));
-                if (!name || name.length < 2) continue;
-
-                const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
-                const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
-                const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
-                const phone = extractPhone(phoneRaw) || extractPhone(joined);
-
-                const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
-                const { startTime, endTime } = extractTimeRange(timeSource);
-
-                crew.push({
-                  name,
-                  role,
-                  roleDetail,
-                  phone,
-                  startTime,
-                  endTime,
-                });
-              }
+              const crew = bestCrew;
 
               const titleEl =
                 document.querySelector('.modal-title') ||
@@ -533,7 +564,7 @@ async function fetchSchedule(browser, url) {
                 document.querySelector('[class*="title"]') ||
                 document.querySelector('font[color="red"]');
               const titleText = cleanText(titleEl?.textContent || '');
-              const studioMatch = titleText.match(/(?:אולפן|סטודיו)\s*\d+\w?/i);
+              const studioMatch = titleText.match(/(?:׳׳•׳׳₪׳|׳¡׳˜׳•׳“׳™׳•)\s*\d+\w?/i);
               const studio = studioMatch ? studioMatch[0] : '';
 
               const closeBtn =
@@ -742,3 +773,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
