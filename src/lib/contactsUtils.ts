@@ -1,7 +1,12 @@
 ﻿export function normalizeContactName(name: string): string {
   if (!name) return '';
 
-  let cleaned = name
+  // Strip role prefix with colon (e.g. "צילום: ירון אורבך" → "ירון אורבך")
+  let cleaned = name.replace(/^[\u05d0-\u05ea]+:\s*/u, '');
+  // Strip role suffix with dash (e.g. "ירון אורבך - צילום" → "ירון אורבך")
+  cleaned = cleaned.replace(/\s*[-\u2013\u2014]\s*[\u05d0-\u05ea\s]+$/u, '');
+
+  cleaned = cleaned
     .replace(/[()\[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
     .replace(/[\u2013\u2014-]/g, ' ')

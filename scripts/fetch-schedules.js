@@ -17,19 +17,22 @@ function normalizeName(name) {
   if (!name) return '';
 
   let cleaned = String(name)
-    .replace(/^[\u05d0-\u05ea]+:\s*/u, '')
-    .replace(/\s*[-ג€“]\s*[\u05d0-\u05ea\s]+$/u, '')
     .replace(/[()\[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
-    .replace(/[ג€“ג€”-]/g, ' ')
+    .replace(/["\u201C\u201D\u2013\u2014-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
+  // Strip role prefix with colon: "צילום: ירון" → "ירון"
+  cleaned = cleaned.replace(/^[\u05d0-\u05ea]+:\s*/u, '');
+  // Strip role suffix with dash: "ירון - צילום" → "ירון"
+  cleaned = cleaned.replace(/\s*[-\u2013]\s*[\u05d0-\u05ea\s]+$/u, '');
+
   const rolePhrases = [
-    '׳¦׳׳ ׳¨׳—׳£', '׳¡׳˜׳“׳™ ׳§׳׳', '׳¡׳˜׳“׳™-׳§׳׳', '׳¢. ׳‘׳׳׳™', '׳¢. ׳‘׳׳׳™׳×', '׳¢. ׳¦׳™׳׳•׳',
-    '׳¦׳™׳׳•׳', '׳¦׳׳', '׳¦׳׳׳×', '׳¨׳—׳£', '׳¨׳—׳₪׳', '׳¨׳—׳₪׳ ׳™׳×', '׳¡׳˜׳“׳™׳§׳׳', '׳¡׳׳•׳ ׳“',
-    '׳‘׳׳׳™', '׳‘׳׳׳™׳×', '׳‘׳™׳׳•׳™', '׳׳₪׳™׳§', '׳׳₪׳™׳§׳×', '׳¢׳•׳¨׳', '׳¢׳•׳¨׳›׳×', '׳§׳•׳',
-    '׳׳§׳׳™׳˜', '׳׳§׳׳™׳˜׳”', '׳×׳׳•׳¨׳”', '׳×׳׳•׳¨׳', '׳׳™׳₪׳•׳¨', '׳¡׳˜׳™׳™׳׳™׳ ׳’', '׳׳¨׳˜', '׳×׳₪׳׳•׳¨׳”',
+    'צלם רחף', 'סטדי קאם', 'סטדי-קאם', 'ע. במאי', 'ע. במאית', 'ע. צילום',
+    'צילום', 'צלם', 'צלמת', 'רחף', 'רחפן', 'רחפנית', 'סטדיקאם', 'סאונד',
+    'במאי', 'במאית', 'בימוי', 'מפיק', 'מפיקת', 'עורך', 'עורכת', 'קול',
+    'מקליט', 'מקליטה', 'תאורה', 'תאורן', 'איפור', 'סטיילינג', 'ארט', 'תפאורה',
   ];
 
   let changed = true;
@@ -143,7 +146,7 @@ function sanitizeCrewForFirestore(crew) {
 }
 
 function getHebrewDay(dateStr) {
-  const days = ['׳™׳•׳ ׳׳³', '׳™׳•׳ ׳‘׳³', '׳™׳•׳ ׳’׳³', '׳™׳•׳ ׳“׳³', '׳™׳•׳ ׳”׳³', '׳™׳•׳ ׳•׳³', '׳©׳‘׳×'];
+  const days = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
   const date = new Date(dateStr);
   return days[date.getDay()];
 }
@@ -309,7 +312,7 @@ async function fetchSchedule(browser, url) {
 
     const workerName = await evaluateWithContext(() => {
       const text = document.body.textContent || '';
-      const match = text.match(/׳©׳׳•׳\s+([^\n,]+)/) || text.match(/׳¢׳•׳‘׳“[:\s]+([^\n]+)/);
+      const match = text.match(/שלום\s+([^\n,]+)/) || text.match(/עובד[:\s]+([^\n]+)/);
       return match ? match[1].trim() : '';
     });
 
@@ -395,7 +398,7 @@ async function fetchSchedule(browser, url) {
             }
           }
 
-          const studioMatch = rawProductionName.match(/(?:׳׳•׳׳₪׳|׳¡׳˜׳•׳“׳™׳•|studio|st\.?)\s*(\d+\w?)/i);
+          const studioMatch = rawProductionName.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
           const cleanName = studio ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : rawProductionName;
 
@@ -951,4 +954,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
