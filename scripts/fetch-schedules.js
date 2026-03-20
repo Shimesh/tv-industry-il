@@ -15,6 +15,11 @@ initializeApp({
 });
 
 const db = getFirestore();
+const V2_PRODUCTIONS_ROOT = 'productions_v2/global/weeks';
+const V2_USER_SCHEDULES_ROOT = 'userSchedules_v2';
+const LEGACY_PRODUCTIONS_ROOT = 'productions/global/weeks';
+const LEGACY_USER_SCHEDULES_ROOT = 'userSchedules';
+const POPUP_SUCCESS_THRESHOLD = 0.85;
 
 function normalizeName(name) {
   if (!name) return '';
@@ -165,9 +170,9 @@ function getWeekId(dateStr) {
   return `${yy}-${mm}-${dd}`;
 }
 
-async function cleanupWeek(weekId) {
+async function cleanupWeek(root, weekId) {
   console.log(`Cleaning up existing data for week ${weekId}...`);
-  const prodsSnap = await db.collection(`productions/global/weeks/${weekId}/productions`).get();
+  const prodsSnap = await db.collection(`${root}/${weekId}/productions`).get();
 
   if (prodsSnap.empty) {
     console.log('No existing productions to clean up');
@@ -176,7 +181,7 @@ async function cleanupWeek(weekId) {
 
   for (const prodDoc of prodsSnap.docs) {
     const crewSnap = await db
-      .collection(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`)
+      .collection(`${root}/${weekId}/productions/${prodDoc.id}/crew`)
       .get();
 
     const batch = db.batch();
@@ -474,35 +479,8 @@ async function fetchSchedule(browser, url) {
       );
 
       const evaluateCrewFromPopup = async () =>
-        evaluateWithContext(async (hId, expectedProductionName, expectedCrewNames, expectedStartTime, expectedEndTime) => {
+        evaluateWithContext(async (hId) => {
         const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-        const extractPhone = (text) => {
-          const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
-          if (!matches || !matches.length) return null;
-          return matches[0];
-        };
-        const extractTimeRange = (text) => {
-          const m = String(text || '').match(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/);
-          if (!m) return { startTime: '', endTime: '' };
-          return { startTime: m[1], endTime: m[2] };
-        };
-        const normalizeLookup = (value) =>
-          cleanText(value)
-            .toLowerCase()
-            .replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const normalizeNameKey = (value) =>
-          normalizeLookup(value)
-            .replace(/\b(\u05e6\u05dc\u05dd|\u05e6\u05d9\u05dc\u05d5\u05dd|\u05e8\u05d7\u05e3|\u05de\u05e0\u05d4\u05dc|\u05d1\u05de\u05d0\u05d9|\u05ea\u05d0\u05d5\u05e8\u05d4|\u05e7\u05d5\u05dc)\b/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const toMinutes = (t) => {
-          if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
-          const [h, m] = t.split(':').map(Number);
-          return h * 60 + m;
-        };
-
         const isVisible = (el) => {
           if (!el) return false;
           const rect = el.getBoundingClientRect();
@@ -585,142 +563,29 @@ async function fetchSchedule(browser, url) {
           return best;
         };
 
-        const findHeaderRow = (rows) => {
-          for (let i = 0; i < Math.min(rows.length, 6); i++) {
-            const cells = Array.from(rows[i].querySelectorAll('th,td')).map((c) => cleanText(c.textContent || ''));
-            if (!cells.length) continue;
-            const headerText = cells.join(' ');
-            const hits = [
-              /\u05e9\u05e2\u05d5\u05ea/u,
-              /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
-              /\u05e9\u05dd/u,
-              /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
-              /\u05e4\u05e8\u05d8\u05d9\u05dd/u,
-            ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
-            if (hits >= 2) return { index: i, cells };
-          }
-          return { index: -1, cells: [] };
-        };
-
-        const chooseIndexesByContent = (dataRows, columnCount) => {
-          const stats = Array.from({ length: columnCount }, () => ({
-            time: 0,
-            phone: 0,
-            empty: 0,
-            unique: new Set(),
-          }));
-
-          dataRows.forEach((row) => {
-            for (let i = 0; i < columnCount; i++) {
-              const txt = cleanText(row[i] || '');
-              if (!txt) {
-                stats[i].empty++;
-                continue;
-              }
-              stats[i].unique.add(txt);
-              if (extractPhone(txt)) stats[i].phone++;
-              if (extractTimeRange(txt).startTime) stats[i].time++;
-            }
-          });
-
-          const colIndexes = Array.from({ length: columnCount }, (_, i) => i);
-          const phoneIdx = colIndexes.slice().sort((a, b) => stats[b].phone - stats[a].phone)[0] ?? -1;
-          const timeIdx = colIndexes.slice().sort((a, b) => stats[b].time - stats[a].time)[0] ?? -1;
-
-          const nonName = new Set([phoneIdx, timeIdx]);
-          let nameIdx = -1;
-          let bestNameScore = -1;
-          colIndexes.forEach((i) => {
-            if (nonName.has(i)) return;
-            const uniqueCount = stats[i].unique.size;
-            const filled = dataRows.length - stats[i].empty;
-            const score = uniqueCount * 2 + filled - stats[i].phone * 3 - stats[i].time * 3;
-            if (score > bestNameScore) {
-              bestNameScore = score;
-              nameIdx = i;
-            }
-          });
-
-          const roleIdx = colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx) ?? -1;
-          const detailsIdx =
-            colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx && i !== roleIdx) ?? -1;
-
-          return { nameIdx, roleIdx, detailsIdx, timeIdx, phoneIdx };
-        };
-
-        const parseCrewTable = (table) => {
-          const rows = Array.from(table.querySelectorAll('tr'));
-          if (rows.length < 2) return [];
-
-          const header = findHeaderRow(rows);
-          if (header.index < 0) return [];
-
-          const headerCells = header.cells;
-          const findIndex = (pred) => headerCells.findIndex((h) => pred(h));
-          let timeIdx = findIndex((h) => /\u05e9\u05e2\u05d5\u05ea/u.test(h));
-          let roleIdx = findIndex((h) => /\u05ea\u05e4\u05e7\u05d9\u05d3/u.test(h));
-          let nameIdx = findIndex((h) => /\u05e9\u05dd/u.test(h));
-          let detailsIdx = findIndex((h) => /\u05e4\u05e8\u05d8\u05d9\u05dd/u.test(h));
-          let phoneIdx = findIndex((h) => /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u.test(h));
-
-          const rawRows = rows
-            .slice(header.index + 1)
-            .map((row) => Array.from(row.querySelectorAll('td')).map((td) => cleanText(td.textContent || '')))
-            .filter((cells) => cells.length >= 3);
-
-          if (!rawRows.length) return [];
-
-          const colCount = Math.max(...rawRows.map((r) => r.length));
-          if (nameIdx < 0 || nameIdx >= colCount || timeIdx < 0 || phoneIdx < 0) {
-            const byContent = chooseIndexesByContent(rawRows, colCount);
-            nameIdx = nameIdx >= 0 ? nameIdx : byContent.nameIdx;
-            roleIdx = roleIdx >= 0 ? roleIdx : byContent.roleIdx;
-            detailsIdx = detailsIdx >= 0 ? detailsIdx : byContent.detailsIdx;
-            timeIdx = timeIdx >= 0 ? timeIdx : byContent.timeIdx;
-            phoneIdx = phoneIdx >= 0 ? phoneIdx : byContent.phoneIdx;
-          }
-
-          if (nameIdx < 0) return [];
-
-          const parsed = [];
-          for (const cells of rawRows) {
-            const joined = cleanText(cells.join(' | '));
-            const name = cleanText((cells[nameIdx] || '').replace(/^[:\-]+|[:\-]+$/g, ''));
-            if (!name || name.length < 2) continue;
-            if (/\u05e9\u05dd|\u05ea\u05e4\u05e7\u05d9\u05d3|\u05e0\u05d9\u05d9\u05d3/u.test(name)) continue;
-
-            const role = cleanText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
-            const roleDetail = cleanText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
-            const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
-            const phone = extractPhone(phoneRaw) || extractPhone(joined);
-            const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
-            const { startTime, endTime } = extractTimeRange(timeSource);
-
-            parsed.push({ name, role, roleDetail, phone, startTime, endTime });
-          }
-
-          return parsed;
-        };
-
         const scoreTable = (table) => {
           const text = cleanText(table.textContent || '');
           const rowsCount = table.querySelectorAll('tr').length;
           if (rowsCount < 3) return -1;
+          const headerText = cleanText(table.querySelector('tr')?.textContent || '');
+          const headerHits = [/שם/u, /תפקיד/u, /נייד|טלפון/u, /שעות/u].reduce(
+            (sum, re) => (re.test(headerText) ? sum + 1 : sum),
+            0,
+          );
           const phones = (text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g) || []).length;
           const times = (text.match(/\d{1,2}:\d{2}\s*[-\u2013\u2014]\s*\d{1,2}:\d{2}/g) || []).length;
-          const header = findHeaderRow(Array.from(table.querySelectorAll('tr')));
-          const headerText = cleanText((header.cells || []).join(' '));
-          const headerHits = [
-            /\u05e9\u05dd/u,
-            /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
-            /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
-            /\u05e9\u05e2\u05d5\u05ea/u,
-          ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
           return rowsCount * 2 + phones * 3 + times * 2 + headerHits * 8;
         };
 
+        const snapshotTable = (table) => ({
+          score: scoreTable(table),
+          rows: Array.from(table.querySelectorAll('tr')).map((row) =>
+            Array.from(row.querySelectorAll('th,td')).map((cell) => cleanText(cell.textContent || '')),
+          ),
+        });
+
         if (typeof openmd2 !== 'function') {
-          return { crew: [], studio: '', title: '' };
+          return { tables: [], studio: '', title: '', invalid: true, reason: 'openmd2_missing' };
         }
 
         const previousRoot = getActiveModalRoot();
@@ -731,7 +596,7 @@ async function fetchSchedule(browser, url) {
         openmd2(hId);
 
         const deadline = Date.now() + 1800;
-        let bestCrew = [];
+        let bestSnapshot = [];
         let bestScore = -1;
         let activeModalRoot = null;
         while (Date.now() < deadline) {
@@ -753,63 +618,35 @@ async function fetchSchedule(browser, url) {
           for (const table of tables) {
             const score = scoreTable(table);
             if (score < 6) continue;
-            const parsed = parseCrewTable(table);
-            if (parsed.length === 0) continue;
-            const combined = score + parsed.length * 5;
+            const snapshot = snapshotTable(table);
+            const rowsCount = snapshot.rows.filter((row) => row.length >= 3).length;
+            if (rowsCount === 0) continue;
+            const combined = score + rowsCount * 5;
             if (combined > bestScore) {
               bestScore = combined;
-              bestCrew = parsed;
+              bestSnapshot = [snapshot];
             }
           }
-          if (bestCrew.length >= 4) break;
+          if (bestScore >= 20) break;
           await new Promise((r) => setTimeout(r, 120));
         }
 
         const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
         const studioMatch = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
         const studio = studioMatch ? studioMatch[0] : '';
-        const expected = normalizeLookup(expectedProductionName || '');
-        const titleNorm = normalizeLookup(titleText || '');
-        const expectedTokens = expected.split(' ').filter((token) => token.length > 2);
-        const expectedTokenHits = expectedTokens.filter((token) => titleNorm.includes(token)).length;
-        const titleMatch =
-          expectedTokens.length === 0 ||
-          titleNorm.includes(expected) ||
-          expected.includes(titleNorm) ||
-          expectedTokenHits >= Math.min(2, expectedTokens.length);
-        const expectedNameKeys = (expectedCrewNames || [])
-          .map((name) => normalizeNameKey(name))
-          .filter((name) => name.length >= 2);
-        const overlapCount = expectedNameKeys.length
-          ? bestCrew.filter((member) => {
-            const key = normalizeNameKey(member.name);
-            return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
-          }).length
-          : 1;
         closePopup();
 
-        if (!titleText || !titleMatch || overlapCount === 0) {
-          return {
-            crew: [],
-            studio,
-            title: titleText,
-            rejected: true,
-            overlapCount,
-            rawCrewCount: bestCrew.length,
-          };
-        }
-
         return {
-          crew: bestCrew,
+          tables: bestSnapshot,
           studio,
           title: titleText,
-          rejected: false,
-          overlapCount,
-          rawCrewCount: bestCrew.length,
+          invalid: !bestSnapshot.length,
+          reason: bestSnapshot.length ? '' : 'no_tables',
         };
-        }, prod.herzliyaId, prod.name, (prod.crew || []).map((member) => member.name), prod.startTime, prod.endTime);
+        }, prod.herzliyaId);
 
-      const detailed = await evaluateCrewFromPopup();
+      const popupSnapshot = await evaluateCrewFromPopup();
+      const detailed = parsePopupSnapshot(prod, popupSnapshot);
       popupSnapshots.push({
         herzliyaId: prod.herzliyaId,
         productionName: prod.name,
@@ -822,6 +659,8 @@ async function fetchSchedule(browser, url) {
         rejected: !!detailed?.rejected,
         overlapCount: detailed?.overlapCount || 0,
         rawCrewCount: detailed?.rawCrewCount || 0,
+        parseQuality: detailed?.parseQuality || null,
+        tables: popupSnapshot?.tables || [],
         crew: (detailed?.crew || []).map((member) => ({
           name: member.name || '',
           role: member.role || '',
@@ -873,7 +712,7 @@ async function fetchSchedule(browser, url) {
         consecutivePopupMiss = 0;
       } else {
         if (detailed?.rejected) {
-          console.log(`  Production ${prod.name}: popup rejected by title/time/name validation (kept calendar fallback)`);
+          console.log(`  Production ${prod.name}: popup rejected after snapshot validation`);
           popupRejectedCount += 1;
           consecutivePopupMiss = 0;
         } else {
@@ -918,25 +757,16 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
   const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
-  const cleanupAllowed = popupSuccessRate >= 0.5;
-  if (cleanupAllowed) {
-    await cleanupWeek(weekId);
-  } else {
-    console.log(
-      `Skipping destructive cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
+  if (popupSuccessRate < POPUP_SUCCESS_THRESHOLD) {
+    throw new Error(
+      `Popup quality gate failed for week ${weekId}: ${(popupSuccessRate * 100).toFixed(1)}% < ${(POPUP_SUCCESS_THRESHOLD * 100).toFixed(0)}%`,
     );
   }
 
-  const batch = db.batch();
-  const existingMap = new Map();
-  if (!cleanupAllowed) {
-    const existingSnap = await db.collection(`productions/global/weeks/${weekId}/productions`).get();
-    existingSnap.docs.forEach((docSnap) => {
-      existingMap.set(docSnap.id, docSnap.data());
-    });
-  }
+  await cleanupWeek(V2_PRODUCTIONS_ROOT, weekId);
 
-  const weekRef = db.doc(`productions/global/weeks/${weekId}`);
+  const batch = db.batch();
+  const weekRef = db.doc(`${V2_PRODUCTIONS_ROOT}/${weekId}`);
   batch.set(weekRef, {
     weekId,
     weekStart: schedule.weekStart,
@@ -949,16 +779,8 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     const prodId = String(prod.herzliyaId);
     if (!prodId || prodId === '0') continue;
 
-    const prodRef = db.doc(`productions/global/weeks/${weekId}/productions/${prodId}`);
-    let cleanCrew = sanitizeCrewForFirestore(prod.crew);
-
-    if (!cleanupAllowed && !prod.popupParsed) {
-      const existing = existingMap.get(prodId);
-      const existingCrew = sanitizeCrewForFirestore(existing?.crew || []);
-      if (existingCrew.length > cleanCrew.length) {
-        cleanCrew = existingCrew;
-      }
-    }
+    const prodRef = db.doc(`${V2_PRODUCTIONS_ROOT}/${weekId}/productions/${prodId}`);
+    const cleanCrew = sanitizeCrewForFirestore(prod.crew);
 
     batch.set(prodRef, {
       name: prod.name,
@@ -972,6 +794,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       isCurrentUserShift: !!prod.isCurrentUserShift,
       lastUpdatedBy: userId,
       lastUpdatedAt: new Date().toISOString(),
+      popupParsed: !!prod.popupParsed,
+      crewSource: prod.popupParsed ? 'popup' : 'fallback',
+      parseQuality: schedule.parseStats,
       crew: cleanCrew,
     });
   }
@@ -983,16 +808,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   console.log('Saving userSchedule for userId:', userId);
   console.log('My productions:', myProductionIds.length);
 
-  const userScheduleRef = db.doc(`users/${userId}/schedules/${weekId}`);
-  batch.set(userScheduleRef, {
-    workerName: schedule.workerName || requestedWorkerName,
-    weekStart: schedule.weekStart,
-    weekEnd: schedule.weekEnd,
-    fetchedAt: schedule.fetchedAt,
-    productionCount: schedule.productions.length,
-  });
-
-  const userSchedulesRef = db.doc(`userSchedules/${userId}/weeks/${weekId}`);
+  const userSchedulesRef = db.doc(`${V2_USER_SCHEDULES_ROOT}/${userId}/weeks/${weekId}`);
   batch.set(userSchedulesRef, {
     workerName: schedule.workerName || requestedWorkerName,
     weekStart: schedule.weekStart,
@@ -1000,10 +816,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     fetchedAt: schedule.fetchedAt,
     productionCount: schedule.productions.length,
     myProductionIds,
+    parseStats: schedule.parseStats || null,
   });
 
   await batch.commit();
-  console.log(`Saved ${schedule.productions.length} productions to week ${weekId} (clean)`);
+  console.log(`Saved ${schedule.productions.length} productions to V2 week ${weekId}`);
 
   if (schedule.snapshotPath) {
     try {
@@ -1012,6 +829,217 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       console.warn('Failed deleting popup snapshot:', error.message);
     }
   }
+}
+
+function cleanSnapshotText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeLookup(value) {
+  return cleanSnapshotText(value)
+    .toLowerCase()
+    .replace(/[^\u05d0-\u05eaa-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeNameKey(value) {
+  return normalizeLookup(value)
+    .replace(/\b(\u05e6\u05dc\u05dd|\u05e6\u05d9\u05dc\u05d5\u05dd|\u05e8\u05d7\u05e3|\u05de\u05e0\u05d4\u05dc|\u05d1\u05de\u05d0\u05d9|\u05ea\u05d0\u05d5\u05e8\u05d4|\u05e7\u05d5\u05dc)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractPhoneFromText(text) {
+  const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
+  if (!matches || !matches.length) return null;
+  return normalizePhone(matches[0]);
+}
+
+function extractTimeRangeFromText(text) {
+  const m = String(text || '').match(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/);
+  if (!m) return { startTime: '', endTime: '' };
+  return { startTime: m[1], endTime: m[2] };
+}
+
+function findHeaderRowFromSnapshot(rows) {
+  for (let i = 0; i < Math.min(rows.length, 6); i++) {
+    const cells = (rows[i] || []).map((cell) => cleanSnapshotText(cell));
+    if (!cells.length) continue;
+    const headerText = cells.join(' ');
+    const hits = [
+      /\u05e9\u05e2\u05d5\u05ea/u,
+      /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
+      /\u05e9\u05dd/u,
+      /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
+      /\u05e4\u05e8\u05d8\u05d9\u05dd/u,
+    ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
+    if (hits >= 2) return { index: i, cells };
+  }
+  return { index: -1, cells: [] };
+}
+
+function chooseIndexesByContentSnapshot(dataRows, columnCount) {
+  const stats = Array.from({ length: columnCount }, () => ({
+    time: 0,
+    phone: 0,
+    empty: 0,
+    unique: new Set(),
+  }));
+
+  dataRows.forEach((row) => {
+    for (let i = 0; i < columnCount; i++) {
+      const txt = cleanSnapshotText(row[i] || '');
+      if (!txt) {
+        stats[i].empty++;
+        continue;
+      }
+      stats[i].unique.add(txt);
+      if (extractPhoneFromText(txt)) stats[i].phone++;
+      if (extractTimeRangeFromText(txt).startTime) stats[i].time++;
+    }
+  });
+
+  const colIndexes = Array.from({ length: columnCount }, (_, i) => i);
+  const phoneIdx = colIndexes.slice().sort((a, b) => stats[b].phone - stats[a].phone)[0] ?? -1;
+  const timeIdx = colIndexes.slice().sort((a, b) => stats[b].time - stats[a].time)[0] ?? -1;
+
+  const nonName = new Set([phoneIdx, timeIdx]);
+  let nameIdx = -1;
+  let bestNameScore = -1;
+  colIndexes.forEach((i) => {
+    if (nonName.has(i)) return;
+    const uniqueCount = stats[i].unique.size;
+    const filled = dataRows.length - stats[i].empty;
+    const score = uniqueCount * 2 + filled - stats[i].phone * 3 - stats[i].time * 3;
+    if (score > bestNameScore) {
+      bestNameScore = score;
+      nameIdx = i;
+    }
+  });
+
+  const roleIdx = colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx) ?? -1;
+  const detailsIdx =
+    colIndexes.find((i) => i !== nameIdx && i !== phoneIdx && i !== timeIdx && i !== roleIdx) ?? -1;
+
+  return { nameIdx, roleIdx, detailsIdx, timeIdx, phoneIdx };
+}
+
+function parseCrewTableSnapshot(tableRows) {
+  const rows = Array.isArray(tableRows) ? tableRows : [];
+  if (rows.length < 2) return { crew: [], score: -1 };
+
+  const header = findHeaderRowFromSnapshot(rows);
+  if (header.index < 0) return { crew: [], score: -1 };
+
+  const headerCells = header.cells;
+  const findIndex = (pred) => headerCells.findIndex((h) => pred(h));
+  let timeIdx = findIndex((h) => /\u05e9\u05e2\u05d5\u05ea/u.test(h));
+  let roleIdx = findIndex((h) => /\u05ea\u05e4\u05e7\u05d9\u05d3/u.test(h));
+  let nameIdx = findIndex((h) => /\u05e9\u05dd/u.test(h));
+  let detailsIdx = findIndex((h) => /\u05e4\u05e8\u05d8\u05d9\u05dd/u.test(h));
+  let phoneIdx = findIndex((h) => /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u.test(h));
+
+  const rawRows = rows
+    .slice(header.index + 1)
+    .map((row) => (Array.isArray(row) ? row.map((cell) => cleanSnapshotText(cell)) : []))
+    .filter((cells) => cells.length >= 3);
+
+  if (!rawRows.length) return { crew: [], score: -1 };
+
+  const colCount = Math.max(...rawRows.map((r) => r.length));
+  if (nameIdx < 0 || nameIdx >= colCount || timeIdx < 0 || phoneIdx < 0) {
+    const byContent = chooseIndexesByContentSnapshot(rawRows, colCount);
+    nameIdx = nameIdx >= 0 ? nameIdx : byContent.nameIdx;
+    roleIdx = roleIdx >= 0 ? roleIdx : byContent.roleIdx;
+    detailsIdx = detailsIdx >= 0 ? detailsIdx : byContent.detailsIdx;
+    timeIdx = timeIdx >= 0 ? timeIdx : byContent.timeIdx;
+    phoneIdx = phoneIdx >= 0 ? phoneIdx : byContent.phoneIdx;
+  }
+
+  if (nameIdx < 0) return { crew: [], score: -1 };
+
+  const crew = [];
+  for (const cells of rawRows) {
+    const joined = cleanSnapshotText(cells.join(' | '));
+    const name = cleanSnapshotText((cells[nameIdx] || '').replace(/^[:\-]+|[:\-]+$/g, ''));
+    if (!name || name.length < 2) continue;
+    if (/\u05e9\u05dd|\u05ea\u05e4\u05e7\u05d9\u05d3|\u05e0\u05d9\u05d9\u05d3/u.test(name)) continue;
+
+    const role = cleanSnapshotText(roleIdx >= 0 ? cells[roleIdx] || '' : '');
+    const roleDetail = cleanSnapshotText(detailsIdx >= 0 ? cells[detailsIdx] || '' : '');
+    const phoneRaw = phoneIdx >= 0 ? cells[phoneIdx] || '' : joined;
+    const phone = extractPhoneFromText(phoneRaw) || extractPhoneFromText(joined);
+    const timeSource = timeIdx >= 0 ? cells[timeIdx] || '' : joined;
+    const { startTime, endTime } = extractTimeRangeFromText(timeSource);
+
+    crew.push({ name, role, roleDetail, phone, startTime, endTime });
+  }
+
+  const headerText = cleanSnapshotText(headerCells.join(' '));
+  const headerHits = [
+    /\u05e9\u05dd/u,
+    /\u05ea\u05e4\u05e7\u05d9\u05d3/u,
+    /\u05e0\u05d9\u05d9\u05d3|\u05d8\u05dc\u05e4\u05d5\u05df/u,
+    /\u05e9\u05e2\u05d5\u05ea/u,
+  ].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
+
+  const score = crew.length * 10 + headerHits * 8 + crew.filter((member) => member.phone).length * 3;
+  return { crew, score };
+}
+
+function parsePopupSnapshot(production, snapshot) {
+  const tables = Array.isArray(snapshot?.tables) ? snapshot.tables : [];
+  let best = { crew: [], score: -1 };
+
+  for (const table of tables) {
+    const parsed = parseCrewTableSnapshot(table.rows || []);
+    if (parsed.score > best.score) {
+      best = parsed;
+    }
+  }
+
+  const bestCrew = deduplicateCrew(best.crew || []);
+  const titleText = cleanSnapshotText(snapshot?.title || '');
+  const titleNorm = normalizeLookup(titleText);
+  const expectedNorm = normalizeLookup(production?.name || '');
+  const expectedTokens = expectedNorm.split(' ').filter((token) => token.length > 1);
+  const titleTokenHits = expectedTokens.filter((token) => titleNorm.includes(token)).length;
+  const titleMatch =
+    !titleText ||
+    !expectedNorm ||
+    titleNorm.includes(expectedNorm) ||
+    expectedNorm.includes(titleNorm) ||
+    titleTokenHits >= Math.min(2, expectedTokens.length || 0);
+
+  const expectedNameKeys = (production?.crew || [])
+    .map((member) => normalizeNameKey(member.name))
+    .filter((name) => name.length >= 2);
+
+  const overlapCount = expectedNameKeys.length
+    ? bestCrew.filter((member) => {
+        const key = normalizeNameKey(member.name);
+        return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
+      }).length
+    : 0;
+
+  const strongCrewShape = bestCrew.length >= Math.max(4, (production?.crew || []).length + 2);
+  const accepted = bestCrew.length > 0 && (titleMatch || strongCrewShape || overlapCount >= 1);
+
+  return {
+    crew: bestCrew,
+    title: titleText,
+    studio: cleanSnapshotText(snapshot?.studio || ''),
+    rejected: !accepted,
+    overlapCount,
+    rawCrewCount: bestCrew.length,
+    parseQuality: {
+      titleMatch,
+      strongCrewShape,
+      overlapCount,
+      tableCount: tables.length,
+    },
+  };
 }
 
 async function main() {
