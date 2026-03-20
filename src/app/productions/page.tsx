@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
 import MessageInput from '@/components/productions/MessageInput';
@@ -719,6 +719,39 @@ function ProductionsContent() {
     return `${y}-${m}-${d}`;
   };
 
+  const renderedRange = useMemo(() => {
+    if (calendarView === 'week') {
+      const start = getWeekStartDate(currentDate);
+      const end = getWeekEndDate(currentDate);
+      return {
+        start: toLocalDate(start),
+        end: toLocalDate(end),
+      };
+    }
+
+    if (calendarView === 'month') {
+      return {
+        start: toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)),
+        end: toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)),
+      };
+    }
+
+    const start = new Date(currentDate);
+    start.setMonth(start.getMonth() - 1);
+    const end = new Date(currentDate);
+    end.setMonth(end.getMonth() + 2);
+    return {
+      start: toLocalDate(start),
+      end: toLocalDate(end),
+    };
+  }, [calendarView, currentDate]);
+
+  const visibleProductions = useMemo(() => {
+    return productions.filter((production) => (
+      production.date >= renderedRange.start && production.date <= renderedRange.end
+    ));
+  }, [productions, renderedRange]);
+
   // Load the latest week - try known current week first, then user schedules via REST
   const handleReloadLatest = useCallback(async () => {
     if (!user) return;
@@ -1218,11 +1251,11 @@ function ProductionsContent() {
       )}
 
       {/* Calendar */}
-      {(productions.length > 0 || currentWeekId) && weekStart && weekEnd && (
+      {(visibleProductions.length > 0 || currentWeekId) && renderedRange.start && renderedRange.end && (
         <WeeklyCalendar
-          productions={productions}
-          weekStart={weekStart}
-          weekEnd={weekEnd}
+          productions={visibleProductions}
+          weekStart={renderedRange.start}
+          weekEnd={renderedRange.end}
           workerName={workerName}
           currentUserName={profile?.displayName || ''}
           onNavigate={handleCalendarNavigate}
