@@ -444,9 +444,9 @@ function ProductionsContent() {
         setLastDiff(diff);
         setShowSummary(true);
         await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
-        setStatusMessage(`${diff.changes.length} ׳©׳™׳ ׳•׳™׳™׳ ׳¢׳•׳“׳›׳ ׳•`);
+        setStatusMessage(`${diff.changes.length} שינויים עודכנו`);
       } else {
-        setStatusMessage('׳׳™׳ ׳©׳™׳ ׳•׳™׳™׳ ׳—׳“׳©׳™׳');
+        setStatusMessage('אין שינויים חדשים');
       }
     } else {
       const existingProds = await loadExistingWeek(weekId);
@@ -464,7 +464,7 @@ function ProductionsContent() {
         } else {
           setProductions(existingProds);
           productionsByWeekRef.current.set(weekId, existingProds);
-          setStatusMessage('׳”׳׳•׳— ׳›׳‘׳¨ ׳¢׳“׳›׳ ׳™');
+          setStatusMessage('הלוח כבר עדכני');
         }
       } else {
         const prodsWithIds = parsed.productions.map(p => ({
@@ -479,14 +479,14 @@ function ProductionsContent() {
               type: 'ADD_PRODUCTION' as const,
               productionName: p.name,
               productionDate: p.date,
-              description: '׳”׳₪׳§׳” ׳ ׳•׳¡׳₪׳” ׳׳¨׳׳©׳•׳ ׳”',
+              description: 'הפקה נוספה לראשונה',
             }],
           }],
         }));
         setProductions(prodsWithIds);
         productionsByWeekRef.current.set(weekId, prodsWithIds);
         await saveToFirestore(weekId, prodsWithIds, parsed.weekStart, parsed.weekEnd);
-        setStatusMessage(`׳ ׳˜׳¢׳ ׳׳•׳— ׳¢׳‘׳•׳“׳” ׳¢׳ ${prodsWithIds.length} ׳”׳₪׳§׳•׳×`);
+        setStatusMessage(`נטען לוח עבודה עם ${prodsWithIds.length} הפקות`);
       }
 
       setCurrentWeekId(weekId);
@@ -585,12 +585,12 @@ function ProductionsContent() {
     // Extract URL from WhatsApp message
     const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
     if (!urlMatch) {
-      setStatusMessage('׳׳ ׳׳¦׳׳×׳™ ׳׳™׳ ׳§ ׳‘׳”׳•׳“׳¢׳”');
+      setStatusMessage('לא מצאתי לינק בהודעה');
       return;
     }
 
     // Extract worker name
-    const nameMatch = messageText.match(/׳©׳׳•׳\s+([^\n,]+)/);
+    const nameMatch = messageText.match(/שלום\s+([^\n,]+)/);
     const extractedWorkerName = nameMatch?.[1]?.trim() || profile?.displayName || '';
 
     // Extract dates
@@ -643,19 +643,19 @@ function ProductionsContent() {
                   const sat = new Date(y, m - 1, d + 6);
                   setWeekEnd(toLocalDate(sat));
                   setCurrentWeekId(weekId);
-                  setStatusMessage(`׳ ׳˜׳¢׳ ׳• ${prods.length} ׳”׳₪׳§׳•׳×`);
+                  setStatusMessage(`נטענו ${prods.length} הפקות`);
                 }
               } catch {
                 handleReloadLatest();
               }
             } else {
-              setStatusMessage('׳”׳׳•׳— ׳¢׳•׳“׳›׳ - ׳¨׳¢׳ ׳ ׳׳× ׳”׳“׳£');
+              setStatusMessage('הלוח עודכן - רענן את הדף');
             }
 
             setTimeout(() => setRequestStatus('idle'), 5000);
           } else if (status === 'error') {
             clearInterval(pollInterval);
-            setRequestError((data.error as string) || '׳©׳’׳™׳׳” ׳‘׳˜׳¢׳™׳ ׳× ׳”׳׳•׳—');
+            setRequestError((data.error as string) || 'שגיאה בטעינת הלוח');
             setTimeout(() => setRequestStatus('idle'), 8000);
           }
         } catch (pollErr) {
@@ -666,7 +666,7 @@ function ProductionsContent() {
       setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
     } catch (error: unknown) {
       setRequestStatus('error');
-      setRequestError(error instanceof Error ? error.message : '׳©׳’׳™׳׳” ׳‘׳©׳׳™׳—׳× ׳”׳‘׳§׳©׳”');
+      setRequestError(error instanceof Error ? error.message : 'שגיאה בשליחת הבקשה');
     }
   }, [user, profile, firestoreRestWrite, firestoreRestRead, loadExistingWeek]);
 
@@ -748,7 +748,7 @@ function ProductionsContent() {
         setCurrentDate(new Date(sunday));
         setWeekEnd(toLocalDate(satDate));
         setCurrentWeekId(weekId);
-        setStatusMessage(`׳ ׳˜׳¢׳ ׳• ${prods.length} ׳”׳₪׳§׳•׳×`);
+        setStatusMessage(`נטענו ${prods.length} הפקות`);
         return;
       }
 
@@ -770,7 +770,7 @@ function ProductionsContent() {
           setWeekEnd((latest.fields.weekEnd as string) || '');
           setWorkerName((latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
-          setStatusMessage(`׳ ׳˜׳¢׳ ׳• ${latestProds.length} ׳”׳₪׳§׳•׳×`);
+          setStatusMessage(`נטענו ${latestProds.length} הפקות`);
         }
       }
     } catch (error) {
@@ -950,7 +950,7 @@ function ProductionsContent() {
     try {
       // Raw HTML from clipboard (Herzliya page Ctrl+A Ctrl+C)
       if (rawHtml) {
-        setFetchProgress({ step: 'parsing', message: 'ג™ן¸ ׳׳¢׳‘׳“ HTML ׳©׳ ׳׳•׳— ׳”׳¨׳¦׳׳™׳”...' });
+        setFetchProgress({ step: 'parsing', message: 'מעבד HTML של לוח הרצליה...' });
         const parsed = parseHerzliyaHTML(rawHtml, userName);
         if (parsed.productions.length > 0) {
           setFetchProgress({ step: 'done', message: getStepMessage('done') });
@@ -993,7 +993,7 @@ function ProductionsContent() {
             return;
           }
 
-          setStatusMessage('׳׳ ׳”׳¦׳׳—׳×׳™ ׳׳—׳׳¥ ׳”׳₪׳§׳•׳× ׳׳”׳˜׳§׳¡׳˜. ׳ ׳¡׳” ׳׳”׳“׳‘׳™׳§ ׳׳× ׳×׳•׳›׳ ׳”׳“׳£ ׳”׳׳׳.');
+          setStatusMessage('לא הצלחתי לחלץ הפקות מהטקסט. נסה להדביק את תוכן הדף המלא.');
           setShowManualFallback(true);
           return;
         }
@@ -1004,18 +1004,18 @@ function ProductionsContent() {
       }
 
       if (!url) {
-        throw new Error('׳׳ ׳¡׳•׳₪׳§ ׳׳™׳ ׳§');
+        throw new Error('לא סופק לינק');
       }
 
       // URL detected - skip CORS proxy attempts, go directly to GitHub Action
       // The Herzliya server blocks external proxies, only GitHub servers can access it
-      setFetchProgress({ step: 'connecting', message: 'נ₪– ׳©׳•׳׳— ׳׳¢׳™׳‘׳•׳“ ׳‘׳¨׳§׳¢...' });
+      setFetchProgress({ step: 'connecting', message: 'שולח לעיבוד ברקע...' });
       setLoading(false);
 
-      const fakeMessage = `׳©׳׳•׳ ${userName}\n׳׳•׳— ׳¢׳‘׳•׳“׳”\n${url}`;
+      const fakeMessage = `שלום ${userName}\nלוח עבודה\n${url}`;
       await submitScheduleRequest(fakeMessage);
     } catch (error) {
-      setFetchProgress({ step: 'error', message: 'ג ׳©׳’׳™׳׳”' });
+      setFetchProgress({ step: 'error', message: 'שגיאה' });
       throw error;
     } finally {
       setLoading(false);
@@ -1031,7 +1031,7 @@ function ProductionsContent() {
   ) => {
     const nameLine = workerName || profile?.displayName || '';
     const dateLine = weekStartLabel && weekEndLabel ? `${weekStartLabel} - ${weekEndLabel}` : '';
-    const parts = [nameLine ? `׳©׳׳•׳ ${nameLine}` : '', dateLine, url].filter(Boolean);
+    const parts = [nameLine ? `שלום ${nameLine}` : '', dateLine, url].filter(Boolean);
     const message = parts.join('\n');
     await submitScheduleRequest(message);
   }, [profile, submitScheduleRequest]);
@@ -1068,10 +1068,10 @@ function ProductionsContent() {
         return;
       }
 
-      setStatusMessage('׳׳ ׳”׳¦׳׳—׳×׳™ ׳׳—׳׳¥ ׳”׳₪׳§׳•׳×. ׳ ׳¡׳” ׳׳”׳“׳‘׳™׳§ ׳׳× ׳›׳ ׳×׳•׳›׳ ׳”׳“׳£ (Ctrl+A, Ctrl+C).');
-      setFetchProgress({ step: 'error', message: 'ג ן¸ ׳׳ ׳ ׳׳¦׳׳• ׳”׳₪׳§׳•׳×' });
+      setStatusMessage('לא הצלחתי לחלץ הפקות. נסה להדביק את כל תוכן הדף (Ctrl+A, Ctrl+C).');
+      setFetchProgress({ step: 'error', message: 'לא נמצאו הפקות' });
     } catch (error) {
-      setStatusMessage('׳©׳’׳™׳׳” ׳‘׳¢׳™׳‘׳•׳“ ׳”׳˜׳§׳¡׳˜');
+      setStatusMessage('שגיאה בעיבוד הטקסט');
     } finally {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
@@ -1089,10 +1089,10 @@ function ProductionsContent() {
       if (existing.length > 0) {
         setProductions(existing);
         productionsByWeekRef.current.set(currentWeekId, existing);
-        setStatusMessage('׳ ׳˜׳¢׳ ׳׳—׳“׳© ׳׳”׳©׳¨׳×');
+        setStatusMessage('נטען מחדש מהשרת');
       }
     } catch {
-      setStatusMessage('׳©׳’׳™׳׳” ׳‘׳˜׳¢׳™׳ ׳” ׳׳—׳“׳©');
+      setStatusMessage('שגיאה בטעינה מחדש');
     }
     setLoading(false);
   };
@@ -1107,10 +1107,10 @@ function ProductionsContent() {
           </div>
           <div>
             <h1 className="text-xl font-black" style={{ color: 'var(--theme-text)' }}>
-              ׳׳•׳— ׳”׳₪׳§׳•׳×
+              לוח הפקות
             </h1>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              ׳”׳“׳‘׳§ ׳”׳•׳“׳¢׳× WhatsApp ׳׳• ׳׳™׳ ׳§ ׳׳׳•׳— ׳”׳¢׳‘׳•׳“׳”
+              הדבק הודעת WhatsApp או לינק ללוח העבודה
             </p>
           </div>
         </div>
@@ -1125,17 +1125,17 @@ function ProductionsContent() {
                     return names.some(n => c.name === n || c.name.includes(n) || n.includes(c.name));
                   })
                 );
-                if (myShifts.length === 0) { alert('׳׳™׳ ׳”׳₪׳§׳•׳× ׳׳”׳¦׳’׳”'); return; }
+                if (myShifts.length === 0) { alert('אין הפקות להצגה'); return; }
                 const byDay: Record<string, typeof myShifts> = {};
                 myShifts.forEach(p => {
                   if (!byDay[p.date]) byDay[p.date] = [];
                   byDay[p.date].push(p);
                 });
-                const lines = [`נ“÷ *׳׳•׳— ׳¢׳‘׳•׳“׳” ׳©׳‘׳•׳¢׳™*`, `נ“… ${weekStart} ג€“ ${weekEnd}`, ''];
+                const lines = [`📋 *לוח עבודה שבועי*`, `📅 ${weekStart} – ${weekEnd}`, ''];
                 Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).forEach(([, prods]) => {
                   lines.push(`*${prods[0].day} ${prods[0].date}:*`);
                   prods.forEach(p => {
-                    lines.push(`  ג€¢ ${p.name} | ${p.startTime}ג€“${p.endTime}${p.studio ? ` | ${p.studio}` : ''}`);
+                    lines.push(`  • ${p.name} | ${p.startTime}–${p.endTime}${p.studio ? ` | ${p.studio}` : ''}`);
                   });
                   lines.push('');
                 });
@@ -1143,7 +1143,7 @@ function ProductionsContent() {
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all bg-green-600 hover:bg-green-700 text-white"
             >
-              נ“₪ ׳©׳×׳£ ׳©׳‘׳•׳¢
+              📤 שתף שבוע
             </button>
           )}
           {currentWeekId && (
@@ -1154,7 +1154,7 @@ function ProductionsContent() {
               style={{ color: 'var(--theme-text-secondary)' }}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              ׳¨׳¢׳ ׳
+              רענן
             </button>
           )}
         </div>
@@ -1241,10 +1241,10 @@ function ProductionsContent() {
             <Clapperboard className="w-10 h-10 text-orange-400/50" />
           </div>
           <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--theme-text)' }}>
-            ׳׳™׳ ׳׳•׳— ׳”׳₪׳§׳•׳×
+            אין לוח הפקות
           </h3>
           <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--theme-text-secondary)' }}>
-            ׳”׳“׳‘׳§ ׳”׳•׳“׳¢׳× WhatsApp ׳¢׳ ׳”׳׳™׳ ׳§ ׳׳׳•׳— ׳”׳¢׳‘׳•׳“׳” ׳”׳©׳‘׳•׳¢׳™, ׳׳• ׳”׳›׳ ׳¡ ׳׳× ׳”׳׳™׳ ׳§ ׳™׳©׳™׳¨׳•׳× ׳‘׳©׳“׳” ׳׳׳¢׳׳”
+            הדבק הודעת WhatsApp עם הלינק ללוח העבודה השבועי, או הכנס את הלינק ישירות בשדה למעלה
           </p>
         </div>
       )}
@@ -1253,9 +1253,9 @@ function ProductionsContent() {
   );
 }
 
-// ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
+// ═══════════════════════════════════════════════
 // Schedule Request Status Component
-// ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
+// ═══════════════════════════════════════════════
 function ScheduleRequestStatus({
   status,
   error,
@@ -1266,11 +1266,11 @@ function ScheduleRequestStatus({
   workerName: string;
 }) {
   const steps = [
-    { id: 1, text: '׳”׳”׳•׳“׳¢׳” ׳”׳×׳§׳‘׳׳”', icon: 'ג…' },
-    { id: 2, text: '׳׳×׳—׳‘׳¨ ׳׳©׳¨׳× ׳”׳¨׳¦׳׳™׳”...', icon: 'נ”—' },
-    { id: 3, text: '׳§׳•׳¨׳ ׳׳•׳— ׳©׳™׳“׳•׳¨׳™׳', icon: 'נ“‹' },
-    { id: 4, text: '׳׳¢׳‘׳“ ׳ ׳×׳•׳ ׳™ ׳¦׳•׳•׳×', icon: 'נ‘¥' },
-    { id: 5, text: '׳©׳•׳׳¨ ׳‘׳™׳•׳׳', icon: 'נ’¾' },
+    { id: 1, text: 'ההודעה התקבלה', icon: '✅' },
+    { id: 2, text: 'מתחבר לשרת הרצליה...', icon: '🔗' },
+    { id: 3, text: 'קורא לוח שידורים', icon: '📋' },
+    { id: 4, text: 'מעבד נתוני צוות', icon: '👥' },
+    { id: 5, text: 'שומר ביומן', icon: '💾' },
   ];
 
   const activeStep = status === 'pending' ? 2 : status === 'processing' ? 3 : status === 'done' ? 6 : 0;
@@ -1284,9 +1284,9 @@ function ScheduleRequestStatus({
         <div className="flex items-center gap-3">
           <AlertTriangleIcon className="w-5 h-5 text-red-400" />
           <div>
-            <h3 className="text-sm font-bold text-red-400">׳©׳’׳™׳׳” ׳‘׳¢׳™׳‘׳•׳“</h3>
+            <h3 className="text-sm font-bold text-red-400">שגיאה בעיבוד</h3>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              {error || '׳ ׳¡׳” ׳©׳•׳‘ ׳׳׳•׳—׳¨ ׳™׳•׳×׳¨'}
+              {error || 'נסה שוב מאוחר יותר'}
             </p>
           </div>
         </div>
@@ -1309,7 +1309,7 @@ function ScheduleRequestStatus({
               <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
             )}
             <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-              {status === 'done' ? '׳”׳׳•׳— ׳¢׳•׳“׳›׳!' : `׳˜׳•׳¢׳ ׳׳× ׳”׳׳•׳— ׳©׳ ${workerName || '׳”׳¢׳•׳‘׳“'}...`}
+              {status === 'done' ? 'הלוח עודכן!' : `טוען את הלוח של ${workerName || 'העובד'}...`}
             </h3>
           </div>
           {status !== 'done' && (
@@ -1317,7 +1317,7 @@ function ScheduleRequestStatus({
               background: 'rgba(251, 191, 36, 0.1)',
               color: 'var(--theme-text-secondary)',
             }}>
-              ׳‘׳“׳¨׳ ׳›׳׳ 1-3 ׳“׳§׳•׳×
+              בדרך כלל 1-3 דקות
             </span>
           )}
         </div>
@@ -1334,7 +1334,7 @@ function ScheduleRequestStatus({
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
                   isDone ? 'bg-green-500/20' : isActive ? 'bg-amber-500/20' : 'bg-white/5'
                 }`}>
-                  {isDone ? 'ג“' : isActive ? (
+                  {isDone ? '✓' : isActive ? (
                     <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
                   ) : (
                     <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>{step.id}</span>
@@ -1365,18 +1365,18 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     }}>
       <div className="mb-3">
         <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--theme-text)' }}>
-          ג ן¸ ׳׳ ׳”׳¦׳׳—׳×׳™ ׳׳”׳×׳—׳‘׳¨ ׳׳©׳¨׳× ׳”׳¨׳¦׳׳™׳”
+          לא הצלחתי להתחבר לשרת הרצליה
         </h3>
         <div className="text-xs space-y-1" style={{ color: 'var(--theme-text-secondary)' }}>
-          <p>׳׳ ׳ ׳‘׳¦׳¢ ׳׳× ׳”׳¦׳¢׳“׳™׳ ׳”׳‘׳׳™׳:</p>
+          <p>אנא בצע את הצעדים הבאים:</p>
           <ol className="list-decimal pr-5 space-y-0.5">
-            <li>׳₪׳×׳— ׳׳× ׳”׳׳™׳ ׳§ ׳‘׳“׳₪׳“׳₪׳</li>
-            <li>׳¡׳׳ &quot;׳”׳¦׳’׳× ׳׳—׳׳§׳”&quot; ׳׳ ׳¨׳׳•׳•׳ ׳˜׳™</li>
+            <li>פתח את הלינק בדפדפן</li>
+            <li>סמן &quot;הצבת מחלקה&quot; אם רלוונטי</li>
             <li>
-              ׳׳—׳¥ <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+A</kbd>{' '}
-              ׳•׳׳– <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+C</kbd>
+              לחץ <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+A</kbd>{' '}
+              ואז <kbd className="px-1.5 py-0.5 rounded bg-[var(--theme-bg)] text-xs font-mono">Ctrl+C</kbd>
             </li>
-            <li>׳—׳–׳•׳¨ ׳׳›׳׳ ׳•׳”׳“׳‘׳§ ׳‘׳©׳“׳” ׳׳׳˜׳”</li>
+            <li>חזור לכאן והדבק בשדה למטה</li>
           </ol>
         </div>
       </div>
@@ -1384,7 +1384,7 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
       <textarea
         value={manualHtml}
         onChange={(e) => setManualHtml(e.target.value)}
-        placeholder="׳”׳“׳‘׳§ ׳›׳׳ ׳׳× ׳×׳•׳›׳ ׳”׳“׳£..."
+        placeholder="הדבק כאן את תוכן הדף..."
         className="w-full min-h-[120px] p-3 text-sm rounded-xl resize-none bg-transparent outline-none border"
         style={{
           color: 'var(--theme-text)',
@@ -1407,7 +1407,7 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
           background: 'linear-gradient(135deg, #f59e0b, #d97706)',
         }}
       >
-        {loading ? 'ג³ ׳׳¢׳‘׳“...' : 'נ“‹ ׳¢׳‘׳“ ׳×׳•׳›׳ ׳׳•׳“׳‘׳§'}
+        {loading ? 'מעבד...' : '📋 עבד תוכן מודבק'}
       </button>
     </div>
   );
