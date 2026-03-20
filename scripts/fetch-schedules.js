@@ -2,6 +2,9 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 initializeApp({
   credential: cert({
@@ -214,6 +217,30 @@ async function findCalendarContext(page) {
 
 async function fetchSchedule(browser, url) {
   const page = await browser.newPage();
+  const snapshotDir = path.join(os.tmpdir(), 'tv-industry-il-schedule-snapshots');
+  fs.mkdirSync(snapshotDir, { recursive: true });
+  const snapshotPath = path.join(snapshotDir, `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
+  const popupSnapshots = [];
+
+  const writePopupSnapshot = () => {
+    try {
+      fs.writeFileSync(
+        snapshotPath,
+        JSON.stringify(
+          {
+            url,
+            writtenAt: new Date().toISOString(),
+            productions: popupSnapshots,
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+    } catch (error) {
+      console.warn('Failed writing popup snapshot:', error.message);
+    }
+  };
 
   try {
     await page.setUserAgent(
@@ -759,23 +786,52 @@ async function fetchSchedule(browser, url) {
             return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
           }).length
           : 1;
-        const expectedStartMin = toMinutes(expectedStartTime);
-        const expectedEndMin = toMinutes(expectedEndTime);
-        const expectedTimeMatchCount =
-          expectedStartMin !== null && expectedEndMin !== null
-            ? bestCrew.filter((member) => member.startTime === expectedStartTime && member.endTime === expectedEndTime).length
-            : 1;
-
         closePopup();
 
-        if (!titleText || !titleMatch || overlapCount === 0 || expectedTimeMatchCount === 0) {
-          return { crew: [], studio, title: titleText, rejected: true };
+        if (!titleText || !titleMatch || overlapCount === 0) {
+          return {
+            crew: [],
+            studio,
+            title: titleText,
+            rejected: true,
+            overlapCount,
+            rawCrewCount: bestCrew.length,
+          };
         }
 
-        return { crew: bestCrew, studio, title: titleText, rejected: false };
+        return {
+          crew: bestCrew,
+          studio,
+          title: titleText,
+          rejected: false,
+          overlapCount,
+          rawCrewCount: bestCrew.length,
+        };
         }, prod.herzliyaId, prod.name, (prod.crew || []).map((member) => member.name), prod.startTime, prod.endTime);
 
       const detailed = await evaluateCrewFromPopup();
+      popupSnapshots.push({
+        herzliyaId: prod.herzliyaId,
+        productionName: prod.name,
+        date: prod.date,
+        studio: prod.studio || '',
+        expectedStartTime: prod.startTime || '',
+        expectedEndTime: prod.endTime || '',
+        popupTitle: detailed?.title || '',
+        popupStudio: detailed?.studio || '',
+        rejected: !!detailed?.rejected,
+        overlapCount: detailed?.overlapCount || 0,
+        rawCrewCount: detailed?.rawCrewCount || 0,
+        crew: (detailed?.crew || []).map((member) => ({
+          name: member.name || '',
+          role: member.role || '',
+          roleDetail: member.roleDetail || '',
+          phone: normalizePhone(member.phone),
+          startTime: member.startTime || '',
+          endTime: member.endTime || '',
+        })),
+      });
+      writePopupSnapshot();
 
       if (detailed && detailed.crew && detailed.crew.length) {
         const withNormalized = detailed.crew.map((member) => ({
@@ -850,6 +906,7 @@ async function fetchSchedule(browser, url) {
         ? popupSuccessCount / schedule.productions.length
         : 0,
     };
+    schedule.snapshotPath = snapshotPath;
 
     return schedule;
   } finally {
@@ -947,6 +1004,14 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 
   await batch.commit();
   console.log(`Saved ${schedule.productions.length} productions to week ${weekId} (clean)`);
+
+  if (schedule.snapshotPath) {
+    try {
+      fs.unlinkSync(schedule.snapshotPath);
+    } catch (error) {
+      console.warn('Failed deleting popup snapshot:', error.message);
+    }
+  }
 }
 
 async function main() {

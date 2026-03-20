@@ -231,38 +231,7 @@ export function useContacts(): ContactsHookResult {
     const updates: Array<{ id: string; phone: string }> = [];
     const creates: Contact[] = [];
 
-    for (const member of normalizedCrew) {
-      const nameKey = normalizeName(member.name || '');
-      const phoneKey = normalizePhone(member.phone);
-      if (!nameKey || nameKey.length < 2) continue;
-
-      const sameName = byName.get(nameKey) || [];
-      const strongMatch = phoneKey ? sameName.find((c) => c.normalizedPhone === phoneKey) : undefined;
-      if (strongMatch) continue;
-
-      const weakMatch = sameName[0];
-      if (weakMatch) {
-        if (
-          phoneKey &&
-          !weakMatch.normalizedPhone &&
-          weakMatch.source === 'firestore' &&
-          weakMatch.firestoreId
-        ) {
-          updates.push({ id: weakMatch.firestoreId, phone: phoneKey });
-          weakMatch.phone = phoneKey;
-          weakMatch.normalizedPhone = phoneKey;
-          byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), weakMatch]);
-        }
-        continue;
-      }
-
-      if (phoneKey) {
-        const byPhoneMatch = byPhone.get(phoneKey)?.[0];
-        if (byPhoneMatch) {
-          continue;
-        }
-      }
-
+    const queueCreate = (member: CrewMember, nameKey: string, phoneKey: string | null) => {
       const { firstName, lastName } = splitName(nameKey);
       const role = normalizeRole(member.roleDetail || member.role || '');
       const department = inferDepartment(role);
@@ -295,6 +264,45 @@ export function useContacts(): ContactsHookResult {
       indexedContactsRef.current.push(indexed);
       byName.set(nameKey, [...(byName.get(nameKey) || []), indexed]);
       if (phoneKey) byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), indexed]);
+    };
+
+    for (const member of normalizedCrew) {
+      const nameKey = normalizeName(member.name || '');
+      const phoneKey = normalizePhone(member.phone);
+      if (!nameKey || nameKey.length < 2) continue;
+
+      const sameName = byName.get(nameKey) || [];
+      const strongMatch = phoneKey ? sameName.find((c) => c.normalizedPhone === phoneKey) : undefined;
+      if (strongMatch) continue;
+
+      const weakMatch = sameName[0];
+      if (weakMatch) {
+        if (
+          phoneKey &&
+          !weakMatch.normalizedPhone &&
+          weakMatch.source === 'firestore' &&
+          weakMatch.firestoreId
+        ) {
+          updates.push({ id: weakMatch.firestoreId, phone: phoneKey });
+          weakMatch.phone = phoneKey;
+          weakMatch.normalizedPhone = phoneKey;
+          byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), weakMatch]);
+        } else if (phoneKey && !weakMatch.normalizedPhone && weakMatch.source === 'static') {
+          if (!byPhone.get(phoneKey)?.length) {
+            queueCreate(member, nameKey, phoneKey);
+          }
+        }
+        continue;
+      }
+
+      if (phoneKey) {
+        const byPhoneMatch = byPhone.get(phoneKey)?.[0];
+        if (byPhoneMatch) {
+          continue;
+        }
+      }
+
+      queueCreate(member, nameKey, phoneKey);
     }
 
     for (const update of updates) {

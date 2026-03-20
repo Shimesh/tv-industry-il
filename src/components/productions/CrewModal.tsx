@@ -28,13 +28,19 @@ function enrichCrewWithPhones(
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ');
 
-    const contact = contactList.find((c) => {
-      const fullName = `${c.firstName} ${c.lastName}`;
-      if (normalizeContactName(fullName) === normalized) return true;
-      if (firstName && lastName && c.firstName === firstName && c.lastName === lastName) return true;
-      if (firstName.length >= 2 && c.firstName === firstName && lastName && c.lastName.includes(lastName.split(' ')[0])) return true;
-      return false;
-    });
+    const contact = contactList
+      .filter((c) => {
+        const fullName = `${c.firstName} ${c.lastName}`;
+        if (normalizeContactName(fullName) === normalized) return true;
+        if (firstName && lastName && c.firstName === firstName && c.lastName === lastName) return true;
+        if (firstName.length >= 2 && c.firstName === firstName && lastName && c.lastName.includes(lastName.split(' ')[0])) return true;
+        return false;
+      })
+      .sort((a, b) => {
+        const aPhone = normalizePhone(a.phone || '') ? 1 : 0;
+        const bPhone = normalizePhone(b.phone || '') ? 1 : 0;
+        return bPhone - aPhone;
+      })[0];
 
     return {
       ...member,
