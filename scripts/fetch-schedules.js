@@ -433,6 +433,7 @@ async function fetchSchedule(browser, url) {
     let missingPhones = 0;
     let popupSuccessCount = 0;
     let popupFallbackCount = 0;
+    let popupRejectedCount = 0;
     let consecutivePopupMiss = 0;
 
     for (let i = 0; i < schedule.productions.length; i++) {
@@ -475,6 +476,13 @@ async function fetchSchedule(browser, url) {
           return h * 60 + m;
         };
 
+        const isVisible = (el) => {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 30 || rect.height < 30) return false;
+          const style = window.getComputedStyle(el);
+          return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+        };
         const closePopup = () => {
           const closeBtn =
             document.querySelector('.close') ||
@@ -490,23 +498,63 @@ async function fetchSchedule(browser, url) {
             const rect = table.getBoundingClientRect();
             return rect.width > 30 && rect.height > 30;
           });
-        const getActiveModalRoot = () => {
-          const titleEl =
-            document.querySelector('.modal-title') ||
-            document.querySelector('.popup-title') ||
-            document.querySelector('font[color="red"]');
-          if (!titleEl) return null;
-          let node = titleEl;
-          let best = null;
-          for (let i = 0; i < 6 && node; i++) {
-            const parent = node.parentElement;
-            if (!parent) break;
-            const rect = parent.getBoundingClientRect();
-            if (rect.width > 200 && rect.height > 120) {
-              best = parent;
-            }
-            node = parent;
+        const getModalTitle = (root) => {
+          if (!root) return '';
+          const selectors = ['.modal-title', '.popup-title', '[class*="title"]', 'font[color="red"]'];
+          for (const selector of selectors) {
+            const candidates = Array.from(root.querySelectorAll(selector)).filter(isVisible);
+            const best = candidates
+              .map((el) => cleanText(el.textContent || ''))
+              .filter(Boolean)
+              .sort((a, b) => b.length - a.length)[0];
+            if (best) return best;
           }
+          return '';
+        };
+        const getModalFingerprint = (root) => {
+          if (!root) return '';
+          return cleanText(root.textContent || '').slice(0, 400);
+        };
+        const getActiveModalRoot = () => {
+          const titleCandidates = Array.from(
+            document.querySelectorAll('.modal-title, .popup-title, [class*="title"], font[color="red"]'),
+          ).filter(isVisible);
+
+          let best = null;
+          let bestScore = -1;
+
+          for (const titleEl of titleCandidates) {
+            let node = titleEl;
+            for (let depth = 0; depth < 8 && node; depth++) {
+              const parent = node.parentElement;
+              if (!parent) break;
+              node = parent;
+              if (!isVisible(node)) continue;
+
+              const rect = node.getBoundingClientRect();
+              if (rect.width < 220 || rect.height < 120) continue;
+
+              const tableCount = node.querySelectorAll('table').length;
+              if (!tableCount) continue;
+
+              const titleText = getModalTitle(node);
+              const closeExists =
+                !!node.querySelector('.close, .modal-close, [onclick*="close"], button[class*="close"]');
+              const zIndex = Number(window.getComputedStyle(node).zIndex || 0) || 0;
+              const score =
+                tableCount * 4000 +
+                rect.width * rect.height +
+                (titleText ? 3000 : 0) +
+                (closeExists ? 1500 : 0) +
+                zIndex;
+
+              if (score > bestScore) {
+                best = node;
+                bestScore = score;
+              }
+            }
+          }
+
           return best;
         };
 
@@ -648,16 +696,28 @@ async function fetchSchedule(browser, url) {
           return { crew: [], studio: '', title: '' };
         }
 
+        const previousRoot = getActiveModalRoot();
+        const previousFingerprint = getModalFingerprint(previousRoot);
+
         closePopup();
+        await new Promise((r) => setTimeout(r, 80));
         openmd2(hId);
 
         const deadline = Date.now() + 1800;
         let bestCrew = [];
         let bestScore = -1;
+        let activeModalRoot = null;
         while (Date.now() < deadline) {
           const modalRoot = getActiveModalRoot();
-          const modalTables = modalRoot
-            ? Array.from(modalRoot.querySelectorAll('table')).filter((table) => {
+          if (modalRoot) {
+            const fingerprint = getModalFingerprint(modalRoot);
+            if (!previousFingerprint || fingerprint !== previousFingerprint) {
+              activeModalRoot = modalRoot;
+            }
+          }
+          const rootForParsing = activeModalRoot || modalRoot;
+          const modalTables = rootForParsing
+            ? Array.from(rootForParsing.querySelectorAll('table')).filter((table) => {
               const rect = table.getBoundingClientRect();
               return rect.width > 30 && rect.height > 30;
             })
@@ -678,12 +738,7 @@ async function fetchSchedule(browser, url) {
           await new Promise((r) => setTimeout(r, 120));
         }
 
-        const titleEl =
-          document.querySelector('.modal-title') ||
-          document.querySelector('.popup-title') ||
-          document.querySelector('[class*="title"]') ||
-          document.querySelector('font[color="red"]');
-        const titleText = cleanText(titleEl?.textContent || '');
+        const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
         const studioMatch = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
         const studio = studioMatch ? studioMatch[0] : '';
         const expected = normalizeLookup(expectedProductionName || '');
@@ -713,7 +768,7 @@ async function fetchSchedule(browser, url) {
 
         closePopup();
 
-        if (!titleMatch || overlapCount === 0 || expectedTimeMatchCount === 0) {
+        if (!titleText || !titleMatch || overlapCount === 0 || expectedTimeMatchCount === 0) {
           return { crew: [], studio, title: titleText, rejected: true };
         }
 
@@ -763,12 +818,14 @@ async function fetchSchedule(browser, url) {
       } else {
         if (detailed?.rejected) {
           console.log(`  Production ${prod.name}: popup rejected by title/time/name validation (kept calendar fallback)`);
+          popupRejectedCount += 1;
+          consecutivePopupMiss = 0;
         } else {
           console.log(`  Production ${prod.name}: popup parsing returned 0 rows (kept calendar crew fallback)`);
+          consecutivePopupMiss += 1;
         }
         schedule.productions[i].popupParsed = false;
         popupFallbackCount += 1;
-        consecutivePopupMiss += 1;
         if (popupSuccessCount === 0 && i >= 5 && consecutivePopupMiss >= 6) {
           throw new Error('Popup extraction unavailable (likely Herzliya license/session limit) - stopped early');
         }
@@ -784,9 +841,11 @@ async function fetchSchedule(browser, url) {
     console.log('missing phones:', missingPhones);
     console.log('popup success:', popupSuccessCount);
     console.log('popup fallback:', popupFallbackCount);
+    console.log('popup rejected:', popupRejectedCount);
     schedule.parseStats = {
       popupSuccessCount,
       popupFallbackCount,
+      popupRejectedCount,
       popupSuccessRate: schedule.productions.length
         ? popupSuccessCount / schedule.productions.length
         : 0,
