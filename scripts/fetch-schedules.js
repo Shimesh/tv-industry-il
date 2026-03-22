@@ -592,12 +592,14 @@ async function fetchSchedule(browser, url) {
         const previousFingerprint = getModalFingerprint(previousRoot);
 
         closePopup();
-        await new Promise((r) => setTimeout(r, 80));
+        await new Promise((r) => setTimeout(r, 120));
         openmd2(hId);
 
-        const deadline = Date.now() + 1800;
+        const deadline = Date.now() + 3000;
         const snapshotBySignature = new Map();
         let activeModalRoot = null;
+        let bestCombined = -1;
+        let lastImprovementAt = Date.now();
         while (Date.now() < deadline) {
           const modalRoot = getActiveModalRoot();
           if (modalRoot) {
@@ -621,17 +623,22 @@ async function fetchSchedule(browser, url) {
             const rowsCount = snapshot.rows.filter((row) => row.length >= 3).length;
             if (rowsCount === 0) continue;
             const combined = score + rowsCount * 5;
-            const signature = JSON.stringify(snapshot.rows.slice(0, 25));
+            const signature = JSON.stringify(snapshot.rows);
             const existing = snapshotBySignature.get(signature);
             if (!existing || combined > existing.combined) {
               snapshotBySignature.set(signature, {
                 ...snapshot,
                 combined,
               });
+              if (combined > bestCombined) {
+                bestCombined = combined;
+                lastImprovementAt = Date.now();
+              }
             }
           }
           const strongCount = Array.from(snapshotBySignature.values()).filter((entry) => entry.combined >= 20).length;
-          if (strongCount >= 2) break;
+          const stableForMs = Date.now() - lastImprovementAt;
+          if (strongCount >= 1 && stableForMs >= 700) break;
           await new Promise((r) => setTimeout(r, 120));
         }
 
