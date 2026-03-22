@@ -596,8 +596,7 @@ async function fetchSchedule(browser, url) {
         openmd2(hId);
 
         const deadline = Date.now() + 1800;
-        let bestSnapshot = [];
-        let bestScore = -1;
+        const snapshotBySignature = new Map();
         let activeModalRoot = null;
         while (Date.now() < deadline) {
           const modalRoot = getActiveModalRoot();
@@ -622,14 +621,23 @@ async function fetchSchedule(browser, url) {
             const rowsCount = snapshot.rows.filter((row) => row.length >= 3).length;
             if (rowsCount === 0) continue;
             const combined = score + rowsCount * 5;
-            if (combined > bestScore) {
-              bestScore = combined;
-              bestSnapshot = [snapshot];
+            const signature = JSON.stringify(snapshot.rows.slice(0, 25));
+            const existing = snapshotBySignature.get(signature);
+            if (!existing || combined > existing.combined) {
+              snapshotBySignature.set(signature, {
+                ...snapshot,
+                combined,
+              });
             }
           }
-          if (bestScore >= 20) break;
+          const strongCount = Array.from(snapshotBySignature.values()).filter((entry) => entry.combined >= 20).length;
+          if (strongCount >= 2) break;
           await new Promise((r) => setTimeout(r, 120));
         }
+
+        const collectedSnapshots = Array.from(snapshotBySignature.values())
+          .sort((a, b) => b.combined - a.combined)
+          .map(({ combined, ...snapshot }) => snapshot);
 
         const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
         const studioMatch = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
@@ -637,11 +645,11 @@ async function fetchSchedule(browser, url) {
         closePopup();
 
         return {
-          tables: bestSnapshot,
+          tables: collectedSnapshots,
           studio,
           title: titleText,
-          invalid: !bestSnapshot.length,
-          reason: bestSnapshot.length ? '' : 'no_tables',
+          invalid: !collectedSnapshots.length,
+          reason: collectedSnapshots.length ? '' : 'no_tables',
         };
         }, prod.herzliyaId);
 
