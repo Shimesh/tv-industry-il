@@ -707,7 +707,10 @@ async function fetchSchedule(browser, url) {
           schedule.productions[i].studio = detailed.studio;
         }
 
-        console.log(`  Production ${prod.name}: ${withNormalized.length} crew rows parsed`);
+        console.log(
+          `  Production ${prod.name}: ${withNormalized.length} crew rows parsed ` +
+          `(source=${detailed.parseQuality?.selectedSource || 'unknown'}, candidates=${detailed.parseQuality?.candidateCount || 0})`
+        );
         popupSuccessCount += 1;
         consecutivePopupMiss = 0;
       } else {
@@ -990,16 +993,6 @@ function parseCrewTableSnapshot(tableRows) {
 
 function parsePopupSnapshot(production, snapshot) {
   const tables = Array.isArray(snapshot?.tables) ? snapshot.tables : [];
-  let best = { crew: [], score: -1 };
-
-  for (const table of tables) {
-    const parsed = parseCrewTableSnapshot(table.rows || []);
-    if (parsed.score > best.score) {
-      best = parsed;
-    }
-  }
-
-  const bestCrew = deduplicateCrew(best.crew || []);
   const titleText = cleanSnapshotText(snapshot?.title || '');
   const titleNorm = normalizeLookup(titleText);
   const expectedNorm = normalizeLookup(production?.name || '');
@@ -1016,28 +1009,87 @@ function parsePopupSnapshot(production, snapshot) {
     .map((member) => normalizeNameKey(member.name))
     .filter((name) => name.length >= 2);
 
-  const overlapCount = expectedNameKeys.length
-    ? bestCrew.filter((member) => {
-        const key = normalizeNameKey(member.name);
-        return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
-      }).length
-    : 0;
+  const parsedTables = tables
+    .map((table, index) => ({
+      index,
+      ...parseCrewTableSnapshot(table.rows || []),
+    }))
+    .filter((table) => table.crew.length > 0);
 
-  const strongCrewShape = bestCrew.length >= Math.max(4, (production?.crew || []).length + 2);
-  const accepted = bestCrew.length > 0 && (titleMatch || strongCrewShape || overlapCount >= 1);
+  const mergedCrew = parsedTables.length > 1
+    ? deduplicateCrew(parsedTables.flatMap((table) => table.crew || []))
+    : [];
+
+  const candidates = [
+    ...parsedTables.map((table) => ({
+      source: `table:${table.index}`,
+      score: table.score,
+      crew: deduplicateCrew(table.crew || []),
+    })),
+    ...(mergedCrew.length > 0
+      ? [{
+          source: 'merged',
+          score: parsedTables.reduce((sum, table) => sum + Math.max(0, table.score || 0), 0),
+          crew: mergedCrew,
+        }]
+      : []),
+  ];
+
+  const scoredCandidates = candidates.map((candidate) => {
+    const overlapCount = expectedNameKeys.length
+      ? candidate.crew.filter((member) => {
+          const key = normalizeNameKey(member.name);
+          return expectedNameKeys.some((expectedKey) => key.includes(expectedKey) || expectedKey.includes(key));
+        }).length
+      : 0;
+
+    const phoneCount = candidate.crew.filter((member) => normalizePhone(member.phone)).length;
+    const strongCrewShape = candidate.crew.length >= Math.max(4, (production?.crew || []).length + 2);
+    const accepted = candidate.crew.length > 0 && (titleMatch || strongCrewShape || overlapCount >= 1);
+
+    return {
+      ...candidate,
+      overlapCount,
+      phoneCount,
+      strongCrewShape,
+      accepted,
+    };
+  });
+
+  const ranked = (scoredCandidates.filter((candidate) => candidate.accepted).length
+    ? scoredCandidates.filter((candidate) => candidate.accepted)
+    : scoredCandidates
+  ).sort((a, b) => {
+    if (b.crew.length !== a.crew.length) return b.crew.length - a.crew.length;
+    if (b.overlapCount !== a.overlapCount) return b.overlapCount - a.overlapCount;
+    if (b.phoneCount !== a.phoneCount) return b.phoneCount - a.phoneCount;
+    return b.score - a.score;
+  });
+
+  const best = ranked[0] || {
+    source: 'none',
+    crew: [],
+    score: -1,
+    overlapCount: 0,
+    phoneCount: 0,
+    strongCrewShape: false,
+    accepted: false,
+  };
 
   return {
-    crew: bestCrew,
+    crew: best.crew,
     title: titleText,
     studio: cleanSnapshotText(snapshot?.studio || ''),
-    rejected: !accepted,
-    overlapCount,
-    rawCrewCount: bestCrew.length,
+    rejected: !best.accepted,
+    overlapCount: best.overlapCount,
+    rawCrewCount: best.crew.length,
     parseQuality: {
       titleMatch,
-      strongCrewShape,
-      overlapCount,
+      strongCrewShape: best.strongCrewShape,
+      overlapCount: best.overlapCount,
       tableCount: tables.length,
+      selectedSource: best.source,
+      candidateCount: scoredCandidates.length,
     },
   };
 }
