@@ -45,8 +45,8 @@ import {
 import { db, ensureOnline } from '@/lib/firebase';
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
 
-const PRODUCTIONS_COLLECTION_PATHS = ['productions_v2/global/weeks', 'productions/global/weeks'] as const;
-const USER_SCHEDULES_COLLECTION_PATHS = ['userSchedules_v2', 'userSchedules'] as const;
+const PRODUCTIONS_ROOT = 'productions/global/weeks';
+const USER_SCHEDULES_ROOT = 'userSchedules';
 
 export default function ProductionsPage() {
   return (
@@ -183,11 +183,7 @@ function ProductionsContent() {
   // Load existing week data via REST API
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
     try {
-      let prodDocs: Array<{ id: string; fields: Record<string, unknown> }> = [];
-      for (const root of PRODUCTIONS_COLLECTION_PATHS) {
-        prodDocs = await restListDocs(`${root}/${weekId}/productions`);
-        if (prodDocs.length > 0) break;
-      }
+      const prodDocs = await restListDocs(`${PRODUCTIONS_ROOT}/${weekId}/productions`);
 
       // Deduplicate by herzliyaId (the stable ID from Herzliya system)
       const dedupMap = new Map<string, Production>();
@@ -273,7 +269,7 @@ function ProductionsContent() {
       await ensureOnline();
       const batch = writeBatch(db);
 
-      const metaRef = doc(db, 'productions_v2', 'global', 'weeks', weekId);
+      const metaRef = doc(db, 'productions', 'global', 'weeks', weekId);
       let metaSnap;
       try {
         metaSnap = await Promise.race([
@@ -308,7 +304,7 @@ function ProductionsContent() {
 
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodRef = doc(db, 'productions_v2', 'global', 'weeks', weekId, 'productions', prodId);
+        const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
 
         // Deduplicate crew by name before saving
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
@@ -330,7 +326,7 @@ function ProductionsContent() {
         });
       }
 
-      const userScheduleRef = doc(db, 'userSchedules_v2', user.uid, 'weeks', weekId);
+      const userScheduleRef = doc(db, 'userSchedules', user.uid, 'weeks', weekId);
       batch.set(userScheduleRef, {
         workerName,
         fetchedAt: serverTimestamp(),
@@ -681,7 +677,7 @@ function ProductionsContent() {
   const listenToWeek = useCallback((weekId: string) => {
     unsubWeekRef.current?.();
 
-    const weekRef = doc(db, 'productions_v2', 'global', 'weeks', weekId);
+    const weekRef = doc(db, 'productions', 'global', 'weeks', weekId);
     unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
       if (!snap.exists()) return;
 
@@ -773,11 +769,7 @@ function ProductionsContent() {
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
         // Also fetch the user's schedule to get workerName
-        let scheduleDocs: Array<{ id: string; fields: Record<string, unknown> }> = [];
-        for (const root of USER_SCHEDULES_COLLECTION_PATHS) {
-          scheduleDocs = await restListDocs(`${root}/${user.uid}/weeks`);
-          if (scheduleDocs.length > 0) break;
-        }
+        let scheduleDocs = await restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`);
         if (scheduleDocs.length === 0) {
           scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
         }
@@ -797,11 +789,7 @@ function ProductionsContent() {
       }
 
       // Fallback: try user schedules via REST
-      let scheduleDocs: Array<{ id: string; fields: Record<string, unknown> }> = [];
-      for (const root of USER_SCHEDULES_COLLECTION_PATHS) {
-        scheduleDocs = await restListDocs(`${root}/${user.uid}/weeks`);
-        if (scheduleDocs.length > 0) break;
-      }
+      let scheduleDocs = await restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`);
       if (scheduleDocs.length === 0) {
         scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
       }

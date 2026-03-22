@@ -15,26 +15,28 @@ initializeApp({
 });
 
 const db = getFirestore();
-const V2_PRODUCTIONS_ROOT = 'productions_v2/global/weeks';
-const V2_USER_SCHEDULES_ROOT = 'userSchedules_v2';
-const LEGACY_PRODUCTIONS_ROOT = 'productions/global/weeks';
-const LEGACY_USER_SCHEDULES_ROOT = 'userSchedules';
-const POPUP_SUCCESS_THRESHOLD = 0.85;
+const PRODUCTIONS_ROOT = 'productions/global/weeks';
+const USER_SCHEDULES_ROOT = 'userSchedules';
 
 function normalizeName(name) {
   if (!name) return '';
 
-  let cleaned = String(name)
+  let cleaned = String(name);
+
+  // Strip role prefix with colon FIRST (before cleaning punctuation)
+  // "צילום: ירון אורבך" → "ירון אורבך"
+  cleaned = cleaned.replace(/^[\u05d0-\u05ea]+:\s*/u, '');
+  // Strip role suffix with dash FIRST
+  // "ירון אורבך - צילום" → "ירון אורבך"
+  cleaned = cleaned.replace(/\s*[-\u2013\u2014]\s*[\u05d0-\u05ea\s]+$/u, '');
+
+  // Now clean general punctuation
+  cleaned = cleaned
     .replace(/[()\[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
     .replace(/["\u201C\u201D\u2013\u2014-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-
-  // Strip role prefix with colon: "צילום: ירון" → "ירון"
-  cleaned = cleaned.replace(/^[\u05d0-\u05ea]+:\s*/u, '');
-  // Strip role suffix with dash: "ירון - צילום" → "ירון"
-  cleaned = cleaned.replace(/\s*[-\u2013]\s*[\u05d0-\u05ea\s]+$/u, '');
 
   const rolePhrases = [
     'צלם רחף', 'סטדי קאם', 'סטדי-קאם', 'ע. במאי', 'ע. במאית', 'ע. צילום',
@@ -775,16 +777,17 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
   const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
-  if (popupSuccessRate < POPUP_SUCCESS_THRESHOLD) {
-    throw new Error(
-      `Popup quality gate failed for week ${weekId}: ${(popupSuccessRate * 100).toFixed(1)}% < ${(POPUP_SUCCESS_THRESHOLD * 100).toFixed(0)}%`,
+  const cleanupAllowed = popupSuccessRate >= 0.5;
+  if (cleanupAllowed) {
+    await cleanupWeek(PRODUCTIONS_ROOT, weekId);
+  } else {
+    console.log(
+      `Skipping cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
     );
   }
 
-  await cleanupWeek(V2_PRODUCTIONS_ROOT, weekId);
-
   const batch = db.batch();
-  const weekRef = db.doc(`${V2_PRODUCTIONS_ROOT}/${weekId}`);
+  const weekRef = db.doc(`${PRODUCTIONS_ROOT}/${weekId}`);
   batch.set(weekRef, {
     weekId,
     weekStart: schedule.weekStart,
@@ -797,7 +800,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     const prodId = String(prod.herzliyaId);
     if (!prodId || prodId === '0') continue;
 
-    const prodRef = db.doc(`${V2_PRODUCTIONS_ROOT}/${weekId}/productions/${prodId}`);
+    const prodRef = db.doc(`${PRODUCTIONS_ROOT}/${weekId}/productions/${prodId}`);
     const cleanCrew = sanitizeCrewForFirestore(prod.crew);
 
     batch.set(prodRef, {
@@ -826,7 +829,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   console.log('Saving userSchedule for userId:', userId);
   console.log('My productions:', myProductionIds.length);
 
-  const userSchedulesRef = db.doc(`${V2_USER_SCHEDULES_ROOT}/${userId}/weeks/${weekId}`);
+  const userSchedulesRef = db.doc(`${USER_SCHEDULES_ROOT}/${userId}/weeks/${weekId}`);
   batch.set(userSchedulesRef, {
     workerName: schedule.workerName || requestedWorkerName,
     weekStart: schedule.weekStart,
@@ -838,7 +841,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   });
 
   await batch.commit();
-  console.log(`Saved ${schedule.productions.length} productions to V2 week ${weekId}`);
+  console.log(`Saved ${schedule.productions.length} productions to week ${weekId}`);
 
   if (schedule.snapshotPath) {
     try {
