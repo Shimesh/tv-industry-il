@@ -16,13 +16,12 @@ interface DetectedInfo {
 
 interface MessageInputProps {
   onFetch: (url: string | null, manualText: string | null, rawHtml?: string | null) => Promise<void>;
-  onSubmitActionRequest?: (url: string, workerName?: string | null, weekStart?: string | null, weekEnd?: string | null) => Promise<void>;
   loading: boolean;
   existingWeekId?: string | null;
   fetchProgress?: FetchProgress | null;
 }
 
-export default function MessageInput({ onFetch, onSubmitActionRequest, loading, existingWeekId, fetchProgress }: MessageInputProps) {
+export default function MessageInput({ onFetch, loading, existingWeekId, fetchProgress }: MessageInputProps) {
   const [text, setText] = useState('');
   const [detected, setDetected] = useState<DetectedInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -240,17 +239,6 @@ export default function MessageInput({ onFetch, onSubmitActionRequest, loading, 
                 </>
               )}
             </button>
-            {detected?.url && onSubmitActionRequest && (
-              <button
-                onClick={() => onSubmitActionRequest(detected.url!, detected.workerName, detected.weekStart, detected.weekEnd)}
-                disabled={loading}
-                className="px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-[var(--theme-accent-glow)]"
-                style={{ color: 'var(--theme-text-secondary)' }}
-                title="שלח לעיבוד ברקע (GitHub Action)"
-              >
-                שלח ל-Action
-              </button>
-            )}
             <button
               onClick={clearAll}
               disabled={loading}

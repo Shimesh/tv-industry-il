@@ -778,6 +778,7 @@ function ProductionsContent() {
 
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
+        productionsByWeekRef.current.set(weekId, prods);
         // Also fetch the user's schedule to get workerName
         let scheduleDocs = await restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`);
         if (scheduleDocs.length === 0) {
@@ -794,7 +795,6 @@ function ProductionsContent() {
         setCurrentDate(new Date(sunday));
         setWeekEnd(toLocalDate(satDate));
         setCurrentWeekId(weekId);
-        setStatusMessage(`נטענו ${prods.length} הפקות`);
         return;
       }
 
@@ -808,6 +808,7 @@ function ProductionsContent() {
         const latestWeekId = latest.id;
         const latestProds = await loadExistingWeek(latestWeekId);
         if (latestProds.length > 0) {
+          productionsByWeekRef.current.set(latestWeekId, latestProds);
           setProductions(latestProds);
           setWeekStart((latest.fields.weekStart as string) || '');
           if (latest.fields.weekStart) {
@@ -816,7 +817,6 @@ function ProductionsContent() {
           setWeekEnd((latest.fields.weekEnd as string) || '');
           setWorkerName((latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
-          setStatusMessage(`נטענו ${latestProds.length} הפקות`);
         }
       }
     } catch (error) {
@@ -1195,7 +1195,6 @@ function ProductionsContent() {
       <div className="mb-6">
         <MessageInput
           onFetch={handleFetch}
-          onSubmitActionRequest={handleActionRequest}
           loading={loading}
           existingWeekId={currentWeekId}
           fetchProgress={fetchProgress}
@@ -1248,8 +1247,8 @@ function ProductionsContent() {
         </div>
       )}
 
-      {/* Calendar */}
-      {(visibleProductions.length > 0 || currentWeekId) && renderedRange.start && renderedRange.end && (
+      {/* Calendar - always show once we have a valid range */}
+      {renderedRange.start && renderedRange.end && (
         <WeeklyCalendar
           productions={visibleProductions}
           weekStart={renderedRange.start}
