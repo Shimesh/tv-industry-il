@@ -6,6 +6,8 @@ import {
   getDocs,
   doc,
   writeBatch,
+  deleteDoc,
+  updateDoc,
   serverTimestamp,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -125,6 +127,83 @@ function mapSnapshotToContact(d: QueryDocumentSnapshot<DocumentData>): Contact {
   };
 }
 
+/**
+ * Silently resolves duplicate contacts:
+ * - Groups by normalized name
+ * - Merges info (phone, role, department) into the best record
+ * - Deletes redundant Firestore records
+ */
+async function autoResolveDuplicates(indexed: IndexedContact[], firestoreContacts: Contact[]) {
+  try {
+    const byName = new Map<string, IndexedContact[]>();
+    for (const c of indexed) {
+      if (!c.normalizedName || c.normalizedName.length < 2) continue;
+      const group = byName.get(c.normalizedName) || [];
+      group.push(c);
+      byName.set(c.normalizedName, group);
+    }
+
+    const batch = writeBatch(db);
+    let batchCount = 0;
+    const MAX_BATCH = 450; // Firestore batch limit is 500
+
+    for (const [, group] of byName) {
+      if (group.length < 2) continue;
+      if (batchCount >= MAX_BATCH) break;
+
+      // Pick the best record: prefer one with phone, then firestore over static
+      const sorted = [...group].sort((a, b) => {
+        if (a.normalizedPhone && !b.normalizedPhone) return -1;
+        if (!a.normalizedPhone && b.normalizedPhone) return 1;
+        if (a.source === 'firestore' && b.source !== 'firestore') return -1;
+        if (a.source !== 'firestore' && b.source === 'firestore') return 1;
+        return 0;
+      });
+
+      const winner = sorted[0];
+      const losers = sorted.slice(1);
+
+      // Merge missing info into winner
+      let needsUpdate = false;
+      for (const loser of losers) {
+        if (!winner.phone && loser.phone) { winner.phone = loser.phone; winner.normalizedPhone = loser.normalizedPhone; needsUpdate = true; }
+        if (!winner.role && loser.role) { winner.role = loser.role; needsUpdate = true; }
+        if (!winner.department && loser.department) { winner.department = loser.department; needsUpdate = true; }
+        if (!winner.email && loser.email) { winner.email = loser.email; needsUpdate = true; }
+      }
+
+      // Update winner in Firestore if it gained new info
+      if (needsUpdate && winner.source === 'firestore' && winner.firestoreId) {
+        batch.update(doc(db, 'contacts', winner.firestoreId), {
+          phone: winner.phone || null,
+          role: winner.role || '',
+          department: winner.department || '',
+          updatedAt: serverTimestamp(),
+        });
+        batchCount++;
+      }
+
+      // Delete loser Firestore records
+      for (const loser of losers) {
+        if (loser.source === 'firestore' && loser.firestoreId) {
+          batch.delete(doc(db, 'contacts', loser.firestoreId));
+          batchCount++;
+        }
+      }
+    }
+
+    if (batchCount > 0) {
+      await batch.commit();
+      // Invalidate cache so next load picks up clean data
+      cachedMergedContacts = null;
+      cacheLoadedAt = 0;
+      console.log(`[useContacts] Auto-resolved ${batchCount} duplicate contact operations`);
+    }
+  } catch (err) {
+    console.warn('[useContacts] Auto-resolve duplicates failed:', err);
+  }
+}
+
 export function useContacts(): ContactsHookResult {
   const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>(cachedMergedContacts || staticContacts);
@@ -186,9 +265,10 @@ export function useContacts(): ContactsHookResult {
         cachedDuplicateReport = report;
         cacheLoadedAt = Date.now();
 
-        if (report.length > 0 && !alertShownRef.current && typeof window !== 'undefined') {
+        // Auto-resolve duplicates silently
+        if (report.length > 0 && !alertShownRef.current) {
           alertShownRef.current = true;
-          window.alert(`נמצאו כפילויות באלפון:\n${report.slice(0, 10).map((r) => `${r.type}: ${r.key} (${r.count})`).join('\n')}`);
+          void autoResolveDuplicates(indexed, firestoreContacts);
         }
       } catch {
         if (!mounted) return;

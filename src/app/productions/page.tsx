@@ -91,7 +91,7 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 
 function ProductionsContent() {
   const { user, profile } = useAuth();
-  const { ensureFromCrew, duplicateContactsReport } = useContacts();
+  const { ensureFromCrew } = useContacts();
   const [loading, setLoading] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -108,7 +108,6 @@ function ProductionsContent() {
   const unsubRequestRef = useRef<(() => void) | null>(null);
   const unsubWeekRef = useRef<(() => void) | null>(null);
   const loadTokenRef = useRef(0);
-  const duplicateAlertShownRef = useRef(false);
 
     // Calendar navigation state
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
@@ -956,16 +955,7 @@ function ProductionsContent() {
     void ensureFromCrew(allCrew);
   }, [productions, ensureFromCrew]);
 
-  useEffect(() => {
-    if (!duplicateContactsReport.length || duplicateAlertShownRef.current) return;
-    duplicateAlertShownRef.current = true;
-    if (typeof window !== 'undefined') {
-      window.alert(
-        `נמצאו כפילויות באלפון (${duplicateContactsReport.length}). ` +
-        `דוגמאות: ${duplicateContactsReport.slice(0, 4).map((d) => d.key).join(', ')}`,
-      );
-    }
-  }, [duplicateContactsReport]);
+  // Duplicates are auto-resolved silently by useContacts hook
 
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
