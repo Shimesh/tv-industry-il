@@ -168,13 +168,24 @@ function ProductionsContent() {
   // Parse Firestore REST array value to JS array
   const parseFirestoreArray = useCallback((val: unknown): Array<Record<string, string>> => {
     if (!val || typeof val !== 'object') return [];
-    const arrVal = val as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string }> } }> };
+    const arrVal = val as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string; integerValue?: string; booleanValue?: boolean; nullValue?: null }> } }> };
     if (!arrVal.values) return [];
     return arrVal.values.map(item => {
       const fields = item.mapValue?.fields || {};
       const result: Record<string, string> = {};
       for (const [key, v] of Object.entries(fields)) {
-        result[key] = v.stringValue || '';
+        // Handle all Firestore REST API value types
+        if (v.stringValue !== undefined) {
+          result[key] = v.stringValue;
+        } else if (v.integerValue !== undefined) {
+          result[key] = String(v.integerValue);
+        } else if (v.booleanValue !== undefined) {
+          result[key] = String(v.booleanValue);
+        } else if ('nullValue' in v) {
+          result[key] = '';
+        } else {
+          result[key] = '';
+        }
       }
       return result;
     });

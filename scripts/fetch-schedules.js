@@ -574,7 +574,7 @@ async function fetchSchedule(browser, url) {
             (sum, re) => (re.test(headerText) ? sum + 1 : sum),
             0,
           );
-          const phones = (text.match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g) || []).length;
+          const phones = (text.match(/(?:\+?972[-\s.]?)?0?(?:[2-9]\d|5\d)[-\s.]?\d{3}[-\s.]?\d{4}/g) || []).length;
           const times = (text.match(/\d{1,2}:\d{2}\s*[-\u2013\u2014]\s*\d{1,2}:\d{2}/g) || []).length;
           return rowsCount * 2 + phones * 3 + times * 2 + headerHits * 8;
         };
@@ -872,9 +872,15 @@ function normalizeNameKey(value) {
 }
 
 function extractPhoneFromText(text) {
-  const matches = String(text || '').match(/(?:\+?972[-\s]?)?(?:0)?(?:[2-9]\d|5\d)\d{6,7}/g);
-  if (!matches || !matches.length) return null;
-  return normalizePhone(matches[0]);
+  const raw = String(text || '');
+  // First try: match with dashes/spaces between digit groups (common Israeli format: 052-7805152, 052-780-5152)
+  const withSeps = raw.match(/(?:\+?972[-\s.]?)?0?(?:[2-9]\d|5\d)[-\s.]?\d{3}[-\s.]?\d{4}/g);
+  if (withSeps && withSeps.length) return normalizePhone(withSeps[0]);
+  // Fallback: strip separators between adjacent digits and try consecutive match
+  const cleaned = raw.replace(/(\d)[-–—\s.]+(\d)/g, '$1$2');
+  const matches = cleaned.match(/(?:\+?972)?0?(?:[2-9]\d|5\d)\d{6,7}/g);
+  if (matches && matches.length) return normalizePhone(matches[0]);
+  return null;
 }
 
 function extractTimeRangeFromText(text) {
