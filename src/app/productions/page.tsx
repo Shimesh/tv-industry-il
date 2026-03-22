@@ -996,29 +996,30 @@ function ProductionsContent() {
     const userName = profile?.displayName || '';
 
     try {
+      const rawHtmlHasHerzliyaUrl = rawHtml ? /https?:\/\/[^\s"']*hsil\.acc\.co\.il[^\s"']*/i.test(rawHtml) : false;
+      const manualTextHasUrl = manualText ? /https?:\/\/[^\s]+/i.test(manualText) : false;
+
       // Raw HTML from clipboard (Herzliya page Ctrl+A Ctrl+C)
       if (rawHtml) {
-        setFetchProgress({ step: 'parsing', message: 'מעבד HTML של לוח הרצליה...' });
-        const parsed = parseHerzliyaHTML(rawHtml, userName);
-        if (parsed.productions.length > 0) {
-          setFetchProgress({ step: 'done', message: getStepMessage('done') });
-          await processSchedule(parsed);
+        if (url || isHerzliyaHTML(rawHtml) || rawHtmlHasHerzliyaUrl) {
+          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+          setLoading(false);
+          const sourceText = manualText || rawHtml || url || '';
+          await submitScheduleRequest(sourceText);
           return;
         }
       }
 
       // Manual text input (no URL detected)
       if (manualText && !url) {
-        setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
-
-        if (isHerzliyaHTML(manualText)) {
-          const htmlParsed = parseHerzliyaHTML(manualText, userName);
-          if (htmlParsed.productions.length > 0) {
-            setFetchProgress({ step: 'done', message: getStepMessage('done') });
-            await processSchedule(htmlParsed);
-            return;
-          }
+        if (isHerzliyaHTML(manualText) || manualTextHasUrl) {
+          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+          setLoading(false);
+          await submitScheduleRequest(manualText);
+          return;
         }
+
+        setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
         const parsed = parseManualText(manualText);
 
@@ -1030,15 +1031,6 @@ function ProductionsContent() {
               await processSchedule(htmlParsed);
               return;
             }
-          }
-
-          // Check if text contains a URL - submit as GitHub Action request
-          const urlInText = manualText.match(/https?:\/\/[^\s]+/);
-          if (urlInText) {
-            setFetchProgress(null);
-            setLoading(false);
-            await submitScheduleRequest(manualText);
-            return;
           }
 
           setStatusMessage('לא הצלחתי לחלץ הפקות מהטקסט. נסה להדביק את תוכן הדף המלא.');
@@ -1090,16 +1082,18 @@ function ProductionsContent() {
     setShowManualFallback(false);
     setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
-    const userName = profile?.displayName || '';
-
     try {
-      if (isHerzliyaHTML(html)) {
-        const herzliyaParsed = parseHerzliyaHTML(html, userName);
-        if (herzliyaParsed.productions.length > 0) {
-          setFetchProgress({ step: 'done', message: getStepMessage('done') });
-          await processSchedule(herzliyaParsed);
+      const hasHerzliyaUrl = /https?:\/\/[^\s"']*hsil\.acc\.co\.il[^\s"']*/i.test(html);
+      if (isHerzliyaHTML(html) || hasHerzliyaUrl) {
+        if (hasHerzliyaUrl) {
+          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+          setLoading(false);
+          await submitScheduleRequest(html);
           return;
         }
+        setStatusMessage('הדבקת HTML של הרציליה בלי לינק. כדי לשמור צוות מלא, הדבק את הודעת ה־WhatsApp עם הקישור.');
+        setFetchProgress({ step: 'error', message: 'חסר קישור של הרציליה' });
+        return;
       }
 
       const parsed = parseScheduleHTML(html, '');
@@ -1124,7 +1118,7 @@ function ProductionsContent() {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule, profile]);
+  }, [processSchedule, submitScheduleRequest]);
 
   // (Test button removed - REST API confirmed working)
 
