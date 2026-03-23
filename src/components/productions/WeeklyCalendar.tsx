@@ -174,10 +174,10 @@ export default function WeeklyCalendar({
       </div>
 
       {/* Personal view header */}
-      {viewMode === 'personal' && workerName && (
+      {viewMode === 'personal' && (currentUserName || workerName) && (
         <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
           <span className="text-sm text-amber-300">
-            לוח עבודה של <span className="font-bold">{workerName}</span>
+            לוח עבודה של <span className="font-bold">{currentUserName || workerName}</span>
           </span>
         </div>
       )}
