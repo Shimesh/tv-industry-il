@@ -8,6 +8,8 @@ import {
   query, orderBy, serverTimestamp, Timestamp
 } from 'firebase/firestore';
 import { parseProductionFile } from '@/lib/productionParser';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 import { contacts } from '@/data/contacts';
 import {
   Production, CrewAssignment, ParsedProduction,
@@ -18,7 +20,8 @@ import {
   Upload, Calendar, Clock, MapPin, Users, FileSpreadsheet,
   ChevronRight, ChevronLeft, Plus, Trash2, Edit3, X, Check,
   AlertCircle, Loader2, UserPlus, Phone, Building2,
-  RefreshCw, Filter, Eye, Search
+  RefreshCw, Filter, Eye, Search, Sparkles, CalendarPlus,
+  ExternalLink, Wand2
 } from 'lucide-react';
 
 /* ===== Helper: generate unique ID ===== */
@@ -95,9 +98,13 @@ const monthNames = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מא�
 /* ===== Main Component ===== */
 export default function ProductionsPage() {
   const { user, profile } = useAuth();
+  const { addNotification } = useNotifications();
   const [productions, setProductions] = useState<Production[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [useAI, setUseAI] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string>('');
+  const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [view, setView] = useState<'week' | 'month' | 'list'>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -127,6 +134,51 @@ export default function ProductionsPage() {
     return () => unsubscribe();
   }, []);
 
+  /* ===== AI-Powered File Parse ===== */
+  const parseWithAI = useCallback(async (file: File): Promise<ParsedProduction[]> => {
+    setAiStatus('קורא את הקובץ...');
+
+    // Read file content as text for AI
+    const reader = new FileReader();
+    const textContent = await new Promise<string>((resolve, reject) => {
+      reader.onload = (e) => {
+        const data = e.target?.result;
+        if (!data) { reject(new Error('Failed to read')); return; }
+        // Try to convert to text using xlsx
+        const XLSX = require('xlsx');
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        resolve(csv);
+      };
+      reader.onerror = () => reject(new Error('Read error'));
+      reader.readAsArrayBuffer(file);
+    });
+
+    setAiStatus('מנתח עם AI...');
+
+    const response = await fetch('/api/productions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: textContent, fileName: file.name }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'שגיאה בפרסור AI');
+
+    setAiStatus('');
+    return (result.productions || []).map((p: ParsedProduction) => ({
+      name: p.name || '',
+      date: p.date || '',
+      startTime: p.startTime || '',
+      endTime: p.endTime || '',
+      location: p.location || '',
+      studio: p.studio || '',
+      notes: p.notes || '',
+      crew: (p.crew || []).map(c => ({ ...c, confirmed: false })),
+    }));
+  }, []);
+
   /* ===== File Upload Handler ===== */
   const handleFileUpload = useCallback(async (file: File) => {
     if (!user) {
@@ -154,7 +206,13 @@ export default function ProductionsPage() {
     setUploadMessage(null);
 
     try {
-      const parsed = await parseProductionFile(file);
+      // Use AI parser or standard parser
+      let parsed: ParsedProduction[];
+      if (useAI) {
+        parsed = await parseWithAI(file);
+      } else {
+        parsed = await parseProductionFile(file);
+      }
 
       if (parsed.length === 0) {
         setUploadMessage({ type: 'error', text: 'לא נמצאו הפקות בקובץ. ודאו שהעמודות כוללות לפחות: שם הפקה, תאריך' });
@@ -185,9 +243,16 @@ export default function ProductionsPage() {
         savedCount++;
       }
 
+      // Send notification about upload
+      await addNotification({
+        type: 'file_upload',
+        title: 'קובץ הפקות נטען',
+        message: `${savedCount} הפקות נטענו מ-"${file.name}"${useAI ? ' (AI)' : ''}`,
+      });
+
       setUploadMessage({
         type: 'success',
-        text: `נטענו ${savedCount} הפקות בהצלחה מהקובץ "${file.name}"`,
+        text: `נטענו ${savedCount} הפקות בהצלחה מהקובץ "${file.name}"${useAI ? ' (פרסור AI)' : ''}`,
       });
     } catch (err) {
       setUploadMessage({
@@ -196,9 +261,47 @@ export default function ProductionsPage() {
       });
     } finally {
       setUploading(false);
+      setAiStatus('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [user]);
+  }, [user, useAI, parseWithAI, addNotification]);
+
+  /* ===== Google Calendar Sync ===== */
+  const syncToGoogleCalendar = useCallback(async (production: Production) => {
+    setGcalSyncing(production.id);
+    try {
+      const token = await getGoogleAuthToken();
+      if (!token) {
+        setUploadMessage({ type: 'error', text: 'לא ניתן להתחבר ל-Google Calendar' });
+        return;
+      }
+
+      const result = await createCalendarEvent(token, production);
+      if (result.success) {
+        // Save Google Calendar event ID to production
+        await updateDoc(doc(db, 'productions', production.id), {
+          googleCalendarEventId: result.eventId,
+          googleCalendarUrl: result.eventUrl,
+          updatedAt: Date.now(),
+        });
+        setUploadMessage({ type: 'success', text: `ההפקה "${production.name}" סונכרנה ל-Google Calendar` });
+
+        await addNotification({
+          type: 'general',
+          title: 'סנכרון Google Calendar',
+          message: `"${production.name}" נוספה ליומן Google`,
+          productionId: production.id,
+          productionName: production.name,
+        });
+      } else {
+        setUploadMessage({ type: 'error', text: result.error || 'שגיאה בסנכרון' });
+      }
+    } catch (err) {
+      setUploadMessage({ type: 'error', text: 'שגיאה בסנכרון ל-Google Calendar' });
+    } finally {
+      setGcalSyncing(null);
+    }
+  }, [addNotification]);
 
   /* ===== Drag & Drop ===== */
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -334,23 +437,47 @@ export default function ProductionsPage() {
         />
         <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right">
           {uploading ? (
-            <Loader2 className="w-10 h-10 animate-spin" style={{ color: 'var(--theme-accent)' }} />
+            <div className="text-center">
+              <Loader2 className="w-10 h-10 animate-spin mx-auto" style={{ color: 'var(--theme-accent)' }} />
+              {aiStatus && <p className="text-xs mt-2" style={{ color: 'var(--theme-accent)' }}>{aiStatus}</p>}
+            </div>
           ) : (
             <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ background: 'var(--theme-accent-glow)' }}>
-              <Upload className="w-7 h-7" style={{ color: 'var(--theme-accent)' }} />
+              {useAI ? <Wand2 className="w-7 h-7" style={{ color: 'var(--theme-accent)' }} /> : <Upload className="w-7 h-7" style={{ color: 'var(--theme-accent)' }} />}
             </div>
           )}
           <div className="flex-1">
             <p className="font-bold text-lg" style={{ color: 'var(--theme-text)' }}>
-              {uploading ? 'טוען הפקות...' : 'העלאת קובץ הפקות'}
+              {uploading ? (useAI ? 'מנתח עם AI...' : 'טוען הפקות...') : 'העלאת קובץ הפקות'}
             </p>
             <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-              גררו קובץ Excel או CSV לכאן, או לחצו לבחירת קובץ. המערכת תזהה אוטומטית את העמודות ותשבץ את הצוות
+              {useAI
+                ? 'מצב AI: גררו כל קובץ - ה-AI יזהה אוטומטית את המבנה גם בפורמטים לא סטנדרטיים'
+                : 'גררו קובץ Excel או CSV לכאן, או לחצו לבחירת קובץ. המערכת תזהה אוטומטית את העמודות ותשבץ את הצוות'
+              }
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5" style={{ color: 'var(--theme-text-secondary)' }} />
-            <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>.xlsx .xls .csv</span>
+          <div className="flex flex-col items-end gap-2" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" style={{ color: 'var(--theme-text-secondary)' }} />
+              <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>.xlsx .xls .csv</span>
+            </div>
+            {/* AI Toggle */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setUseAI(!useAI); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                useAI ? 'text-white shadow-lg shadow-purple-500/20' : ''
+              }`}
+              style={{
+                background: useAI
+                  ? 'linear-gradient(135deg, #7c3aed, #3b82f6)'
+                  : 'var(--theme-bg)',
+                color: useAI ? '#fff' : 'var(--theme-text-secondary)',
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              {useAI ? 'AI פעיל' : 'הפעל AI'}
+            </button>
           </div>
         </div>
       </div>
@@ -505,6 +632,8 @@ export default function ProductionsPage() {
             onClose={() => setSelectedProduction(null)}
             onUpdate={updateProduction}
             onDelete={deleteProduction}
+            onSyncGCal={syncToGoogleCalendar}
+            gcalSyncing={gcalSyncing}
           />
         )}
       </AnimatePresence>
@@ -820,11 +949,15 @@ function ProductionDetailModal({
   onClose,
   onUpdate,
   onDelete,
+  onSyncGCal,
+  gcalSyncing,
 }: {
   production: Production;
   onClose: () => void;
   onUpdate: (id: string, data: Partial<Production>) => void;
   onDelete: (id: string) => void;
+  onSyncGCal: (p: Production) => void;
+  gcalSyncing: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({ ...production });
@@ -932,6 +1065,32 @@ function ProductionDetailModal({
               </>
             ) : (
               <>
+                <button
+                  onClick={() => onSyncGCal(production)}
+                  disabled={gcalSyncing === production.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md"
+                  style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
+                  title="סנכרן ל-Google Calendar"
+                >
+                  {gcalSyncing === production.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CalendarPlus className="w-4 h-4" />
+                  )}
+                  <span className="hidden sm:inline">Google Calendar</span>
+                </button>
+                {(production as unknown as Record<string, string>).googleCalendarUrl && (
+                  <a
+                    href={(production as unknown as Record<string, string>).googleCalendarUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 rounded-lg hover:bg-[var(--theme-accent-glow)]"
+                    style={{ color: 'var(--theme-accent)' }}
+                    title="פתח ב-Google Calendar"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
                 <button onClick={() => setEditing(true)} className="p-2 rounded-lg hover:bg-[var(--theme-accent-glow)]" style={{ color: 'var(--theme-text-secondary)' }}>
                   <Edit3 className="w-4 h-4" />
                 </button>

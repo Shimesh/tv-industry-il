@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
+import NotificationBell from './NotificationBell';
 import {
   Tv, Calendar, Users, Newspaper, Building2, Menu, X,
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
@@ -95,6 +96,9 @@ export default function Navigation() {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            {/* Notifications */}
+            {user && <NotificationBell />}
+
             {/* Theme Toggle (desktop) */}
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button
