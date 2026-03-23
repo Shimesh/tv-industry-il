@@ -16,7 +16,7 @@ export interface Production {
 }
 
 export interface CrewAssignment {
-  contactId?: number;
+  contactId?: number | string;
   name: string;
   role: string;
   department: string;
