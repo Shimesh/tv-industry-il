@@ -17,7 +17,6 @@ import {
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
-  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
   { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users },

@@ -43,7 +43,9 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db, ensureOnline } from '@/lib/firebase';
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2 } from 'lucide-react';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 
 const PRODUCTIONS_ROOT = 'productions/global/weeks';
 const USER_SCHEDULES_ROOT = 'userSchedules';
@@ -92,7 +94,11 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 function ProductionsContent() {
   const { user, profile } = useAuth();
   const { ensureFromCrew } = useContacts();
+  const { addNotification } = useNotifications();
   const [loading, setLoading] = useState(false);
+  const [useAI, setUseAI] = useState(false);
+  const [aiStatus, setAiStatus] = useState('');
+  const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
@@ -973,6 +979,113 @@ function ProductionsContent() {
     checkPending();
   }, [user, handleReloadLatest]);
 
+  // ===== AI-Powered Parse =====
+  const handleAIParse = useCallback(async (text: string): Promise<ParsedSchedule | null> => {
+    setAiStatus('מנתח עם AI...');
+    try {
+      const response = await fetch('/api/productions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text, fileName: 'manual-input' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'שגיאה בפרסור AI');
+
+      // Convert AI result to ParsedSchedule format
+      const productions: Production[] = (result.productions || []).map((p: {
+        name?: string; date?: string; startTime?: string; endTime?: string;
+        location?: string; studio?: string; notes?: string;
+        crew?: { name: string; role: string; department: string }[];
+      }) => ({
+        id: generateProductionId(p.name || '', p.date || '', p.studio || p.location || ''),
+        name: p.name || '',
+        date: p.date || '',
+        day: p.date ? getHebrewDay(p.date) : '',
+        startTime: p.startTime || '',
+        endTime: p.endTime || '',
+        studio: p.studio || p.location || '',
+        status: 'scheduled' as const,
+        crew: (p.crew || []).map(c => ({
+          name: c.name,
+          role: c.role || '',
+          roleDetail: '',
+          phone: '',
+        })),
+        versions: [],
+      }));
+
+      if (productions.length === 0) return null;
+
+      // Build ParsedSchedule
+      const dates = productions.map(p => p.date).filter(Boolean).sort();
+      const parsed: ParsedSchedule = {
+        weekStart: dates[0] || '',
+        weekEnd: dates[dates.length - 1] || '',
+        workerName: '',
+        productions,
+      };
+
+      setStatusMessage(`AI זיהה ${productions.length} הפקות`);
+      await addNotification({
+        type: 'file_upload',
+        title: 'פרסור AI הושלם',
+        message: `${productions.length} הפקות זוהו בהצלחה`,
+      });
+
+      return parsed;
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'שגיאה בפרסור AI');
+      return null;
+    } finally {
+      setAiStatus('');
+    }
+  }, [addNotification]);
+
+  // ===== Google Calendar Sync =====
+  const syncToGoogleCalendar = useCallback(async (prod: Production) => {
+    setGcalSyncing(prod.id);
+    try {
+      const token = await getGoogleAuthToken();
+      if (!token) {
+        setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
+        return;
+      }
+
+      const result = await createCalendarEvent(token, {
+        id: prod.id,
+        name: prod.name,
+        date: prod.date,
+        startTime: prod.startTime,
+        endTime: prod.endTime,
+        location: prod.studio || '',
+        studio: prod.studio || '',
+        notes: '',
+        crew: (prod.crew || []).map(c => ({
+          name: c.name,
+          role: c.role || c.roleDetail || '',
+          department: '',
+        })),
+      });
+
+      if (result.success) {
+        setStatusMessage(`"${prod.name}" סונכרנה ל-Google Calendar`);
+        await addNotification({
+          type: 'general',
+          title: 'Google Calendar',
+          message: `"${prod.name}" נוספה ליומן`,
+          productionId: prod.id,
+          productionName: prod.name,
+        });
+      } else {
+        setStatusMessage(result.error || 'שגיאה בסנכרון');
+      }
+    } catch {
+      setStatusMessage('שגיאה בסנכרון ל-Google Calendar');
+    } finally {
+      setGcalSyncing(null);
+    }
+  }, [addNotification]);
+
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
 
@@ -1008,7 +1121,19 @@ function ProductionsContent() {
           return;
         }
 
-        setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+        setFetchProgress({ step: 'parsing', message: useAI ? 'מנתח עם AI...' : getStepMessage('parsing') });
+
+        // Try AI parsing if enabled
+        if (useAI) {
+          const aiParsed = await handleAIParse(manualText);
+          if (aiParsed && aiParsed.productions.length > 0) {
+            setFetchProgress({ step: 'done', message: `AI זיהה ${aiParsed.productions.length} הפקות` });
+            await processSchedule(aiParsed);
+            return;
+          }
+          // Fall through to standard parser if AI fails
+          setFetchProgress({ step: 'parsing', message: 'AI לא הצליח, מנסה פרסור רגיל...' });
+        }
 
         const parsed = parseManualText(manualText);
 
@@ -1050,7 +1175,7 @@ function ProductionsContent() {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule, profile, submitScheduleRequest]);
+  }, [processSchedule, profile, submitScheduleRequest, useAI, handleAIParse]);
 
   const handleActionRequest = useCallback(async (
     url: string,
@@ -1147,6 +1272,43 @@ function ProductionsContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* AI Toggle */}
+          <button
+            onClick={() => setUseAI(!useAI)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              useAI ? 'text-white shadow-lg shadow-purple-500/20' : ''
+            }`}
+            style={{
+              background: useAI ? 'linear-gradient(135deg, #7c3aed, #3b82f6)' : 'var(--theme-bg-secondary)',
+              color: useAI ? '#fff' : 'var(--theme-text-secondary)',
+            }}
+            title={useAI ? 'AI פעיל - לחץ לכיבוי' : 'הפעל פרסור AI חכם'}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {useAI ? 'AI פעיל' : 'AI'}
+          </button>
+
+          {/* Google Calendar Sync */}
+          {productions.length > 0 && (
+            <button
+              onClick={async () => {
+                const today = new Date().toISOString().split('T')[0];
+                const todayProds = productions.filter(p => p.date >= today);
+                if (todayProds.length === 0) { setStatusMessage('אין הפקות עתידיות לסנכרון'); return; }
+                for (const prod of todayProds.slice(0, 5)) {
+                  await syncToGoogleCalendar(prod);
+                }
+              }}
+              disabled={gcalSyncing !== null}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
+              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+              title="סנכרן הפקות ל-Google Calendar"
+            >
+              {gcalSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
+              GCal
+            </button>
+          )}
+
           {productions.length > 0 && (
             <button
               onClick={() => {
@@ -1200,6 +1362,14 @@ function ProductionsContent() {
           fetchProgress={fetchProgress}
         />
       </div>
+
+      {/* AI Status */}
+      {aiStatus && (
+        <div className="mb-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(59,130,246,0.1))', border: '1px solid rgba(124,58,237,0.2)' }}>
+          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+          <span className="text-sm text-purple-300">{aiStatus}</span>
+        </div>
+      )}
 
       {/* GitHub Action request status - waiting UI */}
       {requestStatus !== 'idle' && (
