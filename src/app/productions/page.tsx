@@ -47,7 +47,6 @@ import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTria
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 
-const GLOBAL_PRODUCTIONS_ROOT = 'productions/global/weeks'; // legacy shared path
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 
@@ -677,11 +676,12 @@ function ProductionsContent() {
     }
   }, [user, profile, firestoreRestWrite, firestoreRestRead, loadExistingWeek]);
 
-  // Listen to a week's productions for real-time updates
+  // Listen to a week's productions for real-time updates (per-user path)
   const listenToWeek = useCallback((weekId: string) => {
+    if (!user) return;
     unsubWeekRef.current?.();
 
-    const weekRef = doc(db, 'productions', 'global', 'weeks', weekId);
+    const weekRef = doc(db, 'productions', user.uid, 'weeks', weekId);
     unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
       if (!snap.exists()) return;
 
@@ -697,7 +697,7 @@ function ProductionsContent() {
         }
       }
     });
-  }, [loadExistingWeek]);
+  }, [user, loadExistingWeek]);
 
   const getWeekStartDate = (date: Date) => {
     const d = new Date(date);
@@ -1414,7 +1414,7 @@ function ProductionsContent() {
           weekStart={renderedRange.start}
           weekEnd={renderedRange.end}
           workerName={workerName}
-          currentUserName={profile?.displayName || ''}
+          currentUserName={profile?.displayName || user?.displayName || ''}
           onNavigate={handleCalendarNavigate}
           onViewChange={handleViewChange}
           calendarView={calendarView}
