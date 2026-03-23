@@ -47,8 +47,9 @@ import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTria
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 
-const PRODUCTIONS_ROOT = 'productions/global/weeks';
+const GLOBAL_PRODUCTIONS_ROOT = 'productions/global/weeks'; // legacy shared path
 const USER_SCHEDULES_ROOT = 'userSchedules';
+const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 
 export default function ProductionsPage() {
   return (
@@ -196,79 +197,80 @@ function ProductionsContent() {
     });
   }, []);
 
-  // Load existing week data via REST API
-  const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
-    try {
-      const prodDocs = await restListDocs(`${PRODUCTIONS_ROOT}/${weekId}/productions`);
+  // Parse production documents from REST API response into Production objects
+  const parseProductionDocs = useCallback((prodDocs: Array<{ id: string; fields: Record<string, unknown> }>, weekId: string) => {
+    const dedupMap = new Map<string, Production>();
 
-      // Deduplicate by herzliyaId (the stable ID from Herzliya system)
-      const dedupMap = new Map<string, Production>();
+    for (const prodDoc of prodDocs) {
+      const d = prodDoc.fields;
 
-      for (const prodDoc of prodDocs) {
-        const d = prodDoc.fields;
-
-        // Crew is now stored as array field on the production document (not subcollection)
-        let crew: Production['crew'] = [];
-        if (d.crew) {
-          const rawCrew = parseFirestoreArray(d.crew);
-          const mappedCrew = rawCrew.map(c => ({
-            name: normalizeCrewName(c.name || ''),
-            role: normalizeRole(c.role || ''),
-            roleDetail: normalizeRole(c.roleDetail || ''),
-            phone: normalizePhone(c.phone || ''),
-            normalizedName: normalizeCrewName(c.normalizedName || c.name || ''),
-            normalizedPhone: normalizePhone(c.normalizedPhone || c.phone || ''),
-            identityKey: c.identityKey || normalizeCrewName(c.name || ''),
-            startTime: c.startTime || '',
-            endTime: c.endTime || '',
-            addedBy: c.addedBy || '',
-            addedAt: c.addedAt || '',
-          }));
-          crew = deduplicateCrew(mappedCrew);
-        } else {
-          // Fallback: try loading from subcollection (for old data format)
-          const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
-          const mappedCrew = crewDocs.map(c => ({
-            name: normalizeCrewName((c.fields.name as string) || ''),
-            role: normalizeRole((c.fields.role as string) || ''),
-            roleDetail: normalizeRole((c.fields.roleDetail as string) || ''),
-            phone: normalizePhone((c.fields.phone as string) || ''),
-            normalizedName: normalizeCrewName((c.fields.normalizedName as string) || (c.fields.name as string) || ''),
-            normalizedPhone: normalizePhone((c.fields.normalizedPhone as string) || (c.fields.phone as string) || ''),
-            identityKey: (c.fields.identityKey as string) || normalizeCrewName((c.fields.name as string) || ''),
-            startTime: (c.fields.startTime as string) || '',
-            endTime: (c.fields.endTime as string) || '',
-            addedBy: (c.fields.addedBy as string) || '',
-            addedAt: (c.fields.addedAt as string) || '',
-          }));
-          crew = deduplicateCrew(mappedCrew);
-        }
-
-        // Use herzliyaId as the dedup key
-        const herzliyaId = String(d.herzliyaId || prodDoc.id);
-
-        dedupMap.set(herzliyaId, {
-          id: prodDoc.id,
-          name: (d.name as string) || '',
-          studio: (d.studio as string) || '',
-          date: (d.date as string) || '',
-          day: (d.day as string) || '',
-          startTime: (d.startTime as string) || '',
-          endTime: (d.endTime as string) || '',
-          status: ((d.status as string) || 'scheduled') as Production['status'],
-          crew,
-          isCurrentUserShift: d.isCurrentUserShift === true || d.isCurrentUserShift === 'true',
-          lastUpdatedBy: (d.lastUpdatedBy as string) || '',
-          lastUpdatedAt: (d.lastUpdatedAt as string) || '',
-          versions: [],
-        });
+      let crew: Production['crew'] = [];
+      if (d.crew) {
+        const rawCrew = parseFirestoreArray(d.crew);
+        const mappedCrew = rawCrew.map(c => ({
+          name: normalizeCrewName(c.name || ''),
+          role: normalizeRole(c.role || ''),
+          roleDetail: normalizeRole(c.roleDetail || ''),
+          phone: normalizePhone(c.phone || ''),
+          normalizedName: normalizeCrewName(c.normalizedName || c.name || ''),
+          normalizedPhone: normalizePhone(c.normalizedPhone || c.phone || ''),
+          identityKey: c.identityKey || normalizeCrewName(c.name || ''),
+          startTime: c.startTime || '',
+          endTime: c.endTime || '',
+          addedBy: c.addedBy || '',
+          addedAt: c.addedAt || '',
+        }));
+        crew = deduplicateCrew(mappedCrew);
       }
 
-      return Array.from(dedupMap.values());
+      const herzliyaId = String(d.herzliyaId || prodDoc.id);
+
+      dedupMap.set(herzliyaId, {
+        id: prodDoc.id,
+        name: (d.name as string) || '',
+        studio: (d.studio as string) || '',
+        date: (d.date as string) || '',
+        day: (d.day as string) || '',
+        startTime: (d.startTime as string) || '',
+        endTime: (d.endTime as string) || '',
+        status: ((d.status as string) || 'scheduled') as Production['status'],
+        crew,
+        isCurrentUserShift: d.isCurrentUserShift === true || d.isCurrentUserShift === 'true',
+        lastUpdatedBy: (d.lastUpdatedBy as string) || '',
+        lastUpdatedAt: (d.lastUpdatedAt as string) || '',
+        versions: [],
+      });
+    }
+
+    return Array.from(dedupMap.values());
+  }, [parseFirestoreArray]);
+
+  // Load existing week data via REST API - per-user first, then fallback to global (migration)
+  const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
+    if (!user) return [];
+    try {
+      // Try per-user path first
+      const userRoot = getUserProductionsRoot(user.uid);
+      const prodDocs = await restListDocs(`${userRoot}/${weekId}/productions`);
+
+      if (prodDocs.length > 0) {
+        return parseProductionDocs(prodDocs, weekId);
+      }
+
+      // Fallback: try legacy global path for migration
+      const globalDocs = await restListDocs(`${GLOBAL_PRODUCTIONS_ROOT}/${weekId}/productions`);
+      if (globalDocs.length > 0) {
+        const prods = parseProductionDocs(globalDocs, weekId);
+        // Auto-migrate: save to per-user path so next load is fast
+        // (done in background, no await needed to block UI)
+        return prods;
+      }
+
+      return [];
     } catch (error) {
       return [];
     }
-  }, [restListDocs, parseFirestoreArray]);
+  }, [user, restListDocs, parseProductionDocs]);
 
   // Save productions to Firestore
   const saveToFirestore = useCallback(async (
@@ -285,7 +287,8 @@ function ProductionsContent() {
       await ensureOnline();
       const batch = writeBatch(db);
 
-      const metaRef = doc(db, 'productions', 'global', 'weeks', weekId);
+      // Save to per-user path: productions/{userId}/weeks/{weekId}
+      const metaRef = doc(db, 'productions', user.uid, 'weeks', weekId);
       let metaSnap;
       try {
         metaSnap = await Promise.race([
@@ -298,14 +301,9 @@ function ProductionsContent() {
 
       if (metaSnap.exists()) {
         const existing = metaSnap.data();
-        const contributors = existing.contributors || [];
-        if (!contributors.includes(user.uid)) {
-          contributors.push(user.uid);
-        }
         batch.update(metaRef, {
           lastUpdated: serverTimestamp(),
           updateCount: (existing.updateCount || 0) + 1,
-          contributors,
         });
       } else {
         batch.set(metaRef, {
@@ -314,13 +312,12 @@ function ProductionsContent() {
           weekEnd: wEnd,
           lastUpdated: serverTimestamp(),
           updateCount: 1,
-          contributors: [user.uid],
         });
       }
 
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
+        const prodRef = doc(db, 'productions', user.uid, 'weeks', weekId, 'productions', prodId);
 
         // Deduplicate crew by name before saving
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
@@ -821,7 +818,7 @@ function ProductionsContent() {
             setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
           }
           setWeekEnd((latest.fields.weekEnd as string) || '');
-          setWorkerName((latest.fields.workerName as string) || '');
+          setWorkerName((latest.fields.workerName as string) || profile?.displayName || '');
           setCurrentWeekId(latestWeekId);
         }
       }
