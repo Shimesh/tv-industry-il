@@ -117,6 +117,11 @@ service cloud.firestore {
     // ── Calls (WebRTC signaling) ──────────────────────────────────
     match /calls/{callId} {
       allow read, write: if isAuth();
+
+      // ICE candidates subcollection
+      match /candidates/{candidateId} {
+        allow read, write: if isAuth();
+      }
     }
   }
 }

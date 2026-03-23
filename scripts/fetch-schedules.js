@@ -15,7 +15,6 @@ initializeApp({
 });
 
 const db = getFirestore();
-const GLOBAL_PRODUCTIONS_ROOT = 'productions/global/weeks'; // legacy shared path
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid) => `productions/${uid}/weeks`;
 
