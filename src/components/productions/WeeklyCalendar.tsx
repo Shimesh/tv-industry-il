@@ -174,13 +174,18 @@ export default function WeeklyCalendar({
       </div>
 
       {/* Personal view header */}
-      {viewMode === 'personal' && (currentUserName || workerName) && (
-        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-          <span className="text-sm text-amber-300">
-            לוח עבודה של <span className="font-bold">{currentUserName || workerName}</span>
-          </span>
-        </div>
-      )}
+      {viewMode === 'personal' && (() => {
+        const displayName = currentUserName || workerName || '';
+        // Don't show "לוח עבודה של לוח עבודה" - filter out bad values
+        const isValidName = displayName && displayName !== 'לוח עבודה' && displayName !== 'לוח הפקות';
+        return isValidName ? (
+          <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <span className="text-sm text-amber-300">
+              לוח עבודה של <span className="font-bold">{displayName}</span>
+            </span>
+          </div>
+        ) : null;
+      })()}
 
       {/* ═══════════ WEEK VIEW ═══════════ */}
       {calendarView === 'week' && (
