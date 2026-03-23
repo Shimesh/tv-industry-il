@@ -29,6 +29,13 @@ export interface UserProfile {
   isOnline: boolean;
   onboardingComplete: boolean;
   theme: string;
+  openToWork?: boolean;
+  city?: string;
+  yearsOfExperience?: number;
+  credits?: string[];
+  gear?: string[];
+  preferredRoles?: string[];
+  preferredRegions?: string[];
 }
 
 interface AuthContextType {

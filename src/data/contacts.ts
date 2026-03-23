@@ -5,9 +5,14 @@ export interface Contact {
   email?: string;
   department: string;
   role: string;
-  availability?: 'available' | 'unavailable';
+  availability?: 'available' | 'unavailable' | 'maybe';
   phone?: string;
   skills?: string[];
+  openToWork?: boolean;
+  city?: string;
+  yearsOfExperience?: number;
+  credits?: string[];
+  gear?: string[];
 }
 
 export const departments = [
@@ -35,20 +40,20 @@ export const roles = [
 ];
 
 export const contacts: Contact[] = [
-  { id: 1, firstName: 'אלכס', lastName: 'סברנסקי', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-6766899', skills: ['aerial-photography', 'outdoor-events'] },
-  { id: 2, firstName: 'ירון', lastName: 'זילבר', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-8518083' },
-  { id: 3, firstName: 'עדי', lastName: 'הופמן', department: 'טכני', role: 'כתוביות', availability: 'available', phone: '052-5564313' },
-  { id: 4, firstName: 'שגיב', lastName: 'מילר', department: 'הפקה', role: 'ניהול במה', availability: 'available', phone: '054-443-1575' },
-  { id: 5, firstName: 'אודי', lastName: 'לזר', department: 'סאונד', role: 'פיקוח קול', availability: 'available', phone: '050-8854338' },
+  { id: 1, firstName: 'אלכס', lastName: 'סברנסקי', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-6766899', skills: ['aerial-photography', 'outdoor-events'], openToWork: true, city: 'תל אביב', yearsOfExperience: 8, credits: ['MasterChef ישראל', 'הישרדות VIP', 'האח הגדול'], gear: ['DJI Mavic 3 Pro', 'DJI Inspire 3'] },
+  { id: 2, firstName: 'ירון', lastName: 'זילבר', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-8518083', openToWork: true, city: 'רמת גן', yearsOfExperience: 12, credits: ['חדשות 12', 'כוכב נולד'] },
+  { id: 3, firstName: 'עדי', lastName: 'הופמן', department: 'טכני', role: 'כתוביות', availability: 'available', phone: '052-5564313', city: 'תל אביב', yearsOfExperience: 5 },
+  { id: 4, firstName: 'שגיב', lastName: 'מילר', department: 'הפקה', role: 'ניהול במה', availability: 'available', phone: '054-443-1575', openToWork: true, city: 'הרצליה', yearsOfExperience: 10, credits: ['יהיה טוב', 'הכוכב הבא'] },
+  { id: 5, firstName: 'אודי', lastName: 'לזר', department: 'סאונד', role: 'פיקוח קול', availability: 'available', phone: '050-8854338', city: 'חיפה', yearsOfExperience: 15 },
   { id: 6, firstName: 'גילי', lastName: 'רחום', department: 'טכני', role: 'VTR', availability: 'available', phone: '050-7774207' },
   { id: 7, firstName: 'נאור', lastName: 'ברנס', department: 'טכני', role: 'תפאורן', availability: 'available', phone: '052-240-3984' },
   { id: 8, firstName: 'ליאור', lastName: 'נוימרק', department: 'טכני', role: 'ניתוב', availability: 'available', phone: '054-7111130' },
   { id: 9, firstName: 'שי', lastName: "רטוביץ'", department: 'טכני', role: 'CCU', availability: 'available', phone: '050-5506661' },
-  { id: 10, firstName: 'אבי', lastName: 'אורן', department: 'צילום', role: 'צלם', availability: 'available', phone: '052-8600417' },
+  { id: 10, firstName: 'אבי', lastName: 'אורן', department: 'צילום', role: 'צלם', availability: 'available', phone: '052-8600417', openToWork: true, city: 'ירושלים', yearsOfExperience: 20, credits: ['חדשות הבוקר', 'משדר למשפחות אנשי הקבע'], gear: ['Sony PXW-FX9', 'Canon C300 III'] },
   { id: 11, firstName: 'אורטל', lastName: 'ציפאני', department: 'טכני', role: 'טלפרומפטר', availability: 'available', phone: '054-7339521' },
   { id: 12, firstName: 'דרור', lastName: 'למפל', department: 'סאונד', role: 'קול', availability: 'available', phone: '050-9987796' },
   { id: 13, firstName: 'אור', lastName: 'אורן', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-7520099' },
-  { id: 14, firstName: 'מיכאל', lastName: 'שלם', department: 'צילום', role: 'צלם רחף', availability: 'unavailable' },
+  { id: 14, firstName: 'מיכאל', lastName: 'שלם', department: 'צילום', role: 'צלם רחף', availability: 'maybe', city: 'תל אביב', yearsOfExperience: 7 },
   { id: 15, firstName: 'מרט', lastName: 'פלדמן', department: 'תאורה', role: 'תאורן', availability: 'available', phone: '052-353-0315' },
   { id: 16, firstName: 'יוסי', lastName: 'אברהם', department: 'צילום', role: 'צלם', phone: '054-3456789' },
   { id: 17, firstName: 'דורין', lastName: 'סיביליה', department: 'טכני', role: 'טלפרומפטר', phone: '052-3725106' },
@@ -88,7 +93,7 @@ export const contacts: Contact[] = [
   { id: 51, firstName: 'יזהר', lastName: 'טרמו', department: 'צילום', role: 'צלם', phone: '052-2779771' },
   { id: 52, firstName: 'בני', lastName: 'ונטורה', department: 'צילום', role: 'צלם', phone: '052-2741300' },
   { id: 53, firstName: 'נוויל', lastName: 'האריס', department: 'צילום', role: 'צלם', phone: '054-6510051' },
-  { id: 54, firstName: 'ירון', lastName: 'אורבך', department: 'צילום', role: 'צלם', availability: 'available', phone: '054-7603436' },
+  { id: 54, firstName: 'ירון', lastName: 'אורבך', department: 'צילום', role: 'צלם', availability: 'available', phone: '054-7603436', openToWork: true, city: 'הרצליה', yearsOfExperience: 18, credits: ['חדשות 12', 'יהיה טוב', 'האח הגדול'], gear: ['Sony A7S III', 'Blackmagic URSA Mini'] },
   { id: 55, firstName: 'אלון', lastName: 'ליטבק', department: 'הפקה', role: 'ניתוב', phone: '054-4889888' },
   { id: 56, firstName: 'ניסו', lastName: 'עזרן', department: 'סאונד', role: 'פיקוח קול', phone: '052-6070655' },
   { id: 57, firstName: 'שחר', lastName: 'סיליק', department: 'תאורה', role: 'תאורן', phone: '052-8432231' },

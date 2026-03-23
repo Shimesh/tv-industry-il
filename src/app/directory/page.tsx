@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
 import { useContacts } from '@/hooks/useContacts';
-import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall } from 'lucide-react';
+import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 
 const deptColors: Record<string, string> = {
@@ -82,6 +82,7 @@ export default function DirectoryPage() {
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [openToWorkFilter, setOpenToWorkFilter] = useState(false);
 
   // Check if a contact matches the logged-in user
   const isCurrentUser = (contact: Contact): boolean => {
@@ -103,10 +104,12 @@ export default function DirectoryPage() {
       const matchDept = !deptFilter || c.department === deptFilter;
       const matchAvail = !availFilter ||
         (availFilter === 'available' && c.availability === 'available') ||
-        (availFilter === 'unavailable' && c.availability === 'unavailable');
-      return matchSearch && matchDept && matchAvail;
+        (availFilter === 'unavailable' && c.availability === 'unavailable') ||
+        (availFilter === 'maybe' && c.availability === 'maybe');
+      const matchOpenToWork = !openToWorkFilter || c.openToWork === true;
+      return matchSearch && matchDept && matchAvail && matchOpenToWork;
     });
-  }, [search, deptFilter, availFilter, contactsList]);
+  }, [search, deptFilter, availFilter, openToWorkFilter, contactsList]);
 
   // Sort: current user first
   const sortedFiltered = useMemo(() => {
@@ -120,6 +123,8 @@ export default function DirectoryPage() {
   }, [filtered, profile]);
 
   const availableCount = contactsList.filter(c => c.availability === 'available').length;
+  const maybeCount = contactsList.filter(c => c.availability === 'maybe').length;
+  const openToWorkCount = contactsList.filter(c => c.openToWork === true).length;
 
   const formatWhatsApp = (phone?: string) => {
     if (!phone) return '';
@@ -182,6 +187,15 @@ export default function DirectoryPage() {
             <span className="flex items-center gap-1.5 text-green-400">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               {availableCount} פנויים
+            </span>
+            <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.3 }}>|</span>
+            <span className="flex items-center gap-1.5 text-yellow-400">
+              <span className="w-2 h-2 rounded-full bg-yellow-400" />
+              {maybeCount} אולי
+            </span>
+            <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.3 }}>|</span>
+            <span className="flex items-center gap-1.5 text-green-400">
+              {openToWorkCount} מחפשים עבודה
             </span>
           </motion.div>
         </motion.div>
@@ -257,8 +271,23 @@ export default function DirectoryPage() {
             >
               <option value="">כל הסטטוסים</option>
               <option value="available">פנויים</option>
+              <option value="maybe">אולי פנוי</option>
               <option value="unavailable">לא פנויים</option>
             </select>
+
+            {/* Open to Work Toggle */}
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setOpenToWorkFilter(!openToWorkFilter)}
+              className={`px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
+                openToWorkFilter
+                  ? 'border-green-500/50 bg-green-500/15 text-green-300 shadow-sm shadow-green-500/10'
+                  : 'hover:border-green-500/30'
+              }`}
+              style={!openToWorkFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
+            >
+              מחפשים עבודה בלבד
+            </motion.button>
 
             {/* View Toggle */}
             <div className="flex rounded-xl border overflow-hidden" style={{ borderColor: 'var(--theme-border)' }}>
@@ -292,12 +321,12 @@ export default function DirectoryPage() {
             >
               {filtered.length} תוצאות
             </motion.span>
-            {(search || deptFilter || availFilter) && (
+            {(search || deptFilter || availFilter || openToWorkFilter) && (
               <motion.button
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
-                onClick={() => { setSearch(''); setDeptFilter(''); setAvailFilter(''); }}
+                onClick={() => { setSearch(''); setDeptFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
                 className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> נקה פילטרים
@@ -370,9 +399,14 @@ export default function DirectoryPage() {
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold truncate transition-colors group-hover:text-purple-300" style={{ color: 'var(--theme-text)' }}>
-                            {contact.firstName} {contact.lastName}
-                          </h3>
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="font-bold truncate transition-colors group-hover:text-purple-300" style={{ color: 'var(--theme-text)' }}>
+                              {contact.firstName} {contact.lastName}
+                            </h3>
+                            {contact.openToWork && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">מחפש עבודה</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             <span className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
                               {contact.role}
@@ -387,13 +421,15 @@ export default function DirectoryPage() {
                         <div className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full ${
                             contact.availability === 'available' ? 'bg-green-400 shadow-sm shadow-green-400/50' :
-                            contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'
+                            contact.availability === 'unavailable' ? 'bg-red-400' :
+                            contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'
                           }`} />
                           <span className={`text-xs ${
                             contact.availability === 'available' ? 'text-green-400' :
-                            contact.availability === 'unavailable' ? 'text-red-400' : 'text-gray-500'
+                            contact.availability === 'unavailable' ? 'text-red-400' :
+                            contact.availability === 'maybe' ? 'text-yellow-400' : 'text-gray-500'
                           }`}>
-                            {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : 'לא צוין'}
+                            {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : contact.availability === 'maybe' ? 'אולי פנוי' : 'לא צוין'}
                           </span>
                         </div>
                         {contact.phone && (
@@ -440,17 +476,20 @@ export default function DirectoryPage() {
                       <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
                         {contact.firstName[0]}{contact.lastName[0]}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
                         <span className="font-medium text-sm" style={{ color: isMeRow ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
                           {contact.firstName} {contact.lastName}
                           {isMeRow && <span className="text-[10px] mr-1 font-bold">(אני)</span>}
                         </span>
+                        {contact.openToWork && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">מחפש עבודה</span>
+                        )}
                       </div>
                       <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
                         {contact.department}
                       </span>
-                      <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'}`} />
+                      <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'}`} />
                       {contact.phone && (
                         <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
                           className="text-xs hover:text-green-400 hidden sm:block transition-colors" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">{contact.phone}</a>
@@ -625,13 +664,15 @@ export default function DirectoryPage() {
                   >
                     <span className={`w-2.5 h-2.5 rounded-full ${
                       selectedContact.availability === 'available' ? 'bg-green-400 shadow-sm shadow-green-400/50' :
-                      selectedContact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'
+                      selectedContact.availability === 'unavailable' ? 'bg-red-400' :
+                      selectedContact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'
                     }`} />
                     <span className={`text-sm font-medium ${
                       selectedContact.availability === 'available' ? 'text-green-400' :
-                      selectedContact.availability === 'unavailable' ? 'text-red-400' : 'text-gray-400'
+                      selectedContact.availability === 'unavailable' ? 'text-red-400' :
+                      selectedContact.availability === 'maybe' ? 'text-yellow-400' : 'text-gray-400'
                     }`}>
-                      {selectedContact.availability === 'available' ? 'פנוי לעבודה' : selectedContact.availability === 'unavailable' ? 'לא פנוי' : 'סטטוס לא צוין'}
+                      {selectedContact.availability === 'available' ? 'פנוי לעבודה' : selectedContact.availability === 'unavailable' ? 'לא פנוי' : selectedContact.availability === 'maybe' ? 'אולי פנוי' : 'סטטוס לא צוין'}
                     </span>
                   </motion.div>
                 </div>
@@ -657,6 +698,81 @@ export default function DirectoryPage() {
                           className="text-xs px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20"
                         >
                           {skill}
+                        </motion.span>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* City & Experience */}
+                {(selectedContact.city || selectedContact.yearsOfExperience) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.37, duration: 0.3 }}
+                    className="mb-6 flex flex-wrap gap-3"
+                  >
+                    {selectedContact.city && (
+                      <span className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                        <MapPin className="w-3 h-3" /> {selectedContact.city}
+                      </span>
+                    )}
+                    {selectedContact.yearsOfExperience && (
+                      <span className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                        <Clock className="w-3 h-3" /> {selectedContact.yearsOfExperience} שנות ניסיון
+                      </span>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Credits / Productions */}
+                {selectedContact.credits && selectedContact.credits.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.39, duration: 0.3 }}
+                    className="mb-6"
+                  >
+                    <h4 className="text-xs font-medium mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
+                      <Film className="w-3 h-3" /> קרדיטים / הפקות
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedContact.credits.map((credit, i) => (
+                        <motion.span
+                          key={credit}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.39 + i * 0.05, duration: 0.2 }}
+                          className="text-xs px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20"
+                        >
+                          {credit}
+                        </motion.span>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Gear / Equipment */}
+                {selectedContact.gear && selectedContact.gear.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.41, duration: 0.3 }}
+                    className="mb-6"
+                  >
+                    <h4 className="text-xs font-medium mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
+                      <Wrench className="w-3 h-3" /> ציוד
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedContact.gear.map((item, i) => (
+                        <motion.span
+                          key={item}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.41 + i * 0.05, duration: 0.2 }}
+                          className="text-xs px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-300 border border-orange-500/20"
+                        >
+                          {item}
                         </motion.span>
                       ))}
                     </div>
