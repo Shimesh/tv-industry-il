@@ -245,25 +245,16 @@ function ProductionsContent() {
     return Array.from(dedupMap.values());
   }, [parseFirestoreArray]);
 
-  // Load existing week data via REST API - per-user first, then fallback to global (migration)
+  // Load existing week data via REST API - per-user only (no global fallback)
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
     if (!user) return [];
     try {
-      // Try per-user path first
+      // Load from per-user path only
       const userRoot = getUserProductionsRoot(user.uid);
       const prodDocs = await restListDocs(`${userRoot}/${weekId}/productions`);
 
       if (prodDocs.length > 0) {
         return parseProductionDocs(prodDocs, weekId);
-      }
-
-      // Fallback: try legacy global path for migration
-      const globalDocs = await restListDocs(`${GLOBAL_PRODUCTIONS_ROOT}/${weekId}/productions`);
-      if (globalDocs.length > 0) {
-        const prods = parseProductionDocs(globalDocs, weekId);
-        // Auto-migrate: save to per-user path so next load is fast
-        // (done in background, no await needed to block UI)
-        return prods;
       }
 
       return [];
@@ -443,7 +434,7 @@ function ProductionsContent() {
     }
 
     const weekId = getWeekId(parsed.weekStart);
-    const wName = parsed.workerName || profile?.displayName || '';
+    const wName = profile?.displayName || parsed.workerName || '';
 
     setWorkerName(wName);
     setWeekStart(parsed.weekStart);
@@ -788,7 +779,9 @@ function ProductionsContent() {
           scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
         }
         const userSchedule = scheduleDocs.find(s => s.id === weekId);
-        const wName = (userSchedule?.fields?.workerName as string) || profile?.displayName || '';
+        const storedName = (userSchedule?.fields?.workerName as string) || '';
+        // Always prefer profile displayName; stored workerName is only for schedule parsing context
+        const wName = profile?.displayName || storedName;
 
         setProductions(prods);
         setWorkerName(wName);
@@ -818,7 +811,7 @@ function ProductionsContent() {
             setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
           }
           setWeekEnd((latest.fields.weekEnd as string) || '');
-          setWorkerName((latest.fields.workerName as string) || profile?.displayName || '');
+          setWorkerName(profile?.displayName || (latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
         }
       }
