@@ -8,6 +8,7 @@ import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
+import NotificationBell from './NotificationBell';
 import {
   Tv, Calendar, Users, Newspaper, Building2, Menu, X,
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
@@ -18,6 +19,7 @@ const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
   { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
+  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users },
   { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
@@ -99,6 +101,9 @@ export default function Navigation() {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            {/* Notifications */}
+            {user && <NotificationBell />}
+
             {/* Theme Toggle (desktop) */}
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button
