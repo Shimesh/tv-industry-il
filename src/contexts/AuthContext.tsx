@@ -3,12 +3,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import {
   User,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -23,6 +22,7 @@ export interface UserProfile {
   department: string;
   role: string;
   phone: string;
+  linkedContactId?: number;
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
@@ -53,58 +53,55 @@ const AuthContext = createContext<AuthContextType>({
   updateUserProfile: async () => {},
 });
 
+async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | null> {
+  try {
+    const profileRef = doc(db, 'users', firebaseUser.uid);
+    const profileSnap = await getDoc(profileRef);
+
+    if (profileSnap.exists()) {
+      updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
+      return { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
+    }
+
+    const profileData: Omit<UserProfile, 'uid'> = {
+      displayName: firebaseUser.displayName || 'משתמש חדש',
+      email: firebaseUser.email || '',
+      photoURL: firebaseUser.photoURL,
+      department: '',
+      role: '',
+      phone: '',
+      skills: [],
+      bio: '',
+      status: 'available',
+      isOnline: true,
+      onboardingComplete: false,
+      theme: 'dark',
+    };
+
+    await setDoc(profileRef, {
+      ...profileData,
+      createdAt: serverTimestamp(),
+      lastSeen: serverTimestamp(),
+    });
+
+    return { uid: firebaseUser.uid, ...profileData };
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Handle Google redirect result on page load
-  useEffect(() => {
-    getRedirectResult(auth).then(async (result) => {
-      if (result?.user) {
-        const profileRef = doc(db, 'users', result.user.uid);
-        const profileSnap = await getDoc(profileRef);
-        if (!profileSnap.exists()) {
-          const profileData: Omit<UserProfile, 'uid'> = {
-            displayName: result.user.displayName || 'משתמש חדש',
-            email: result.user.email || '',
-            photoURL: result.user.photoURL,
-            department: '',
-            role: '',
-            phone: '',
-            skills: [],
-            bio: '',
-            status: 'available',
-            isOnline: true,
-            onboardingComplete: false,
-            theme: 'dark',
-          };
-          await setDoc(profileRef, {
-            ...profileData,
-            createdAt: serverTimestamp(),
-            lastSeen: serverTimestamp(),
-          });
-          setProfile({ uid: result.user.uid, ...profileData });
-        }
-      }
-    }).catch(() => {
-      // Redirect result errors handled silently
-    });
-  }, []);
 
   // Listen to auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Fetch or create user profile
-        const profileRef = doc(db, 'users', firebaseUser.uid);
-        const profileSnap = await getDoc(profileRef);
-        if (profileSnap.exists()) {
-          setProfile({ uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile);
-          // Update online status
-          await updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() });
-        }
+        const userProfile = await fetchOrCreateProfile(firebaseUser);
+        setProfile(userProfile);
       } else {
         setProfile(null);
       }
@@ -121,7 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
 
-    // Create user profile in Firestore
     const profileData: Omit<UserProfile, 'uid'> = {
       displayName: name,
       email: email,
@@ -137,68 +133,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       theme: 'dark',
     };
 
-    await setDoc(doc(db, 'users', result.user.uid), {
-      ...profileData,
-      createdAt: serverTimestamp(),
-      lastSeen: serverTimestamp(),
-    });
+    try {
+      await setDoc(doc(db, 'users', result.user.uid), {
+        ...profileData,
+        createdAt: serverTimestamp(),
+        lastSeen: serverTimestamp(),
+      });
+    } catch {
+      // Firestore write failed - still proceed with local profile
+    }
 
     setProfile({ uid: result.user.uid, ...profileData });
   };
 
   const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
     try {
-      // Try popup first (works on localhost and some browsers)
-      const result = await signInWithPopup(auth, googleProvider);
-      const profileRef = doc(db, 'users', result.user.uid);
-      const profileSnap = await getDoc(profileRef);
-
-      if (!profileSnap.exists()) {
-        const profileData: Omit<UserProfile, 'uid'> = {
-          displayName: result.user.displayName || 'משתמש חדש',
-          email: result.user.email || '',
-          photoURL: result.user.photoURL,
-          department: '',
-          role: '',
-          phone: '',
-          skills: [],
-          bio: '',
-          status: 'available',
-          isOnline: true,
-          onboardingComplete: false,
-          theme: 'dark',
-        };
-
-        await setDoc(profileRef, {
-          ...profileData,
-          createdAt: serverTimestamp(),
-          lastSeen: serverTimestamp(),
-        });
-
-        setProfile({ uid: result.user.uid, ...profileData });
+      const result = await signInWithPopup(auth, provider);
+      await fetchOrCreateProfile(result.user);
+    } catch (error: unknown) {
+      const authError = error as { code?: string };
+      // If auth actually succeeded despite the error (e.g. iframe error after
+      // popup completed), don't re-throw — onAuthStateChanged will handle it
+      if (auth.currentUser) {
+        return;
       }
-    } catch (popupError: unknown) {
-      const err = popupError as { code?: string };
-      // If popup blocked or fails, fall back to redirect
-      if (err.code === 'auth/popup-blocked' ||
-          err.code === 'auth/popup-closed-by-user' ||
-          err.code === 'auth/cancelled-popup-request') {
-        // For popup-closed, user cancelled - don't redirect
-        if (err.code === 'auth/popup-closed-by-user') throw popupError;
+      if (authError.code !== 'auth/popup-closed-by-user') {
+        throw error;
       }
-      // For any other popup error, use redirect
-      await signInWithRedirect(auth, googleProvider);
     }
   };
 
   const logout = async () => {
     if (user) {
-      await updateDoc(doc(db, 'users', user.uid), {
-        isOnline: false,
-        lastSeen: serverTimestamp(),
-      });
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+        });
+      } catch {
+        // Firestore update failed - still proceed with logout
+      }
     }
     await signOut(auth);
+    setUser(null);
     setProfile(null);
   };
 

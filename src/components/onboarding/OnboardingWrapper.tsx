@@ -1,34 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import OnboardingTour from './OnboardingTour';
+import { ProfileLinker } from '@/components/onboarding/ProfileLinker';
 
-export default function OnboardingWrapper() {
-  const { user, profile, updateUserProfile } = useAuth();
-  const [showOnboarding, setShowOnboarding] = useState(false);
+export default function OnboardingWrapper({ children }: { children: ReactNode }) {
+  const { user, profile, loading } = useAuth();
 
-  useEffect(() => {
-    if (user && profile && !profile.onboardingComplete) {
-      // Small delay for better UX
-      const timer = setTimeout(() => setShowOnboarding(true), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [user, profile]);
+  // Show onboarding if: logged in + profile loaded + not completed + not linked
+  const needsOnboarding =
+    !loading &&
+    user !== null &&
+    profile !== null &&
+    !profile.onboardingComplete &&
+    !profile.linkedContactId;
 
-  const handleComplete = async () => {
-    setShowOnboarding(false);
-    if (user) {
-      try {
-        await updateUserProfile({ onboardingComplete: true });
-      } catch {
-        // Store locally as fallback
-        localStorage.setItem('tv-onboarding-complete', 'true');
-      }
-    }
-  };
-
-  if (!showOnboarding) return null;
-
-  return <OnboardingTour onComplete={handleComplete} />;
+  return (
+    <>
+      {children}
+      {needsOnboarding && (
+        <ProfileLinker
+          onComplete={() => {
+            // Profile will reload via onSnapshot
+          }}
+        />
+      )}
+    </>
+  );
 }

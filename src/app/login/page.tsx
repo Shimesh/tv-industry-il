@@ -30,7 +30,7 @@ export default function LoginPage() {
   const { user, loading: authLoading, signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
 
-  // Redirect to home if already logged in (handles redirect flow from Google)
+  // Redirect to home if already logged in
   useEffect(() => {
     if (user && !authLoading) {
       router.push('/');
@@ -85,20 +85,23 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await signInWithGoogle();
-      router.push('/');
+      // Popup succeeded - onAuthStateChanged will handle redirect
     } catch (err: unknown) {
-      const firebaseError = err as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/popup-closed-by-user') {
+      const firebaseError = err as { code?: string };
+      // SECURITY: Never show raw Firebase error messages (they contain API keys/URLs)
+      // Only show safe, user-friendly Hebrew messages based on error code
+      if (firebaseError.code === 'auth/unauthorized-domain') {
+        setError('הדומיין הנוכחי לא מורשה. פנו למנהל המערכת.');
+      } else if (firebaseError.code === 'auth/popup-blocked') {
+        setError('הדפדפן חסם את החלון. אנא אפשרו חלונות קופצים ונסו שוב.');
+      } else if (firebaseError.code === 'auth/popup-closed-by-user') {
+        // User closed popup intentionally - no error to show
         setError('');
-      } else if (firebaseError.code === 'auth/unauthorized-domain') {
-        setError('הדומיין הנוכחי לא מורשה ב-Firebase. יש להוסיף אותו בהגדרות Firebase → Authentication → Authorized domains');
-      } else if (firebaseError.code === 'auth/configuration-not-found' || firebaseError.code === 'auth/invalid-api-key') {
-        setError('Firebase לא מוגדר כראוי. יש להגדיר קובץ .env.local עם פרטי Firebase אמיתיים');
       } else {
-        setError(`שגיאה בהתחברות: ${firebaseError.code || firebaseError.message || 'שגיאה לא ידועה'}`);
+        setError('שגיאה בהתחברות עם Google. נסו שוב.');
       }
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

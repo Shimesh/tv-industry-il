@@ -1,5 +1,5 @@
 export interface Contact {
-  id: number;
+  id: number | string;
   firstName: string;
   lastName: string;
   email?: string;
@@ -35,7 +35,7 @@ export const roles = [
 ];
 
 export const contacts: Contact[] = [
-  { id: 1, firstName: 'אלכס', lastName: 'סברנסקי', department: 'צילום', role: 'צלם רחף', availability: 'available', skills: ['aerial-photography', 'outdoor-events'] },
+  { id: 1, firstName: 'אלכס', lastName: 'סברנסקי', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-6766899', skills: ['aerial-photography', 'outdoor-events'] },
   { id: 2, firstName: 'ירון', lastName: 'זילבר', department: 'צילום', role: 'צלם רחף', availability: 'available', phone: '050-8518083' },
   { id: 3, firstName: 'עדי', lastName: 'הופמן', department: 'טכני', role: 'כתוביות', availability: 'available', phone: '052-5564313' },
   { id: 4, firstName: 'שגיב', lastName: 'מילר', department: 'הפקה', role: 'ניהול במה', availability: 'available', phone: '054-443-1575' },
@@ -127,3 +127,4 @@ export const contacts: Contact[] = [
   { id: 90, firstName: 'רז', lastName: 'כהן', department: 'סאונד', role: 'קול', phone: '054-5640211' },
   { id: 91, firstName: 'סמיון', lastName: 'קציב', department: 'צילום', role: 'צלם', phone: '054-7737401' },
 ];
+

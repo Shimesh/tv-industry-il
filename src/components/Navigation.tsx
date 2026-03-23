@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
@@ -15,6 +17,7 @@ import {
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
+  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
   { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users },
@@ -27,6 +30,7 @@ const navLinks = [
 
 export default function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -77,6 +81,7 @@ export default function Navigation() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
@@ -110,7 +115,7 @@ export default function Navigation() {
               </button>
 
               {themeMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border p-2 shadow-xl z-50" style={{
+                <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border p-2 shadow-xl z-[100]" style={{
                   background: 'var(--theme-bg-secondary)',
                   borderColor: 'var(--theme-border)',
                 }}>
@@ -154,7 +159,7 @@ export default function Navigation() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-50 overflow-hidden" style={{
+                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-[100]" style={{
                     background: 'var(--theme-bg-secondary)',
                     borderColor: 'var(--theme-border)',
                   }}>
@@ -175,27 +180,38 @@ export default function Navigation() {
                     </div>
 
                     <div className="p-2">
-                      <Link
-                        href="/profile"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                      <button
+                        onClick={() => { setUserMenuOpen(false); router.push('/profile'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <UserIcon className="w-4 h-4" />
                         <span className="font-medium">הפרופיל שלי</span>
-                      </Link>
-                      <Link
-                        href="/profile"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                      </button>
+                      <button
+                        onClick={() => { setUserMenuOpen(false); router.push('/settings'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <Settings className="w-4 h-4" />
                         <span className="font-medium">הגדרות</span>
-                      </Link>
+                      </button>
 
                       <div className="my-1 border-t" style={{ borderColor: 'var(--theme-border)' }} />
 
                       <button
-                        onClick={() => { logout(); setUserMenuOpen(false); }}
+                        onClick={async () => {
+                          setUserMenuOpen(false);
+                          try {
+                            if (typeof window !== 'undefined') {
+                              localStorage.removeItem('lastOpenedChat');
+                              localStorage.removeItem('lastScheduleWeek');
+                              sessionStorage.clear();
+                            }
+                            await signOut(auth);
+                            window.location.href = '/login';
+                          } catch {
+                            window.location.href = '/login';
+                          }
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
                       >
                         <LogOut className="w-4 h-4" />

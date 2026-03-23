@@ -14,10 +14,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         <NotificationProvider>
           <CallProvider>
-            {children}
-            <IncomingCall />
-            <CallScreen />
-            <OnboardingWrapper />
+            <OnboardingWrapper>
+              {children}
+              <IncomingCall />
+              <CallScreen />
+            </OnboardingWrapper>
           </CallProvider>
         </NotificationProvider>
       </AuthProvider>
