@@ -265,13 +265,16 @@ export function useChat() {
   }, [user, activeChat, displayName, displayPhoto, chats]);
 
   const deleteMessage = useCallback(async (messageId: string) => {
-    if (!activeChat) return;
+    if (!activeChat || !user) return;
+    // Only allow sender to delete their own messages
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg || msg.senderId !== user.uid) return;
     try {
       await deleteDoc(doc(db, 'chats', activeChat, 'messages', messageId));
     } catch (err) {
       console.error('Delete error:', err);
     }
-  }, [activeChat]);
+  }, [activeChat, user, messages]);
 
   const createPrivateChat = useCallback(async (otherUserId: string): Promise<string | null> => {
     if (!user) return null;

@@ -1,6 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const authUser = await verifyAuthToken(request);
+  if (!authUser) {
+    return unauthorizedResponse();
+  }
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     return NextResponse.json({ triggered: false, error: 'No token configured' }, { status: 500 });

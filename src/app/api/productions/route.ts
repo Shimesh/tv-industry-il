@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -11,6 +12,12 @@ const anthropic = new Anthropic({
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const authUser = await verifyAuthToken(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const { content, fileName } = await request.json();
 
     if (!content) {
