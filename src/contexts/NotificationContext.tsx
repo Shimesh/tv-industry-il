@@ -10,7 +10,7 @@ import {
 
 export interface AppNotification {
   id: string;
-  type: 'production_reminder' | 'crew_assignment' | 'status_change' | 'file_upload' | 'general';
+  type: 'production_reminder' | 'crew_assignment' | 'status_change' | 'file_upload' | 'general' | 'job_match' | 'availability_reminder' | 'new_message' | 'event_reminder';
   title: string;
   message: string;
   productionId?: string;

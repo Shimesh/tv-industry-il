@@ -3,13 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { contacts } from '@/data/contacts';
+import { mockJobs } from '@/data/jobs';
 import { channels, generateSchedule, getCurrentProgram } from '@/data/channels';
 import { industryEvents, categoryLabels } from '@/data/news';
 import { motion, useInView } from 'framer-motion';
 import {
   Calendar, Users, Newspaper, Building2, Tv, TrendingUp, Radio, Zap,
   ArrowLeft, Clock, MapPin, Tag, MessageCircle, Megaphone, Wrench,
-  Play, Sparkles, Signal, ChevronDown, Globe
+  Play, Sparkles, Signal, ChevronDown, Globe,
+  Briefcase, Bookmark, Mail, Film, CircleDot
 } from 'lucide-react';
 
 interface RssNewsItem {
@@ -70,9 +72,24 @@ function LiveClock() {
   );
 }
 
+/* ===== Time-based greeting ===== */
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'בוקר טוב';
+  if (hour >= 12 && hour < 17) return 'צהריים טובים';
+  if (hour >= 17 && hour < 21) return 'ערב טוב';
+  return 'לילה טוב';
+}
+
 export default function HomePage() {
   const availableCount = contacts.filter(c => c.availability === 'available').length;
+  const openToWorkCount = contacts.filter(c => c.openToWork).length;
   const uniqueDepts = new Set(contacts.map(c => c.department)).size;
+
+  const [greeting, setGreeting] = useState('');
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
 
   // Real-time news from API
   const [liveNews, setLiveNews] = useState<RssNewsItem[]>([]);
@@ -87,7 +104,7 @@ export default function HomePage() {
     { label: 'אנשי מקצוע', value: contacts.length, icon: Users, color: 'bg-purple-500' },
     { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: 'bg-green-500' },
     { label: 'ערוצי טלוויזיה', value: channels.length, icon: Tv, color: 'bg-blue-500' },
-    { label: 'מחלקות', value: uniqueDepts, icon: Radio, color: 'bg-orange-500' },
+    { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: 'bg-orange-500' },
   ];
 
   const newsCount = liveNews.length || 0;
@@ -115,6 +132,62 @@ export default function HomePage() {
     return () => clearInterval(t);
   }, []);
 
+  // Personal dashboard cards data
+  const dashboardCards = [
+    {
+      id: 'status',
+      icon: CircleDot,
+      label: 'הסטטוס שלי',
+      value: 'פנוי לעבודה',
+      dotColor: 'bg-green-500',
+      dotPing: 'bg-green-400',
+      href: '/directory',
+      gradient: 'from-green-600 to-emerald-500',
+      iconBg: 'bg-green-500/15',
+      iconColor: 'text-green-400',
+    },
+    {
+      id: 'jobs',
+      icon: Briefcase,
+      label: 'משרות פתוחות',
+      value: `${mockJobs.length} משרות חדשות`,
+      href: '/board',
+      gradient: 'from-blue-600 to-cyan-500',
+      iconBg: 'bg-blue-500/15',
+      iconColor: 'text-blue-400',
+    },
+    {
+      id: 'saved',
+      icon: Bookmark,
+      label: 'משרות שמורות',
+      value: '3 משרות שמורות',
+      href: '/board',
+      gradient: 'from-amber-600 to-yellow-500',
+      iconBg: 'bg-amber-500/15',
+      iconColor: 'text-amber-400',
+    },
+    {
+      id: 'messages',
+      icon: Mail,
+      label: 'הודעות',
+      value: '2 הודעות חדשות',
+      href: '/chat',
+      gradient: 'from-purple-600 to-pink-500',
+      iconBg: 'bg-purple-500/15',
+      iconColor: 'text-purple-400',
+    },
+    {
+      id: 'production',
+      icon: Film,
+      label: 'הפקה קרובה',
+      value: 'יהיה טוב - יום א\' 05:15',
+      href: '/productions',
+      gradient: 'from-rose-600 to-pink-500',
+      iconBg: 'bg-rose-500/15',
+      iconColor: 'text-rose-400',
+    },
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
 
@@ -128,10 +201,26 @@ export default function HomePage() {
               transition={{ duration: 0.4 }}
               className="flex items-center gap-3"
             >
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--theme-text)' }}>
-                <span className="gradient-text">TV Industry</span>{' '}
-                <span style={{ color: 'var(--theme-text)' }}>IL</span>
-              </h1>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--theme-text)' }}>
+                  {greeting ? (
+                    <>
+                      <span className="gradient-text">{greeting}</span>{' '}
+                      <span className="text-base sm:text-lg font-bold opacity-60" style={{ color: 'var(--theme-text-secondary)' }}>
+                        &#x1f44b;
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="gradient-text">TV Industry</span>{' '}
+                      <span style={{ color: 'var(--theme-text)' }}>IL</span>
+                    </>
+                  )}
+                </h1>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--theme-text-secondary)' }}>
+                  מה חדש בתעשייה היום?
+                </p>
+              </div>
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border"
                 style={{ background: 'var(--theme-accent-glow)', borderColor: 'var(--theme-border)' }}>
                 <span className="relative flex h-1.5 w-1.5">
@@ -196,6 +285,62 @@ export default function HomePage() {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+
+        {/* ===== Personal Dashboard - האזור שלי ===== */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--theme-text-secondary)' }}>האזור שלי</h2>
+          </div>
+          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-5 md:overflow-visible">
+            {dashboardCards.map((card, i) => {
+              const Icon = card.icon;
+              return (
+                <motion.div
+                  key={card.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05, duration: 0.3 }}
+                  className="min-w-[160px] md:min-w-0 flex-shrink-0 md:flex-shrink"
+                >
+                  <Link
+                    href={card.href}
+                    className="group block rounded-xl border p-3.5 transition-all duration-200 hover:shadow-md relative overflow-hidden h-full"
+                    style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-[0.06] transition-opacity duration-200`} />
+                    <div className="relative">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-8 h-8 ${card.iconBg} rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200`}>
+                          <Icon className={`w-4 h-4 ${card.iconColor}`} />
+                        </div>
+                        {card.id === 'status' && card.dotColor && (
+                          <span className="relative flex h-2.5 w-2.5 mr-auto">
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${card.dotPing} opacity-75`} />
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${card.dotColor}`} />
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium mb-0.5" style={{ color: 'var(--theme-text-secondary)' }}>
+                        {card.label}
+                      </div>
+                      <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                        {card.value}
+                      </div>
+                    </div>
+                    <ArrowLeft className="absolute left-2.5 bottom-2.5 w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-hover:-translate-x-0.5 transition-all" style={{ color: 'var(--theme-accent)' }} />
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.section>
 
         {/* ===== Now Playing ===== */}
         <motion.section
