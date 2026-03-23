@@ -14,7 +14,7 @@ import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   collection, query, orderBy, onSnapshot, addDoc, serverTimestamp,
-  where, Timestamp, updateDoc, doc, increment
+  where, Timestamp, updateDoc, doc, increment, setDoc, deleteDoc, getDoc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -380,10 +380,22 @@ export default function BoardPage() {
 
   const handleLike = async (postId: string) => {
     if (!user) return;
+    const likeRef = doc(db, 'posts', postId, 'likes', user.uid);
     try {
-      await updateDoc(doc(db, 'posts', postId), { likes: increment(1) });
+      const likeSnap = await getDoc(likeRef);
+      if (likeSnap.exists()) {
+        // Already liked → unlike
+        await deleteDoc(likeRef);
+        await updateDoc(doc(db, 'posts', postId), { likes: increment(-1) });
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: Math.max(0, p.likes - 1) } : p));
+      } else {
+        // New like
+        await setDoc(likeRef, { likedAt: Date.now() });
+        await updateDoc(doc(db, 'posts', postId), { likes: increment(1) });
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
+      }
     } catch {
-      // Demo mode - local toggle
+      // Fallback - local toggle
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
     }
   };

@@ -7,6 +7,7 @@ import { departments, type Contact } from '@/data/contacts';
 import { useContacts } from '@/hooks/useContacts';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
+import AuthGuard from '@/components/AuthGuard';
 
 const deptColors: Record<string, string> = {
   'צילום': 'from-blue-500 to-blue-600',
@@ -75,6 +76,14 @@ const filterPillVariants = {
 };
 
 export default function DirectoryPage() {
+  return (
+    <AuthGuard>
+      <DirectoryContent />
+    </AuthGuard>
+  );
+}
+
+function DirectoryContent() {
   const { profile, loading: authLoading } = useAuth();
   const { contacts: contactsList, loading: contactsLoading } = useContacts();
   const [search, setSearch] = useState('');
