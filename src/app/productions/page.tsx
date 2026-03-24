@@ -134,9 +134,15 @@ function ProductionsContent() {
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.warn('[restListDocs] HTTP error', res.status, 'for', collectionPath);
+        return [];
+      }
       const data = await res.json();
-      if (!data.documents) return [];
+      if (!data.documents) {
+        console.log('[restListDocs] No documents at', collectionPath);
+        return [];
+      }
 
       return data.documents.map((doc: Record<string, unknown>) => {
         const name = doc.name as string;
@@ -240,7 +246,10 @@ function ProductionsContent() {
     try {
       // Load from per-user path only
       const userRoot = getUserProductionsRoot(user.uid);
-      const prodDocs = await restListDocs(`${userRoot}/${weekId}/productions`);
+      const path = `${userRoot}/${weekId}/productions`;
+      console.log('[loadExistingWeek] Loading from:', path);
+      const prodDocs = await restListDocs(path);
+      console.log('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
 
       if (prodDocs.length > 0) {
         return parseProductionDocs(prodDocs, weekId);
@@ -248,6 +257,7 @@ function ProductionsContent() {
 
       return [];
     } catch (error) {
+      console.error('[loadExistingWeek] Error:', error);
       return [];
     }
   }, [user, restListDocs, parseProductionDocs]);
@@ -371,10 +381,13 @@ function ProductionsContent() {
         productionIds: prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio)),
       });
 
+      console.log('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
+
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
     } catch (error) {
-      console.error('saveToFirestore failed:', error);
+      console.error('[saveToFirestore] FAILED:', error);
+      setStatusMessage('שגיאה בשמירת הנתונים: ' + (error instanceof Error ? error.message : String(error)));
     }
   }, [user, workerName]);
 
@@ -487,6 +500,7 @@ function ProductionsContent() {
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
+    console.log('[processSchedule] Called with', parsed.productions.length, 'productions, weekStart:', parsed.weekStart, 'workerName:', parsed.workerName);
     if (!parsed.weekStart) {
       const now = new Date();
       const day = now.getDay();
@@ -1144,6 +1158,7 @@ function ProductionsContent() {
 
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
+    console.log('[handleFetch] url:', url?.substring(0, 50), 'manualText length:', manualText?.length, 'rawHtml length:', rawHtml?.length);
 
     setLoading(true);
     setStatusMessage(null);
