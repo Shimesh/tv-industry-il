@@ -30,19 +30,9 @@ import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 import {
   doc,
-  getDoc,
-  collection,
-  getDocs,
-  addDoc,
-  writeBatch,
-  serverTimestamp,
   onSnapshot,
-  query,
-  where,
-  orderBy,
-  limit,
 } from 'firebase/firestore';
-import { db, ensureOnline } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2 } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
@@ -262,7 +252,7 @@ function ProductionsContent() {
     }
   }, [user, restListDocs, parseProductionDocs]);
 
-  // Save productions to Firestore
+  // Save productions to Firestore via REST API (bypasses broken SDK)
   const saveToFirestore = useCallback(async (
     weekId: string,
     prods: Production[],
@@ -274,46 +264,90 @@ function ProductionsContent() {
     }
 
     try {
-      await ensureOnline();
-      const batch = writeBatch(db);
+      const token = await user.getIdToken(true);
+      const projectId = 'tv-industry-il';
+      const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
-      // Save to per-user path: productions/{userId}/weeks/{weekId}
-      const metaRef = doc(db, 'productions', user.uid, 'weeks', weekId);
-      let metaSnap;
+      // Helper: convert JS value to Firestore REST format
+      const toVal = (v: unknown): Record<string, unknown> => {
+        if (typeof v === 'string') return { stringValue: v };
+        if (typeof v === 'number') return { integerValue: String(v) };
+        if (typeof v === 'boolean') return { booleanValue: v };
+        if (v === null || v === undefined) return { nullValue: null };
+        if (Array.isArray(v)) {
+          return { arrayValue: { values: v.map(item => {
+            if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+              const fields: Record<string, unknown> = {};
+              for (const [k, val] of Object.entries(item)) fields[k] = toVal(val);
+              return { mapValue: { fields } };
+            }
+            return toVal(item);
+          }) } };
+        }
+        if (typeof v === 'object') {
+          const fields: Record<string, unknown> = {};
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) fields[k] = toVal(val);
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(v) };
+      };
+
+      const toFields = (obj: Record<string, unknown>) => {
+        const fields: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj)) fields[k] = toVal(v);
+        return fields;
+      };
+
+      const restSet = async (docPath: string, data: Record<string, unknown>) => {
+        const res = await fetch(`${baseUrl}/${docPath}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fields: toFields(data) }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          console.error('Firestore REST write failed:', docPath, err);
+          throw new Error(err.error?.message || `REST error ${res.status}`);
+        }
+      };
+
+      // 1. Save week metadata
+      const metaPath = `productions/${user.uid}/weeks/${weekId}`;
+
+      // Read existing to get updateCount
+      let updateCount = 1;
       try {
-        metaSnap = await Promise.race([
-          getDoc(metaRef),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getDoc timeout')), 10000)),
-        ]);
+        const metaRes = await fetch(`${baseUrl}/${metaPath}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (metaRes.ok) {
+          const metaData = await metaRes.json();
+          const ucVal = metaData?.fields?.updateCount?.integerValue;
+          if (ucVal) updateCount = Number(ucVal) + 1;
+        }
       } catch {
-        metaSnap = { exists: () => false, data: () => null } as any;
+        // New doc
       }
 
-      if (metaSnap.exists()) {
-        const existing = metaSnap.data();
-        batch.update(metaRef, {
-          lastUpdated: serverTimestamp(),
-          updateCount: (existing.updateCount || 0) + 1,
-        });
-      } else {
-        batch.set(metaRef, {
-          weekId,
-          weekStart: wStart,
-          weekEnd: wEnd,
-          lastUpdated: serverTimestamp(),
-          updateCount: 1,
-        });
-      }
+      await restSet(metaPath, {
+        weekId,
+        weekStart: wStart,
+        weekEnd: wEnd,
+        lastUpdated: new Date().toISOString(),
+        updateCount,
+      });
 
+      // 2. Save each production
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodRef = doc(db, 'productions', user.uid, 'weeks', weekId, 'productions', prodId);
+        const prodPath = `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
 
-        // Deduplicate crew by name before saving
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
 
-        // SET (not merge) - crew stored as array field on production document
-        batch.set(prodRef, {
+        await restSet(prodPath, {
           name: prod.name,
           studio: prod.studio,
           date: prod.date,
@@ -329,22 +363,22 @@ function ProductionsContent() {
         });
       }
 
-      const userScheduleRef = doc(db, 'userSchedules', user.uid, 'weeks', weekId);
-      batch.set(userScheduleRef, {
+      // 3. Save user schedule metadata
+      const userSchedulePath = `userSchedules/${user.uid}/weeks/${weekId}`;
+      await restSet(userSchedulePath, {
         workerName,
-        fetchedAt: serverTimestamp(),
+        fetchedAt: new Date().toISOString(),
         productionIds: prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio)),
       });
-
-      await batch.commit();
 
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
     } catch (error) {
+      console.error('saveToFirestore failed:', error);
     }
   }, [user, workerName]);
 
-  // Sync crew members with registered user profiles
+  // Sync crew members with registered user profiles (via REST API)
   const syncCrewProfiles = useCallback(async (
     weekId: string,
     prods: Production[],
@@ -360,19 +394,49 @@ function ProductionsContent() {
       }
       if (allCrewNames.size === 0) return;
 
-      const usersRef = collection(db, 'users');
-      const usersSnap = await getDocs(usersRef);
+      // Fetch all users via REST API
+      const userDocs = await restListDocs('users');
       const usersByName = new Map<string, string>();
 
-      usersSnap.docs.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.displayName) {
-          usersByName.set(data.displayName, docSnap.id);
+      for (const userDoc of userDocs) {
+        if (userDoc.fields.displayName) {
+          usersByName.set(userDoc.fields.displayName as string, userDoc.id);
         }
-      });
+      }
 
-      const batch2 = writeBatch(db);
-      let matchCount = 0;
+      const token = await user?.getIdToken(true);
+      if (!token) return;
+      const projectId = 'tv-industry-il';
+      const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+
+      const toVal = (v: unknown): Record<string, unknown> => {
+        if (typeof v === 'string') return { stringValue: v };
+        if (typeof v === 'number') return { integerValue: String(v) };
+        if (typeof v === 'boolean') return { booleanValue: v };
+        if (v === null || v === undefined) return { nullValue: null };
+        if (Array.isArray(v)) {
+          return { arrayValue: { values: v.map(item => {
+            if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+              const fields: Record<string, unknown> = {};
+              for (const [k, val] of Object.entries(item)) fields[k] = toVal(val);
+              return { mapValue: { fields } };
+            }
+            return toVal(item);
+          }) } };
+        }
+        if (typeof v === 'object') {
+          const fields: Record<string, unknown> = {};
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) fields[k] = toVal(val);
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(v) };
+      };
+
+      const toFields = (obj: Record<string, unknown>) => {
+        const fields: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj)) fields[k] = toVal(v);
+        return fields;
+      };
 
       for (const crewName of allCrewNames) {
         const matchedUid = usersByName.get(crewName);
@@ -399,25 +463,27 @@ function ProductionsContent() {
           };
         });
 
-        const userScheduleRef = doc(db, 'users', matchedUid, 'schedules', weekId);
-        batch2.set(userScheduleRef, {
-          workerName: crewName,
-          weekStart: wStart,
-          weekEnd: wEnd,
-          productions: productionEntries,
-          autoUpdatedAt: serverTimestamp(),
-          autoUpdatedBy: user?.uid || '',
+        const docPath = `users/${matchedUid}/schedules/${weekId}`;
+        await fetch(`${baseUrl}/${docPath}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fields: toFields({
+            workerName: crewName,
+            weekStart: wStart,
+            weekEnd: wEnd,
+            productions: productionEntries,
+            autoUpdatedAt: new Date().toISOString(),
+            autoUpdatedBy: user?.uid || '',
+          }) }),
         });
-
-        matchCount++;
-      }
-
-      if (matchCount > 0) {
-        await batch2.commit();
       }
     } catch (error) {
+      console.error('syncCrewProfiles failed:', error);
     }
-  }, [user]);
+  }, [user, restListDocs]);
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
@@ -500,8 +566,8 @@ function ProductionsContent() {
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
-  // Firestore REST API helper (bypasses broken SDK)
-  // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
+  // Firestore REST API helpers (bypasses broken SDK)
+  //ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
   const firestoreRestWrite = useCallback(async (
     collectionPath: string,
     fields: Record<string, unknown>,
