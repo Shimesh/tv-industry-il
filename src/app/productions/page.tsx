@@ -28,11 +28,7 @@ import {
 } from '@/lib/crewNormalization';
 import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
-import {
-  doc,
-  onSnapshot,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+// Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2 } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
@@ -102,7 +98,7 @@ function ProductionsContent() {
   const [requestStatus, setRequestStatus] = useState<RequestStatus>('idle');
   const [requestError, setRequestError] = useState<string | null>(null);
   const unsubRequestRef = useRef<(() => void) | null>(null);
-  const unsubWeekRef = useRef<(() => void) | null>(null);
+  // unsubWeekRef removed - listenToWeek was using broken SDK
   const loadTokenRef = useRef(0);
 
     // Calendar navigation state
@@ -116,7 +112,7 @@ function ProductionsContent() {
   useEffect(() => {
     return () => {
       unsubRequestRef.current?.();
-      unsubWeekRef.current?.();
+      // unsubWeekRef removed
     };
   }, []);
   useEffect(() => {
@@ -140,7 +136,7 @@ function ProductionsContent() {
       }
       const data = await res.json();
       if (!data.documents) {
-        console.log('[restListDocs] No documents at', collectionPath);
+        console.warn('[restListDocs] No documents at', collectionPath);
         return [];
       }
 
@@ -247,9 +243,9 @@ function ProductionsContent() {
       // Load from per-user path only
       const userRoot = getUserProductionsRoot(user.uid);
       const path = `${userRoot}/${weekId}/productions`;
-      console.log('[loadExistingWeek] Loading from:', path);
+      console.warn('[loadExistingWeek] Loading from:', path);
       const prodDocs = await restListDocs(path);
-      console.log('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
+      console.warn('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
 
       if (prodDocs.length > 0) {
         return parseProductionDocs(prodDocs, weekId);
@@ -381,7 +377,7 @@ function ProductionsContent() {
         productionIds: prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio)),
       });
 
-      console.log('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
+      console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
 
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
@@ -500,7 +496,7 @@ function ProductionsContent() {
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
-    console.log('[processSchedule] Called with', parsed.productions.length, 'productions, weekStart:', parsed.weekStart, 'workerName:', parsed.workerName);
+    console.warn('[processSchedule] Called with', parsed.productions.length, 'productions, weekStart:', parsed.weekStart, 'workerName:', parsed.workerName);
     if (!parsed.weekStart) {
       const now = new Date();
       const day = now.getDay();
@@ -756,28 +752,7 @@ function ProductionsContent() {
     }
   }, [user, profile, firestoreRestWrite, firestoreRestRead, loadExistingWeek]);
 
-  // Listen to a week's productions for real-time updates (per-user path)
-  const listenToWeek = useCallback((weekId: string) => {
-    if (!user) return;
-    unsubWeekRef.current?.();
-
-    const weekRef = doc(db, 'productions', user.uid, 'weeks', weekId);
-    unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
-      if (!snap.exists()) return;
-
-      const data = snap.data();
-      if (data.lastUpdated) {
-        // Week was updated - reload productions
-        const prods = await loadExistingWeek(weekId);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(data.weekStart || '');
-          setWeekEnd(data.weekEnd || '');
-          setCurrentWeekId(weekId);
-        }
-      }
-    });
-  }, [user, loadExistingWeek]);
+  // listenToWeek removed - was using broken SDK onSnapshot and was never called
 
   const getWeekStartDate = (date: Date) => {
     const d = new Date(date);
@@ -1158,7 +1133,7 @@ function ProductionsContent() {
 
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
-    console.log('[handleFetch] url:', url?.substring(0, 50), 'manualText length:', manualText?.length, 'rawHtml length:', rawHtml?.length);
+    console.warn('[handleFetch] url:', url?.substring(0, 50), 'manualText length:', manualText?.length, 'rawHtml length:', rawHtml?.length);
 
     setLoading(true);
     setStatusMessage(null);
