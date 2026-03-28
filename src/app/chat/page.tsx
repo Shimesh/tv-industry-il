@@ -9,6 +9,8 @@ import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
 import { MessageCircle } from 'lucide-react';
+import { useContacts } from '@/hooks/useContacts';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function ChatPage() {
   return (
@@ -20,6 +22,8 @@ export default function ChatPage() {
 
 function ChatContent() {
   const { user } = useAuth();
+  const { contacts } = useContacts();
+  const { showToast } = useToast();
   const {
     chats,
     activeChat,
@@ -44,35 +48,67 @@ function ChatContent() {
   useOnlineStatus(user?.uid);
 
   const handleSelectChat = useCallback((chatId: string) => {
+    if (!user) { showToast('יש להתחבר כדי לצפות בשיחות', 'error'); return; }
     setActiveChat(chatId);
     setMobileShowChat(true);
-  }, [setActiveChat]);
+  }, [setActiveChat, user, showToast]);
 
   const handleSelectOnlineUser = useCallback(async (userId: string) => {
-    const chatId = await createPrivateChat(userId);
-    if (chatId) {
-      setActiveChat(chatId);
-      setMobileShowChat(true);
+    if (!user) { showToast('יש להתחבר כדי להתחיל שיחה', 'error'); return; }
+    try {
+      const chatId = await createPrivateChat(userId);
+      if (chatId) {
+        setActiveChat(chatId);
+        setMobileShowChat(true);
+      }
+    } catch {
+      showToast('שגיאה ביצירת שיחה', 'error');
     }
-  }, [createPrivateChat, setActiveChat]);
+  }, [createPrivateChat, setActiveChat, user, showToast]);
 
   const handleCreatePrivateChat = useCallback(async (userId: string) => {
-    const chatId = await createPrivateChat(userId);
-    if (chatId) {
-      setActiveChat(chatId);
-      setMobileShowChat(true);
-      setShowNewChat(false);
+    if (!user) { showToast('יש להתחבר כדי להתחיל שיחה', 'error'); return; }
+    try {
+      const chatId = await createPrivateChat(userId);
+      if (chatId) {
+        setActiveChat(chatId);
+        setMobileShowChat(true);
+        setShowNewChat(false);
+      }
+    } catch {
+      showToast('שגיאה ביצירת שיחה', 'error');
     }
-  }, [createPrivateChat, setActiveChat]);
+  }, [createPrivateChat, setActiveChat, user, showToast]);
 
   const handleCreateGroup = useCallback(async (name: string, memberIds: string[]) => {
-    const chatId = await createGroup(name, memberIds);
-    if (chatId) {
-      setActiveChat(chatId);
-      setMobileShowChat(true);
-      setShowNewChat(false);
+    if (!user) { showToast('יש להתחבר כדי ליצור קבוצה', 'error'); return; }
+    try {
+      const chatId = await createGroup(name, memberIds);
+      if (chatId) {
+        setActiveChat(chatId);
+        setMobileShowChat(true);
+        setShowNewChat(false);
+      }
+    } catch {
+      showToast('שגיאה ביצירת קבוצה', 'error');
     }
-  }, [createGroup, setActiveChat]);
+  }, [createGroup, setActiveChat, user, showToast]);
+
+  const handleSendMessage = useCallback(async (
+    text: string,
+    type: 'text' | 'image' | 'file' | 'voice' | 'video',
+    file?: File,
+    replyTo?: { messageId: string; text: string; senderName: string } | null,
+    duration?: number,
+    mimeType?: string
+  ) => {
+    if (!user) { showToast('יש להתחבר כדי לשלוח הודעה', 'error'); return; }
+    try {
+      await sendMessage(text, type, file, replyTo, duration, mimeType);
+    } catch {
+      showToast('שגיאה בשליחת הודעה', 'error');
+    }
+  }, [sendMessage, user, showToast]);
 
   if (!user) return null;
 
@@ -100,7 +136,7 @@ function ChatContent() {
             currentUserId={user.uid}
             typingUsers={typingUsers}
             uploadProgress={uploadProgress}
-            onSendMessage={sendMessage}
+            onSendMessage={handleSendMessage}
             onDeleteMessage={deleteMessage}
             onSetTyping={setTyping}
             onBack={() => setMobileShowChat(false)}
@@ -133,6 +169,8 @@ function ChatContent() {
       {showNewChat && (
         <NewChatModal
           users={allUsers}
+          contacts={contacts}
+          onlineUsers={onlineUsers}
           currentUserId={user.uid}
           onCreatePrivate={handleCreatePrivateChat}
           onCreateGroup={handleCreateGroup}

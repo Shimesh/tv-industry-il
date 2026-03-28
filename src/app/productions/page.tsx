@@ -48,6 +48,35 @@ import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTria
 const PRODUCTIONS_ROOT = 'productions/global/weeks';
 const USER_SCHEDULES_ROOT = 'userSchedules';
 
+// --- Productions localStorage cache ---
+const PRODS_CACHE_KEY = 'productions_cache_v2';
+const PRODS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function loadProdsCache(weekId: string): Production[] | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(PRODS_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
+    const entry = cache[weekId];
+    if (!entry || Date.now() - entry.savedAt > PRODS_CACHE_TTL) return null;
+    return entry.data;
+  } catch { return null; }
+}
+
+function saveProdsCache(weekId: string, productions: Production[]) {
+  try {
+    if (typeof window === 'undefined' || !productions.length) return;
+    const raw = localStorage.getItem(PRODS_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
+    // Keep max 8 weeks
+    const keys = Object.keys(cache).sort();
+    while (keys.length >= 8) { delete cache[keys.shift()!]; }
+    cache[weekId] = { data: productions, savedAt: Date.now() };
+    localStorage.setItem(PRODS_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* storage full */ }
+}
+
 export default function ProductionsPage() {
   return (
     <AuthGuard>
@@ -191,9 +220,14 @@ function ProductionsContent() {
   }, []);
 
   // Load existing week data via REST API
+  // Try both global path and user-specific path (Firestore rules may redirect writes to user path)
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
     try {
-      const prodDocs = await restListDocs(`${PRODUCTIONS_ROOT}/${weekId}/productions`);
+      let prodDocs = await restListDocs(`${PRODUCTIONS_ROOT}/${weekId}/productions`);
+      // Fallback: try user-specific path (GitHub Action writes land here due to Firestore rules)
+      if (prodDocs.length === 0 && user) {
+        prodDocs = await restListDocs(`productions/${user.uid}/weeks/${weekId}/productions`);
+      }
 
       // Deduplicate by herzliyaId (the stable ID from Herzliya system)
       const dedupMap = new Map<string, Production>();
@@ -258,7 +292,9 @@ function ProductionsContent() {
         });
       }
 
-      return Array.from(dedupMap.values());
+      const result = Array.from(dedupMap.values());
+      if (result.length > 0) saveProdsCache(weekId, result);
+      return result;
     } catch (error) {
       return [];
     }
@@ -279,7 +315,8 @@ function ProductionsContent() {
       await ensureOnline();
       const batch = writeBatch(db);
 
-      const metaRef = doc(db, 'productions', 'global', 'weeks', weekId);
+      // Save to user-specific path (Firestore rules redirect global writes here)
+      const metaRef = doc(db, 'productions', user.uid, 'weeks', weekId);
       let metaSnap;
       try {
         metaSnap = await Promise.race([
@@ -314,7 +351,7 @@ function ProductionsContent() {
 
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodRef = doc(db, 'productions', 'global', 'weeks', weekId, 'productions', prodId);
+        const prodRef = doc(db, 'productions', user.uid, 'weeks', weekId, 'productions', prodId);
 
         // Deduplicate crew by name before saving
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
@@ -687,7 +724,10 @@ function ProductionsContent() {
   const listenToWeek = useCallback((weekId: string) => {
     unsubWeekRef.current?.();
 
-    const weekRef = doc(db, 'productions', 'global', 'weeks', weekId);
+    // Listen on user-specific path (where data actually lives due to Firestore rules)
+    const weekRef = user
+      ? doc(db, 'productions', user.uid, 'weeks', weekId)
+      : doc(db, 'productions', 'global', 'weeks', weekId);
     unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
       if (!snap.exists()) return;
 
@@ -775,6 +815,19 @@ function ProductionsContent() {
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - dayOfWeek);
       const weekId = getWeekId(toLocalDate(sunday));
+
+      // Show cached data instantly while Firestore loads
+      const cached = loadProdsCache(weekId);
+      if (cached && cached.length > 0 && productions.length === 0) {
+        productionsByWeekRef.current.set(weekId, cached);
+        setProductions(cached);
+        setCurrentWeekId(weekId);
+        const satDate = new Date(sunday);
+        satDate.setDate(sunday.getDate() + 6);
+        setWeekStart(toLocalDate(sunday));
+        setWeekEnd(toLocalDate(satDate));
+        setCurrentDate(new Date(sunday));
+      }
 
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {

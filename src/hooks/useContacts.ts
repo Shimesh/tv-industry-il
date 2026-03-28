@@ -33,6 +33,7 @@ export interface DuplicateContactRecord {
 export interface ContactsHookResult {
   contacts: Contact[];
   loading: boolean;
+  ready: boolean; // true once real data (localStorage or Firestore) is loaded
   duplicateContactsReport: DuplicateContactRecord[];
   ensureFromCrew: (crew: CrewMember[]) => Promise<void>;
 }
@@ -49,6 +50,26 @@ let cachedFirestoreContacts: Contact[] = [];
 let cachedDuplicateReport: DuplicateContactRecord[] = [];
 let cacheLoadedAt = 0;
 const CACHE_TTL_MS = 45_000;
+const LS_KEY = 'contacts_cache_v1';
+const LS_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function loadLocalCache(): Contact[] | null {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LS_KEY) : null;
+    if (!raw) return null;
+    const { contacts, savedAt } = JSON.parse(raw) as { contacts: Contact[]; savedAt: number };
+    if (Date.now() - savedAt > LS_TTL_MS) return null;
+    return contacts;
+  } catch { return null; }
+}
+
+function saveLocalCache(contacts: Contact[]) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LS_KEY, JSON.stringify({ contacts, savedAt: Date.now() }));
+    }
+  } catch { /* storage full or unavailable */ }
+}
 
 function toIndexedContact(contact: Contact, source: 'static' | 'firestore', firestoreId?: string): IndexedContact {
   const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
@@ -183,6 +204,23 @@ async function autoResolveDuplicates(indexed: IndexedContact[], firestoreContact
         batchCount++;
       }
 
+      // If winner is static and gained info from firestore losers, persist it as a new firestore record
+      if (needsUpdate && winner.source === 'static') {
+        const newRef = doc(collection(db, 'contacts'));
+        batch.set(newRef, {
+          firstName: winner.firstName || '',
+          lastName: winner.lastName || '',
+          phone: winner.phone || null,
+          role: winner.role || '',
+          department: winner.department || '',
+          availability: winner.availability || 'available',
+          source: 'merged',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        batchCount++;
+      }
+
       // Delete loser Firestore records
       for (const loser of losers) {
         if (loser.source === 'firestore' && loser.firestoreId) {
@@ -206,8 +244,18 @@ async function autoResolveDuplicates(indexed: IndexedContact[], firestoreContact
 
 export function useContacts(): ContactsHookResult {
   const { user } = useAuth();
-  const [contacts, setContacts] = useState<Contact[]>(cachedMergedContacts || staticContacts);
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    if (cachedMergedContacts) return cachedMergedContacts;
+    const local = loadLocalCache();
+    if (local) { cachedMergedContacts = local; return local; }
+    return staticContacts;
+  });
   const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(() => {
+    // ready immediately if we have cached/localStorage data
+    if (cachedMergedContacts) return true;
+    return loadLocalCache() !== null;
+  });
   const [duplicateContactsReport, setDuplicateContactsReport] = useState<DuplicateContactRecord[]>(cachedDuplicateReport);
 
   const loadedRef = useRef(false);
@@ -219,9 +267,14 @@ export function useContacts(): ContactsHookResult {
 
     const load = async () => {
       if (!user) {
-        if (mounted) {
-          setContacts(staticContacts);
-          setDuplicateContactsReport([]);
+        // Don't overwrite cached/localStorage data just because auth hasn't resolved yet.
+        // Only fall back to static if we truly have no cached data at all.
+        if (mounted && !cachedMergedContacts) {
+          const local = loadLocalCache();
+          if (!local) {
+            setContacts(staticContacts);
+            setDuplicateContactsReport([]);
+          }
         }
         return;
       }
@@ -245,7 +298,11 @@ export function useContacts(): ContactsHookResult {
       try {
         const snap = await getDocs(collection(db, 'contacts'));
         const firestoreContacts = snap.docs.map(mapSnapshotToContact);
-        const merged = mergeContacts(staticContacts, firestoreContacts);
+        // Merge: start from localStorage/cached data so Firestore being empty doesn't erase local data
+        const base = cachedMergedContacts && cachedMergedContacts.length > staticContacts.length
+          ? cachedMergedContacts
+          : staticContacts;
+        const merged = mergeContacts(base, firestoreContacts);
 
         const indexed = [
           ...staticContacts.map((c) => toIndexedContact(c, 'static')),
@@ -257,6 +314,7 @@ export function useContacts(): ContactsHookResult {
         if (!mounted) return;
         setContacts(merged);
         setDuplicateContactsReport(report);
+        setReady(true);
         indexedContactsRef.current = indexed;
         loadedRef.current = true;
 
@@ -264,6 +322,7 @@ export function useContacts(): ContactsHookResult {
         cachedFirestoreContacts = firestoreContacts;
         cachedDuplicateReport = report;
         cacheLoadedAt = Date.now();
+        saveLocalCache(merged);
 
         // Auto-resolve duplicates silently
         if (report.length > 0 && !alertShownRef.current) {
@@ -287,7 +346,15 @@ export function useContacts(): ContactsHookResult {
 
   const ensureFromCrew = useCallback(async (crew: CrewMember[]) => {
     if (!user || !crew?.length) return;
-    if (!loadedRef.current) return;
+
+    // If contacts aren't loaded yet, build index from cached/static data so we don't miss writes
+    if (!loadedRef.current) {
+      const base = cachedMergedContacts || staticContacts;
+      if (base.length > 0 && indexedContactsRef.current.length === 0) {
+        indexedContactsRef.current = base.map(c => toIndexedContact(c, 'static'));
+      }
+      // Still proceed — better to create a duplicate (auto-resolved later) than miss the data
+    }
 
     const normalizedCrew = deduplicateCrewEntries(crew);
     if (!normalizedCrew.length) return;
@@ -412,6 +479,7 @@ export function useContacts(): ContactsHookResult {
         ...createdFirestore,
       ];
       cacheLoadedAt = Date.now();
+      saveLocalCache(merged);
       return merged;
     });
 
@@ -423,5 +491,5 @@ export function useContacts(): ContactsHookResult {
     });
   }, [user]);
 
-  return { contacts, loading, duplicateContactsReport, ensureFromCrew };
+  return { contacts, loading, ready, duplicateContactsReport, ensureFromCrew };
 }

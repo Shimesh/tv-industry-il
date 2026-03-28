@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
 import { useContacts } from '@/hooks/useContacts';
-import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall } from 'lucide-react';
+import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, Copy, Check } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 
 const deptColors: Record<string, string> = {
@@ -82,6 +82,14 @@ export default function DirectoryPage() {
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [copied, setCopied] = useState<'phone' | 'email' | null>(null);
+
+  const copyToClipboard = (text: string, field: 'phone' | 'email') => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(field);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
 
   // Check if a contact matches the logged-in user
   const isCurrentUser = (contact: Contact): boolean => {
@@ -189,9 +197,9 @@ export default function DirectoryPage() {
 
       {/* Search & Filters */}
       <section className="sticky top-16 z-30 backdrop-blur-xl border-b" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search - glass morphism */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+          {/* Row 1: Search + availability + view toggle */}
+          <div className="flex gap-3 items-center">
             <div className="relative flex-1 group">
               <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
               <input
@@ -199,109 +207,84 @@ export default function DirectoryPage() {
                 placeholder="חיפוש לפי שם, תפקיד..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-4 pr-11 py-3 rounded-xl border text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
+                className="w-full pl-4 pr-11 py-2.5 rounded-xl border text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 backdrop-blur-sm placeholder-gray-500"
                 style={{ background: 'color-mix(in srgb, var(--theme-bg-secondary) 70%, transparent)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
               />
             </div>
-
-            {/* Department Filter Pills */}
-            <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-              <motion.button
-                variants={filterPillVariants}
-                animate={!deptFilter ? 'active' : 'inactive'}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setDeptFilter('')}
-                className={`px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
-                  !deptFilter
-                    ? 'border-purple-500/50 bg-purple-500/15 text-purple-300 shadow-sm shadow-purple-500/10'
-                    : 'hover:border-purple-500/30'
-                }`}
-                style={deptFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
-              >
-                הכל
-              </motion.button>
-              {departments.map(d => {
-                const isActive = deptFilter === d.label;
-                return (
-                  <motion.button
-                    key={d.id}
-                    variants={filterPillVariants}
-                    animate={isActive ? 'active' : 'inactive'}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setDeptFilter(isActive ? '' : d.label)}
-                    className={`relative px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
-                      isActive
-                        ? 'border-purple-500/50 bg-purple-500/15 text-purple-300 shadow-sm shadow-purple-500/10'
-                        : 'hover:border-purple-500/30'
-                    }`}
-                    style={!isActive ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
-                  >
-                    {d.icon} {d.label}
-                    {/* Floating count badge */}
-                    <span className={`absolute -top-2 -left-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                      isActive ? 'bg-purple-500 text-white' : 'bg-gray-600/80 text-gray-300'
-                    }`}>
-                      {deptCounts[d.label] || 0}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Availability Filter */}
             <select
               value={availFilter}
               onChange={(e) => setAvailFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300"
+              className="px-3 py-2.5 rounded-xl border text-sm focus:outline-none focus:border-purple-500/50 appearance-none cursor-pointer transition-all duration-300 hidden sm:block"
               style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
             >
               <option value="">כל הסטטוסים</option>
               <option value="available">פנויים</option>
               <option value="unavailable">לא פנויים</option>
             </select>
-
-            {/* View Toggle */}
-            <div className="flex rounded-xl border overflow-hidden" style={{ borderColor: 'var(--theme-border)' }}>
-              <motion.button
-                whileTap={{ scale: 0.9 }}
+            <div className="flex rounded-xl border overflow-hidden shrink-0" style={{ borderColor: 'var(--theme-border)' }}>
+              <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2.5 transition-all duration-300 ${viewMode === 'grid' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
+                className={`p-2.5 transition-all duration-300 ${viewMode === 'grid' ? 'bg-purple-500/20 text-purple-400' : ''}`}
                 style={viewMode !== 'grid' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
               >
                 <LayoutGrid className="w-4 h-4" />
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.9 }}
+              </button>
+              <button
                 onClick={() => setViewMode('list')}
-                className={`p-2.5 transition-all duration-300 ${viewMode === 'list' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
+                className={`p-2.5 transition-all duration-300 ${viewMode === 'list' ? 'bg-purple-500/20 text-purple-400' : ''}`}
                 style={viewMode !== 'list' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
               >
                 <List className="w-4 h-4" />
-              </motion.button>
+              </button>
             </div>
           </div>
 
-          {/* Active Filters & Count */}
-          <div className="flex items-center justify-between mt-3">
+          {/* Row 2: Department filter pills - full width */}
+          <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
+            <button
+              onClick={() => setDeptFilter('')}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                !deptFilter
+                  ? 'bg-purple-500/20 text-purple-300'
+                  : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              הכל ({contactsList.length})
+            </button>
+            {departments.map(d => {
+              const isActive = deptFilter === d.label;
+              const count = deptCounts[d.label] || 0;
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => setDeptFilter(isActive ? '' : d.label)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                    isActive
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                >
+                  {d.icon} {d.label} ({count})
+                </button>
+              );
+            })}
+            <div className="flex-1" />
             <motion.span
               key={filtered.length}
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs shrink-0"
               style={{ color: 'var(--theme-text-secondary)' }}
             >
               {filtered.length} תוצאות
             </motion.span>
             {(search || deptFilter || availFilter) && (
-              <motion.button
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
+              <button
                 onClick={() => { setSearch(''); setDeptFilter(''); setAvailFilter(''); }}
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors shrink-0"
               >
-                <X className="w-3 h-3" /> נקה פילטרים
-              </motion.button>
+                <X className="w-3 h-3" /> נקה
+              </button>
             )}
           </div>
         </div>
@@ -526,7 +509,7 @@ export default function DirectoryPage() {
         </div>
       </section>
 
-      {/* Contact Detail Modal - Glass Morphism Dark */}
+      {/* Contact Detail Modal */}
       <AnimatePresence>
         {selectedContact && (
           <motion.div
@@ -534,7 +517,7 @@ export default function DirectoryPage() {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md"
             onClick={() => setSelectedContact(null)}
           >
             <motion.div
@@ -542,174 +525,153 @@ export default function DirectoryPage() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="relative rounded-3xl max-w-md w-full overflow-hidden"
+              className="relative rounded-t-3xl sm:rounded-3xl max-w-md w-full overflow-hidden"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'linear-gradient(145deg, color-mix(in srgb, var(--theme-bg) 90%, rgba(139,92,246,0.1)), var(--theme-bg))',
-                border: '1px solid color-mix(in srgb, var(--theme-border) 60%, rgba(139,92,246,0.2))',
-                boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.08)',
+                background: 'linear-gradient(165deg, rgba(20, 20, 35, 0.98) 0%, rgba(10, 10, 20, 0.99) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
               }}
             >
-              {/* Top gradient bar */}
-              <div className={`h-1.5 w-full bg-gradient-to-l ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'}`} />
+              {/* Decorative gradient header */}
+              <div className={`relative h-28 bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} overflow-hidden`}>
+                <div className="absolute inset-0 bg-black/30" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.15),transparent_60%)]" />
+                {/* Close button */}
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setSelectedContact(null)}
+                  className="absolute top-4 left-4 p-2 rounded-full bg-black/30 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/50 transition-all z-10"
+                >
+                  <X className="w-5 h-5" />
+                </motion.button>
+                {isCurrentUser(selectedContact) && (
+                  <div className="absolute top-4 right-4 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/30 backdrop-blur-sm text-amber-300 text-xs font-bold">
+                    <Star className="w-3 h-3" /> זה אני
+                  </div>
+                )}
+              </div>
 
-              {/* Close button */}
-              <motion.button
-                whileHover={{ scale: 1.1, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => setSelectedContact(null)}
-                className="absolute top-4 left-4 p-2 rounded-full transition-colors z-10 hover:bg-white/10"
-                style={{ color: 'var(--theme-text-secondary)' }}
-              >
-                <X className="w-5 h-5" />
-              </motion.button>
+              {/* Avatar overlapping header */}
+              <div className="flex justify-center -mt-14 relative z-10">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+                >
+                  <div className={`w-28 h-28 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-4xl shadow-2xl ring-4 ring-[rgba(20,20,35,0.98)]`}>
+                    {selectedContact.firstName[0]}{selectedContact.lastName[0]}
+                  </div>
+                </motion.div>
+              </div>
 
-              <div className="p-8 pt-6">
-                {/* Avatar section */}
-                <div className="text-center mb-6">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-                    className="relative inline-block"
-                  >
-                    {/* Avatar glow */}
-                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} blur-xl opacity-30`} />
-                    <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-3xl shadow-2xl ${
-                      isCurrentUser(selectedContact) ? 'ring-3 ring-[var(--theme-accent)] ring-offset-4 ring-offset-[var(--theme-bg)]' : ''
-                    }`}>
-                      {selectedContact.firstName[0]}{selectedContact.lastName[0]}
-                    </div>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2, duration: 0.3 }}
-                  >
-                    <h2 className="text-2xl font-black mt-4 bg-gradient-to-l from-white via-purple-100 to-white bg-clip-text text-transparent">
-                      {selectedContact.firstName} {selectedContact.lastName}
-                    </h2>
-                    {isCurrentUser(selectedContact) && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: 'spring', stiffness: 300, delay: 0.3 }}
-                        className="inline-flex items-center gap-1 text-xs text-[var(--theme-accent)] font-bold mt-1"
-                      >
-                        <Star className="w-3 h-3" /> זה אני
-                      </motion.span>
-                    )}
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.25, duration: 0.3 }}
-                    className="flex items-center justify-center gap-2 mt-3"
-                  >
-                    <span className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+              <div className="px-6 pb-7 pt-4">
+                {/* Name */}
+                <div className="text-center mb-5">
+                  <h2 className="text-2xl font-black text-white/95">
+                    {selectedContact.firstName} {selectedContact.lastName}
+                  </h2>
+                  <div className="flex items-center justify-center gap-2 mt-2.5">
+                    <span className="text-sm px-3 py-1 rounded-full flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>
                       <Briefcase className="w-3.5 h-3.5" />{selectedContact.role}
                     </span>
-                    <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department]}`}>
+                    <span className={`text-sm px-3 py-1 rounded-full ${deptBadgeColors[selectedContact.department]}`}>
                       {selectedContact.department}
                     </span>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3, duration: 0.3 }}
-                    className="flex items-center justify-center gap-2 mt-3"
-                  >
-                    <span className={`w-2.5 h-2.5 rounded-full ${
+                  </div>
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <span className={`w-2 h-2 rounded-full ${
                       selectedContact.availability === 'available' ? 'bg-green-400 shadow-sm shadow-green-400/50' :
                       selectedContact.availability === 'unavailable' ? 'bg-red-400' : 'bg-gray-500'
                     }`} />
-                    <span className={`text-sm font-medium ${
+                    <span className={`text-xs font-medium ${
                       selectedContact.availability === 'available' ? 'text-green-400' :
                       selectedContact.availability === 'unavailable' ? 'text-red-400' : 'text-gray-400'
                     }`}>
                       {selectedContact.availability === 'available' ? 'פנוי לעבודה' : selectedContact.availability === 'unavailable' ? 'לא פנוי' : 'סטטוס לא צוין'}
                     </span>
-                  </motion.div>
+                  </div>
                 </div>
 
                 {/* Skills */}
                 {selectedContact.skills && selectedContact.skills.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.35, duration: 0.3 }}
-                    className="mb-6"
-                  >
-                    <h4 className="text-xs font-medium mb-2.5 flex items-center gap-1.5" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
-                      <Star className="w-3 h-3" /> מיומנויות
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedContact.skills.map((skill, i) => (
-                        <motion.span
+                  <div className="mb-5">
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      {selectedContact.skills.map((skill) => (
+                        <span
                           key={skill}
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.35 + i * 0.05, duration: 0.2 }}
-                          className="text-xs px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20"
+                          className="text-xs px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/15"
                         >
                           {skill}
-                        </motion.span>
+                        </span>
                       ))}
                     </div>
-                  </motion.div>
+                  </div>
                 )}
 
-                {/* Contact actions */}
-                {selectedContact.phone && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4, duration: 0.3 }}
-                    className="space-y-2.5"
-                  >
-                    <motion.a
-                      whileHover={{ scale: 1.02, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      href={`tel:${selectedContact.phone}`}
-                      className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl bg-gradient-to-l from-green-600 to-emerald-600 text-white font-bold shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/30 transition-shadow"
-                    >
-                      <Phone className="w-4.5 h-4.5" />
-                      <span>התקשר</span>
-                      <span dir="ltr" className="opacity-80 text-sm">{selectedContact.phone}</span>
-                    </motion.a>
-                    <motion.a
-                      whileHover={{ scale: 1.02, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      href={formatWhatsApp(selectedContact.phone)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl bg-gradient-to-l from-green-700 to-green-800 text-white font-bold shadow-lg shadow-green-800/20 hover:shadow-xl hover:shadow-green-800/30 transition-shadow"
-                    >
-                      <MessageCircle className="w-4.5 h-4.5" />
-                      שלח הודעת WhatsApp
-                    </motion.a>
-                  </motion.div>
-                )}
-
-                {selectedContact.email && (
-                  <motion.a
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.45, duration: 0.3 }}
-                    whileHover={{ scale: 1.02, y: -1 }}
-                    whileTap={{ scale: 0.98 }}
-                    href={`mailto:${selectedContact.email}`}
-                    className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl mt-2.5 border font-bold transition-all hover:bg-purple-500/10"
-                    style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}
-                  >
-                    <Mail className="w-4 h-4" />
-                    שלח אימייל
-                  </motion.a>
-                )}
+                {/* Action buttons */}
+                <div className="space-y-2">
+                  {selectedContact.phone && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <motion.a
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          href={`tel:${selectedContact.phone}`}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl text-white font-bold text-sm transition-shadow"
+                          style={{ background: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)', boxShadow: '0 4px 15px rgba(34, 197, 94, 0.25)' }}
+                        >
+                          <Phone className="w-4 h-4" />
+                          <span>התקשר</span>
+                        </motion.a>
+                        <motion.a
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          href={formatWhatsApp(selectedContact.phone)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl text-white font-bold text-sm transition-shadow"
+                          style={{ background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)', boxShadow: '0 4px 15px rgba(37, 211, 102, 0.25)' }}
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>WhatsApp</span>
+                        </motion.a>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="text-xs font-mono text-white/40" dir="ltr">{selectedContact.phone}</span>
+                        <button
+                          onClick={() => copyToClipboard(selectedContact.phone!, 'phone')}
+                          className="p-1 rounded hover:bg-[var(--theme-accent-glow)] transition-colors text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]"
+                          title="העתק מספר"
+                        >
+                          {copied === 'phone' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {selectedContact.email && (
+                    <div className="flex items-center gap-2">
+                      <motion.a
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        href={`mailto:${selectedContact.email}`}
+                        className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl border font-bold text-sm transition-all hover:bg-white/5"
+                        style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}
+                      >
+                        <Mail className="w-4 h-4" />
+                        שלח אימייל
+                      </motion.a>
+                      <button
+                        onClick={() => copyToClipboard(selectedContact.email!, 'email')}
+                        className="p-1 rounded hover:bg-[var(--theme-accent-glow)] transition-colors text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]"
+                        title="העתק אימייל"
+                      >
+                        {copied === 'email' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>

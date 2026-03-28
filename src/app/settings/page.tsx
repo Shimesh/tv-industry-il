@@ -23,9 +23,10 @@ function SettingsContent() {
   const { user, profile, logout, updateUserProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
+  const [soundEnabled, setSoundEnabled] = useState(profile?.soundEnabled !== false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [statusSaved, setStatusSaved] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -34,6 +35,25 @@ function SettingsContent() {
 
   const handleStatusChange = async (status: 'available' | 'busy' | 'offline') => {
     await updateUserProfile({ status });
+    setStatusSaved(true);
+    setTimeout(() => setStatusSaved(false), 2000);
+  };
+
+  const handleToggleNotifications = async () => {
+    const next = !notificationsEnabled;
+    setNotificationsEnabled(next);
+    await updateUserProfile({ notificationsEnabled: next });
+  };
+
+  const handleToggleSound = async () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    await updateUserProfile({ soundEnabled: next });
+  };
+
+  const handleToggleShowPhone = async () => {
+    const next = !(profile?.showPhone ?? true);
+    await updateUserProfile({ showPhone: next });
   };
 
   if (!profile) return null;
@@ -77,26 +97,34 @@ function SettingsContent() {
 
         {/* Status */}
         <SettingsSection icon={<User className="w-4 h-4" />} title="סטטוס">
-          <div className="flex gap-2">
-            {[
-              { value: 'available' as const, label: 'פנוי', color: 'bg-green-500' },
-              { value: 'busy' as const, label: 'תפוס', color: 'bg-red-500' },
-              { value: 'offline' as const, label: 'לא פעיל', color: 'bg-gray-500' },
-            ].map(s => (
-              <button
-                key={s.value}
-                onClick={() => handleStatusChange(s.value)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  profile.status === s.value
-                    ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
-                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)]'
-                }`}
-                style={profile.status !== s.value ? { background: 'var(--theme-bg)' } : undefined}
-              >
-                <span className={`w-2 h-2 rounded-full ${s.color}`} />
-                {s.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-2">
+              {[
+                { value: 'available' as const, label: 'פנוי', color: 'bg-green-500' },
+                { value: 'busy' as const, label: 'תפוס', color: 'bg-red-500' },
+                { value: 'offline' as const, label: 'לא פעיל', color: 'bg-gray-500' },
+              ].map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => handleStatusChange(s.value)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    profile.status === s.value
+                      ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)]'
+                  }`}
+                  style={profile.status !== s.value ? { background: 'var(--theme-bg)' } : undefined}
+                >
+                  <span className={`w-2 h-2 rounded-full ${s.color}`} />
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {statusSaved && (
+              <span className="flex items-center gap-1 text-xs font-medium text-green-400 animate-pulse">
+                <CheckCircle className="w-3.5 h-3.5" />
+                סטטוס עודכן
+              </span>
+            )}
           </div>
         </SettingsSection>
 
@@ -130,14 +158,14 @@ function SettingsContent() {
               label="התראות Push"
               description="קבל התראות על עדכוני לוח הפקות"
               enabled={notificationsEnabled}
-              onToggle={() => setNotificationsEnabled(!notificationsEnabled)}
+              onToggle={handleToggleNotifications}
             />
             <ToggleRow
               icon={<Volume2 className="w-4 h-4" />}
               label="צלילים"
               description="צליל בעת הודעה חדשה"
               enabled={soundEnabled}
-              onToggle={() => setSoundEnabled(!soundEnabled)}
+              onToggle={handleToggleSound}
             />
           </div>
         </SettingsSection>
@@ -156,8 +184,8 @@ function SettingsContent() {
               icon={<Smartphone className="w-4 h-4" />}
               label="הצג מספר טלפון"
               description="הצג את מספר הטלפון שלך באלפון"
-              enabled={!!profile.phone}
-              onToggle={() => {}}
+              enabled={profile.showPhone !== false}
+              onToggle={handleToggleShowPhone}
             />
           </div>
         </SettingsSection>

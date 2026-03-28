@@ -125,6 +125,17 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     }
   }, []);
 
+  // Keyboard shortcuts: F = fullscreen, M = mute
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+      if (e.key === 'm' || e.key === 'M') setVolume(v => v === 0 ? 80 : 0);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [toggleFullscreen]);
+
   const videoStyle = {
     filter: `brightness(${brightness}%) contrast(${contrast}%)`,
     width: '100%',
@@ -144,7 +155,15 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     >
       {hasDirectStream ? (
         <>
-          <video ref={videoRef} style={videoStyle} playsInline />
+          <video
+            ref={videoRef}
+            style={videoStyle}
+            playsInline
+            onError={() => {
+              setError('השידור אינו זמין כרגע');
+              setLoading(false);
+            }}
+          />
 
           {/* Loading spinner */}
           {loading && (
@@ -345,7 +364,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
               onClick={toggleFullscreen}
               className="hover:text-blue-400 transition-colors text-lg p-1"
             >
-              {isFullscreen ? '⛶' : '⛶'}
+              {isFullscreen ? '⊡' : '⛶'}
             </button>
           </div>
         </div>

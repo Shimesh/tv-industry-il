@@ -27,6 +27,57 @@ interface ArticleContent {
 
 const eventCategories = ['', 'festival', 'conference', 'premiere', 'workshop', 'award'];
 
+/* ===== ICS Calendar helpers ===== */
+function toICSDate(dateStr: string, timeStr?: string): string {
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  if (timeStr) {
+    const [h, m] = timeStr.split(':');
+    return `${year}${month}${day}T${h.padStart(2, '0')}${m.padStart(2, '0')}00`;
+  }
+  return `${year}${month}${day}`;
+}
+
+function addToCalendar(event: { title: string; date: string; time?: string; location: string; description: string }) {
+  const dtStart = toICSDate(event.date, event.time);
+  // Default end time: 2 hours after start if time provided, else all-day
+  let dtEnd: string;
+  if (event.time) {
+    const [h, m] = event.time.split(':').map(Number);
+    const endHour = String(h + 2).padStart(2, '0');
+    const endMin = String(m).padStart(2, '0');
+    dtEnd = toICSDate(event.date, `${endHour}:${endMin}`);
+  } else {
+    dtEnd = dtStart;
+  }
+
+  const icsContent = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//TVIndustryIL//HE',
+    'BEGIN:VEVENT',
+    `DTSTART:${dtStart}`,
+    `DTEND:${dtEnd}`,
+    `SUMMARY:${event.title}`,
+    `DESCRIPTION:${event.description}`,
+    `LOCATION:${event.location}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const blob = new Blob([icsContent], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'event.ics';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 const catColors: Record<string, string> = {
   festival: 'bg-yellow-500/15 text-yellow-300',
   conference: 'bg-blue-500/15 text-blue-300',
@@ -562,7 +613,10 @@ export default function NewsPage() {
                           )}
                           <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{event.location}</span>
                         </div>
-                        <button className="mt-3 px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 text-sm font-medium hover:bg-blue-500/20 transition-colors">
+                        <button
+                          onClick={() => addToCalendar(event)}
+                          className="mt-3 px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 text-sm font-medium hover:bg-blue-500/20 transition-colors"
+                        >
                           <Calendar className="w-3.5 h-3.5 inline ml-1" />
                           הוסף ליומן
                         </button>

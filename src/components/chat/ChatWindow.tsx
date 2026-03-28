@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  ArrowRight, Search, Paperclip, Send, Smile, Mic, X, Image as ImageIcon, FileText
+  ArrowRight, Search, Paperclip, Send, Smile, Mic, X, Image as ImageIcon,
+  FileText, Phone, Video, Lock, StopCircle, Video as VideoIcon
 } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import type { ChatRoom, Message } from '@/hooks/useChat';
+import { useCall } from '@/contexts/CallContext';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 
 interface ChatWindowProps {
   chat: ChatRoom;
@@ -15,9 +18,11 @@ interface ChatWindowProps {
   uploadProgress: number | null;
   onSendMessage: (
     text: string,
-    type: 'text' | 'image' | 'file',
+    type: 'text' | 'image' | 'file' | 'voice' | 'video',
     file?: File,
-    replyTo?: { messageId: string; text: string; senderName: string } | null
+    replyTo?: { messageId: string; text: string; senderName: string } | null,
+    duration?: number,
+    mimeType?: string
   ) => Promise<void>;
   onDeleteMessage: (id: string) => void;
   onSetTyping: (isTyping: boolean) => void;
@@ -58,6 +63,12 @@ function getChatDisplayPhoto(chat: ChatRoom, currentUserId: string): string | nu
   return chat.photoURL;
 }
 
+function formatRecordingDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function ChatWindow({
   chat, messages, currentUserId, typingUsers, uploadProgress,
   onSendMessage, onDeleteMessage, onSetTyping, onBack,
@@ -66,15 +77,47 @@ export default function ChatWindow({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<'audio' | 'video' | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const { callState, startCall } = useCall();
+  const {
+    isRecording, duration, audioBlob, mimeType, stream,
+    startRecording, stopRecording, cancelRecording, error: recorderError,
+  } = useVoiceRecorder();
 
   const chatName = getChatDisplayName(chat, currentUserId);
   const chatPhoto = getChatDisplayPhoto(chat, currentUserId);
   const isGroup = chat.type !== 'private';
+  const otherMember = chat.type === 'private'
+    ? chat.membersInfo.find(m => m.uid && m.uid !== currentUserId)
+    : null;
+  const canCall = !!otherMember?.uid && callState.status === 'idle';
+
+  // Attach video stream to preview element
+  useEffect(() => {
+    if (videoPreviewRef.current && stream && recordingMode === 'video') {
+      videoPreviewRef.current.srcObject = stream;
+    }
+  }, [stream, recordingMode]);
+
+  // When recording stops and blob is available, auto-send
+  useEffect(() => {
+    if (!isRecording && audioBlob && recordingMode) {
+      const mode = recordingMode;
+      setRecordingMode(null);
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const fileName = mode === 'video' ? `video_${Date.now()}.${ext}` : `voice_${Date.now()}.${ext}`;
+      const file = new File([audioBlob], fileName, { type: mimeType });
+      onSendMessage('', mode === 'video' ? 'video' : 'voice', file, null, duration, mimeType).catch(() => {});
+    }
+  }, [isRecording, audioBlob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -106,7 +149,6 @@ export default function ChatWindow({
     setShowEmoji(false);
     onSetTyping(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    // Reset textarea height
     if (inputRef.current) inputRef.current.style.height = 'auto';
   };
 
@@ -128,9 +170,29 @@ export default function ChatWindow({
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     handleTyping();
-    // Auto-expand textarea
     e.target.style.height = 'auto';
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+  };
+
+  const handleStartVoice = async () => {
+    setRecordingMode('audio');
+    await startRecording('audio');
+  };
+
+  const handleStartVideo = async () => {
+    setShowAttach(false);
+    setRecordingMode('video');
+    await startRecording('video');
+  };
+
+  const handleCancelRecording = () => {
+    cancelRecording();
+    setRecordingMode(null);
+  };
+
+  const handleStopAndSend = () => {
+    stopRecording();
+    // blob will be picked up by the useEffect above
   };
 
   // Group messages by date
@@ -172,7 +234,10 @@ export default function ChatWindow({
 
         {/* Name + status */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-[15px] font-medium text-[#E9EDEF] truncate">{chatName}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[15px] font-medium text-[#E9EDEF] truncate">{chatName}</h3>
+            <span title="מוצפן מקצה לקצה"><Lock className="w-3 h-3 text-[#00A884] shrink-0" /></span>
+          </div>
           <p className="text-[12px] text-[#8696a0]">
             {typingUsers.length > 0 ? (
               <span className="text-[#00A884]">
@@ -185,6 +250,28 @@ export default function ChatWindow({
             )}
           </p>
         </div>
+
+        {/* Call buttons — private chats only */}
+        {chat.type === 'private' && otherMember?.uid && (
+          <>
+            <button
+              onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'voice')}
+              disabled={!canCall}
+              className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="שיחת קול"
+            >
+              <Phone className="w-5 h-5 text-[#AEBAC1]" />
+            </button>
+            <button
+              onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'video')}
+              disabled={!canCall}
+              className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="שיחת וידאו"
+            >
+              <Video className="w-5 h-5 text-[#AEBAC1]" />
+            </button>
+          </>
+        )}
 
         {/* Search */}
         <button className="p-2 rounded-full hover:bg-[#2A3942] transition-colors">
@@ -230,6 +317,7 @@ export default function ChatWindow({
                     isOwn={isOwn}
                     showSender={showSender}
                     isGroup={isGroup}
+                    chatMembers={chat.members}
                     onReply={(m) => { setReplyTo(m); inputRef.current?.focus(); }}
                     onDelete={onDeleteMessage}
                   />
@@ -266,7 +354,7 @@ export default function ChatWindow({
       )}
 
       {/* ── Reply Preview ── */}
-      {replyTo && (
+      {replyTo && !isRecording && (
         <div className="flex items-center gap-3 px-4 py-2 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
           <div className="flex-1 min-w-0 border-r-[3px] border-[#00A884] pr-3">
             <p className="text-[12px] font-medium text-[#00A884]">{replyTo.senderName}</p>
@@ -279,7 +367,7 @@ export default function ChatWindow({
       )}
 
       {/* ── Emoji Picker ── */}
-      {showEmoji && (
+      {showEmoji && !isRecording && (
         <div className="bg-[#202C33] border-t border-[#2A3942] p-3" dir="rtl">
           <div className="grid grid-cols-10 gap-1 max-h-[120px] overflow-y-auto">
             {EMOJI_LIST.map((emoji) => (
@@ -299,7 +387,7 @@ export default function ChatWindow({
       )}
 
       {/* ── Attachment Menu ── */}
-      {showAttach && (
+      {showAttach && !isRecording && (
         <div className="bg-[#202C33] border-t border-[#2A3942] p-3 flex gap-4 justify-center" dir="rtl">
           <button
             onClick={() => imageInputRef.current?.click()}
@@ -319,6 +407,28 @@ export default function ChatWindow({
             </div>
             <span className="text-[11px] text-[#8696a0]">מסמך</span>
           </button>
+          <button
+            onClick={handleStartVideo}
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[#2A3942] transition-colors"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#E03E3E] flex items-center justify-center">
+              <VideoIcon className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-[11px] text-[#8696a0]">וידאו</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Video Preview (while recording video) ── */}
+      {isRecording && recordingMode === 'video' && (
+        <div className="bg-[#111B21] border-t border-[#2A3942] p-2 flex justify-center">
+          <video
+            ref={videoPreviewRef}
+            muted
+            autoPlay
+            playsInline
+            className="rounded-lg max-h-[160px] max-w-full bg-black"
+          />
         </div>
       )}
 
@@ -345,53 +455,95 @@ export default function ChatWindow({
         }}
       />
 
-      {/* ── Input Bar ── */}
-      <div className="flex items-end gap-2 px-3 py-2 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">
-        {/* Emoji button */}
-        <button
-          onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
-          className={`p-2 rounded-full transition-colors shrink-0 ${showEmoji ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
-        >
-          <Smile className="w-6 h-6" />
-        </button>
-
-        {/* Attach button */}
-        <button
-          onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
-          className={`p-2 rounded-full transition-colors shrink-0 ${showAttach ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
-        >
-          <Paperclip className="w-6 h-6" />
-        </button>
-
-        {/* Text input */}
-        <div className="flex-1 min-w-0">
-          <textarea
-            ref={inputRef}
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            placeholder="הקלד הודעה"
-            rows={1}
-            dir="auto"
-            className="w-full px-3 py-[9px] rounded-lg text-[14px] text-[#E9EDEF] bg-[#2A3942] placeholder:text-[#8696a0] outline-none resize-none leading-[20px] max-h-[120px]"
-            style={{ scrollbarWidth: 'none' }}
-          />
-        </div>
-
-        {/* Send / Mic button */}
-        {text.trim() ? (
+      {/* ── Recording Bar (shown while recording) ── */}
+      {isRecording ? (
+        <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">
+          {/* Cancel */}
           <button
-            onClick={handleSend}
+            onClick={handleCancelRecording}
+            className="p-2 rounded-full bg-[#2A3942] hover:bg-[#3A4952] transition-colors shrink-0"
+            title="ביטול"
+          >
+            <X className="w-5 h-5 text-[#8696a0]" />
+          </button>
+
+          {/* Recording indicator */}
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-full bg-[#2A3942]">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+            <span className="text-[13px] text-[#E9EDEF] font-medium">
+              {recordingMode === 'video' ? '🎥' : '🎤'} מקליט... {formatRecordingDuration(duration)}
+            </span>
+          </div>
+
+          {/* Send */}
+          <button
+            onClick={handleStopAndSend}
             className="p-2.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] transition-colors shrink-0"
+            title="שלח"
           >
             <Send className="w-5 h-5 text-[#111B21]" />
           </button>
-        ) : (
-          <button className="p-2 rounded-full text-[#8696a0] hover:text-[#E9EDEF] transition-colors shrink-0">
-            <Mic className="w-6 h-6" />
+        </div>
+      ) : (
+        /* ── Normal Input Bar ── */
+        <div className="flex items-end gap-2 px-3 py-2 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">
+          {/* Emoji button */}
+          <button
+            onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
+            className={`p-2 rounded-full transition-colors shrink-0 ${showEmoji ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
+          >
+            <Smile className="w-6 h-6" />
           </button>
-        )}
-      </div>
+
+          {/* Attach button */}
+          <button
+            onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
+            className={`p-2 rounded-full transition-colors shrink-0 ${showAttach ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
+          >
+            <Paperclip className="w-6 h-6" />
+          </button>
+
+          {/* Text input */}
+          <div className="flex-1 min-w-0">
+            <textarea
+              ref={inputRef}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              placeholder="הקלד הודעה"
+              rows={1}
+              dir="auto"
+              className="w-full px-3 py-[9px] rounded-lg text-[14px] text-[#E9EDEF] bg-[#2A3942] placeholder:text-[#8696a0] outline-none resize-none leading-[20px] max-h-[120px]"
+              style={{ scrollbarWidth: 'none' }}
+            />
+          </div>
+
+          {/* Send / Mic button */}
+          {text.trim() ? (
+            <button
+              onClick={handleSend}
+              className="p-2.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] transition-colors shrink-0"
+            >
+              <Send className="w-5 h-5 text-[#111B21]" />
+            </button>
+          ) : (
+            <button
+              onPointerDown={handleStartVoice}
+              className="p-2 rounded-full text-[#8696a0] hover:text-[#E9EDEF] hover:bg-[#2A3942] transition-colors shrink-0"
+              title="לחץ להקלטת הודעה קולית"
+            >
+              <Mic className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Recorder error toast */}
+      {recorderError && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[13px] px-4 py-2 rounded-lg shadow-lg z-50 whitespace-nowrap" dir="rtl">
+          {recorderError}
+        </div>
+      )}
     </div>
   );
 }

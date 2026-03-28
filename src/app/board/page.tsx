@@ -1,20 +1,186 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { useRouter } from 'next/navigation';
 import PostCard, { Post } from '@/components/board/PostCard';
 import PostForm, { PostFormData } from '@/components/board/PostForm';
+import UserAvatar from '@/components/UserAvatar';
 import {
-  Plus, Search, Briefcase, Package, Gift, Filter, SlidersHorizontal,
-  TrendingUp, Clock, Megaphone
+  Plus, Search, Briefcase, Package, Gift, Filter,
+  TrendingUp, Clock, Megaphone, X, Send, MessageCircle
 } from 'lucide-react';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   collection, query, orderBy, onSnapshot, addDoc, serverTimestamp,
-  where, Timestamp, updateDoc, doc, increment
+  where, Timestamp, updateDoc, doc, increment, getDocs
 } from 'firebase/firestore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// ─── Comment type ───────────────────────────────────────────────────────────
+interface Comment {
+  id: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  authorPhoto: string | null;
+  createdAt: number;
+}
+
+// ─── CommentsModal ───────────────────────────────────────────────────────────
+function CommentsModal({ postId, onClose }: { postId: string; onClose: () => void }) {
+  const { user, profile } = useAuth();
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [commentError, setCommentError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    try {
+      const commentsRef = collection(db, 'posts', postId, 'comments');
+      const q = query(commentsRef, orderBy('createdAt', 'asc'));
+      const unsubscribe = onSnapshot(q, (snap) => {
+        const loaded: Comment[] = [];
+        snap.forEach(d => {
+          const data = d.data();
+          loaded.push({
+            id: d.id,
+            text: data.text,
+            authorId: data.authorId,
+            authorName: data.authorName,
+            authorPhoto: data.authorPhoto || null,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
+          });
+        });
+        setComments(loaded);
+        setLoading(false);
+      }, () => setLoading(false));
+      return () => unsubscribe();
+    } catch {
+      setLoading(false);
+    }
+  }, [postId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim() || !user || !profile) return;
+    setSubmitting(true);
+    try {
+      await addDoc(collection(db, 'posts', postId, 'comments'), {
+        text: text.trim(),
+        authorId: user.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL || null,
+        createdAt: serverTimestamp(),
+      });
+      // Also increment the comments counter on the post
+      await updateDoc(doc(db, 'posts', postId), { comments: increment(1) });
+      setCommentError('');
+      setText('');
+      inputRef.current?.focus();
+    } catch {
+      setCommentError('שגיאה בשליחת תגובה');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'עכשיו';
+    if (minutes < 60) return `לפני ${minutes} דקות`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `לפני ${hours} שעות`;
+    const days = Math.floor(hours / 24);
+    return days < 7 ? `לפני ${days} ימים` : new Date(ts).toLocaleDateString('he-IL');
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col"
+        style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)', maxHeight: '80vh' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--theme-border)]">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-[var(--theme-accent)]" />
+            <span className="font-bold text-sm text-[var(--theme-text)]">תגובות</span>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--theme-bg-secondary)] transition-all">
+            <X className="w-4 h-4 text-[var(--theme-text-secondary)]" />
+          </button>
+        </div>
+
+        {/* Comments list */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {loading ? (
+            <p className="text-center text-sm text-[var(--theme-text-secondary)] py-6">טוען תגובות...</p>
+          ) : comments.length === 0 ? (
+            <p className="text-center text-sm text-[var(--theme-text-secondary)] py-6">אין תגובות עדיין. היה/י הראשון/ה!</p>
+          ) : (
+            comments.map(c => (
+              <div key={c.id} className="flex gap-2.5">
+                <UserAvatar name={c.authorName} photoURL={c.authorPhoto} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-bold text-[var(--theme-text)]">{c.authorName}</span>
+                    <span className="text-[10px] text-[var(--theme-text-secondary)]">{formatTime(c.createdAt)}</span>
+                  </div>
+                  <p className="text-sm text-[var(--theme-text)] mt-0.5 break-words">{c.text}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Input */}
+        <div className="px-4 py-3 border-t border-[var(--theme-border)]">
+          {commentError && (
+            <p className="text-xs text-red-400 mb-2">{commentError}</p>
+          )}
+          {user ? (
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="כתוב/י תגובה..."
+                disabled={submitting}
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none disabled:opacity-50"
+                style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
+              />
+              <button
+                type="submit"
+                disabled={submitting || !text.trim()}
+                className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-l from-purple-500 to-blue-600 text-white disabled:opacity-40 transition-all"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <p className="text-center text-xs text-[var(--theme-text-secondary)]">יש להתחבר כדי להגיב</p>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 const typeFilters = [
   { key: 'all', label: 'הכל', icon: Megaphone },
@@ -78,11 +244,14 @@ const demoPosts: Post[] = [
 
 export default function BoardPage() {
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
+  const router = useRouter();
   const [posts, setPosts] = useState<Post[]>(demoPosts);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
 
   // Subscribe to posts from Firestore
   useEffect(() => {
@@ -143,33 +312,53 @@ export default function BoardPage() {
   const handleSubmitPost = async (data: PostFormData) => {
     if (!user || !profile) return;
 
-    let imageURL = null;
-    if (data.image) {
-      const storageRef = ref(storage, `board/${Date.now()}_${data.image.name}`);
-      await uploadBytes(storageRef, data.image);
-      imageURL = await getDownloadURL(storageRef);
+    try {
+      let imageURL = null;
+      if (data.image) {
+        const storageRef = ref(storage, `board/${Date.now()}_${data.image.name}`);
+        await uploadBytes(storageRef, data.image);
+        imageURL = await getDownloadURL(storageRef);
+      }
+
+      await addDoc(collection(db, 'posts'), {
+        ...data,
+        image: undefined,
+        imageURL,
+        authorId: user.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL,
+        authorRole: profile.role || '',
+        views: 0,
+        likes: 0,
+        comments: 0,
+        isActive: true,
+        createdAt: serverTimestamp(),
+      });
+
+      setShowForm(false);
+      showToast('הפרסום פורסם בהצלחה!', 'success');
+    } catch {
+      showToast('שגיאה בפרסום. נסה שוב.', 'error');
     }
+  };
 
-    await addDoc(collection(db, 'posts'), {
-      ...data,
-      image: undefined,
-      imageURL,
-      authorId: user.uid,
-      authorName: profile.displayName,
-      authorPhoto: profile.photoURL,
-      authorRole: profile.role || '',
-      views: 0,
-      likes: 0,
-      comments: 0,
-      isActive: true,
-      createdAt: serverTimestamp(),
-    });
+  const handleContact = (post: Post) => {
+    if (post.authorId.startsWith('demo')) {
+      showToast('הפוסט הוא דוגמה בלבד', 'info');
+      return;
+    }
+    router.push(`/chat?userId=${post.authorId}`);
+  };
 
-    setShowForm(false);
+  const handleOpenComments = (postId: string) => {
+    setCommentsPostId(postId);
   };
 
   const handleLike = async (postId: string) => {
-    if (!user) return;
+    if (!user) {
+      showToast('יש להתחבר כדי לאהוב פרסום', 'info');
+      return;
+    }
     try {
       await updateDoc(doc(db, 'posts', postId), { likes: increment(1) });
     } catch {
@@ -301,6 +490,8 @@ export default function BoardPage() {
                 key={post.id}
                 post={post}
                 onLike={() => handleLike(post.id)}
+                onContact={() => handleContact(post)}
+                onComments={() => handleOpenComments(post.id)}
               />
             ))}
           </div>
@@ -311,6 +502,16 @@ export default function BoardPage() {
       {showForm && (
         <PostForm onSubmit={handleSubmitPost} onClose={() => setShowForm(false)} />
       )}
+
+      {/* Comments Modal */}
+      <AnimatePresence>
+        {commentsPostId && (
+          <CommentsModal
+            postId={commentsPostId}
+            onClose={() => setCommentsPostId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

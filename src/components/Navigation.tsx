@@ -34,8 +34,20 @@ export default function Navigation() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [loadingBar, setLoadingBar] = useState(false);
+  const prevPathnameRef = useRef(pathname);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Show loading bar on route change
+  useEffect(() => {
+    if (prevPathnameRef.current !== pathname) {
+      prevPathnameRef.current = pathname;
+      setLoadingBar(true);
+      const t = setTimeout(() => setLoadingBar(false), 600);
+      return () => clearTimeout(t);
+    }
+  }, [pathname]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -58,6 +70,15 @@ export default function Navigation() {
       background: 'var(--theme-nav-bg)',
       borderColor: 'var(--theme-border)',
     }}>
+      {/* Navigation loading bar */}
+      {loadingBar && (
+        <div className="absolute top-0 right-0 left-0 h-0.5 overflow-hidden z-50">
+          <div
+            className="h-full bg-gradient-to-l from-purple-500 to-blue-500"
+            style={{ animation: 'navLoadBar 0.6s ease-out forwards' }}
+          />
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}

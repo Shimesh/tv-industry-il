@@ -6,6 +6,7 @@ import {
   Briefcase, Search, Package, Gift, MapPin, Clock, MessageCircle,
   Eye, Heart, Share2, Tag
 } from 'lucide-react';
+import { useState } from 'react';
 
 export interface Post {
   id: string;
@@ -33,6 +34,7 @@ interface PostCardProps {
   post: Post;
   onLike?: () => void;
   onContact?: () => void;
+  onComments?: () => void;
 }
 
 const typeConfig: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
@@ -42,9 +44,23 @@ const typeConfig: Record<string, { label: string; icon: React.ElementType; color
   equipment_free: { label: 'ציוד למסירה', icon: Gift, color: 'text-purple-400', bg: 'bg-purple-500/10' },
 };
 
-export default function PostCard({ post, onLike, onContact }: PostCardProps) {
+export default function PostCard({ post, onLike, onContact, onComments }: PostCardProps) {
   const config = typeConfig[post.type] || typeConfig.job_offer;
   const TypeIcon = config.icon;
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const text = `${post.title}\n${post.description}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: post.title, text });
+      } catch { /* user cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const formatTime = (timestamp: number) => {
     const diff = Date.now() - timestamp;
@@ -158,17 +174,35 @@ export default function PostCard({ post, onLike, onContact }: PostCardProps) {
               <Heart className="w-3.5 h-3.5" />
               {post.likes > 0 && post.likes}
             </button>
+            <button
+              onClick={onComments}
+              className="flex items-center gap-1 text-xs text-[var(--theme-text-secondary)] hover:text-blue-400 transition-all"
+              title="הצג תגובות"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              {post.comments > 0 && post.comments}
+            </button>
             <span className="flex items-center gap-1 text-xs text-[var(--theme-text-secondary)]">
               <Eye className="w-3.5 h-3.5" />
               {post.views}
             </span>
             <button
-              onClick={onContact}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white transition-all"
+              onClick={handleShare}
+              className="flex items-center gap-1 text-xs text-[var(--theme-text-secondary)] hover:text-blue-400 transition-all"
+              title="שתף פוסט"
             >
-              <MessageCircle className="w-3.5 h-3.5" />
-              צור קשר
+              <Share2 className="w-3.5 h-3.5" />
+              {copied ? '✓' : ''}
             </button>
+            {onContact && (
+              <button
+                onClick={onContact}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white transition-all"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                צור קשר
+              </button>
+            )}
           </div>
         </div>
       </div>

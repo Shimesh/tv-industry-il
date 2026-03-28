@@ -16,40 +16,53 @@ interface CrewModalProps {
 
 // --- Department inference ---
 
-type Department = 'צילום' | 'טכני' | 'סאונד' | 'תאורה' | 'הפקה' | 'כללי';
+type Department = 'אולפן' | 'קונטרול' | 'טכני' | 'תאורה' | 'הפקה' | 'כללי';
 
-const DEPARTMENT_ORDER: Department[] = ['צילום', 'טכני', 'סאונד', 'תאורה', 'הפקה', 'כללי'];
+const DEPARTMENT_ORDER: Department[] = ['אולפן', 'קונטרול', 'טכני', 'תאורה', 'הפקה', 'כללי'];
 
 function inferCrewDepartment(role: string, roleDetail?: string | null): Department {
   const text = `${role || ''} ${roleDetail || ''}`.toLowerCase();
 
-  // צילום
-  if (/צלם|צילום|רחף|רחפן|סטדיקאם|סטדי|קאם/u.test(text)) return 'צילום';
-  // Also match CCU under צילום if no other tech keyword
-  if (/ccu/i.test(text) && !/טכני|vtr|שידור|מיקסר|ויז'ן/u.test(text)) return 'צילום';
+  // קונטרול - ניתוב, בימוי, פרומפטר, עוזר במאי, CCU, סאונד
+  if (/ניתוב|נתב/u.test(text)) return 'קונטרול';
+  if (/במאי|בימוי|עוזר.?במאי/u.test(text)) return 'קונטרול';
+  if (/פרומפטר|טלפרומפטר|prompter/iu.test(text)) return 'קונטרול';
+  if (/ccu/i.test(text)) return 'קונטרול';
+  if (/סאונד|קול|מקליט|מיקרופון|boom|sound/iu.test(text)) return 'קונטרול';
+
+  // אולפן - צלמים + ניהול במה
+  if (/צלם|צילום|רחף|רחפן|סטדיקאם|סטדי|קאם|camera/iu.test(text)) return 'אולפן';
+  if (/במה|ניהול.?במה|stage/iu.test(text)) return 'אולפן';
 
   // טכני
-  if (/טכני|ccu|vtr|שידור|מיקסר|ויז'ן/iu.test(text)) return 'טכני';
-
-  // סאונד
-  if (/סאונד|קול|מקליט|מיקרופון|boom/iu.test(text)) return 'סאונד';
+  if (/טכני|vtr|שידור|מיקסר|ויז'ן|vision|technical/iu.test(text)) return 'טכני';
 
   // תאורה
-  if (/תאורה|תאורן|אור/u.test(text)) return 'תאורה';
+  if (/תאורה|תאורן|אור|light/iu.test(text)) return 'תאורה';
 
   // הפקה
-  if (/מפיק|הפקה|עורך|במאי|בימוי|עיצוב/u.test(text)) return 'הפקה';
+  if (/מפיק|הפקה|עורך|עיצוב|produc/iu.test(text)) return 'הפקה';
+
+  // Fallback - try to put in טכני rather than כללי
+  if (/גריפ|grip|גנרטור|generator|כבלים|cable/iu.test(text)) return 'טכני';
 
   return 'כללי';
 }
 
 const DEPARTMENT_COLORS: Record<Department, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
-  'צילום': {
+  'אולפן': {
     bg: 'rgba(59, 130, 246, 0.10)',
     text: '#93c5fd',
     border: 'rgba(59, 130, 246, 0.25)',
     pill: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
     pillActive: 'bg-blue-500/25 text-blue-200 border-blue-400/50 shadow-blue-500/20 shadow-sm',
+  },
+  'קונטרול': {
+    bg: 'rgba(249, 115, 22, 0.10)',
+    text: '#fdba74',
+    border: 'rgba(249, 115, 22, 0.25)',
+    pill: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+    pillActive: 'bg-orange-500/25 text-orange-200 border-orange-400/50 shadow-orange-500/20 shadow-sm',
   },
   'טכני': {
     bg: 'rgba(16, 185, 129, 0.10)',
@@ -57,13 +70,6 @@ const DEPARTMENT_COLORS: Record<Department, { bg: string; text: string; border: 
     border: 'rgba(16, 185, 129, 0.25)',
     pill: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     pillActive: 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50 shadow-emerald-500/20 shadow-sm',
-  },
-  'סאונד': {
-    bg: 'rgba(249, 115, 22, 0.10)',
-    text: '#fdba74',
-    border: 'rgba(249, 115, 22, 0.25)',
-    pill: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
-    pillActive: 'bg-orange-500/25 text-orange-200 border-orange-400/50 shadow-orange-500/20 shadow-sm',
   },
   'תאורה': {
     bg: 'rgba(245, 158, 11, 0.10)',

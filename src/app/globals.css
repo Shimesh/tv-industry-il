@@ -336,3 +336,11 @@ body {
   color: #ef4444 !important;
   text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
 }
+
+/* Navigation loading bar */
+@keyframes navLoadBar {
+  0% { transform: translateX(100%) scaleX(0.01); }
+  30% { transform: translateX(60%) scaleX(0.4); }
+  80% { transform: translateX(5%) scaleX(0.9); }
+  100% { transform: translateX(0%) scaleX(1); }
+}

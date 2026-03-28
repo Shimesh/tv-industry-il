@@ -5,6 +5,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "TV Industry IL - פלטפורמת תעשיית הטלוויזיה הישראלית",
@@ -45,7 +46,7 @@ export default function RootLayout({
         <Providers>
           <Navigation />
           <main className="flex-1 pt-16">
-            {children}
+            <ErrorBoundary>{children}</ErrorBoundary>
           </main>
           <Footer />
           <ServiceWorkerRegistration />

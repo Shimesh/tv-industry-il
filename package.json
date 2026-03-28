@@ -20,7 +20,9 @@
     "react-dom": "19.2.3",
     "react-firebase-hooks": "^5.1.1",
     "react-joyride": "^2.9.3",
-    "simple-peer": "^9.11.1"
+    "simple-peer": "^9.11.1",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "engines": {
     "node": "20.x"

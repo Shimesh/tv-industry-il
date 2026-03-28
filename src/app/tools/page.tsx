@@ -292,18 +292,39 @@ function CostCalculator() {
 }
 
 /* ========== Equipment Checklist ========== */
+const DEFAULT_CHECKLIST = [
+  { text: 'מצלמה ראשית + סוללות', checked: false },
+  { text: 'עדשות (24-70, 70-200)', checked: false },
+  { text: 'חצובה + ראש', checked: false },
+  { text: 'תאורה (3 פנסים)', checked: false },
+  { text: 'מיקרופון + בום', checked: false },
+  { text: 'כרטיסי זיכרון (x4)', checked: false },
+  { text: 'מוניטור שטח', checked: false },
+  { text: 'רפלקטור', checked: false },
+];
+const CHECKLIST_KEY = 'tv-equipment-checklist';
+
 function EquipmentChecklist() {
-  const [items, setItems] = useState([
-    { text: 'מצלמה ראשית + סוללות', checked: false },
-    { text: 'עדשות (24-70, 70-200)', checked: false },
-    { text: 'חצובה + ראש', checked: false },
-    { text: 'תאורה (3 פנסים)', checked: false },
-    { text: 'מיקרופון + בום', checked: false },
-    { text: 'כרטיסי זיכרון (x4)', checked: false },
-    { text: 'מוניטור שטח', checked: false },
-    { text: 'רפלקטור', checked: false },
-  ]);
+  const [items, setItems] = useState(DEFAULT_CHECKLIST);
   const [newItem, setNewItem] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(CHECKLIST_KEY);
+      if (saved) setItems(JSON.parse(saved));
+    } catch {}
+    setLoaded(true);
+  }, []);
+
+  // Save to localStorage whenever items change (after initial load)
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(CHECKLIST_KEY, JSON.stringify(items));
+    } catch {}
+  }, [items, loaded]);
 
   const toggle = (i: number) => setItems(items.map((item, idx) => idx === i ? { ...item, checked: !item.checked } : item));
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));

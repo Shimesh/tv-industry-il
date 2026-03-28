@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '@/lib/firebase';
+import { getOrCreateKeyPair } from '@/lib/encryption';
 
 export interface UserProfile {
   uid: string;
@@ -29,6 +30,10 @@ export interface UserProfile {
   isOnline: boolean;
   onboardingComplete: boolean;
   theme: string;
+  notificationsEnabled?: boolean;
+  soundEnabled?: boolean;
+  showPhone?: boolean;
+  encryptionPublicKey?: string;
 }
 
 interface AuthContextType {
@@ -60,8 +65,19 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
 
     if (profileSnap.exists()) {
       updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
-      return { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
+      // Ensure encryption public key is published
+      const profileData = profileSnap.data();
+      if (!profileData.encryptionPublicKey && typeof window !== 'undefined') {
+        const kp = getOrCreateKeyPair(firebaseUser.uid);
+        if (kp) {
+          updateDoc(profileRef, { encryptionPublicKey: kp.publicKey }).catch(() => {});
+        }
+      }
+      return { uid: firebaseUser.uid, ...profileData } as UserProfile;
     }
+
+    // Generate encryption key pair for new user
+    const kp = typeof window !== 'undefined' ? getOrCreateKeyPair(firebaseUser.uid) : null;
 
     const profileData: Omit<UserProfile, 'uid'> = {
       displayName: firebaseUser.displayName || 'משתמש חדש',
@@ -76,6 +92,7 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
       isOnline: true,
       onboardingComplete: false,
       theme: 'dark',
+      encryptionPublicKey: kp?.publicKey,
     };
 
     await setDoc(profileRef, {
