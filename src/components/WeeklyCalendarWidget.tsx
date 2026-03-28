@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { X, Clapperboard, ArrowLeft, Clock, MapPin, User } from 'lucide-react';
+import { X, Clapperboard, ArrowLeft, Clock, MapPin, User, ChevronRight, ChevronLeft } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,10 +13,24 @@ import type { Production } from '@/lib/productionDiff';
 const CACHE_KEY = 'productions_cache_v2';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const DAY_NAMES = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 /* ─── helpers ───────────────────────────────── */
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getWeekSunday(offset: number): Date {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + offset * 7);
+}
+
+function getWeekDays(offset: number): string[] {
+  const sunday = getWeekSunday(offset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
+    return toDateStr(d);
+  });
 }
 
 function getWeekId(dateStr: string): string {
@@ -26,22 +40,19 @@ function getWeekId(dateStr: string): string {
   return toDateStr(sunday);
 }
 
-function getWeekDays(): string[] {
-  const today = new Date();
-  const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
-    return toDateStr(d);
-  });
+function getWeekLabel(days: string[]): string {
+  const [fy, fm, fd] = days[0].split('-').map(Number);
+  const [, lm, ld] = days[6].split('-').map(Number);
+  if (fm === lm) return `${fd}–${ld} ${MONTHS[fm - 1]}`;
+  return `${fd} ${MONTHS[fm - 1]} – ${ld} ${MONTHS[lm - 1]}`;
 }
 
-function loadFromCache(): Production[] | null {
+function loadFromCache(weekId: string): Production[] | null {
   try {
     if (typeof window === 'undefined') return null;
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
-    const weekId = getWeekId(toDateStr(new Date()));
     const entry = cache[weekId];
     if (!entry || Date.now() - entry.savedAt > CACHE_TTL) return null;
     return entry.data;
@@ -71,9 +82,8 @@ function getMyRole(p: Production, displayName: string, phone: string): string {
 }
 
 function formatHebrewDate(dateStr: string, dayIndex: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-  return `יום ${DAY_NAMES[dayIndex]} · ${d} ב${months[m - 1]}`;
+  const [, m, d] = dateStr.split('-').map(Number);
+  return `יום ${DAY_NAMES[dayIndex]} · ${d} ב${MONTHS[m - 1]}`;
 }
 
 /* ─── Day Popup ─────────────────────────────── */
@@ -111,10 +121,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
               {formatHebrewDate(dateStr, dayIndex)}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 transition-colors"
-          >
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
             <X className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
           </button>
         </div>
@@ -131,14 +138,9 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
                 style={mine ? { background: 'rgba(251, 146, 60, 0.08)' } : undefined}
               >
                 <div className="flex items-start gap-2">
-                  {mine && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 shrink-0" />
-                  )}
+                  {mine && <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 shrink-0" />}
                   <div className={`flex-1 ${!mine ? 'pr-3.5' : ''}`}>
-                    <p
-                      className="text-sm font-bold leading-tight"
-                      style={{ color: mine ? 'rgb(251,146,60)' : 'var(--theme-text)' }}
-                    >
+                    <p className="text-sm font-bold leading-tight" style={{ color: mine ? 'rgb(251,146,60)' : 'var(--theme-text)' }}>
                       {p.name}
                     </p>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
@@ -188,7 +190,8 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
 /* ─── Main Widget ───────────────────────────── */
 export default function WeeklyCalendarWidget() {
   const { user, profile } = useAuth();
-  const [days] = useState<string[]>(() => getWeekDays());
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [days, setDays] = useState<string[]>(() => getWeekDays(0));
   const [productions, setProductions] = useState<Production[] | null>(null);
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
@@ -196,20 +199,33 @@ export default function WeeklyCalendarWidget() {
   const displayName = profile?.displayName ?? '';
   const phone = profile?.phone ?? '';
 
-  /* Phase 1: localStorage */
+  // Recompute days when offset changes
+  useEffect(() => {
+    const newDays = getWeekDays(weekOffset);
+    setDays(newDays);
+    setProductions(null);
+    // Phase 1: try cache
+    const weekId = getWeekId(newDays[0]);
+    const cached = loadFromCache(weekId);
+    if (cached) setProductions(cached);
+  }, [weekOffset]);
+
+  /* Phase 1 on mount */
   useEffect(() => {
     setMounted(true);
-    const cached = loadFromCache();
+    const weekId = getWeekId(days[0]);
+    const cached = loadFromCache(weekId);
     if (cached) setProductions(cached);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* Phase 2: Firestore background refresh */
   useEffect(() => {
     if (!user) return;
-    const weekId = getWeekId(toDateStr(new Date()));
+    const weekId = getWeekId(days[0]);
     const colRef = collection(db, `productions/global/weeks/${weekId}/productions`);
     getDocs(colRef).then(snap => {
-      if (snap.empty) return;
+      if (snap.empty) { setProductions(prev => prev ?? []); return; }
       const prods: Production[] = [];
       snap.forEach(doc => {
         const d = doc.data();
@@ -229,8 +245,8 @@ export default function WeeklyCalendarWidget() {
         });
       });
       setProductions(prods);
-    }).catch(() => { /* silently ignore — cache still shown */ });
-  }, [user]);
+    }).catch(() => {});
+  }, [user, days]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';
 
@@ -251,11 +267,13 @@ export default function WeeklyCalendarWidget() {
   const myShiftCount = myShiftDays.size;
   const popupProductions = popupDate ? (byDate[popupDate] ?? []) : [];
   const popupDayIndex = popupDate ? days.indexOf(popupDate) : 0;
+  const weekLabel = getWeekLabel(days);
+  const isCurrentWeek = weekOffset === 0;
 
   return (
     <>
       <div
-        className="rounded-2xl border overflow-hidden transition-all hover:shadow-lg"
+        className="rounded-2xl border overflow-hidden"
         style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
       >
         {/* Header */}
@@ -265,28 +283,57 @@ export default function WeeklyCalendarWidget() {
               <Clapperboard className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
-              <h2 className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>לוח הפקות השבוע</h2>
+              <h2 className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>
+                לוח הפקות
+                {isCurrentWeek && <span className="mr-1.5 text-[10px] font-medium opacity-50">השבוע</span>}
+              </h2>
               {mounted && (
                 <p className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
-                  {!productions
-                    ? 'טוען...'
-                    : myShiftCount > 0
-                      ? `${myShiftCount} ימי עבודה שלך השבוע`
-                      : productions.length > 0
-                        ? `${productions.length} הפקות`
-                        : 'אין הפקות השבוע'}
+                  {weekLabel}
+                  {productions !== null && myShiftCount > 0 && (
+                    <span className="mr-1.5 text-orange-400 font-semibold">· {myShiftCount} ימי עבודה שלך</span>
+                  )}
                 </p>
               )}
             </div>
           </div>
-          <Link
-            href="/productions"
-            className="flex items-center gap-1 text-xs font-medium opacity-50 hover:opacity-100 transition-opacity"
-            style={{ color: 'var(--theme-accent)' }}
-          >
-            לכל ההפקות
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </Link>
+
+          {/* Right side: nav arrows + link */}
+          <div className="flex items-center gap-1">
+            {/* Week navigation */}
+            <button
+              onClick={() => setWeekOffset(o => o + 1)}
+              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              title="שבוע הבא"
+            >
+              <ChevronRight className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            </button>
+            {!isCurrentWeek && (
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
+                style={{ background: 'rgba(139,92,246,0.15)', color: 'var(--theme-accent)' }}
+              >
+                היום
+              </button>
+            )}
+            <button
+              onClick={() => setWeekOffset(o => o - 1)}
+              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              title="שבוע קודם"
+            >
+              <ChevronLeft className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            </button>
+            <div className="w-px h-4 mx-1 opacity-20" style={{ background: 'var(--theme-border)' }} />
+            <Link
+              href="/productions"
+              className="flex items-center gap-0.5 text-xs font-medium opacity-50 hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--theme-accent)' }}
+            >
+              לכל ההפקות
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
 
         {/* Days grid */}
@@ -298,13 +345,14 @@ export default function WeeklyCalendarWidget() {
             const isMyDay = myShiftDays.has(dateStr);
             const isPast = mounted && dateStr < todayStr;
             const isClickable = dayProds.length > 0;
+            const myProdsToday = dayProds.filter(p => isMyProduction(p, displayName, phone));
 
             return (
               <button
                 key={dateStr}
                 disabled={!isClickable}
                 onClick={() => isClickable ? setPopupDate(dateStr) : undefined}
-                className="flex flex-col items-center py-2.5 px-1 gap-1.5 relative transition-colors"
+                className="flex flex-col items-center py-2 px-0.5 gap-1 relative transition-colors"
                 style={{
                   background: isMyDay
                     ? 'rgba(251, 146, 60, 0.10)'
@@ -334,7 +382,7 @@ export default function WeeklyCalendarWidget() {
                   {DAY_NAMES[i]}
                 </span>
 
-                {/* Day number circle */}
+                {/* Day number */}
                 <div
                   className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${
                     isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-sm' : ''
@@ -347,35 +395,72 @@ export default function WeeklyCalendarWidget() {
                   {parseInt(dayNum)}
                 </div>
 
-                {/* Production chips */}
-                <div className="flex flex-col items-center gap-1 w-full min-h-[32px]">
+                {/* Productions area */}
+                <div className="flex flex-col items-stretch gap-0.5 w-full min-h-[36px] px-0.5">
                   {!mounted ? null : dayProds.length === 0 ? (
-                    <div className="w-1 h-1 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
-                  ) : dayProds.slice(0, 2).map((p, pi) => {
-                    const mine = isMyProduction(p, displayName, phone);
-                    return (
-                      <div key={pi} className="w-full px-0.5">
+                    <div className="flex justify-center mt-1">
+                      <div className="w-1 h-1 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
+                    </div>
+                  ) : isMyDay ? (
+                    /* My working day — show my productions as rows */
+                    <>
+                      {myProdsToday.slice(0, 3).map((p, pi) => (
                         <div
-                          className="rounded text-[8px] font-semibold text-center truncate px-1 py-0.5 leading-tight"
+                          key={pi}
+                          className="rounded text-[8px] font-bold text-center leading-tight px-0.5 py-0.5"
                           style={{
-                            background: mine
-                              ? 'rgba(251, 146, 60, 0.20)'
-                              : isToday
-                                ? 'rgba(139, 92, 246, 0.15)'
-                                : 'rgba(255,255,255,0.05)',
-                            color: mine ? 'rgb(251,146,60)' : isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
-                            opacity: isPast && !mine ? 0.5 : 1,
+                            background: 'rgba(251, 146, 60, 0.22)',
+                            color: 'rgb(251,146,60)',
+                            opacity: isPast ? 0.7 : 1,
+                          }}
+                        >
+                          <div className="truncate">{p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}</div>
+                          {p.startTime && (
+                            <div className="opacity-70 text-[7px] font-medium">{p.startTime}</div>
+                          )}
+                        </div>
+                      ))}
+                      {/* Other productions (not mine) as grey dots */}
+                      {dayProds.filter(p => !isMyProduction(p, displayName, phone)).slice(0, 1).map((p, pi) => (
+                        <div
+                          key={`other-${pi}`}
+                          className="rounded text-[7px] font-medium text-center truncate px-0.5 py-0.5 leading-tight opacity-50"
+                          style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            color: 'var(--theme-text-secondary)',
+                          }}
+                        >
+                          {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
+                        </div>
+                      ))}
+                      {(myProdsToday.length > 3 || dayProds.length > myProdsToday.length + 1) && (
+                        <span className="text-[7px] font-medium text-center" style={{ color: 'rgb(251,146,60)', opacity: 0.7 }}>
+                          +{dayProds.length - Math.min(myProdsToday.length, 3) - Math.min(dayProds.filter(p => !isMyProduction(p, displayName, phone)).length, 1)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    /* Non-working day — show regular chips */
+                    <>
+                      {dayProds.slice(0, 2).map((p, pi) => (
+                        <div
+                          key={pi}
+                          className="rounded text-[8px] font-semibold text-center truncate px-0.5 py-0.5 leading-tight"
+                          style={{
+                            background: isToday ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.05)',
+                            color: isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
+                            opacity: isPast ? 0.5 : 1,
                           }}
                         >
                           {p.name.length > 7 ? p.name.slice(0, 6) + '…' : p.name}
                         </div>
-                      </div>
-                    );
-                  })}
-                  {dayProds.length > 2 && (
-                    <span className="text-[8px] font-medium" style={{ color: 'var(--theme-accent)', opacity: 0.7 }}>
-                      +{dayProds.length - 2}
-                    </span>
+                      ))}
+                      {dayProds.length > 2 && (
+                        <span className="text-[8px] font-medium text-center" style={{ color: 'var(--theme-accent)', opacity: 0.7 }}>
+                          +{dayProds.length - 2}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </button>
@@ -383,7 +468,7 @@ export default function WeeklyCalendarWidget() {
           })}
         </div>
 
-        {/* Footer — only when no cache */}
+        {/* Footer — only when no data */}
         {mounted && productions === null && (
           <div className="px-4 py-3 border-t text-center" style={{ borderColor: 'var(--theme-border)' }}>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
