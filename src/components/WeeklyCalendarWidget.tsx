@@ -352,7 +352,7 @@ export default function WeeklyCalendarWidget() {
                 key={dateStr}
                 disabled={!isClickable}
                 onClick={() => isClickable ? setPopupDate(dateStr) : undefined}
-                className="flex flex-col items-center py-2 px-0.5 gap-1 relative transition-colors"
+                className="flex flex-col items-center py-3 px-1 gap-1.5 relative transition-colors"
                 style={{
                   background: isMyDay
                     ? 'rgba(251, 146, 60, 0.10)'
@@ -396,10 +396,10 @@ export default function WeeklyCalendarWidget() {
                 </div>
 
                 {/* Productions area */}
-                <div className="flex flex-col items-stretch gap-0.5 w-full min-h-[36px] px-0.5">
+                <div className="flex flex-col items-stretch gap-1 w-full min-h-[48px] px-0.5">
                   {!mounted ? null : dayProds.length === 0 ? (
-                    <div className="flex justify-center mt-1">
-                      <div className="w-1 h-1 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
+                    <div className="flex justify-center mt-2">
+                      <div className="w-1.5 h-1.5 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
                     </div>
                   ) : isMyDay ? (
                     /* My working day — show my productions as rows */
@@ -407,34 +407,34 @@ export default function WeeklyCalendarWidget() {
                       {myProdsToday.slice(0, 3).map((p, pi) => (
                         <div
                           key={pi}
-                          className="rounded text-[8px] font-bold text-center leading-tight px-0.5 py-0.5"
+                          className="rounded-md text-[10px] font-bold text-center leading-snug px-1 py-1"
                           style={{
                             background: 'rgba(251, 146, 60, 0.22)',
                             color: 'rgb(251,146,60)',
                             opacity: isPast ? 0.7 : 1,
                           }}
                         >
-                          <div className="truncate">{p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}</div>
+                          <div className="truncate">{p.name.length > 9 ? p.name.slice(0, 8) + '…' : p.name}</div>
                           {p.startTime && (
-                            <div className="opacity-70 text-[7px] font-medium">{p.startTime}</div>
+                            <div className="opacity-70 text-[9px] font-medium mt-0.5">{p.startTime}</div>
                           )}
                         </div>
                       ))}
-                      {/* Other productions (not mine) as grey dots */}
+                      {/* Other productions (not mine) */}
                       {dayProds.filter(p => !isMyProduction(p, displayName, phone)).slice(0, 1).map((p, pi) => (
                         <div
                           key={`other-${pi}`}
-                          className="rounded text-[7px] font-medium text-center truncate px-0.5 py-0.5 leading-tight opacity-50"
+                          className="rounded-md text-[9px] font-medium text-center truncate px-1 py-0.5 leading-tight opacity-50"
                           style={{
                             background: 'rgba(255,255,255,0.05)',
                             color: 'var(--theme-text-secondary)',
                           }}
                         >
-                          {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
+                          {p.name.length > 9 ? p.name.slice(0, 8) + '…' : p.name}
                         </div>
                       ))}
                       {(myProdsToday.length > 3 || dayProds.length > myProdsToday.length + 1) && (
-                        <span className="text-[7px] font-medium text-center" style={{ color: 'rgb(251,146,60)', opacity: 0.7 }}>
+                        <span className="text-[9px] font-semibold text-center" style={{ color: 'rgb(251,146,60)', opacity: 0.7 }}>
                           +{dayProds.length - Math.min(myProdsToday.length, 3) - Math.min(dayProds.filter(p => !isMyProduction(p, displayName, phone)).length, 1)}
                         </span>
                       )}
@@ -445,18 +445,18 @@ export default function WeeklyCalendarWidget() {
                       {dayProds.slice(0, 2).map((p, pi) => (
                         <div
                           key={pi}
-                          className="rounded text-[8px] font-semibold text-center truncate px-0.5 py-0.5 leading-tight"
+                          className="rounded-md text-[10px] font-semibold text-center truncate px-1 py-1 leading-tight"
                           style={{
                             background: isToday ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.05)',
                             color: isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
                             opacity: isPast ? 0.5 : 1,
                           }}
                         >
-                          {p.name.length > 7 ? p.name.slice(0, 6) + '…' : p.name}
+                          {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
                         </div>
                       ))}
                       {dayProds.length > 2 && (
-                        <span className="text-[8px] font-medium text-center" style={{ color: 'var(--theme-accent)', opacity: 0.7 }}>
+                        <span className="text-[9px] font-semibold text-center" style={{ color: 'var(--theme-accent)', opacity: 0.7 }}>
                           +{dayProds.length - 2}
                         </span>
                       )}
