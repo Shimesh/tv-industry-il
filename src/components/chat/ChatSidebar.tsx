@@ -92,7 +92,7 @@ export default function ChatSidebar({
       <OnlineUsers users={onlineUsers} onSelectUser={onSelectOnlineUser} />
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20">
         {filteredChats.length === 0 ? (
           <div className="p-8 text-center">
             <MessageCircle className="w-12 h-12 text-[#3B4A54] mx-auto mb-3" />

@@ -63,6 +63,14 @@ function getChatDisplayPhoto(chat: ChatRoom, currentUserId: string): string | nu
   return chat.photoURL;
 }
 
+function getReplyPreviewText(message: Message): string {
+  if (message.type === 'voice') return '🎤 הודעה קולית';
+  if (message.type === 'video') return '🎥 הודעת וידאו';
+  if (message.type === 'image') return '📷 תמונה';
+  if (message.type === 'file') return `📎 ${message.fileName || 'קובץ'}`;
+  return message.text || '';
+}
+
 function formatRecordingDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -78,6 +86,8 @@ export default function ChatWindow({
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [recordingMode, setRecordingMode] = useState<'audio' | 'video' | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -131,6 +141,8 @@ export default function ChatWindow({
     setText('');
     setShowEmoji(false);
     setShowAttach(false);
+    setShowSearch(false);
+    setSearchQuery('');
   }, [chat.id]);
 
   // Handle typing indicator with debounce
@@ -142,7 +154,7 @@ export default function ChatWindow({
 
   const handleSend = async () => {
     if (!text.trim()) return;
-    const reply = replyTo ? { messageId: replyTo.id, text: replyTo.text, senderName: replyTo.senderName } : null;
+    const reply = replyTo ? { messageId: replyTo.id, text: getReplyPreviewText(replyTo), senderName: replyTo.senderName } : null;
     await onSendMessage(text.trim(), 'text', undefined, reply);
     setText('');
     setReplyTo(null);
@@ -154,7 +166,7 @@ export default function ChatWindow({
 
   const handleFileUpload = async (file: File) => {
     const isImage = file.type.startsWith('image/');
-    const reply = replyTo ? { messageId: replyTo.id, text: replyTo.text, senderName: replyTo.senderName } : null;
+    const reply = replyTo ? { messageId: replyTo.id, text: getReplyPreviewText(replyTo), senderName: replyTo.senderName } : null;
     await onSendMessage(file.name, isImage ? 'image' : 'file', file, reply);
     setReplyTo(null);
     setShowAttach(false);
@@ -195,10 +207,17 @@ export default function ChatWindow({
     // blob will be picked up by the useEffect above
   };
 
+  const filteredMessages = searchQuery.trim()
+    ? messages.filter(m =>
+        m.type !== 'text' || // always show non-text messages (voice/video/image/file)
+        m.text.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : messages;
+
   // Group messages by date
   const groupedMessages: { date: string; messages: Message[] }[] = [];
   let currentDate = '';
-  messages.forEach(msg => {
+  filteredMessages.forEach(msg => {
     const msgDate = getDateLabel(msg.createdAt);
     if (msgDate !== currentDate) {
       currentDate = msgDate;
@@ -209,7 +228,7 @@ export default function ChatWindow({
   });
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0B141A] h-full">
+    <div className="flex-1 flex flex-col bg-[#0B141A] h-full relative">
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-4 py-[10px] bg-[#202C33] border-b border-[#2A3942] shrink-0">
         {/* Back button (mobile) */}
@@ -274,10 +293,32 @@ export default function ChatWindow({
         )}
 
         {/* Search */}
-        <button className="p-2 rounded-full hover:bg-[#2A3942] transition-colors">
-          <Search className="w-5 h-5 text-[#AEBAC1]" />
+        <button
+          onClick={() => { setShowSearch(s => !s); setSearchQuery(''); }}
+          className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-[#2A3942] text-[#00A884]' : 'hover:bg-[#2A3942] text-[#AEBAC1]'}`}
+        >
+          <Search className="w-5 h-5" />
         </button>
       </div>
+
+      {/* ── Search Bar ── */}
+      {showSearch && (
+        <div className="px-3 py-2 bg-[#1A2731] border-b border-[#2A3942]" dir="rtl">
+          <input
+            autoFocus
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="חפש בשיחה..."
+            className="w-full px-3 py-[7px] rounded-lg text-[13px] bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696a0] outline-none"
+          />
+          {searchQuery && (
+            <p className="text-[11px] text-[#8696a0] mt-1 text-center">
+              {filteredMessages.length} תוצאות
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Messages Area ── */}
       <div
@@ -287,12 +328,17 @@ export default function ChatWindow({
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       >
-        {messages.length === 0 ? (
+        {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-20 h-20 rounded-full bg-[#00A88415] flex items-center justify-center">
-              <Send className="w-8 h-8 text-[#00A884]" />
+              {searchQuery.trim()
+                ? <Search className="w-8 h-8 text-[#8696a0]" />
+                : <Send className="w-8 h-8 text-[#00A884]" />
+              }
             </div>
-            <p className="text-[14px] text-[#8696a0]" dir="rtl">שלחו את ההודעה הראשונה 💬</p>
+            <p className="text-[14px] text-[#8696a0]" dir="rtl">
+              {searchQuery.trim() ? `אין תוצאות עבור "${searchQuery}"` : 'שלחו את ההודעה הראשונה 💬'}
+            </p>
           </div>
         ) : (
           groupedMessages.map((group) => (
@@ -358,7 +404,7 @@ export default function ChatWindow({
         <div className="flex items-center gap-3 px-4 py-2 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
           <div className="flex-1 min-w-0 border-r-[3px] border-[#00A884] pr-3">
             <p className="text-[12px] font-medium text-[#00A884]">{replyTo.senderName}</p>
-            <p className="text-[12px] text-[#8696a0] truncate">{replyTo.text}</p>
+            <p className="text-[12px] text-[#8696a0] truncate">{getReplyPreviewText(replyTo)}</p>
           </div>
           <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-[#2A3942] rounded-full transition-colors">
             <X className="w-4 h-4 text-[#8696a0]" />
@@ -528,7 +574,7 @@ export default function ChatWindow({
             </button>
           ) : (
             <button
-              onPointerDown={handleStartVoice}
+              onClick={handleStartVoice}
               className="p-2 rounded-full text-[#8696a0] hover:text-[#E9EDEF] hover:bg-[#2A3942] transition-colors shrink-0"
               title="לחץ להקלטת הודעה קולית"
             >

@@ -171,7 +171,7 @@ export default function MessageBubble({
           )}
         </div>
       )}
-      {!isOwn && isGroup && !showSender && <div className="w-[36px] shrink-0" />}
+      {!isOwn && isGroup && !showSender && <div className="w-[34px] shrink-0" />}
 
       <div className="relative max-w-[65%] min-w-[90px]">
         {/* Message bubble */}
@@ -196,7 +196,9 @@ export default function MessageBubble({
           {message.replyTo && (
             <div className="bg-[#00000026] rounded-md px-[10px] py-[5px] mb-[4px] border-r-[3px] border-[#00A884]">
               <p className="text-[11px] font-medium text-[#00A884]">{message.replyTo.senderName}</p>
-              <p className="text-[11px] text-[#8696a0] truncate max-w-[220px]">{message.replyTo.text}</p>
+              <p className="text-[11px] text-[#8696a0] truncate max-w-[220px]">
+                {message.replyTo.text || '💬 הודעה'}
+              </p>
             </div>
           )}
 

@@ -60,6 +60,8 @@ function ChatContent() {
       if (chatId) {
         setActiveChat(chatId);
         setMobileShowChat(true);
+      } else {
+        showToast('לא ניתן ליצור שיחה — המשתמש לא נמצא', 'error');
       }
     } catch {
       showToast('שגיאה ביצירת שיחה', 'error');
@@ -74,6 +76,8 @@ function ChatContent() {
         setActiveChat(chatId);
         setMobileShowChat(true);
         setShowNewChat(false);
+      } else {
+        showToast('לא ניתן ליצור שיחה — המשתמש לא נמצא', 'error');
       }
     } catch {
       showToast('שגיאה ביצירת שיחה', 'error');
@@ -88,6 +92,8 @@ function ChatContent() {
         setActiveChat(chatId);
         setMobileShowChat(true);
         setShowNewChat(false);
+      } else {
+        showToast('שגיאה ביצירת הקבוצה — נסו שוב', 'error');
       }
     } catch {
       showToast('שגיאה ביצירת קבוצה', 'error');

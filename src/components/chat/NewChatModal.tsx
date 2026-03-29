@@ -209,7 +209,9 @@ export default function NewChatModal({
 
         {/* Stats bar */}
         <div className="px-4 py-1.5 border-t border-[#2A3942] flex items-center justify-between">
-          <span className="text-[11px] text-[#8696a0]">{filtered.length} אנשי קשר</span>
+          <span className="text-[11px] text-[#8696a0]">
+            {mode === 'group' ? filtered.filter(p => !!p.userId).length : filtered.length} אנשי קשר
+          </span>
           {onlineCount > 0 && (
             <span className="text-[11px] text-[#00A884] flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[#00A884]" />
@@ -224,21 +226,26 @@ export default function NewChatModal({
             <div className="p-8 text-center">
               <p className="text-sm text-[#8696a0]">לא נמצאו אנשי קשר</p>
             </div>
+          ) : mode === 'group' && filtered.every(p => !p.userId) ? (
+            <div className="p-8 text-center flex flex-col items-center gap-2">
+              <Users className="w-10 h-10 text-[#3B4A54]" />
+              <p className="text-sm text-[#8696a0]">אין משתמשים רשומים לבחירה</p>
+              <p className="text-[11px] text-[#667781]">רק משתמשים שהצטרפו לאפליקציה יכולים להיות חלק מקבוצה</p>
+            </div>
           ) : (
-            filtered.map(p => {
+            filtered
+              .filter(p => mode === 'group' ? !!p.userId : true)
+              .map(p => {
               const isSelected = p.userId ? selectedUsers.includes(p.userId) : false;
               const canChat = !!p.userId;
               const isExpanded = expandedKey === p.key;
-              const isGroupDisabled = mode === 'group' && !canChat;
 
               return (
                 <div key={p.key}>
                   <button
                     onClick={() => handlePersonClick(p)}
-                    disabled={isGroupDisabled}
-                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
-                      isGroupDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#2A3942]'
-                    } ${isSelected ? 'bg-[#2A394280]' : ''} ${isExpanded ? 'bg-[#2A3942]' : ''}`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[#2A3942] ${
+                      isSelected ? 'bg-[#2A394280]' : ''} ${isExpanded ? 'bg-[#2A3942]' : ''}`}
                   >
                     {p.photoURL ? (
                       <img src={p.photoURL} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
