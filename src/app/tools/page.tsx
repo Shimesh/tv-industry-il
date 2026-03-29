@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Timer, Calculator, Radio, ClipboardCheck, Cloud, Clapperboard,
   Play, Pause, RotateCcw, Plus, Minus, Check, X, Trash2,
-  Sun, CloudRain, Wind, Thermometer, Wrench
+  Sun, CloudRain, Wind, Thermometer, Wrench,
+  FileText, CheckSquare, Receipt, StickyNote, Lock
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -31,6 +32,45 @@ export default function ToolsPage() {
           <EquipmentChecklist />
           <WeatherWidget />
           <ClapperBoard />
+        </div>
+
+        {/* Coming Soon */}
+        <h2 className="text-lg font-bold mt-10 mb-4" style={{ color: 'var(--theme-text)' }}>בקרוב...</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pb-8">
+          {([
+            { icon: FileText, title: 'קורא Call Sheet', desc: 'העלה קובץ Call Sheet ופענח אותו אוטומטית', gradient: 'from-blue-600 to-cyan-500' },
+            { icon: CheckSquare, title: "צ'קליסט ציוד", desc: 'רשימת ציוד מותאמת לסוג ההפקה', gradient: 'from-green-600 to-emerald-500' },
+            { icon: Receipt, title: 'עוזר חשבוניות', desc: 'הפקת חשבוניות ומעקב תשלומים', gradient: 'from-orange-600 to-amber-500' },
+            { icon: StickyNote, title: 'פנקס הפקה', desc: 'רשימות, הערות ומעקב משימות להפקה', gradient: 'from-purple-600 to-pink-500' },
+          ] as const).map((tool, i) => {
+            const Icon = tool.icon;
+            return (
+              <motion.div
+                key={tool.title}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.05, duration: 0.3 }}
+                className="relative rounded-2xl border p-5 overflow-hidden group"
+                style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${tool.gradient} opacity-[0.03] group-hover:opacity-[0.06] transition-opacity`} />
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center opacity-60`}>
+                      <Icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                      <Lock className="w-3 h-3" />
+                      בקרוב
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-sm mb-1" style={{ color: 'var(--theme-text)' }}>{tool.title}</h3>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>{tool.desc}</p>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </section>
     </div>

@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '@/lib/firebase';
-import { getOrCreateKeyPair } from '@/lib/encryption';
+import { type UserRole, can, hasRole, type Permission } from '@/lib/permissions';
 
 export interface UserProfile {
   uid: string;
@@ -30,6 +30,14 @@ export interface UserProfile {
   isOnline: boolean;
   onboardingComplete: boolean;
   theme: string;
+  siteRole?: UserRole;
+  openToWork?: boolean;
+  city?: string;
+  yearsOfExperience?: number;
+  credits?: string[];
+  gear?: string[];
+  preferredRoles?: string[];
+  preferredRegions?: string[];
   notificationsEnabled?: boolean;
   soundEnabled?: boolean;
   showPhone?: boolean;
@@ -45,6 +53,10 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  /** Check if current user has a specific permission */
+  can: (permission: Permission) => boolean;
+  /** Check if current user has at least the given role */
+  hasRole: (role: UserRole) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -56,6 +68,8 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   logout: async () => {},
   updateUserProfile: async () => {},
+  can: () => false,
+  hasRole: () => false,
 });
 
 async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | null> {
@@ -65,19 +79,8 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
 
     if (profileSnap.exists()) {
       updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
-      // Ensure encryption public key is published
-      const profileData = profileSnap.data();
-      if (!profileData.encryptionPublicKey && typeof window !== 'undefined') {
-        const kp = getOrCreateKeyPair(firebaseUser.uid);
-        if (kp) {
-          updateDoc(profileRef, { encryptionPublicKey: kp.publicKey }).catch(() => {});
-        }
-      }
-      return { uid: firebaseUser.uid, ...profileData } as UserProfile;
+      return { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
     }
-
-    // Generate encryption key pair for new user
-    const kp = typeof window !== 'undefined' ? getOrCreateKeyPair(firebaseUser.uid) : null;
 
     const profileData: Omit<UserProfile, 'uid'> = {
       displayName: firebaseUser.displayName || 'משתמש חדש',
@@ -92,7 +95,6 @@ async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | n
       isOnline: true,
       onboardingComplete: false,
       theme: 'dark',
-      encryptionPublicKey: kp?.publicKey,
     };
 
     await setDoc(profileRef, {
@@ -203,6 +205,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(prev => prev ? { ...prev, ...data } : null);
   };
 
+  const canDo = (permission: Permission): boolean => {
+    return can(profile?.siteRole, permission);
+  };
+
+  const hasRoleLevel = (role: UserRole): boolean => {
+    return hasRole(profile?.siteRole, role);
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -213,6 +223,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle,
       logout,
       updateUserProfile,
+      can: canDo,
+      hasRole: hasRoleLevel,
     }}>
       {children}
     </AuthContext.Provider>

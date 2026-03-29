@@ -85,7 +85,7 @@ function toIndexedContact(contact: Contact, source: 'static' | 'firestore', fire
 function mergeContacts(base: Contact[], extra: Contact[]): Contact[] {
   const map = new Map<string, Contact>();
 
-  const upsert = (c: Contact) => {
+  const upsert = (c: Contact, priority: boolean) => {
     const fullName = `${c.firstName || ''} ${c.lastName || ''}`.trim();
     const key = normalizeName(fullName) || String(c.id);
     const existing = map.get(key);
@@ -94,18 +94,30 @@ function mergeContacts(base: Contact[], extra: Contact[]): Contact[] {
       return;
     }
 
-    map.set(key, {
-      ...existing,
-      ...c,
-      phone: existing.phone || c.phone,
-      role: existing.role || c.role,
-      department: existing.department || c.department,
-      availability: existing.availability || c.availability,
-    });
+    if (priority) {
+      // Firestore (extra) data wins, fall back to existing for missing fields
+      map.set(key, {
+        ...existing,
+        ...c,
+        phone: c.phone || existing.phone,
+        role: c.role || existing.role,
+        department: c.department || existing.department,
+        availability: c.availability || existing.availability,
+      });
+    } else {
+      // Static (base) data: only fill in if no existing record
+      map.set(key, {
+        ...existing,
+        phone: existing.phone || c.phone,
+        role: existing.role || c.role,
+        department: existing.department || c.department,
+        availability: existing.availability || c.availability,
+      });
+    }
   };
 
-  base.forEach(upsert);
-  extra.forEach(upsert);
+  base.forEach((c) => upsert(c, false));
+  extra.forEach((c) => upsert(c, true));
   return Array.from(map.values());
 }
 

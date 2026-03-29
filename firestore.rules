@@ -1,10 +1,127 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Simple catch-all: any authenticated user can read/write anything
-    // TODO: tighten rules after confirming Firestore works
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ── Helper functions ──────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteRole;
+    }
+    function isAdmin() {
+      return isAuth() && userRole() == 'admin';
+    }
+    function isModeratorOrAbove() {
+      return isAuth() && (userRole() in ['admin', 'moderator']);
+    }
+
+    // ── User profiles ─────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+
+      // Sub-collections under user (schedules synced from crew)
+      match /{sub=**} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAuth();
+      }
+    }
+
+    // ── Notifications (private per user) ──────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Chat rooms ────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if isAuth() && request.auth.uid in resource.data.members;
+      allow create: if isAuth();
+      allow update: if isAuth() && request.auth.uid in resource.data.members;
+      allow delete: if isAdmin();
+
+      // Messages inside a chat
+      match /messages/{messageId} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+        // Only sender or moderator+ can delete
+        allow delete: if isAuth() &&
+          (resource.data.senderId == request.auth.uid || isModeratorOrAbove());
+        allow update: if isAuth() && resource.data.senderId == request.auth.uid;
+      }
+
+      // Typing indicators
+      match /typing/{typingId} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // ── Board posts ───────────────────────────────────────────────
+    match /posts/{postId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() &&
+        (resource.data.authorId == request.auth.uid || isModeratorOrAbove());
+      allow delete: if isAuth() &&
+        (resource.data.authorId == request.auth.uid || isModeratorOrAbove());
+
+      // Likes sub-collection (one doc per user)
+      match /likes/{userId} {
+        allow read: if isAuth();
+        allow create, delete: if isOwner(userId);
+      }
+    }
+
+    // ── Productions (per-user schedules) ──────────────────────────
+    match /productions/{userId} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) || isAdmin();
+
+      match /{sub=**} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAuth();
+      }
+    }
+
+    // ── User schedules ────────────────────────────────────────────
+    match /userSchedules/{userId} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) || isAuth();
+
+      match /{sub=**} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAuth();
+      }
+    }
+
+    // ── Schedule requests (global, for GitHub Action) ─────────────
+    match /scheduleRequests/{docId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── Contacts ──────────────────────────────────────────────────
+    match /contacts/{contactId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isAuth();
+    }
+
+    // ── Calls (WebRTC signaling) ──────────────────────────────────
+    match /calls/{callId} {
+      allow read, write: if isAuth();
+
+      // ICE candidates subcollection
+      match /candidates/{candidateId} {
+        allow read, write: if isAuth();
+      }
     }
   }
 }

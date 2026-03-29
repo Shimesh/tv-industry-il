@@ -15,8 +15,8 @@ initializeApp({
 });
 
 const db = getFirestore();
-const PRODUCTIONS_ROOT = 'productions/global/weeks';
 const USER_SCHEDULES_ROOT = 'userSchedules';
+const getUserProductionsRoot = (uid) => `productions/${uid}/weeks`;
 
 function normalizeName(name) {
   if (!name) return '';
@@ -778,8 +778,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 
   const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
   const cleanupAllowed = popupSuccessRate >= 0.5;
+  // Save to per-user path: productions/{userId}/weeks/{weekId}
+  const userProductionsRoot = getUserProductionsRoot(userId);
+
   if (cleanupAllowed) {
-    await cleanupWeek(PRODUCTIONS_ROOT, weekId);
+    await cleanupWeek(userProductionsRoot, weekId);
   } else {
     console.log(
       `Skipping cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
@@ -787,7 +790,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   }
 
   const batch = db.batch();
-  const weekRef = db.doc(`${PRODUCTIONS_ROOT}/${weekId}`);
+  const weekRef = db.doc(`${userProductionsRoot}/${weekId}`);
   batch.set(weekRef, {
     weekId,
     weekStart: schedule.weekStart,
@@ -800,7 +803,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     const prodId = String(prod.herzliyaId);
     if (!prodId || prodId === '0') continue;
 
-    const prodRef = db.doc(`${PRODUCTIONS_ROOT}/${weekId}/productions/${prodId}`);
+    const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);
     const cleanCrew = sanitizeCrewForFirestore(prod.crew);
 
     batch.set(prodRef, {

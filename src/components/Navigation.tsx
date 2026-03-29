@@ -8,22 +8,24 @@ import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
+import NotificationBell from './NotificationBell';
 import {
   Tv, Calendar, Users, Newspaper, Building2, Menu, X,
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
-  Palette, ChevronDown, Settings, CheckCircle, Clapperboard
+  Palette, ChevronDown, Settings, CheckCircle, Clapperboard, Shield
 } from 'lucide-react';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
-  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
-  { href: '/directory', label: 'אלפון', icon: Users },
+  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
+  { href: '/directory', label: 'אלפון', icon: Users, auth: true },
   { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
   { href: '/news', label: 'חדשות', icon: Newspaper },
   { href: '/studios', label: 'אולפנים', icon: Building2 },
   { href: '/tools', label: 'כלים', icon: Wrench },
+  { href: '/admin', label: 'ניהול', icon: Shield, auth: true, adminOnly: true },
 ];
 
 export default function Navigation() {
@@ -63,7 +65,11 @@ export default function Navigation() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredLinks = navLinks.filter(link => !link.auth || user);
+  const filteredLinks = navLinks.filter(link => {
+    if (link.auth && !user) return false;
+    if ('adminOnly' in link && link.adminOnly && profile?.siteRole !== 'admin') return false;
+    return true;
+  });
 
   return (
     <nav className="fixed top-0 right-0 left-0 z-50 backdrop-blur-xl border-b transition-colors" style={{
@@ -120,6 +126,9 @@ export default function Navigation() {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            {/* Notifications */}
+            {user && <NotificationBell />}
+
             {/* Theme Toggle (desktop) */}
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button

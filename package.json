@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",
     "firebase": "^12.10.0",
@@ -21,8 +22,7 @@
     "react-firebase-hooks": "^5.1.1",
     "react-joyride": "^2.9.3",
     "simple-peer": "^9.11.1",
-    "tweetnacl": "^1.0.3",
-    "tweetnacl-util": "^0.15.1"
+    "xlsx": "^0.18.5"
   },
   "engines": {
     "node": "20.x"

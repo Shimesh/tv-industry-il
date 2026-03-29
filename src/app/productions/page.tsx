@@ -28,54 +28,13 @@ import {
 } from '@/lib/crewNormalization';
 import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
-import {
-  doc,
-  getDoc,
-  collection,
-  getDocs,
-  addDoc,
-  writeBatch,
-  serverTimestamp,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  limit,
-} from 'firebase/firestore';
-import { db, ensureOnline } from '@/lib/firebase';
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2 } from 'lucide-react';
+// Firebase SDK imports removed - all Firestore ops now use REST API
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2 } from 'lucide-react';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 
-const PRODUCTIONS_ROOT = 'productions/global/weeks';
 const USER_SCHEDULES_ROOT = 'userSchedules';
-
-// --- Productions localStorage cache ---
-const PRODS_CACHE_KEY = 'productions_cache_v2';
-const PRODS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-function loadProdsCache(weekId: string): Production[] | null {
-  try {
-    if (typeof window === 'undefined') return null;
-    const raw = localStorage.getItem(PRODS_CACHE_KEY);
-    if (!raw) return null;
-    const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
-    const entry = cache[weekId];
-    if (!entry || Date.now() - entry.savedAt > PRODS_CACHE_TTL) return null;
-    return entry.data;
-  } catch { return null; }
-}
-
-function saveProdsCache(weekId: string, productions: Production[]) {
-  try {
-    if (typeof window === 'undefined' || !productions.length) return;
-    const raw = localStorage.getItem(PRODS_CACHE_KEY);
-    const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
-    // Keep max 8 weeks
-    const keys = Object.keys(cache).sort();
-    while (keys.length >= 8) { delete cache[keys.shift()!]; }
-    cache[weekId] = { data: productions, savedAt: Date.now() };
-    localStorage.setItem(PRODS_CACHE_KEY, JSON.stringify(cache));
-  } catch { /* storage full */ }
-}
+const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 
 export default function ProductionsPage() {
   return (
@@ -121,7 +80,11 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 function ProductionsContent() {
   const { user, profile } = useAuth();
   const { ensureFromCrew } = useContacts();
+  const { addNotification } = useNotifications();
   const [loading, setLoading] = useState(false);
+  const [useAI, setUseAI] = useState(false);
+  const [aiStatus, setAiStatus] = useState('');
+  const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
@@ -135,7 +98,7 @@ function ProductionsContent() {
   const [requestStatus, setRequestStatus] = useState<RequestStatus>('idle');
   const [requestError, setRequestError] = useState<string | null>(null);
   const unsubRequestRef = useRef<(() => void) | null>(null);
-  const unsubWeekRef = useRef<(() => void) | null>(null);
+  // unsubWeekRef removed - listenToWeek was using broken SDK
   const loadTokenRef = useRef(0);
 
     // Calendar navigation state
@@ -149,7 +112,7 @@ function ProductionsContent() {
   useEffect(() => {
     return () => {
       unsubRequestRef.current?.();
-      unsubWeekRef.current?.();
+      // unsubWeekRef removed
     };
   }, []);
   useEffect(() => {
@@ -167,9 +130,15 @@ function ProductionsContent() {
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.warn('[restListDocs] HTTP error', res.status, 'for', collectionPath);
+        return [];
+      }
       const data = await res.json();
-      if (!data.documents) return [];
+      if (!data.documents) {
+        console.warn('[restListDocs] No documents at', collectionPath);
+        return [];
+      }
 
       return data.documents.map((doc: Record<string, unknown>) => {
         const name = doc.name as string;
@@ -219,88 +188,77 @@ function ProductionsContent() {
     });
   }, []);
 
-  // Load existing week data via REST API
-  // Try both global path and user-specific path (Firestore rules may redirect writes to user path)
+  // Parse production documents from REST API response into Production objects
+  const parseProductionDocs = useCallback((prodDocs: Array<{ id: string; fields: Record<string, unknown> }>, weekId: string) => {
+    const dedupMap = new Map<string, Production>();
+
+    for (const prodDoc of prodDocs) {
+      const d = prodDoc.fields;
+
+      let crew: Production['crew'] = [];
+      if (d.crew) {
+        const rawCrew = parseFirestoreArray(d.crew);
+        const mappedCrew = rawCrew.map(c => ({
+          name: normalizeCrewName(c.name || ''),
+          role: normalizeRole(c.role || ''),
+          roleDetail: normalizeRole(c.roleDetail || ''),
+          phone: normalizePhone(c.phone || ''),
+          normalizedName: normalizeCrewName(c.normalizedName || c.name || ''),
+          normalizedPhone: normalizePhone(c.normalizedPhone || c.phone || ''),
+          identityKey: c.identityKey || normalizeCrewName(c.name || ''),
+          startTime: c.startTime || '',
+          endTime: c.endTime || '',
+          addedBy: c.addedBy || '',
+          addedAt: c.addedAt || '',
+        }));
+        crew = deduplicateCrew(mappedCrew);
+      }
+
+      const herzliyaId = String(d.herzliyaId || prodDoc.id);
+
+      dedupMap.set(herzliyaId, {
+        id: prodDoc.id,
+        name: (d.name as string) || '',
+        studio: (d.studio as string) || '',
+        date: (d.date as string) || '',
+        day: (d.day as string) || '',
+        startTime: (d.startTime as string) || '',
+        endTime: (d.endTime as string) || '',
+        status: ((d.status as string) || 'scheduled') as Production['status'],
+        crew,
+        isCurrentUserShift: d.isCurrentUserShift === true || d.isCurrentUserShift === 'true',
+        lastUpdatedBy: (d.lastUpdatedBy as string) || '',
+        lastUpdatedAt: (d.lastUpdatedAt as string) || '',
+        versions: [],
+      });
+    }
+
+    return Array.from(dedupMap.values());
+  }, [parseFirestoreArray]);
+
+  // Load existing week data via REST API - per-user only (no global fallback)
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
+    if (!user) return [];
     try {
-      let prodDocs = await restListDocs(`${PRODUCTIONS_ROOT}/${weekId}/productions`);
-      // Fallback: try user-specific path (GitHub Action writes land here due to Firestore rules)
-      if (prodDocs.length === 0 && user) {
-        prodDocs = await restListDocs(`productions/${user.uid}/weeks/${weekId}/productions`);
+      // Load from per-user path only
+      const userRoot = getUserProductionsRoot(user.uid);
+      const path = `${userRoot}/${weekId}/productions`;
+      console.warn('[loadExistingWeek] Loading from:', path);
+      const prodDocs = await restListDocs(path);
+      console.warn('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
+
+      if (prodDocs.length > 0) {
+        return parseProductionDocs(prodDocs, weekId);
       }
 
-      // Deduplicate by herzliyaId (the stable ID from Herzliya system)
-      const dedupMap = new Map<string, Production>();
-
-      for (const prodDoc of prodDocs) {
-        const d = prodDoc.fields;
-
-        // Crew is now stored as array field on the production document (not subcollection)
-        let crew: Production['crew'] = [];
-        if (d.crew) {
-          const rawCrew = parseFirestoreArray(d.crew);
-          const mappedCrew = rawCrew.map(c => ({
-            name: normalizeCrewName(c.name || ''),
-            role: normalizeRole(c.role || ''),
-            roleDetail: normalizeRole(c.roleDetail || ''),
-            phone: normalizePhone(c.phone || ''),
-            normalizedName: normalizeCrewName(c.normalizedName || c.name || ''),
-            normalizedPhone: normalizePhone(c.normalizedPhone || c.phone || ''),
-            identityKey: c.identityKey || normalizeCrewName(c.name || ''),
-            startTime: c.startTime || '',
-            endTime: c.endTime || '',
-            addedBy: c.addedBy || '',
-            addedAt: c.addedAt || '',
-          }));
-          crew = deduplicateCrew(mappedCrew);
-        } else {
-          // Fallback: try loading from subcollection (for old data format)
-          const crewDocs = await restListDocs(`productions/global/weeks/${weekId}/productions/${prodDoc.id}/crew`);
-          const mappedCrew = crewDocs.map(c => ({
-            name: normalizeCrewName((c.fields.name as string) || ''),
-            role: normalizeRole((c.fields.role as string) || ''),
-            roleDetail: normalizeRole((c.fields.roleDetail as string) || ''),
-            phone: normalizePhone((c.fields.phone as string) || ''),
-            normalizedName: normalizeCrewName((c.fields.normalizedName as string) || (c.fields.name as string) || ''),
-            normalizedPhone: normalizePhone((c.fields.normalizedPhone as string) || (c.fields.phone as string) || ''),
-            identityKey: (c.fields.identityKey as string) || normalizeCrewName((c.fields.name as string) || ''),
-            startTime: (c.fields.startTime as string) || '',
-            endTime: (c.fields.endTime as string) || '',
-            addedBy: (c.fields.addedBy as string) || '',
-            addedAt: (c.fields.addedAt as string) || '',
-          }));
-          crew = deduplicateCrew(mappedCrew);
-        }
-
-        // Use herzliyaId as the dedup key
-        const herzliyaId = String(d.herzliyaId || prodDoc.id);
-
-        dedupMap.set(herzliyaId, {
-          id: prodDoc.id,
-          name: (d.name as string) || '',
-          studio: (d.studio as string) || '',
-          date: (d.date as string) || '',
-          day: (d.day as string) || '',
-          startTime: (d.startTime as string) || '',
-          endTime: (d.endTime as string) || '',
-          status: ((d.status as string) || 'scheduled') as Production['status'],
-          crew,
-          isCurrentUserShift: d.isCurrentUserShift === true || d.isCurrentUserShift === 'true',
-          lastUpdatedBy: (d.lastUpdatedBy as string) || '',
-          lastUpdatedAt: (d.lastUpdatedAt as string) || '',
-          versions: [],
-        });
-      }
-
-      const result = Array.from(dedupMap.values());
-      if (result.length > 0) saveProdsCache(weekId, result);
-      return result;
+      return [];
     } catch (error) {
+      console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [restListDocs, parseFirestoreArray]);
+  }, [user, restListDocs, parseProductionDocs]);
 
-  // Save productions to Firestore
+  // Save productions to Firestore via REST API (bypasses broken SDK)
   const saveToFirestore = useCallback(async (
     weekId: string,
     prods: Production[],
@@ -312,52 +270,90 @@ function ProductionsContent() {
     }
 
     try {
-      await ensureOnline();
-      const batch = writeBatch(db);
+      const token = await user.getIdToken(true);
+      const projectId = 'tv-industry-il';
+      const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
-      // Save to user-specific path (Firestore rules redirect global writes here)
-      const metaRef = doc(db, 'productions', user.uid, 'weeks', weekId);
-      let metaSnap;
-      try {
-        metaSnap = await Promise.race([
-          getDoc(metaRef),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getDoc timeout')), 10000)),
-        ]);
-      } catch {
-        metaSnap = { exists: () => false, data: () => null } as any;
-      }
-
-      if (metaSnap.exists()) {
-        const existing = metaSnap.data();
-        const contributors = existing.contributors || [];
-        if (!contributors.includes(user.uid)) {
-          contributors.push(user.uid);
+      // Helper: convert JS value to Firestore REST format
+      const toVal = (v: unknown): Record<string, unknown> => {
+        if (typeof v === 'string') return { stringValue: v };
+        if (typeof v === 'number') return { integerValue: String(v) };
+        if (typeof v === 'boolean') return { booleanValue: v };
+        if (v === null || v === undefined) return { nullValue: null };
+        if (Array.isArray(v)) {
+          return { arrayValue: { values: v.map(item => {
+            if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+              const fields: Record<string, unknown> = {};
+              for (const [k, val] of Object.entries(item)) fields[k] = toVal(val);
+              return { mapValue: { fields } };
+            }
+            return toVal(item);
+          }) } };
         }
-        batch.update(metaRef, {
-          lastUpdated: serverTimestamp(),
-          updateCount: (existing.updateCount || 0) + 1,
-          contributors,
+        if (typeof v === 'object') {
+          const fields: Record<string, unknown> = {};
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) fields[k] = toVal(val);
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(v) };
+      };
+
+      const toFields = (obj: Record<string, unknown>) => {
+        const fields: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj)) fields[k] = toVal(v);
+        return fields;
+      };
+
+      const restSet = async (docPath: string, data: Record<string, unknown>) => {
+        const res = await fetch(`${baseUrl}/${docPath}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fields: toFields(data) }),
         });
-      } else {
-        batch.set(metaRef, {
-          weekId,
-          weekStart: wStart,
-          weekEnd: wEnd,
-          lastUpdated: serverTimestamp(),
-          updateCount: 1,
-          contributors: [user.uid],
+        if (!res.ok) {
+          const err = await res.json();
+          console.error('Firestore REST write failed:', docPath, err);
+          throw new Error(err.error?.message || `REST error ${res.status}`);
+        }
+      };
+
+      // 1. Save week metadata
+      const metaPath = `productions/${user.uid}/weeks/${weekId}`;
+
+      // Read existing to get updateCount
+      let updateCount = 1;
+      try {
+        const metaRes = await fetch(`${baseUrl}/${metaPath}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
         });
+        if (metaRes.ok) {
+          const metaData = await metaRes.json();
+          const ucVal = metaData?.fields?.updateCount?.integerValue;
+          if (ucVal) updateCount = Number(ucVal) + 1;
+        }
+      } catch {
+        // New doc
       }
 
+      await restSet(metaPath, {
+        weekId,
+        weekStart: wStart,
+        weekEnd: wEnd,
+        lastUpdated: new Date().toISOString(),
+        updateCount,
+      });
+
+      // 2. Save each production
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodRef = doc(db, 'productions', user.uid, 'weeks', weekId, 'productions', prodId);
+        const prodPath = `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
 
-        // Deduplicate crew by name before saving
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
 
-        // SET (not merge) - crew stored as array field on production document
-        batch.set(prodRef, {
+        await restSet(prodPath, {
           name: prod.name,
           studio: prod.studio,
           date: prod.date,
@@ -373,22 +369,25 @@ function ProductionsContent() {
         });
       }
 
-      const userScheduleRef = doc(db, 'userSchedules', user.uid, 'weeks', weekId);
-      batch.set(userScheduleRef, {
+      // 3. Save user schedule metadata
+      const userSchedulePath = `userSchedules/${user.uid}/weeks/${weekId}`;
+      await restSet(userSchedulePath, {
         workerName,
-        fetchedAt: serverTimestamp(),
+        fetchedAt: new Date().toISOString(),
         productionIds: prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio)),
       });
 
-      await batch.commit();
+      console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
 
       // Auto-update crew member profiles
       await syncCrewProfiles(weekId, prods, wStart, wEnd);
     } catch (error) {
+      console.error('[saveToFirestore] FAILED:', error);
+      setStatusMessage('שגיאה בשמירת הנתונים: ' + (error instanceof Error ? error.message : String(error)));
     }
   }, [user, workerName]);
 
-  // Sync crew members with registered user profiles
+  // Sync crew members with registered user profiles (via REST API)
   const syncCrewProfiles = useCallback(async (
     weekId: string,
     prods: Production[],
@@ -404,19 +403,49 @@ function ProductionsContent() {
       }
       if (allCrewNames.size === 0) return;
 
-      const usersRef = collection(db, 'users');
-      const usersSnap = await getDocs(usersRef);
+      // Fetch all users via REST API
+      const userDocs = await restListDocs('users');
       const usersByName = new Map<string, string>();
 
-      usersSnap.docs.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.displayName) {
-          usersByName.set(data.displayName, docSnap.id);
+      for (const userDoc of userDocs) {
+        if (userDoc.fields.displayName) {
+          usersByName.set(userDoc.fields.displayName as string, userDoc.id);
         }
-      });
+      }
 
-      const batch2 = writeBatch(db);
-      let matchCount = 0;
+      const token = await user?.getIdToken(true);
+      if (!token) return;
+      const projectId = 'tv-industry-il';
+      const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+
+      const toVal = (v: unknown): Record<string, unknown> => {
+        if (typeof v === 'string') return { stringValue: v };
+        if (typeof v === 'number') return { integerValue: String(v) };
+        if (typeof v === 'boolean') return { booleanValue: v };
+        if (v === null || v === undefined) return { nullValue: null };
+        if (Array.isArray(v)) {
+          return { arrayValue: { values: v.map(item => {
+            if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+              const fields: Record<string, unknown> = {};
+              for (const [k, val] of Object.entries(item)) fields[k] = toVal(val);
+              return { mapValue: { fields } };
+            }
+            return toVal(item);
+          }) } };
+        }
+        if (typeof v === 'object') {
+          const fields: Record<string, unknown> = {};
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) fields[k] = toVal(val);
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(v) };
+      };
+
+      const toFields = (obj: Record<string, unknown>) => {
+        const fields: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj)) fields[k] = toVal(v);
+        return fields;
+      };
 
       for (const crewName of allCrewNames) {
         const matchedUid = usersByName.get(crewName);
@@ -443,28 +472,31 @@ function ProductionsContent() {
           };
         });
 
-        const userScheduleRef = doc(db, 'users', matchedUid, 'schedules', weekId);
-        batch2.set(userScheduleRef, {
-          workerName: crewName,
-          weekStart: wStart,
-          weekEnd: wEnd,
-          productions: productionEntries,
-          autoUpdatedAt: serverTimestamp(),
-          autoUpdatedBy: user?.uid || '',
+        const docPath = `users/${matchedUid}/schedules/${weekId}`;
+        await fetch(`${baseUrl}/${docPath}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fields: toFields({
+            workerName: crewName,
+            weekStart: wStart,
+            weekEnd: wEnd,
+            productions: productionEntries,
+            autoUpdatedAt: new Date().toISOString(),
+            autoUpdatedBy: user?.uid || '',
+          }) }),
         });
-
-        matchCount++;
-      }
-
-      if (matchCount > 0) {
-        await batch2.commit();
       }
     } catch (error) {
+      console.error('syncCrewProfiles failed:', error);
     }
-  }, [user]);
+  }, [user, restListDocs]);
 
   // Process parsed schedule (shared between URL fetch and manual paste)
   const processSchedule = useCallback(async (parsed: ParsedSchedule) => {
+    console.warn('[processSchedule] Called with', parsed.productions.length, 'productions, weekStart:', parsed.weekStart, 'workerName:', parsed.workerName);
     if (!parsed.weekStart) {
       const now = new Date();
       const day = now.getDay();
@@ -477,7 +509,7 @@ function ProductionsContent() {
     }
 
     const weekId = getWeekId(parsed.weekStart);
-    const wName = parsed.workerName || profile?.displayName || '';
+    const wName = profile?.displayName || parsed.workerName || '';
 
     setWorkerName(wName);
     setWeekStart(parsed.weekStart);
@@ -544,8 +576,8 @@ function ProductionsContent() {
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
-  // Firestore REST API helper (bypasses broken SDK)
-  // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
+  // Firestore REST API helpers (bypasses broken SDK)
+  //ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
   const firestoreRestWrite = useCallback(async (
     collectionPath: string,
     fields: Record<string, unknown>,
@@ -720,30 +752,7 @@ function ProductionsContent() {
     }
   }, [user, profile, firestoreRestWrite, firestoreRestRead, loadExistingWeek]);
 
-  // Listen to a week's productions for real-time updates
-  const listenToWeek = useCallback((weekId: string) => {
-    unsubWeekRef.current?.();
-
-    // Listen on user-specific path (where data actually lives due to Firestore rules)
-    const weekRef = user
-      ? doc(db, 'productions', user.uid, 'weeks', weekId)
-      : doc(db, 'productions', 'global', 'weeks', weekId);
-    unsubWeekRef.current = onSnapshot(weekRef, async (snap) => {
-      if (!snap.exists()) return;
-
-      const data = snap.data();
-      if (data.lastUpdated) {
-        // Week was updated - reload productions
-        const prods = await loadExistingWeek(weekId);
-        if (prods.length > 0) {
-          setProductions(prods);
-          setWeekStart(data.weekStart || '');
-          setWeekEnd(data.weekEnd || '');
-          setCurrentWeekId(weekId);
-        }
-      }
-    });
-  }, [loadExistingWeek]);
+  // listenToWeek removed - was using broken SDK onSnapshot and was never called
 
   const getWeekStartDate = (date: Date) => {
     const d = new Date(date);
@@ -816,19 +825,6 @@ function ProductionsContent() {
       sunday.setDate(now.getDate() - dayOfWeek);
       const weekId = getWeekId(toLocalDate(sunday));
 
-      // Show cached data instantly while Firestore loads
-      const cached = loadProdsCache(weekId);
-      if (cached && cached.length > 0 && productions.length === 0) {
-        productionsByWeekRef.current.set(weekId, cached);
-        setProductions(cached);
-        setCurrentWeekId(weekId);
-        const satDate = new Date(sunday);
-        satDate.setDate(sunday.getDate() + 6);
-        setWeekStart(toLocalDate(sunday));
-        setWeekEnd(toLocalDate(satDate));
-        setCurrentDate(new Date(sunday));
-      }
-
       const prods = await loadExistingWeek(weekId);
       if (prods.length > 0) {
         productionsByWeekRef.current.set(weekId, prods);
@@ -838,7 +834,9 @@ function ProductionsContent() {
           scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
         }
         const userSchedule = scheduleDocs.find(s => s.id === weekId);
-        const wName = (userSchedule?.fields?.workerName as string) || profile?.displayName || '';
+        const storedName = (userSchedule?.fields?.workerName as string) || '';
+        // Always prefer profile displayName; stored workerName is only for schedule parsing context
+        const wName = profile?.displayName || storedName;
 
         setProductions(prods);
         setWorkerName(wName);
@@ -868,7 +866,7 @@ function ProductionsContent() {
             setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
           }
           setWeekEnd((latest.fields.weekEnd as string) || '');
-          setWorkerName((latest.fields.workerName as string) || '');
+          setWorkerName(profile?.displayName || (latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
         }
       }
@@ -1026,8 +1024,116 @@ function ProductionsContent() {
     checkPending();
   }, [user, handleReloadLatest]);
 
+  // ===== AI-Powered Parse =====
+  const handleAIParse = useCallback(async (text: string): Promise<ParsedSchedule | null> => {
+    setAiStatus('מנתח עם AI...');
+    try {
+      const response = await fetch('/api/productions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text, fileName: 'manual-input' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'שגיאה בפרסור AI');
+
+      // Convert AI result to ParsedSchedule format
+      const productions: Production[] = (result.productions || []).map((p: {
+        name?: string; date?: string; startTime?: string; endTime?: string;
+        location?: string; studio?: string; notes?: string;
+        crew?: { name: string; role: string; department: string }[];
+      }) => ({
+        id: generateProductionId(p.name || '', p.date || '', p.studio || p.location || ''),
+        name: p.name || '',
+        date: p.date || '',
+        day: p.date ? getHebrewDay(p.date) : '',
+        startTime: p.startTime || '',
+        endTime: p.endTime || '',
+        studio: p.studio || p.location || '',
+        status: 'scheduled' as const,
+        crew: (p.crew || []).map(c => ({
+          name: c.name,
+          role: c.role || '',
+          roleDetail: '',
+          phone: '',
+        })),
+        versions: [],
+      }));
+
+      if (productions.length === 0) return null;
+
+      // Build ParsedSchedule
+      const dates = productions.map(p => p.date).filter(Boolean).sort();
+      const parsed: ParsedSchedule = {
+        weekStart: dates[0] || '',
+        weekEnd: dates[dates.length - 1] || '',
+        workerName: '',
+        productions,
+      };
+
+      setStatusMessage(`AI זיהה ${productions.length} הפקות`);
+      await addNotification({
+        type: 'file_upload',
+        title: 'פרסור AI הושלם',
+        message: `${productions.length} הפקות זוהו בהצלחה`,
+      });
+
+      return parsed;
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'שגיאה בפרסור AI');
+      return null;
+    } finally {
+      setAiStatus('');
+    }
+  }, [addNotification]);
+
+  // ===== Google Calendar Sync =====
+  const syncToGoogleCalendar = useCallback(async (prod: Production) => {
+    setGcalSyncing(prod.id);
+    try {
+      const token = await getGoogleAuthToken();
+      if (!token) {
+        setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
+        return;
+      }
+
+      const result = await createCalendarEvent(token, {
+        id: prod.id,
+        name: prod.name,
+        date: prod.date,
+        startTime: prod.startTime,
+        endTime: prod.endTime,
+        location: prod.studio || '',
+        studio: prod.studio || '',
+        notes: '',
+        crew: (prod.crew || []).map(c => ({
+          name: c.name,
+          role: c.role || c.roleDetail || '',
+          department: '',
+        })),
+      });
+
+      if (result.success) {
+        setStatusMessage(`"${prod.name}" סונכרנה ל-Google Calendar`);
+        await addNotification({
+          type: 'general',
+          title: 'Google Calendar',
+          message: `"${prod.name}" נוספה ליומן`,
+          productionId: prod.id,
+          productionName: prod.name,
+        });
+      } else {
+        setStatusMessage(result.error || 'שגיאה בסנכרון');
+      }
+    } catch {
+      setStatusMessage('שגיאה בסנכרון ל-Google Calendar');
+    } finally {
+      setGcalSyncing(null);
+    }
+  }, [addNotification]);
+
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
+    console.warn('[handleFetch] url:', url?.substring(0, 50), 'manualText length:', manualText?.length, 'rawHtml length:', rawHtml?.length);
 
     setLoading(true);
     setStatusMessage(null);
@@ -1061,7 +1167,19 @@ function ProductionsContent() {
           return;
         }
 
-        setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
+        setFetchProgress({ step: 'parsing', message: useAI ? 'מנתח עם AI...' : getStepMessage('parsing') });
+
+        // Try AI parsing if enabled
+        if (useAI) {
+          const aiParsed = await handleAIParse(manualText);
+          if (aiParsed && aiParsed.productions.length > 0) {
+            setFetchProgress({ step: 'done', message: `AI זיהה ${aiParsed.productions.length} הפקות` });
+            await processSchedule(aiParsed);
+            return;
+          }
+          // Fall through to standard parser if AI fails
+          setFetchProgress({ step: 'parsing', message: 'AI לא הצליח, מנסה פרסור רגיל...' });
+        }
 
         const parsed = parseManualText(manualText);
 
@@ -1103,7 +1221,7 @@ function ProductionsContent() {
       setLoading(false);
       setTimeout(() => setFetchProgress(null), 3000);
     }
-  }, [processSchedule, profile, submitScheduleRequest]);
+  }, [processSchedule, profile, submitScheduleRequest, useAI, handleAIParse]);
 
   const handleActionRequest = useCallback(async (
     url: string,
@@ -1200,6 +1318,43 @@ function ProductionsContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* AI Toggle */}
+          <button
+            onClick={() => setUseAI(!useAI)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              useAI ? 'text-white shadow-lg shadow-purple-500/20' : ''
+            }`}
+            style={{
+              background: useAI ? 'linear-gradient(135deg, #7c3aed, #3b82f6)' : 'var(--theme-bg-secondary)',
+              color: useAI ? '#fff' : 'var(--theme-text-secondary)',
+            }}
+            title={useAI ? 'AI פעיל - לחץ לכיבוי' : 'הפעל פרסור AI חכם'}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {useAI ? 'AI פעיל' : 'AI'}
+          </button>
+
+          {/* Google Calendar Sync */}
+          {productions.length > 0 && (
+            <button
+              onClick={async () => {
+                const today = new Date().toISOString().split('T')[0];
+                const todayProds = productions.filter(p => p.date >= today);
+                if (todayProds.length === 0) { setStatusMessage('אין הפקות עתידיות לסנכרון'); return; }
+                for (const prod of todayProds.slice(0, 5)) {
+                  await syncToGoogleCalendar(prod);
+                }
+              }}
+              disabled={gcalSyncing !== null}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
+              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+              title="סנכרן הפקות ל-Google Calendar"
+            >
+              {gcalSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
+              GCal
+            </button>
+          )}
+
           {productions.length > 0 && (
             <button
               onClick={() => {
@@ -1254,6 +1409,14 @@ function ProductionsContent() {
         />
       </div>
 
+      {/* AI Status */}
+      {aiStatus && (
+        <div className="mb-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(59,130,246,0.1))', border: '1px solid rgba(124,58,237,0.2)' }}>
+          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+          <span className="text-sm text-purple-300">{aiStatus}</span>
+        </div>
+      )}
+
       {/* GitHub Action request status - waiting UI */}
       {requestStatus !== 'idle' && (
         <ScheduleRequestStatus
@@ -1307,7 +1470,7 @@ function ProductionsContent() {
           weekStart={renderedRange.start}
           weekEnd={renderedRange.end}
           workerName={workerName}
-          currentUserName={profile?.displayName || ''}
+          currentUserName={profile?.displayName || user?.displayName || ''}
           onNavigate={handleCalendarNavigate}
           onViewChange={handleViewChange}
           calendarView={calendarView}
