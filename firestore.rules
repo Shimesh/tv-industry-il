@@ -36,7 +36,7 @@ service cloud.firestore {
     // ── Notifications (private per user) ──────────────────────────
     match /notifications/{notifId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuth();
       allow update: if isAuth() && resource.data.userId == request.auth.uid;
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
@@ -112,6 +112,36 @@ service cloud.firestore {
       allow read: if isAuth();
       allow create: if isAuth();
       allow update, delete: if isAuth();
+    }
+
+    // ── Teams ─────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      allow read: if isAuth() && request.auth.uid in resource.data.memberUids;
+      allow create: if isAuth()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.auth.uid in request.resource.data.memberUids;
+      allow update: if isAuth() && request.auth.uid in resource.data.adminUids;
+      allow delete: if isAuth() && resource.data.ownerId == request.auth.uid;
+
+      // Team shared production schedules
+      match /weeks/{weekId}/productions/{prodId} {
+        allow read: if isAuth() && request.auth.uid in
+          get(/databases/$(database)/documents/teams/$(teamId)).data.memberUids;
+        allow write: if isAuth() && request.auth.uid in
+          get(/databases/$(database)/documents/teams/$(teamId)).data.editorUids;
+      }
+    }
+
+    // ── Team Invites ──────────────────────────────────────────────
+    match /teamInvites/{inviteId} {
+      allow read: if isAuth() && (
+        resource.data.inviteeUid == request.auth.uid ||
+        resource.data.invitedBy == request.auth.uid
+      );
+      allow create: if isAuth()
+        && request.resource.data.invitedBy == request.auth.uid;
+      allow update: if isAuth() && resource.data.inviteeUid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.invitedBy == request.auth.uid;
     }
 
     // ── Calls (WebRTC signaling) ──────────────────────────────────

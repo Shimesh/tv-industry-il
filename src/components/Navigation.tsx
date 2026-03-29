@@ -12,13 +12,14 @@ import NotificationBell from './NotificationBell';
 import {
   Tv, Calendar, Users, Newspaper, Building2, Menu, X,
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
-  Palette, ChevronDown, Settings, CheckCircle, Clapperboard, Shield
+  Palette, ChevronDown, Settings, CheckCircle, Clapperboard, Shield, UsersRound
 } from 'lucide-react';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
   { href: '/schedule', label: 'שידורים', icon: Calendar },
   { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
+  { href: '/teams', label: 'צוותים', icon: UsersRound, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
   { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
