@@ -29,9 +29,11 @@ import {
 import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2 } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
+import { useTeam } from '@/hooks/useTeam';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
@@ -81,6 +83,35 @@ function ProductionsContent() {
   const { user, profile } = useAuth();
   const { ensureFromCrew } = useContacts();
   const { addNotification } = useNotifications();
+  const { teams } = useTeam();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [showTeamSelector, setShowTeamSelector] = useState(false);
+
+  // Initialize team from URL query param
+  useEffect(() => {
+    const teamParam = searchParams.get('team');
+    if (teamParam && teams.some(t => t.id === teamParam)) {
+      setSelectedTeamId(teamParam);
+    }
+  }, [searchParams, teams]);
+
+  const selectedTeam = teams.find(t => t.id === selectedTeamId) || null;
+
+  const handleTeamChange = (teamId: string | null) => {
+    setSelectedTeamId(teamId);
+    setShowTeamSelector(false);
+    // Update URL
+    if (teamId) {
+      router.replace(`/productions?team=${teamId}`, { scroll: false });
+    } else {
+      router.replace('/productions', { scroll: false });
+    }
+    // Reset productions when switching context
+    setProductions([]);
+    setCurrentWeekId(null);
+  };
   const [loading, setLoading] = useState(false);
   const [useAI, setUseAI] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
@@ -236,13 +267,15 @@ function ProductionsContent() {
     return Array.from(dedupMap.values());
   }, [parseFirestoreArray]);
 
-  // Load existing week data via REST API - per-user only (no global fallback)
+  // Load existing week data via REST API - supports both personal and team paths
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
     if (!user) return [];
     try {
-      // Load from per-user path only
-      const userRoot = getUserProductionsRoot(user.uid);
-      const path = `${userRoot}/${weekId}/productions`;
+      // Choose path based on team context
+      const root = selectedTeamId
+        ? `teams/${selectedTeamId}/weeks`
+        : getUserProductionsRoot(user.uid);
+      const path = `${root}/${weekId}/productions`;
       console.warn('[loadExistingWeek] Loading from:', path);
       const prodDocs = await restListDocs(path);
       console.warn('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
@@ -256,7 +289,7 @@ function ProductionsContent() {
       console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [user, restListDocs, parseProductionDocs]);
+  }, [user, selectedTeamId, restListDocs, parseProductionDocs]);
 
   // Save productions to Firestore via REST API (bypasses broken SDK)
   const saveToFirestore = useCallback(async (
@@ -321,7 +354,9 @@ function ProductionsContent() {
       };
 
       // 1. Save week metadata
-      const metaPath = `productions/${user.uid}/weeks/${weekId}`;
+      const metaPath = selectedTeamId
+        ? `teams/${selectedTeamId}/weeks/${weekId}`
+        : `productions/${user.uid}/weeks/${weekId}`;
 
       // Read existing to get updateCount
       let updateCount = 1;
@@ -349,7 +384,9 @@ function ProductionsContent() {
       // 2. Save each production
       for (const prod of prods) {
         const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodPath = `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
+        const prodPath = selectedTeamId
+          ? `teams/${selectedTeamId}/weeks/${weekId}/productions/${prodId}`
+          : `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
 
         const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
 
@@ -363,6 +400,7 @@ function ProductionsContent() {
           status: prod.status,
           herzliyaId: prod.id || '',
           lastUpdatedBy: user.uid,
+          lastUpdatedByName: profile?.displayName || '',
           lastUpdatedAt: new Date().toISOString(),
           crew: cleanCrew,
           versions: prod.versions || [],
@@ -385,7 +423,7 @@ function ProductionsContent() {
       console.error('[saveToFirestore] FAILED:', error);
       setStatusMessage('שגיאה בשמירת הנתונים: ' + (error instanceof Error ? error.message : String(error)));
     }
-  }, [user, workerName]);
+  }, [user, profile, workerName, selectedTeamId]);
 
   // Sync crew members with registered user profiles (via REST API)
   const syncCrewProfiles = useCallback(async (
@@ -1398,6 +1436,60 @@ function ProductionsContent() {
           )}
         </div>
       </div>
+
+      {/* Team Selector */}
+      {teams.length > 0 && (
+        <div className="mb-4 relative">
+          <button
+            onClick={() => setShowTeamSelector(!showTeamSelector)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border"
+            style={{
+              background: selectedTeam ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
+              borderColor: selectedTeam ? 'var(--theme-accent)' : 'var(--theme-border)',
+              color: selectedTeam ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
+            }}
+          >
+            <Users className="w-4 h-4" />
+            {selectedTeam ? selectedTeam.name : 'לוח שלי'}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTeamSelector ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showTeamSelector && (
+            <div
+              className="absolute top-full mt-1 right-0 w-64 rounded-xl border shadow-xl z-30 p-1"
+              style={{
+                background: 'var(--theme-bg-secondary)',
+                borderColor: 'var(--theme-border)',
+              }}
+            >
+              <button
+                onClick={() => handleTeamChange(null)}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  !selectedTeamId ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
+                }`}
+                style={!selectedTeamId ? { background: 'var(--theme-accent-glow)' } : undefined}
+              >
+                <Clapperboard className="w-4 h-4" />
+                לוח שלי
+              </button>
+              {teams.map(team => (
+                <button
+                  key={team.id}
+                  onClick={() => handleTeamChange(team.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    selectedTeamId === team.id ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
+                  }`}
+                  style={selectedTeamId === team.id ? { background: 'var(--theme-accent-glow)' } : undefined}
+                >
+                  <Users className="w-4 h-4" />
+                  {team.name}
+                  <span className="text-xs opacity-60 mr-auto">{team.members.length} חברים</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Message Input */}
       <div className="mb-6">
