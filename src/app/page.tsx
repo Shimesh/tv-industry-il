@@ -13,6 +13,7 @@ import {
   Play, Sparkles, Signal, ChevronDown, Globe,
   Briefcase, Bookmark, Mail, Film, CircleDot
 } from 'lucide-react';
+import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
 
 interface RssNewsItem {
   title: string;
@@ -283,6 +284,9 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* ===== Weekly Calendar Widget ===== */}
+      <WeeklyCalendarWidget />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
 
