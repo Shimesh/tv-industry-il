@@ -45,7 +45,13 @@ service cloud.firestore {
     match /chats/{chatId} {
       allow read: if isAuth() && request.auth.uid in resource.data.members;
       allow create: if isAuth();
-      allow update: if isAuth() && request.auth.uid in resource.data.members;
+      allow update: if isAuth() && (
+        request.auth.uid in resource.data.members ||
+        // Allow adding self to team chat on invite acceptance
+        (resource.data.isTeamChat == true &&
+         !(request.auth.uid in resource.data.members) &&
+         request.auth.uid in request.resource.data.members)
+      );
       allow delete: if isAdmin();
 
       // Messages inside a chat
@@ -120,7 +126,13 @@ service cloud.firestore {
       allow create: if isAuth()
         && request.resource.data.ownerId == request.auth.uid
         && request.auth.uid in request.resource.data.memberUids;
-      allow update: if isAuth() && request.auth.uid in resource.data.adminUids;
+      allow update: if isAuth() && (
+        // Admins can change team settings and member lists
+        request.auth.uid in resource.data.adminUids ||
+        // Invitee can accept: they are not yet a member but will be after
+        (!(request.auth.uid in resource.data.memberUids) &&
+         request.auth.uid in request.resource.data.memberUids)
+      );
       allow delete: if isAuth() && resource.data.ownerId == request.auth.uid;
 
       // Team shared production schedules

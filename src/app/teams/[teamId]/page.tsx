@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
@@ -13,7 +13,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import {
   Users, Settings, Calendar, Crown, Shield, UserIcon, Eye,
   UserPlus, Trash2, LogOut, ArrowRight, MoreVertical,
-  ChevronDown, Loader2, Search, Check, X, RefreshCw,
+  Loader2, Search, Check, X,
 } from 'lucide-react';
 
 type Tab = 'members' | 'settings';
@@ -48,6 +48,14 @@ function TeamDashboardContent() {
 
   // Member action menu
   const [menuMember, setMenuMember] = useState<string | null>(null);
+
+  // Close member menu on outside click
+  useEffect(() => {
+    if (!menuMember) return;
+    const handler = () => setMenuMember(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [menuMember]);
 
   // Confirm dialogs
   const [confirmAction, setConfirmAction] = useState<{
