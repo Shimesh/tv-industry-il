@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeam } from '@/hooks/useTeam';
+import { useToast } from '@/contexts/ToastContext';
 import { TEAM_ROLE_LABELS } from '@/types/team';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
@@ -15,6 +16,7 @@ import {
 
 function TeamsContent() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const {
     teams, invites, loading,
     createTeam, acceptInvite, declineInvite,
@@ -49,7 +51,7 @@ function TeamsContent() {
     try {
       await acceptInvite(invite);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'שגיאה');
+      showToast(err instanceof Error ? err.message : 'שגיאה בקבלת ההזמנה', 'error');
     }
   };
 

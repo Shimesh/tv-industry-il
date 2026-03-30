@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useToast } from '@/contexts/ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { useTeam } from '@/hooks/useTeam';
@@ -23,6 +24,7 @@ function TeamDashboardContent() {
   const router = useRouter();
   const teamId = params.teamId as string;
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
   const {
     teams, loading,
     updateTeam, inviteToTeam, removeMember, leaveTeam,
@@ -148,7 +150,7 @@ function TeamDashboardContent() {
           break;
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'שגיאה');
+      showToast(err instanceof Error ? err.message : 'שגיאה בביצוע הפעולה', 'error');
     }
     setConfirmAction(null);
   };
