@@ -735,7 +735,12 @@ function ProductionsContent() {
       setWorkerName(extractedWorkerName);
 
       // Trigger GitHub Action immediately via API route (reduces wait from 5min to ~30s)
-      fetch('/api/trigger-action', { method: 'POST' }).catch(() => {});
+      user.getIdToken().then(idToken => {
+        fetch('/api/trigger-action', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }).catch(() => {});
+      }).catch(() => {});
 
       // Poll for status updates (REST-based, since SDK onSnapshot is broken)
       const pollInterval = setInterval(async () => {
