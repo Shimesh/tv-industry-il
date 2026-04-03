@@ -1556,7 +1556,13 @@ function ProductionsContent() {
                 const myShifts = productions.filter(p =>
                   p.isCurrentUserShift || p.crew.some(c => {
                     const names = [profile?.displayName, workerName].filter(Boolean) as string[];
-                    return names.some(n => c.name === n || c.name.includes(n) || n.includes(c.name));
+                    return names.some(n => {
+                      if (c.name === n) return true;
+                      const crewParts = c.name.trim().split(/\s+/);
+                      const nameParts = n.trim().split(/\s+/);
+                      return (crewParts.length === 1 || nameParts.length === 1) &&
+                        crewParts[0] === nameParts[0] && crewParts[0].length >= 2;
+                    });
                   })
                 );
                 if (myShifts.length === 0) { alert('אין הפקות להצגה'); return; }

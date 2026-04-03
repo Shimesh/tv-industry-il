@@ -69,10 +69,11 @@ export default function WeeklyCalendar({
     for (const name of names) {
       if (!name) continue;
       if (crewName === name) return true;
-      if (crewName.includes(name) || name.includes(crewName)) return true;
-      const crewFirst = crewName.split(/\s+/)[0];
-      const nameFirst = name.split(/\s+/)[0];
-      if (crewFirst && nameFirst && crewFirst === nameFirst && crewFirst.length >= 2) return true;
+      // Only use first-name matching when one side is a single word (no last name)
+      const crewParts = crewName.trim().split(/\s+/);
+      const nameParts = name.trim().split(/\s+/);
+      if ((crewParts.length === 1 || nameParts.length === 1) &&
+          crewParts[0] === nameParts[0] && crewParts[0].length >= 2) return true;
     }
     return false;
   };
