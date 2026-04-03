@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
 import MessageInput from '@/components/productions/MessageInput';
@@ -41,7 +41,9 @@ const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 export default function ProductionsPage() {
   return (
     <AuthGuard>
-      <ProductionsContent />
+      <Suspense>
+        <ProductionsContent />
+      </Suspense>
     </AuthGuard>
   );
 }
@@ -83,11 +85,24 @@ function ProductionsContent() {
   const { user, profile } = useAuth();
   const { ensureFromCrew } = useContacts();
   const { addNotification } = useNotifications();
-  const { teams } = useTeam();
+  const { teams } = useTeam({ skipInvites: true });
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showTeamSelector, setShowTeamSelector] = useState(false);
+  const teamSelectorRef = useRef<HTMLDivElement>(null);
+
+  // Close team selector on outside click
+  useEffect(() => {
+    if (!showTeamSelector) return;
+    const handler = (e: MouseEvent) => {
+      if (teamSelectorRef.current && !teamSelectorRef.current.contains(e.target as Node)) {
+        setShowTeamSelector(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTeamSelector]);
 
   // Initialize team from URL query param
   useEffect(() => {
@@ -1439,7 +1454,7 @@ function ProductionsContent() {
 
       {/* Team Selector */}
       {teams.length > 0 && (
-        <div className="mb-4 relative">
+        <div className="mb-4 relative" ref={teamSelectorRef}>
           <button
             onClick={() => setShowTeamSelector(!showTeamSelector)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border"

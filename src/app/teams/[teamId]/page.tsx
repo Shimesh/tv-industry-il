@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
@@ -9,11 +9,11 @@ import { TEAM_ROLE_LABELS, isTeamAdmin, type TeamRole, type Team, type TeamMembe
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import {
   Users, Settings, Calendar, Crown, Shield, UserIcon, Eye,
   UserPlus, Trash2, LogOut, ArrowRight, MoreVertical,
-  ChevronDown, Loader2, Search, Check, X, RefreshCw,
+  ChevronDown, Loader2, Search, Check, X,
 } from 'lucide-react';
 
 type Tab = 'members' | 'settings';
@@ -69,20 +69,22 @@ function TeamDashboardContent() {
     setMyRole(getUserRole(teamId));
   }, [getUserRole, teamId]);
 
-  // Load all users for invite
+  // Load all users for invite (one-time fetch, not a live listener)
   useEffect(() => {
     if (!showInvite || !user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+    let cancelled = false;
+    getDocs(collection(db, 'users')).then((snapshot) => {
+      if (cancelled) return;
       const users: UserProfile[] = snapshot.docs.map(d => ({
         uid: d.id,
         ...d.data(),
       })) as UserProfile[];
       setAllUsers(users);
     });
-    return () => unsubscribe();
+    return () => { cancelled = true; };
   }, [showInvite, user]);
 
-  const filteredUsers = allUsers.filter(u => {
+  const filteredUsers = useMemo(() => allUsers.filter(u => {
     if (!team) return false;
     if (team.memberUids.includes(u.uid)) return false;
     if (u.uid === user?.uid) return false;
@@ -92,7 +94,7 @@ function TeamDashboardContent() {
       u.displayName?.toLowerCase().includes(search) ||
       u.email?.toLowerCase().includes(search)
     );
-  });
+  }), [allUsers, team, user?.uid, inviteSearch]);
 
   const handleInvite = async (uid: string) => {
     setInviting(uid);

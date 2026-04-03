@@ -5,11 +5,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc,
-  query, where, serverTimestamp, getDoc, getDocs, arrayUnion, arrayRemove, writeBatch,
+  query, where, serverTimestamp, getDoc, getDocs, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import type { Team, TeamMember, TeamInvite, TeamRole } from '@/types/team';
 
-export function useTeam() {
+export function useTeam(options?: { skipInvites?: boolean }) {
   const { user, profile } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
@@ -17,6 +17,7 @@ export function useTeam() {
 
   const displayName = profile?.displayName || user?.displayName || '';
   const displayPhoto = profile?.photoURL || user?.photoURL || null;
+  const skipInvites = options?.skipInvites ?? false;
 
   // Subscribe to user's teams
   useEffect(() => {
@@ -50,9 +51,9 @@ export function useTeam() {
     return () => unsubscribe();
   }, [user]);
 
-  // Subscribe to pending invites for user
+  // Subscribe to pending invites for user (skippable for pages that don't need it)
   useEffect(() => {
-    if (!user) {
+    if (skipInvites || !user) {
       setInvites([]);
       return;
     }
@@ -72,7 +73,7 @@ export function useTeam() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, skipInvites]);
 
   // Create a new team
   const createTeam = useCallback(async (name: string, description?: string): Promise<string | null> => {
@@ -261,19 +262,22 @@ export function useTeam() {
       });
     }
 
-    // Notify team members
+    // Notify team members (in parallel)
     const memberUids = teamData.memberUids || [];
-    for (const uid of memberUids) {
-      if (uid === user.uid) continue;
-      await addDoc(collection(db, 'notifications'), {
-        userId: uid,
-        type: 'team_member_joined',
-        title: 'חבר/ה חדש/ה בצוות',
-        message: `${displayName} הצטרף/ה ל${teamData.name}`,
-        read: false,
-        createdAt: Date.now(),
-      });
-    }
+    await Promise.all(
+      memberUids
+        .filter((uid: string) => uid !== user.uid)
+        .map((uid: string) =>
+          addDoc(collection(db, 'notifications'), {
+            userId: uid,
+            type: 'team_member_joined',
+            title: 'חבר/ה חדש/ה בצוות',
+            message: `${displayName} הצטרף/ה ל${teamData.name}`,
+            read: false,
+            createdAt: Date.now(),
+          }).catch(() => {}) // Don't fail if one notification fails
+        )
+    );
   }, [user, displayName, displayPhoto]);
 
   // Decline an invite
