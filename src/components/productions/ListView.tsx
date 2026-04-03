@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { MapPin, Clock, Users, Info } from 'lucide-react';
+import { useMemo, useRef, useEffect } from 'react';
+import { MapPin, Clock, Users, Info, Loader2 } from 'lucide-react';
 import { Production, formatDateShort, getHebrewDay } from '@/lib/productionDiff';
 
 interface ListViewProps {
@@ -11,6 +11,10 @@ interface ListViewProps {
   workerName: string;
   onProductionClick: (production: Production) => void;
   onInfoClick?: (production: Production) => void;
+  // Infinite scroll
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 export default function ListView({
@@ -20,6 +24,9 @@ export default function ListView({
   workerName,
   onProductionClick,
   onInfoClick,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
 }: ListViewProps) {
   const filteredAndGrouped = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -75,6 +82,20 @@ export default function ListView({
     );
     return member ? member.role || member.roleDetail : null;
   };
+
+  // Sentinel ref for infinite scroll — triggers onLoadMore when it enters the viewport
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!onLoadMore || !hasMore) return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry?.isIntersecting) onLoadMore(); },
+      { rootMargin: '300px' }, // trigger 300px before sentinel is visible
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadMore, hasMore]);
 
   if (filteredAndGrouped.length === 0) {
     return (
@@ -214,6 +235,29 @@ export default function ListView({
           })}
         </div>
       ))}
+
+      {/* Infinite scroll sentinel + status */}
+      {onLoadMore && (
+        <>
+          {/* Invisible sentinel — IntersectionObserver watches this */}
+          <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+
+          {/* Loading more spinner */}
+          {loadingMore && (
+            <div className="flex items-center justify-center gap-2 py-6" style={{ color: 'var(--theme-text-secondary)' }}>
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm">טוען עוד הפקות...</span>
+            </div>
+          )}
+
+          {/* End of list */}
+          {!hasMore && !loadingMore && filteredAndGrouped.length > 0 && (
+            <div className="flex items-center justify-center py-6 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              — סוף הרשימה —
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

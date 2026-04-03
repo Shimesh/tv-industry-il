@@ -60,34 +60,26 @@ export async function POST(request: NextRequest) {
         rejectUnauthorized: false,
       };
 
-      // Fetch personal view
-      const personalResponse = await fetch(url, fetchOptions);
+      // Build department URL variants
+      const deptUrl = new URL(url);
+      deptUrl.searchParams.set('HSELWEBprgnameShowFmp', '1');
+      const deptUrl2 = new URL(url);
+      deptUrl2.searchParams.set('showdept', '1');
+
+      // Fetch personal view and department view in parallel
+      const [personalResponse, deptResult] = await Promise.all([
+        fetch(url, fetchOptions),
+        fetch(deptUrl.toString(), fetchOptions)
+          .catch(() => fetch(deptUrl2.toString(), fetchOptions).catch(() => null)),
+      ]);
+
       if (!personalResponse.ok) {
         throw new Error(`HTTP ${personalResponse.status}`);
       }
       personalHtml = await personalResponse.text();
 
-      // Fetch department view
-      const deptUrl = new URL(url);
-      deptUrl.searchParams.set('HSELWEBprgnameShowFmp', '1');
-
-      try {
-        const deptResponse = await fetch(deptUrl.toString(), fetchOptions);
-        if (deptResponse.ok) {
-          deptHtml = await deptResponse.text();
-        }
-      } catch {
-        // Try alternative parameter
-        const deptUrl2 = new URL(url);
-        deptUrl2.searchParams.set('showdept', '1');
-        try {
-          const deptResponse2 = await fetch(deptUrl2.toString(), fetchOptions);
-          if (deptResponse2.ok) {
-            deptHtml = await deptResponse2.text();
-          }
-        } catch {
-          console.warn('Department view not available');
-        }
+      if (deptResult && deptResult.ok) {
+        deptHtml = await deptResult.text();
       }
     } catch (error) {
       console.error('Server fetch error:', error);

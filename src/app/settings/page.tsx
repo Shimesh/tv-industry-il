@@ -98,10 +98,10 @@ function SettingsContent() {
         {/* Status */}
         <SettingsSection icon={<User className="w-4 h-4" />} title="סטטוס">
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {[
                 { value: 'available' as const, label: 'פנוי', color: 'bg-green-500' },
-                { value: 'busy' as const, label: 'תפוס', color: 'bg-red-500' },
+                { value: 'busy' as const, label: 'תפוס', color: 'bg-amber-500' },
                 { value: 'offline' as const, label: 'לא פעיל', color: 'bg-gray-500' },
               ].map(s => (
                 <button
@@ -125,6 +125,18 @@ function SettingsContent() {
                 סטטוס עודכן
               </span>
             )}
+          </div>
+          <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: 'var(--theme-border)' }}>
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--theme-text)' }}>פתוח להצעות עבודה</p>
+              <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>יוצג כ"מחפש עבודה" באלפון</p>
+            </div>
+            <button
+              onClick={() => updateUserProfile({ openToWork: !profile.openToWork })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${profile.openToWork ? 'bg-[var(--theme-accent)]' : 'bg-gray-600'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${profile.openToWork ? 'right-0.5' : 'right-[22px]'}`} />
+            </button>
           </div>
         </SettingsSection>
 

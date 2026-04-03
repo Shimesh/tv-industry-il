@@ -3,8 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { X, Clapperboard, ArrowLeft, Clock, MapPin, User, ChevronRight, ChevronLeft } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
@@ -219,33 +217,108 @@ export default function WeeklyCalendarWidget() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Phase 2: Firestore background refresh */
+  /* Phase 2: Firestore REST refresh (personal + all teams) */
   useEffect(() => {
     if (!user) return;
     const weekId = getWeekId(days[0]);
-    const colRef = collection(db, `productions/global/weeks/${weekId}/productions`);
-    getDocs(colRef).then(snap => {
-      if (snap.empty) { setProductions(prev => prev ?? []); return; }
-      const prods: Production[] = [];
-      snap.forEach(doc => {
-        const d = doc.data();
-        prods.push({
-          id: doc.id,
-          name: d.name ?? '',
-          studio: d.studio ?? '',
-          date: d.date ?? '',
-          day: d.day ?? '',
-          startTime: d.startTime ?? '',
-          endTime: d.endTime ?? '',
-          status: (d.status ?? 'scheduled') as Production['status'],
-          crew: Array.isArray(d.crew) ? d.crew : [],
-          isCurrentUserShift: d.isCurrentUserShift === true,
-          lastUpdatedBy: d.lastUpdatedBy ?? '',
-          lastUpdatedAt: d.lastUpdatedAt ?? '',
-        });
+    const PROJECT = 'tv-industry-il';
+    const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+
+    const restList = async (token: string, path: string): Promise<Production[]> => {
+      const res = await fetch(`${BASE}/${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setProductions(prods);
-    }).catch(() => {});
+      if (!res.ok) return [];
+      const data = await res.json() as { documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }> };
+      if (!data.documents) return [];
+      return data.documents.map(doc => {
+        const f = doc.fields ?? {};
+        const str = (k: string) => (f[k]?.stringValue as string) ?? '';
+        const arr = (k: string): Production['crew'] => {
+          const av = f[k]?.arrayValue as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string }> } }> } | undefined;
+          return (av?.values ?? []).map(v => {
+            const mf = v.mapValue?.fields ?? {};
+            const s = (mk: string) => mf[mk]?.stringValue ?? '';
+            return { name: s('name'), role: s('role'), roleDetail: s('roleDetail'), phone: s('phone'), normalizedName: s('normalizedName'), normalizedPhone: s('normalizedPhone'), identityKey: s('identityKey'), startTime: s('startTime'), endTime: s('endTime'), addedBy: s('addedBy'), addedAt: s('addedAt') };
+          });
+        };
+        return {
+          id: doc.name.split('/').pop() ?? '',
+          name: str('name'), studio: str('studio'), date: str('date'), day: str('day'),
+          startTime: str('startTime'), endTime: str('endTime'),
+          status: (str('status') || 'scheduled') as Production['status'],
+          crew: arr('crew'),
+          isCurrentUserShift: f['isCurrentUserShift']?.booleanValue === true,
+          lastUpdatedBy: str('lastUpdatedBy'), lastUpdatedAt: str('lastUpdatedAt'),
+        };
+      });
+    };
+
+    const fetchAll = async () => {
+      const token = await user.getIdToken();
+      const allProds: Production[] = [];
+      let fetchSucceeded = false;
+
+      // Personal productions — track if REST call returned 200
+      const personalRes = await fetch(`${BASE}/productions/${user.uid}/weeks/${weekId}/productions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (personalRes.ok) {
+        fetchSucceeded = true;
+        const data = await personalRes.json() as { documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }> };
+        allProds.push(...(data.documents ?? []).map(doc => {
+          const f = doc.fields ?? {};
+          const str = (k: string) => (f[k]?.stringValue as string) ?? '';
+          const arr = (k: string): Production['crew'] => {
+            const av = f[k]?.arrayValue as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string }> } }> } | undefined;
+            return (av?.values ?? []).map(v => {
+              const mf = v.mapValue?.fields ?? {};
+              const s = (mk: string) => mf[mk]?.stringValue ?? '';
+              return { name: s('name'), role: s('role'), roleDetail: s('roleDetail'), phone: s('phone'), normalizedName: s('normalizedName'), normalizedPhone: s('normalizedPhone'), identityKey: s('identityKey'), startTime: s('startTime'), endTime: s('endTime'), addedBy: s('addedBy'), addedAt: s('addedAt') };
+            });
+          };
+          return {
+            id: doc.name.split('/').pop() ?? '',
+            name: str('name'), studio: str('studio'), date: str('date'), day: str('day'),
+            startTime: str('startTime'), endTime: str('endTime'),
+            status: (str('status') || 'scheduled') as Production['status'],
+            crew: arr('crew'),
+            isCurrentUserShift: f['isCurrentUserShift']?.booleanValue === true,
+            lastUpdatedBy: str('lastUpdatedBy'), lastUpdatedAt: str('lastUpdatedAt'),
+          };
+        }));
+      }
+
+      // Team productions (best-effort, don't block on failure)
+      try {
+        const teamsRes = await fetch(`${BASE}/teams?pageSize=20`, { headers: { Authorization: `Bearer ${token}` } });
+        if (teamsRes.ok) {
+          const teamsData = await teamsRes.json() as { documents?: Array<{ name: string; fields: Record<string, unknown> }> };
+          const memberDocs = (teamsData.documents ?? []).filter(d => {
+            const av = d.fields?.memberUids as { arrayValue?: { values?: Array<{ stringValue?: string }> } } | undefined;
+            return av?.arrayValue?.values?.some(v => v.stringValue === user.uid);
+          });
+          await Promise.all(memberDocs.map(async d => {
+            allProds.push(...await restList(token, `teams/${d.name.split('/').pop() ?? ''}/weeks/${weekId}/productions`));
+          }));
+        }
+      } catch { /* ignore team errors */ }
+
+      // Only update state if personal fetch succeeded — prevents wiping cache on network errors
+      if (!fetchSucceeded) return;
+
+      setProductions(allProds);
+
+      // Update cache
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
+        cache[weekId] = { data: allProds, savedAt: Date.now() };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      } catch { /* ignore */ }
+    };
+
+    fetchAll().catch(() => { /* keep existing state on total failure */ });
   }, [user, days]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';

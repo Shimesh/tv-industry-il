@@ -29,7 +29,7 @@ import {
 import { useContacts } from '@/hooks/useContacts';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
@@ -80,7 +80,7 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 }
 
 function ProductionsContent() {
-  const { user, profile } = useAuth();
+  const { user, profile, updateUserProfile } = useAuth();
   const { ensureFromCrew } = useContacts();
   const { addNotification } = useNotifications();
   const { teams } = useTeam();
@@ -109,6 +109,9 @@ function ProductionsContent() {
       router.replace('/productions', { scroll: false });
     }
     // Reset productions when switching context
+    reloadDoneRef.current = false;
+    usersMapRef.current = null;
+    lastCrewKeyRef.current = '';
     setProductions([]);
     setCurrentWeekId(null);
   };
@@ -138,7 +141,24 @@ function ProductionsContent() {
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [navLoading, setNavLoading] = useState(false);
+  // Infinite scroll state for list view
+  const [listViewExtraWeeks, setListViewExtraWeeks] = useState(0);
+  const [loadingMoreList, setLoadingMoreList] = useState(false);
+  const [hasMoreList, setHasMoreList] = useState(true);
   const productionsByWeekRef = useRef<Map<string, Production[]>>(new Map());
+  // Prevents double-load: set to true after handleReloadLatest succeeds on mount
+  const reloadDoneRef = useRef(false);
+  // Cache users name→uid map to avoid full collection read on every save
+  const usersMapRef = useRef<Map<string, string> | null>(null);
+  // Track updateCount per weekId client-side to avoid a pre-read round-trip on every save
+  const weekUpdateCountRef = useRef<Map<string, number>>(new Map());
+  // Track last synced crew fingerprint to avoid re-running ensureFromCrew unnecessarily
+  const lastCrewKeyRef = useRef('');
+  // Crew identity - matches logged-in user to a crew member in productions
+  const [showCrewIdentity, setShowCrewIdentity] = useState(false);
+  const [crewSuggestions, setCrewSuggestions] = useState<Array<{ name: string; role: string; score: number }>>([]);
+  const [crewNameInput, setCrewNameInput] = useState('');
+  const crewIdentityCheckedRef = useRef(false);
   // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
@@ -291,6 +311,67 @@ function ProductionsContent() {
     }
   }, [user, selectedTeamId, restListDocs, parseProductionDocs]);
 
+  // Search all loaded productions for crew members matching a display name
+  const findCrewMatches = useCallback((displayName: string) => {
+    const norm = normalizeName(displayName);
+    if (!norm || norm.length < 2) return [];
+    const firstNameNorm = norm.split(/\s+/)[0];
+
+    const seen = new Map<string, { name: string; role: string; score: number }>();
+    for (const weekProds of productionsByWeekRef.current.values()) {
+      for (const prod of weekProds) {
+        for (const crew of prod.crew) {
+          if (!crew.name) continue;
+          const crewNorm = normalizeName(crew.name);
+          if (!crewNorm) continue;
+          const crewFirst = crewNorm.split(/\s+/)[0];
+          let score = 0;
+          if (crewNorm === norm) score = 3;
+          else if (crewFirst === firstNameNorm && firstNameNorm.length >= 2) score = 2;
+          else if (crewNorm.includes(firstNameNorm) || norm.includes(crewFirst)) score = 1;
+          if (score > 0) {
+            const existing = seen.get(crewNorm);
+            if (!existing || score > existing.score) {
+              seen.set(crewNorm, { name: crew.name, role: crew.role || crew.roleDetail || '', score });
+            }
+          }
+        }
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => b.score - a.score).slice(0, 5);
+  }, []);
+
+  // Confirm crew identity: save to profile and use as workerName
+  const handleCrewIdentityConfirm = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setWorkerName(trimmed);
+    setShowCrewIdentity(false);
+    try {
+      await updateUserProfile({ crewName: trimmed, onboardingComplete: true });
+    } catch {
+      // non-critical — identity still applied locally
+    }
+  }, [updateUserProfile]);
+
+  // After productions load, auto-detect crew identity if not yet confirmed
+  useEffect(() => {
+    if (crewIdentityCheckedRef.current) return;
+    if (!profile) return;
+    if (profile.crewName) {
+      // Already confirmed — just sync workerName locally
+      if (!workerName) setWorkerName(profile.crewName);
+      return;
+    }
+    if (productionsByWeekRef.current.size === 0) return;
+    crewIdentityCheckedRef.current = true;
+    const suggestions = findCrewMatches(profile.displayName);
+    setCrewSuggestions(suggestions);
+    setCrewNameInput(profile.displayName);
+    setShowCrewIdentity(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, productions]);
+
   // Save productions to Firestore via REST API (bypasses broken SDK)
   const saveToFirestore = useCallback(async (
     weekId: string,
@@ -303,7 +384,7 @@ function ProductionsContent() {
     }
 
     try {
-      const token = await user.getIdToken(true);
+      const token = await user.getIdToken(); // no forced refresh — SDK auto-renews near expiry
       const projectId = 'tv-industry-il';
       const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
@@ -353,72 +434,64 @@ function ProductionsContent() {
         }
       };
 
-      // 1. Save week metadata
+      // 1. Prepare paths and IDs
       const metaPath = selectedTeamId
         ? `teams/${selectedTeamId}/weeks/${weekId}`
         : `productions/${user.uid}/weeks/${weekId}`;
 
-      // Read existing to get updateCount
-      let updateCount = 1;
-      try {
-        const metaRes = await fetch(`${baseUrl}/${metaPath}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (metaRes.ok) {
-          const metaData = await metaRes.json();
-          const ucVal = metaData?.fields?.updateCount?.integerValue;
-          if (ucVal) updateCount = Number(ucVal) + 1;
-        }
-      } catch {
-        // New doc
-      }
+      // Increment updateCount client-side — avoids a sequential pre-read round-trip
+      const prevCount = weekUpdateCountRef.current.get(weekId) ?? 0;
+      const updateCount = prevCount + 1;
+      weekUpdateCountRef.current.set(weekId, updateCount);
 
-      await restSet(metaPath, {
-        weekId,
-        weekStart: wStart,
-        weekEnd: wEnd,
-        lastUpdated: new Date().toISOString(),
-        updateCount,
-      });
-
-      // 2. Save each production
-      for (const prod of prods) {
-        const prodId = prod.id || generateProductionId(prod.name, prod.date, prod.studio);
-        const prodPath = selectedTeamId
-          ? `teams/${selectedTeamId}/weeks/${weekId}/productions/${prodId}`
-          : `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
-
-        const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
-
-        await restSet(prodPath, {
-          name: prod.name,
-          studio: prod.studio,
-          date: prod.date,
-          day: prod.day,
-          startTime: prod.startTime,
-          endTime: prod.endTime,
-          status: prod.status,
-          herzliyaId: prod.id || '',
-          lastUpdatedBy: user.uid,
-          lastUpdatedByName: profile?.displayName || '',
-          lastUpdatedAt: new Date().toISOString(),
-          crew: cleanCrew,
-          versions: prod.versions || [],
-        });
-      }
-
-      // 3. Save user schedule metadata
+      const prodIds = prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio));
       const userSchedulePath = `userSchedules/${user.uid}/weeks/${weekId}`;
-      await restSet(userSchedulePath, {
-        workerName,
-        fetchedAt: new Date().toISOString(),
-        productionIds: prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio)),
-      });
+      const now = new Date().toISOString();
+
+      // 2. Save metadata, all productions, and user schedule — all in parallel
+      await Promise.all([
+        restSet(metaPath, {
+          weekId,
+          weekStart: wStart,
+          weekEnd: wEnd,
+          lastUpdated: now,
+          updateCount,
+        }),
+        ...prods.map(async (prod, i) => {
+          const prodId = prodIds[i];
+          const prodPath = selectedTeamId
+            ? `teams/${selectedTeamId}/weeks/${weekId}/productions/${prodId}`
+            : `productions/${user.uid}/weeks/${weekId}/productions/${prodId}`;
+
+          const cleanCrew = sanitizeCrewForFirestore(deduplicateCrew(prod.crew));
+
+          return restSet(prodPath, {
+            name: prod.name,
+            studio: prod.studio,
+            date: prod.date,
+            day: prod.day,
+            startTime: prod.startTime,
+            endTime: prod.endTime,
+            status: prod.status,
+            herzliyaId: prod.id || '',
+            lastUpdatedBy: user.uid,
+            lastUpdatedByName: profile?.displayName || '',
+            lastUpdatedAt: now,
+            crew: cleanCrew,
+            versions: prod.versions || [],
+          });
+        }),
+        restSet(userSchedulePath, {
+          workerName,
+          fetchedAt: now,
+          productionIds: prodIds,
+        }),
+      ]);
 
       console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
 
-      // Auto-update crew member profiles
-      await syncCrewProfiles(weekId, prods, wStart, wEnd);
+      // Auto-update crew member profiles (pass token to avoid second refresh)
+      await syncCrewProfiles(weekId, prods, wStart, wEnd, token);
     } catch (error) {
       console.error('[saveToFirestore] FAILED:', error);
       setStatusMessage('שגיאה בשמירת הנתונים: ' + (error instanceof Error ? error.message : String(error)));
@@ -426,11 +499,13 @@ function ProductionsContent() {
   }, [user, profile, workerName, selectedTeamId]);
 
   // Sync crew members with registered user profiles (via REST API)
+  // token is passed in from saveToFirestore to avoid a second getIdToken() round-trip
   const syncCrewProfiles = useCallback(async (
     weekId: string,
     prods: Production[],
     wStart: string,
     wEnd: string,
+    token: string,
   ) => {
     try {
       const allCrewNames = new Set<string>();
@@ -441,18 +516,17 @@ function ProductionsContent() {
       }
       if (allCrewNames.size === 0) return;
 
-      // Fetch all users via REST API
-      const userDocs = await restListDocs('users');
-      const usersByName = new Map<string, string>();
-
-      for (const userDoc of userDocs) {
-        if (userDoc.fields.displayName) {
-          usersByName.set(userDoc.fields.displayName as string, userDoc.id);
-        }
+      // Use cached users map — only fetch once per session (avoids full collection read each save)
+      if (!usersMapRef.current) {
+        const userDocs = await restListDocs('users');
+        usersMapRef.current = new Map(
+          userDocs
+            .filter(d => d.fields.displayName)
+            .map(d => [d.fields.displayName as string, d.id]),
+        );
       }
+      const usersByName = usersMapRef.current;
 
-      const token = await user?.getIdToken(true);
-      if (!token) return;
       const projectId = 'tv-industry-il';
       const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
@@ -485,15 +559,16 @@ function ProductionsContent() {
         return fields;
       };
 
-      for (const crewName of allCrewNames) {
+      // Write all matched crew members in parallel
+      await Promise.all(Array.from(allCrewNames).map(async (crewName) => {
         const matchedUid = usersByName.get(crewName);
-        if (!matchedUid) continue;
+        if (!matchedUid) return;
 
         const memberProds = prods.filter(p =>
           p.crew.some(c => c.name === crewName) && p.status !== 'cancelled'
         );
 
-        if (memberProds.length === 0) continue;
+        if (memberProds.length === 0) return;
 
         const productionEntries = memberProds.map(p => {
           const crewEntry = p.crew.find(c => c.name === crewName);
@@ -526,7 +601,7 @@ function ProductionsContent() {
             autoUpdatedBy: user?.uid || '',
           }) }),
         });
-      }
+      }));
     } catch (error) {
       console.error('syncCrewProfiles failed:', error);
     }
@@ -841,15 +916,15 @@ function ProductionsContent() {
       };
     }
 
-    const start = new Date(currentDate);
-    start.setMonth(start.getMonth() - 1);
-    const end = new Date(currentDate);
-    end.setMonth(end.getMonth() + 2);
+    // List view: start from current week, extend by extra loaded weeks (infinite scroll)
+    const start = getWeekStartDate(currentDate);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7 * (4 + listViewExtraWeeks) - 1);
     return {
       start: toLocalDate(start),
       end: toLocalDate(end),
     };
-  }, [calendarView, currentDate]);
+  }, [calendarView, currentDate, listViewExtraWeeks]);
 
   const visibleProductions = useMemo(() => {
     return productions.filter((production) => (
@@ -868,18 +943,22 @@ function ProductionsContent() {
       sunday.setDate(now.getDate() - dayOfWeek);
       const weekId = getWeekId(toLocalDate(sunday));
 
-      const prods = await loadExistingWeek(weekId);
+      // Load current week + user schedule list in parallel
+      const [prods, scheduleDocsMain] = await Promise.all([
+        loadExistingWeek(weekId),
+        restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`),
+      ]);
+      let scheduleDocs = scheduleDocsMain;
+      if (scheduleDocs.length === 0) {
+        scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
+      }
+
       if (prods.length > 0) {
         productionsByWeekRef.current.set(weekId, prods);
-        // Also fetch the user's schedule to get workerName
-        let scheduleDocs = await restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`);
-        if (scheduleDocs.length === 0) {
-          scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
-        }
         const userSchedule = scheduleDocs.find(s => s.id === weekId);
         const storedName = (userSchedule?.fields?.workerName as string) || '';
-        // Always prefer profile displayName; stored workerName is only for schedule parsing context
-        const wName = profile?.displayName || storedName;
+        // Prefer confirmed crew name, then profile display name, then stored name
+        const wName = profile?.crewName || profile?.displayName || storedName;
 
         setProductions(prods);
         setWorkerName(wName);
@@ -889,13 +968,15 @@ function ProductionsContent() {
         setCurrentDate(new Date(sunday));
         setWeekEnd(toLocalDate(satDate));
         setCurrentWeekId(weekId);
+        reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
+        // Save to localStorage cache for instant next load
+        try {
+          const raw = localStorage.getItem('productions_cache_v2');
+          const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
+          cache[weekId] = { data: prods, savedAt: Date.now() };
+          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+        } catch { /* ignore */ }
         return;
-      }
-
-      // Fallback: try user schedules via REST
-      let scheduleDocs = await restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`);
-      if (scheduleDocs.length === 0) {
-        scheduleDocs = await restListDocs(`users/${user.uid}/schedules`);
       }
       if (scheduleDocs.length > 0) {
         const latest = scheduleDocs[scheduleDocs.length - 1];
@@ -909,8 +990,16 @@ function ProductionsContent() {
             setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
           }
           setWeekEnd((latest.fields.weekEnd as string) || '');
-          setWorkerName(profile?.displayName || (latest.fields.workerName as string) || '');
+          setWorkerName(profile?.crewName || profile?.displayName || (latest.fields.workerName as string) || '');
           setCurrentWeekId(latestWeekId);
+          reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
+          // Save to localStorage cache for instant next load
+          try {
+            const raw = localStorage.getItem('productions_cache_v2');
+            const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
+            cache[latestWeekId] = { data: latestProds, savedAt: Date.now() };
+            localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+          } catch { /* ignore */ }
         }
       }
     } catch (error) {
@@ -961,6 +1050,31 @@ function ProductionsContent() {
     return [...cached, ...fetched];
   }, [loadExistingWeek]);
 
+  // Load more productions for list view infinite scroll
+  const handleLoadMoreList = useCallback(async () => {
+    if (loadingMoreList || !hasMoreList) return;
+    setLoadingMoreList(true);
+    try {
+      const newExtraWeeks = listViewExtraWeeks + 4;
+      const start = getWeekStartDate(currentDate);
+      const newEnd = new Date(start);
+      newEnd.setDate(newEnd.getDate() + 7 * (4 + newExtraWeeks) - 1);
+      const prevCount = productions.length;
+      const prods = await loadProductionsForPeriod(toLocalDate(start), toLocalDate(newEnd));
+      // If no new productions were added, we've reached the end
+      if (prods.length <= prevCount) {
+        setHasMoreList(false);
+      } else {
+        setProductions(prods);
+        setListViewExtraWeeks(newExtraWeeks);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setLoadingMoreList(false);
+    }
+  }, [loadingMoreList, hasMoreList, listViewExtraWeeks, currentDate, productions.length, loadProductionsForPeriod]);
+
   // Handle calendar navigation
   const handleCalendarNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
     setNavLoading(true);
@@ -981,6 +1095,12 @@ function ProductionsContent() {
     setCurrentDate(target);
   }, [calendarView, currentDate]);
 
+  // Reset infinite scroll state whenever the list view resets (navigation or view switch)
+  useEffect(() => {
+    setListViewExtraWeeks(0);
+    setHasMoreList(true);
+  }, [calendarView, currentDate]);
+
   // Handle view change
   const handleViewChange = useCallback((view: CalendarView) => {
     setCalendarView(view);
@@ -995,6 +1115,12 @@ function ProductionsContent() {
     const controller = new AbortController();
 
     const loadForPeriod = async () => {
+      // Skip initial load if handleReloadLatest already populated data on mount
+      if (reloadDoneRef.current) {
+        reloadDoneRef.current = false; // allow subsequent navigations to load normally
+        setNavLoading(false);
+        return;
+      }
       setNavLoading(true);
       try {
         let start: Date;
@@ -1007,11 +1133,10 @@ function ProductionsContent() {
           start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
           end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
         } else {
-          // List: load 3 months around current
-          start = new Date(currentDate);
-          start.setMonth(start.getMonth() - 1);
-          end = new Date(currentDate);
-          end.setMonth(end.getMonth() + 2);
+          // List view: load only the initial 4 weeks — more loaded via infinite scroll
+          start = getWeekStartDate(currentDate);
+          end = new Date(start);
+          end.setDate(end.getDate() + 7 * 4 - 1);
         }
 
         const startStr = toLocalDate(start);
@@ -1046,6 +1171,10 @@ function ProductionsContent() {
   useEffect(() => {
     if (!productions.length) return;
     const allCrew = productions.flatMap(p => p.crew || []);
+    // Build a fingerprint so we only call ensureFromCrew when crew actually changes
+    const crewKey = allCrew.map(c => c.identityKey || c.name).sort().join(',');
+    if (crewKey === lastCrewKeyRef.current) return;
+    lastCrewKeyRef.current = crewKey;
     void ensureFromCrew(allCrew);
   }, [productions, ensureFromCrew]);
 
@@ -1054,6 +1183,29 @@ function ProductionsContent() {
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {
     if (!user) return;
+
+    // Instantly show cached data while Firestore loads in background
+    try {
+      const raw = localStorage.getItem('productions_cache_v2');
+      if (raw) {
+        const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
+        const now = new Date();
+        const sunday = new Date(now);
+        sunday.setDate(now.getDate() - now.getDay());
+        const weekId = getWeekId(toLocalDate(sunday));
+        const entry = cache[weekId];
+        if (entry && Date.now() - entry.savedAt < 24 * 60 * 60 * 1000 && entry.data.length > 0) {
+          productionsByWeekRef.current.set(weekId, entry.data);
+          setProductions(entry.data);
+          setCurrentWeekId(weekId);
+          const satDate = new Date(sunday);
+          satDate.setDate(sunday.getDate() + 6);
+          setWeekStart(toLocalDate(sunday));
+          setWeekEnd(toLocalDate(satDate));
+          setCurrentDate(new Date(sunday));
+        }
+      }
+    } catch { /* ignore */ }
 
     const checkPending = async () => {
       try {
@@ -1496,6 +1648,97 @@ function ProductionsContent() {
         </div>
       )}
 
+      {/* Crew Identity Modal — shown on first visit when user is not yet identified */}
+      {showCrewIdentity && (
+        <div className="mb-6 rounded-2xl border overflow-hidden" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+          {/* Header strip */}
+          <div className="flex items-center justify-between px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(239,68,68,0.1))', borderBottom: '1px solid var(--theme-border)' }}>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(249,115,22,0.2)' }}>
+                <User className="w-3.5 h-3.5 text-orange-400" />
+              </div>
+              <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>מי אתה בלוח ההפקות?</span>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(249,115,22,0.15)', color: 'var(--theme-accent)' }}>חדש</span>
+            </div>
+            <button
+              onClick={() => setShowCrewIdentity(false)}
+              className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--theme-accent-glow)]"
+              style={{ color: 'var(--theme-text-secondary)' }}
+              title="דלג לעכשיו"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="px-4 py-4">
+            <p className="text-xs mb-3" style={{ color: 'var(--theme-text-secondary)' }}>
+              כדי שהמערכת תזהה אותך בלוחות ההפקות ותציג את המשמרות שלך, הזן את שמך כפי שהוא מופיע בלוח.
+            </p>
+
+            {/* Auto-suggestions */}
+            {crewSuggestions.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--theme-text-secondary)' }}>
+                  {crewSuggestions.length === 1 ? 'האם זה אתה?' : 'נמצאו התאמות אפשריות:'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {crewSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleCrewIdentityConfirm(s.name)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all hover:scale-[1.02]"
+                      style={{
+                        background: s.score === 3 ? 'rgba(249,115,22,0.15)' : 'var(--theme-bg)',
+                        borderColor: s.score === 3 ? 'rgba(249,115,22,0.5)' : 'var(--theme-border)',
+                        color: 'var(--theme-text)',
+                      }}
+                    >
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'rgba(249,115,22,0.2)', color: 'var(--theme-accent)' }}>
+                        {s.name.charAt(0)}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold">{s.name}</div>
+                        {s.role && <div className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>{s.role}</div>}
+                      </div>
+                      <CheckCircle className="w-3.5 h-3.5 text-orange-400 mr-1" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Manual name input */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'var(--theme-text-secondary)' }} />
+                <input
+                  type="text"
+                  value={crewNameInput}
+                  onChange={e => setCrewNameInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCrewIdentityConfirm(crewNameInput)}
+                  placeholder="הקלד שמך כפי שמופיע בלוח..."
+                  dir="rtl"
+                  className="w-full pr-9 pl-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
+                  style={{
+                    background: 'var(--theme-bg)',
+                    border: '1px solid var(--theme-border)',
+                    color: 'var(--theme-text)',
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => handleCrewIdentityConfirm(crewNameInput)}
+                disabled={!crewNameInput.trim()}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
+                style={{ background: 'var(--theme-accent)', color: 'white' }}
+              >
+                אישור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Message Input */}
       <div className="mb-6">
         <MessageInput
@@ -1574,6 +1817,9 @@ function ProductionsContent() {
           calendarYear={calendarYear}
           calendarMonth={calendarMonth}
           navLoading={navLoading}
+          onLoadMore={handleLoadMoreList}
+          hasMore={hasMoreList}
+          loadingMore={loadingMoreList}
         />
       )}
 

@@ -11,8 +11,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider } from '@/lib/firebase';
+import { auth, googleProvider } from '@/lib/firebase';
 import { type UserRole, can, hasRole, type Permission } from '@/lib/permissions';
 
 export interface UserProfile {
@@ -42,6 +41,7 @@ export interface UserProfile {
   soundEnabled?: boolean;
   showPhone?: boolean;
   encryptionPublicKey?: string;
+  crewName?: string;
 }
 
 interface AuthContextType {
@@ -53,9 +53,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
-  /** Check if current user has a specific permission */
   can: (permission: Permission) => boolean;
-  /** Check if current user has at least the given role */
   hasRole: (role: UserRole) => boolean;
 }
 
@@ -72,40 +70,85 @@ const AuthContext = createContext<AuthContextType>({
   hasRole: () => false,
 });
 
-async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile | null> {
-  try {
-    const profileRef = doc(db, 'users', firebaseUser.uid);
-    const profileSnap = await getDoc(profileRef);
+/* ─── Firestore REST helpers ─────────────────────────────── */
+const FS_BASE = 'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents';
 
-    if (profileSnap.exists()) {
-      updateDoc(profileRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
-      return { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
+function toFsFields(data: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === 'string')       fields[k] = { stringValue: v };
+    else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
+    else if (typeof v === 'number')  fields[k] = { integerValue: String(v) };
+    else if (v === null)             fields[k] = { nullValue: null };
+    else if (Array.isArray(v))       fields[k] = { arrayValue: { values: v.map(s => ({ stringValue: String(s) })) } };
+  }
+  return fields;
+}
+
+function fromFsFields(fields: Record<string, Record<string, unknown>>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if ('stringValue'  in v) result[k] = v.stringValue;
+    else if ('booleanValue' in v) result[k] = v.booleanValue;
+    else if ('integerValue' in v) result[k] = Number(v.integerValue);
+    else if ('nullValue'   in v) result[k] = null;
+    else if ('arrayValue'  in v) {
+      const av = v.arrayValue as { values?: Array<{ stringValue?: string }> };
+      result[k] = (av.values ?? []).map(i => i.stringValue ?? '');
+    }
+  }
+  return result;
+}
+
+function defaultProfile(firebaseUser: User): UserProfile {
+  return {
+    uid: firebaseUser.uid,
+    displayName: firebaseUser.displayName || 'משתמש חדש',
+    email: firebaseUser.email || '',
+    photoURL: firebaseUser.photoURL,
+    department: '', role: '', phone: '',
+    skills: [], bio: '',
+    status: 'available', isOnline: true,
+    onboardingComplete: false, theme: 'dark',
+  };
+}
+
+async function fetchOrCreateProfile(firebaseUser: User): Promise<UserProfile> {
+  try {
+    const token = await firebaseUser.getIdToken();
+    const url = `${FS_BASE}/users/${firebaseUser.uid}`;
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json() as { fields?: Record<string, Record<string, unknown>> };
+      if (data.fields) {
+        // Mark online — fire-and-forget
+        fetch(`${url}?updateMask.fieldPaths=isOnline&updateMask.fieldPaths=lastSeen`, {
+          method: 'PATCH', headers,
+          body: JSON.stringify({ fields: {
+            isOnline: { booleanValue: true },
+            lastSeen: { timestampValue: new Date().toISOString() },
+          }}),
+        }).catch(() => {});
+        return { uid: firebaseUser.uid, ...fromFsFields(data.fields) } as UserProfile;
+      }
     }
 
-    const profileData: Omit<UserProfile, 'uid'> = {
-      displayName: firebaseUser.displayName || 'משתמש חדש',
-      email: firebaseUser.email || '',
-      photoURL: firebaseUser.photoURL,
-      department: '',
-      role: '',
-      phone: '',
-      skills: [],
-      bio: '',
-      status: 'available',
-      isOnline: true,
-      onboardingComplete: false,
-      theme: 'dark',
-    };
-
-    await setDoc(profileRef, {
-      ...profileData,
-      createdAt: serverTimestamp(),
-      lastSeen: serverTimestamp(),
+    // Create new profile
+    const profileData = defaultProfile(firebaseUser);
+    await fetch(url, {
+      method: 'PATCH', headers,
+      body: JSON.stringify({ fields: toFsFields({
+        ...profileData,
+        createdAt: new Date().toISOString(),
+        lastSeen: new Date().toISOString(),
+      })}),
     });
-
-    return { uid: firebaseUser.uid, ...profileData };
+    return profileData;
   } catch {
-    return null;
+    // Firestore failure must never break auth — return minimal profile from Firebase Auth
+    return defaultProfile(firebaseUser);
   }
 }
 
@@ -114,7 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Listen to auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -137,32 +179,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
 
-    const profileData: Omit<UserProfile, 'uid'> = {
+    const profileData: UserProfile = {
+      uid: result.user.uid,
       displayName: name,
-      email: email,
+      email,
       photoURL: null,
-      department,
-      role,
-      phone: '',
-      skills: [],
-      bio: '',
-      status: 'available',
-      isOnline: true,
-      onboardingComplete: false,
-      theme: 'dark',
+      department, role, phone: '',
+      skills: [], bio: '',
+      status: 'available', isOnline: true,
+      onboardingComplete: false, theme: 'dark',
     };
 
     try {
-      await setDoc(doc(db, 'users', result.user.uid), {
-        ...profileData,
-        createdAt: serverTimestamp(),
-        lastSeen: serverTimestamp(),
+      const token = await result.user.getIdToken();
+      await fetch(`${FS_BASE}/users/${result.user.uid}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: toFsFields({
+          ...profileData,
+          createdAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        })}),
       });
-    } catch {
-      // Firestore write failed - still proceed with local profile
-    }
+    } catch { /* non-critical */ }
 
-    setProfile({ uid: result.user.uid, ...profileData });
+    setProfile(profileData);
   };
 
   const signInWithGoogle = async () => {
@@ -172,27 +213,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchOrCreateProfile(result.user);
     } catch (error: unknown) {
       const authError = error as { code?: string };
-      // If auth actually succeeded despite the error (e.g. iframe error after
-      // popup completed), don't re-throw — onAuthStateChanged will handle it
-      if (auth.currentUser) {
-        return;
-      }
-      if (authError.code !== 'auth/popup-closed-by-user') {
-        throw error;
-      }
+      if (auth.currentUser) return;
+      if (authError.code !== 'auth/popup-closed-by-user') throw error;
     }
   };
 
   const logout = async () => {
     if (user) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          isOnline: false,
-          lastSeen: serverTimestamp(),
-        });
-      } catch {
-        // Firestore update failed - still proceed with logout
-      }
+      user.getIdToken().then(token =>
+        fetch(`${FS_BASE}/users/${user.uid}?updateMask.fieldPaths=isOnline&updateMask.fieldPaths=lastSeen`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: {
+            isOnline: { booleanValue: false },
+            lastSeen: { timestampValue: new Date().toISOString() },
+          }}),
+        })
+      ).catch(() => {});
     }
     await signOut(auth);
     setUser(null);
@@ -201,30 +238,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    await updateDoc(doc(db, 'users', user.uid), data);
+    try {
+      const token = await user.getIdToken();
+      const fieldPaths = Object.keys(data).map(k => `updateMask.fieldPaths=${k}`).join('&');
+      await fetch(`${FS_BASE}/users/${user.uid}?${fieldPaths}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: toFsFields(data as Record<string, unknown>) }),
+      });
+    } catch { /* non-critical */ }
     setProfile(prev => prev ? { ...prev, ...data } : null);
   };
 
-  const canDo = (permission: Permission): boolean => {
-    return can(profile?.siteRole, permission);
-  };
-
-  const hasRoleLevel = (role: UserRole): boolean => {
-    return hasRole(profile?.siteRole, role);
-  };
+  const canDo = (permission: Permission): boolean => can(profile?.siteRole, permission);
+  const hasRoleLevel = (role: UserRole): boolean => hasRole(profile?.siteRole, role);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      profile,
-      loading,
-      signIn,
-      signUp,
-      signInWithGoogle,
-      logout,
-      updateUserProfile,
-      can: canDo,
-      hasRole: hasRoleLevel,
+      user, profile, loading,
+      signIn, signUp, signInWithGoogle, logout, updateUserProfile,
+      can: canDo, hasRole: hasRoleLevel,
     }}>
       {children}
     </AuthContext.Provider>

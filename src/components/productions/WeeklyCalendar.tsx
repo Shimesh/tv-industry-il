@@ -23,6 +23,10 @@ interface WeeklyCalendarProps {
   calendarYear?: number;
   calendarMonth?: number;
   navLoading?: boolean;
+  // Infinite scroll (list view only)
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 type ViewMode = 'personal' | 'department';
@@ -39,6 +43,9 @@ export default function WeeklyCalendar({
   calendarYear,
   calendarMonth,
   navLoading,
+  onLoadMore,
+  hasMore,
+  loadingMore,
 }: WeeklyCalendarProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('department');
   const [selectedProduction, setSelectedProduction] = useState<Production | null>(null);
@@ -318,6 +325,9 @@ export default function WeeklyCalendar({
           workerName={workerName}
           onProductionClick={(prod) => setSelectedProduction(prod)}
           onInfoClick={(prod) => setHistoryProduction(prod)}
+          onLoadMore={onLoadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
         />
       )}
 
