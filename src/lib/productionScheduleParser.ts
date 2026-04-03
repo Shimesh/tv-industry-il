@@ -231,14 +231,19 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
 function matchesUserName(crewName: string, currentUserName?: string): boolean {
   if (!currentUserName) return false;
   if (crewName === currentUserName) return true;
-  // Check partial match (first name)
-  const crewFirst = crewName.split(' ')[0];
-  const userFirst = currentUserName.split(' ')[0];
-  if (crewFirst.length >= 2 && userFirst.length >= 2) {
-    if (crewName.includes(userFirst) || currentUserName.includes(crewFirst)) {
-      return true;
-    }
+
+  const crewParts = crewName.trim().split(/\s+/);
+  const userParts = currentUserName.trim().split(/\s+/);
+
+  // If both have first+last name, require exact match only (already checked above)
+  // Only use first-name-only matching when crew entry has a single word (no last name)
+  if (crewParts.length === 1 && userParts.length >= 1) {
+    return crewParts[0] === userParts[0] && crewParts[0].length >= 2;
   }
+  if (userParts.length === 1 && crewParts.length >= 1) {
+    return crewParts[0] === userParts[0] && crewParts[0].length >= 2;
+  }
+
   return false;
 }
 
