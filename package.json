@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "chat:server": "npm --prefix realtime-server run dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -22,6 +23,7 @@
     "react-firebase-hooks": "^5.1.1",
     "react-joyride": "^2.9.3",
     "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.1",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "xlsx": "^0.18.5"

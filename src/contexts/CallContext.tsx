@@ -33,6 +33,8 @@ interface CallContextType {
   declineCall: () => Promise<void>;
   toggleMute: () => void;
   toggleVideo: () => void;
+  signalingMode: 'firestore' | 'socket-ready';
+  signalingDetail: string;
 }
 
 const initialCallState: CallState = {
@@ -59,13 +61,29 @@ const CallContext = createContext<CallContextType>({
   declineCall: async () => {},
   toggleMute: () => {},
   toggleVideo: () => {},
+  signalingMode: 'firestore',
+  signalingDetail: 'Firestore signaling is active.',
 });
+
+function isTruthyFlag(value: string | undefined): boolean {
+  return value === '1' || value === 'true' || value === 'on';
+}
 
 export function CallProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
   const [callState, setCallState] = useState<CallState>(initialCallState);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const signalingMode: 'firestore' | 'socket-ready' =
+    isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI) &&
+    isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_SOCKET_ENABLED) &&
+    Boolean(process.env.NEXT_PUBLIC_CHAT_SOCKET_URL?.trim())
+      ? 'socket-ready'
+      : 'firestore';
+  const signalingDetail =
+    signalingMode === 'socket-ready'
+      ? 'Socket-ready boundary is available; current calls still use Firestore signaling.'
+      : 'Firestore signaling is active.';
 
   // Listen for incoming calls
   useEffect(() => {
@@ -356,6 +374,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       declineCall,
       toggleMute,
       toggleVideo,
+      signalingMode,
+      signalingDetail,
     }}>
       {children}
     </CallContext.Provider>

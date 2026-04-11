@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { Search, Plus, MessageCircle } from 'lucide-react';
@@ -26,16 +26,16 @@ function formatTime(timestamp: number): string {
   const isYesterday = date.toDateString() === yesterday.toDateString();
 
   if (isToday) return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-  if (isYesterday) return 'אתמול';
+  if (isYesterday) return '׳׳×׳׳•׳';
   return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
 }
 
 function getChatName(chat: ChatRoom, currentUserId: string): string {
   if (chat.type === 'private') {
     const other = chat.membersInfo?.find(m => m.uid !== currentUserId);
-    return other?.displayName || 'צ\'אט';
+    return other?.displayName || '׳¦\'׳׳˜';
   }
-  return chat.name || 'צ\'אט';
+  return chat.name || '׳¦\'׳׳˜';
 }
 
 function getChatPhoto(chat: ChatRoom, currentUserId: string): string | null {
@@ -64,11 +64,11 @@ export default function ChatSidebar({
     <div className="flex flex-col h-full bg-[#111B21] border-l border-[#2A3942]">
       {/* Header */}
       <div className="px-4 py-3 bg-[#202C33] flex items-center justify-between">
-        <h2 className="text-[#E9EDEF] font-bold text-lg">צ&apos;אטים</h2>
+        <h2 className="text-[#E9EDEF] font-bold text-lg">׳¦&apos;׳׳˜׳™׳</h2>
         <button
           onClick={onNewChat}
           className="p-2 rounded-full hover:bg-[#2A3942] transition-colors"
-          title="שיחה חדשה"
+          title="׳©׳™׳—׳” ׳—׳“׳©׳”"
         >
           <Plus className="w-5 h-5 text-[#AEBAC1]" />
         </button>
@@ -82,7 +82,7 @@ export default function ChatSidebar({
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="חפש או התחל שיחה חדשה"
+            placeholder="׳—׳₪׳© ׳׳• ׳”׳×׳—׳ ׳©׳™׳—׳” ׳—׳“׳©׳”"
             className="w-full pr-10 pl-3 py-[7px] rounded-lg text-[13px] outline-none bg-[#202C33] text-[#E9EDEF] placeholder:text-[#8696a0] border border-transparent focus:border-[#00A884] transition-colors"
           />
         </div>
@@ -97,10 +97,10 @@ export default function ChatSidebar({
           <div className="p-8 text-center">
             <MessageCircle className="w-12 h-12 text-[#3B4A54] mx-auto mb-3" />
             <p className="text-[13px] text-[#8696a0]">
-              {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
+              {search ? '׳׳ ׳ ׳׳¦׳׳• ׳©׳™׳—׳•׳×' : '׳׳™׳ ׳©׳™׳—׳•׳× ׳¢׳“׳™׳™׳'}
             </p>
             <p className="text-[11px] text-[#667781] mt-1">
-              לחצו + כדי להתחיל שיחה חדשה
+              ׳׳—׳¦׳• + ׳›׳“׳™ ׳׳”׳×׳—׳™׳ ׳©׳™׳—׳” ׳—׳“׳©׳”
             </p>
           </div>
         ) : (
@@ -156,7 +156,7 @@ export default function ChatSidebar({
                           {chat.lastMessage.text}
                         </>
                       ) : (
-                        <span className="italic">שיחה חדשה</span>
+                        <span className="italic">׳©׳™׳—׳” ׳—׳“׳©׳”</span>
                       )}
                     </p>
                     {chat.unreadCount > 0 && (
