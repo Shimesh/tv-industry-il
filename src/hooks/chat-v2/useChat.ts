@@ -92,9 +92,13 @@ function createRoomRecord(overrides: Partial<RoomRecord> = {}): RoomRecord {
   };
 }
 
+function getRoomActivityScore(room: ChatRoom): number {
+  return room.lastServerSequence ?? room.lastMessage?.timestamp ?? room.createdAt ?? 0;
+}
+
 function sortRooms(left: ChatRoom, right: ChatRoom): number {
-  const leftTimestamp = left.lastMessage?.timestamp ?? left.createdAt ?? 0;
-  const rightTimestamp = right.lastMessage?.timestamp ?? right.createdAt ?? 0;
+  const leftTimestamp = getRoomActivityScore(left);
+  const rightTimestamp = getRoomActivityScore(right);
   if (leftTimestamp !== rightTimestamp) {
     return rightTimestamp - leftTimestamp;
   }
@@ -355,6 +359,7 @@ export function useChat() {
   const { user, profile } = useAuth();
   const featureFlags = useMemo(() => getChatV2FeatureFlags(), []);
   const legacy = useLegacyChat();
+  const legacyChatsByIdRef = useRef<Map<string, ChatRoom>>(new Map());
   const displayName =
     legacy.displayName || profile?.displayName || user?.displayName || 'משתמש';
   const displayPhoto =
@@ -373,6 +378,28 @@ export function useChat() {
   const [transportTypingByChat, setTransportTypingByChat] = useState<Record<string, string[]>>({});
   const [roomStore, setRoomStore] = useState<Record<string, RoomRecord>>({});
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const roomStoreRef = useRef<Record<string, RoomRecord>>({});
+
+  useEffect(() => {
+    roomStoreRef.current = roomStore;
+  }, [roomStore]);
+
+  useEffect(() => {
+    legacyChatsByIdRef.current = new Map((legacy.chats as ChatRoom[]).map((chat) => [chat.id, chat]));
+  }, [legacy.chats]);
+
+  const resolveRoomBase = useCallback(
+    (chatId: string): ChatRoom | null => roomStoreRef.current[chatId]?.chat ?? legacyChatsByIdRef.current.get(chatId) ?? null,
+    []
+  );
+
+  const mergeRoomSummary = useCallback(
+    (chatId: string, patch?: Partial<ChatV2ChatRoom>) => {
+      if (!patch) return resolveRoomBase(chatId);
+      return mergeChatPatch(resolveRoomBase(chatId), patch, user?.uid ?? null);
+    },
+    [resolveRoomBase, user?.uid]
+  );
 
   const updateRoomRecord = useCallback(
     (chatId: string, updater: (current: RoomRecord) => RoomRecord) => {
@@ -395,7 +422,7 @@ export function useChat() {
 
       updateRoomRecord(chatId, (current) => ({
         ...current,
-        chat: mergeChatPatch(current.chat, patch, user?.uid ?? null),
+        chat: mergeRoomSummary(chatId, patch) ?? current.chat,
         savedAt: Date.now(),
       }));
 
@@ -403,13 +430,13 @@ export function useChat() {
         setTransportChat((current) => mergeChatPatch(current, patch, user?.uid ?? null));
       }
     },
-    [activeChatId, updateRoomRecord, user?.uid]
+    [activeChatId, mergeRoomSummary, updateRoomRecord, user?.uid]
   );
 
   const upsertLocalMessage = useCallback(
     (chatId: string, message: Message, chatPatch?: Partial<ChatV2ChatRoom>) => {
       updateRoomRecord(chatId, (current) => ({
-        chat: mergeChatPatch(current.chat, chatPatch, user?.uid ?? null),
+        chat: chatPatch ? mergeRoomSummary(chatId, chatPatch) ?? current.chat : current.chat,
         messages: trimMessages(mergeMessages(current.messages, [message])),
         cursor: current.cursor,
         savedAt: Date.now(),
@@ -422,7 +449,7 @@ export function useChat() {
         setTransportMessages((current) => trimMessages(mergeMessages(current, [message])));
       }
     },
-    [activeChatId, updateRoomRecord, user?.uid]
+    [activeChatId, mergeRoomSummary, updateRoomRecord, user?.uid]
   );
 
   const updateLocalMessage = useCallback(
@@ -435,7 +462,7 @@ export function useChat() {
       const updateMessages = (messages: Message[]) => messages.map((message) => (matcher(message) ? updater(message) : message));
 
       updateRoomRecord(chatId, (current) => ({
-        chat: mergeChatPatch(current.chat, chatPatch, user?.uid ?? null),
+        chat: chatPatch ? mergeRoomSummary(chatId, chatPatch) ?? current.chat : current.chat,
         messages: trimMessages(updateMessages(current.messages)),
         cursor: current.cursor,
         savedAt: Date.now(),
@@ -448,7 +475,7 @@ export function useChat() {
         setTransportMessages((current) => trimMessages(updateMessages(current)));
       }
     },
-    [activeChatId, updateRoomRecord, user?.uid]
+    [activeChatId, mergeRoomSummary, updateRoomRecord, user?.uid]
   );
   useEffect(() => {
     if (!activeChatId) {
@@ -526,7 +553,7 @@ export function useChat() {
       const nextDeltaMessages = deltaMessages.map(mapProtocolMessage);
 
       updateRoomRecord(payload.chatId, (current) => ({
-        chat: mergeChatPatch(current.chat, payload.chat, user?.uid ?? null),
+        chat: mergeRoomSummary(payload.chatId, payload.chat) ?? current.chat,
         messages: nextDeltaMessages.length
           ? trimMessages(mergeMessages(current.messages, nextDeltaMessages))
           : current.messages,
@@ -546,20 +573,16 @@ export function useChat() {
     onMessage: (payload: ChatV2Message) => {
       const nextMessage = mapProtocolMessage(payload);
       updateRoomRecord(payload.chatId, (current) => ({
-        chat: mergeChatPatch(
-          current.chat,
-          {
-            lastMessage: {
-              text: payload.text,
-              senderId: payload.senderId,
-              senderName: payload.senderName,
-              timestamp: payload.createdAtServer ?? payload.createdAtClient ?? Date.now(),
-              kind: payload.kind,
-            },
-            lastServerSequence: payload.serverSequence ?? current.chat?.lastServerSequence ?? null,
+        chat: mergeRoomSummary(payload.chatId, {
+          lastMessage: {
+            text: payload.text,
+            senderId: payload.senderId,
+            senderName: payload.senderName,
+            timestamp: payload.createdAtServer ?? payload.createdAtClient ?? Date.now(),
+            kind: payload.kind,
           },
-          user?.uid ?? null
-        ),
+          lastServerSequence: payload.serverSequence ?? current.chat?.lastServerSequence ?? null,
+        }) ?? current.chat,
         messages: trimMessages(mergeMessages(current.messages, [nextMessage])),
         cursor: Math.max(current.cursor, payload.serverSequence ?? current.cursor),
         savedAt: Date.now(),
@@ -625,15 +648,11 @@ export function useChat() {
     },
     onReceiptUpdate: (payload: ChatV2ReceiptUpdatePayload) => {
       updateRoomRecord(payload.chatId, (current) => ({
-        chat: mergeChatPatch(
-          current.chat,
-          {
-            unreadCount: payload.unreadCount,
-            lastRead: payload.lastRead,
-            lastServerSequence: payload.serverCursor ?? current.chat?.lastServerSequence ?? null,
-          },
-          user?.uid ?? null
-        ),
+        chat: mergeRoomSummary(payload.chatId, {
+          unreadCount: payload.unreadCount,
+          lastRead: payload.lastRead,
+          lastServerSequence: payload.serverCursor ?? current.chat?.lastServerSequence ?? null,
+        }) ?? current.chat,
         messages: applyReceiptUpdate(current.messages, payload),
         cursor: Math.max(current.cursor, payload.serverCursor ?? current.cursor),
         savedAt: Date.now(),

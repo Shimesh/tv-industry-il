@@ -1,16 +1,33 @@
-'use client';
+﻿'use client';
 
-import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '@/lib/firebase';
 import { rtcConfig, getLocalStream, stopStream } from '@/lib/webrtc';
 import {
-  doc, setDoc, onSnapshot, collection, addDoc, deleteDoc,
-  serverTimestamp, query, where, getDocs, updateDoc, Timestamp
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
+import {
+  connectCallSignaling,
+  emitCallSignal,
+  getCallSignalingBridge,
+  isCallSignalingSocketEnabled,
+  subscribeCallSignals,
+} from '@/lib/chat-v2/callSignaling';
+import type { ChatV2CallSignalPayload } from '@/lib/chat-v2/protocol';
 
 export interface CallState {
   callId: string | null;
+  callerId: string;
   status: 'idle' | 'ringing' | 'calling' | 'active' | 'ended';
   type: 'voice' | 'video';
   isIncoming: boolean;
@@ -39,6 +56,7 @@ interface CallContextType {
 
 const initialCallState: CallState = {
   callId: null,
+  callerId: '',
   status: 'idle',
   type: 'voice',
   isIncoming: false,
@@ -69,23 +87,293 @@ function isTruthyFlag(value: string | undefined): boolean {
   return value === '1' || value === 'true' || value === 'on';
 }
 
+function candidateKey(candidate: unknown): string {
+  if (!candidate || typeof candidate !== 'object') {
+    return String(candidate ?? 'unknown');
+  }
+  const payload = candidate as Record<string, unknown>;
+  const key = {
+    candidate: payload.candidate ?? null,
+    sdpMid: payload.sdpMid ?? null,
+    sdpMLineIndex: payload.sdpMLineIndex ?? null,
+    usernameFragment: payload.usernameFragment ?? null,
+  };
+  return JSON.stringify(key);
+}
+
+function toRtcSessionDescription(value: unknown): RTCSessionDescriptionInit | null {
+  if (!value || typeof value !== 'object') return null;
+  const payload = value as Record<string, unknown>;
+  const type = payload.type;
+  const sdp = payload.sdp;
+  if ((type === 'offer' || type === 'answer') && typeof sdp === 'string') {
+    return { type, sdp };
+  }
+  return null;
+}
+
+function toRtcIceCandidate(value: unknown): RTCIceCandidateInit | null {
+  if (!value || typeof value !== 'object') return null;
+  const payload = value as Record<string, unknown>;
+  const candidate = payload.candidate;
+  if (typeof candidate !== 'string') return null;
+  return {
+    candidate,
+    sdpMid: typeof payload.sdpMid === 'string' ? payload.sdpMid : undefined,
+    sdpMLineIndex: typeof payload.sdpMLineIndex === 'number' ? payload.sdpMLineIndex : undefined,
+    usernameFragment: typeof payload.usernameFragment === 'string' ? payload.usernameFragment : undefined,
+  };
+}
+
 export function CallProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
   const [callState, setCallState] = useState<CallState>(initialCallState);
+  const [socketCallReady, setSocketCallReady] = useState(false);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const signalingMode: 'firestore' | 'socket-ready' =
-    isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI) &&
-    isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_SOCKET_ENABLED) &&
-    Boolean(process.env.NEXT_PUBLIC_CHAT_SOCKET_URL?.trim())
-      ? 'socket-ready'
-      : 'firestore';
-  const signalingDetail =
-    signalingMode === 'socket-ready'
-      ? 'Socket-ready boundary is available; current calls still use Firestore signaling.'
-      : 'Firestore signaling is active.';
+  const bridge = useRef(getCallSignalingBridge()).current;
+  const callStateRef = useRef<CallState>(initialCallState);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const appliedRemoteAnswerRef = useRef(false);
+  const seenCandidateKeysRef = useRef<Set<string>>(new Set());
+  const teardownRef = useRef<Array<() => void>>([]);
+  const socketCallEnabled = isCallSignalingSocketEnabled();
+  const signalingMode: 'firestore' | 'socket-ready' = socketCallEnabled ? 'socket-ready' : 'firestore';
+  const signalingDetail = socketCallEnabled
+    ? socketCallReady
+      ? 'Socket.IO signaling is active for calls, with Firestore fallback.'
+      : 'Socket.IO signaling is enabled; Firestore fallback remains available while the socket connects.'
+    : 'Firestore signaling is active.';
 
-  // Listen for incoming calls
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
+
+  const clearTeardown = useCallback(() => {
+    while (teardownRef.current.length > 0) {
+      const dispose = teardownRef.current.pop();
+      try {
+        dispose?.();
+      } catch (error) {
+        console.error('Error during call cleanup:', error);
+      }
+    }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    clearTeardown();
+
+    if (peerConnection.current) {
+      peerConnection.current.ontrack = null;
+      peerConnection.current.onicecandidate = null;
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    stopStream(localStreamRef.current);
+    localStreamRef.current = null;
+    pendingOfferRef.current = null;
+    appliedRemoteAnswerRef.current = false;
+    seenCandidateKeysRef.current.clear();
+    setCallState(initialCallState);
+  }, [clearTeardown]);
+
+  const attachTeardown = useCallback((dispose: () => void) => {
+    teardownRef.current.push(dispose);
+  }, []);
+
+  const startDurationTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    timerRef.current = setInterval(() => {
+      setCallState(prev => ({ ...prev, duration: prev.duration + 1 }));
+    }, 1000);
+  }, []);
+
+  const attachRemoteIceCandidate = useCallback(async (pc: RTCPeerConnection, candidateValue: unknown) => {
+    const candidate = toRtcIceCandidate(candidateValue);
+    if (!candidate) return;
+    const key = candidateKey(candidate);
+    if (seenCandidateKeysRef.current.has(key)) return;
+    seenCandidateKeysRef.current.add(key);
+
+    if (!pc.remoteDescription) return;
+
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+      console.error('Error adding ICE candidate:', error);
+    }
+  }, []);
+
+  const persistCallRecord = useCallback(async (callId: string, data: Record<string, unknown>) => {
+    try {
+      await setDoc(doc(db, 'calls', callId), data, { merge: true });
+    } catch (error) {
+      console.error('Error persisting call record:', error);
+    }
+  }, []);
+
+  const subscribeFirestoreOutgoingCall = useCallback((callId: string, pc: RTCPeerConnection) => {
+    const unsubCall = onSnapshot(doc(db, 'calls', callId), async (snapshot) => {
+      const data = snapshot.data();
+      if (!data) return;
+
+      if (data.status === 'active' && data.answer && !appliedRemoteAnswerRef.current && pc.signalingState !== 'closed') {
+        const answer = toRtcSessionDescription(data.answer);
+        if (!answer) return;
+
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          appliedRemoteAnswerRef.current = true;
+          setCallState(prev => ({ ...prev, status: 'active' }));
+          startDurationTimer();
+        } catch (error) {
+          console.error('Error setting remote description:', error);
+        }
+      }
+
+      if (data.status === 'ended' || data.status === 'declined') {
+        cleanup();
+      }
+    });
+
+    const unsubCandidates = onSnapshot(collection(db, 'calls', callId, 'candidates'), (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type !== 'added') return;
+        await attachRemoteIceCandidate(pc, change.doc.data().candidate ?? change.doc.data());
+      });
+    });
+
+    attachTeardown(unsubCall);
+    attachTeardown(unsubCandidates);
+  }, [attachRemoteIceCandidate, attachTeardown, cleanup, startDurationTimer]);
+
+  const handleIncomingCallDoc = useCallback(async (callId: string) => {
+    if (callStateRef.current.status !== 'idle') return;
+
+    try {
+      const snapshot = await getDoc(doc(db, 'calls', callId));
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.data() as Record<string, unknown>;
+      pendingOfferRef.current = toRtcSessionDescription(data.offer) ?? pendingOfferRef.current;
+
+      setCallState(prev => ({
+        ...prev,
+        callId,
+        callerId: typeof data.callerId === 'string' ? data.callerId : (typeof data.fromUid === 'string' ? data.fromUid : ''),
+        status: 'ringing',
+        type: data.type === 'video' ? 'video' : 'voice',
+        isIncoming: true,
+        callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
+        callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
+        receiverId: typeof data.receiverId === 'string' ? data.receiverId : (user?.uid ?? ''),
+        receiverName: typeof data.receiverName === 'string' ? data.receiverName : (profile?.displayName ?? ''),
+        localStream: null,
+        remoteStream: null,
+        isMuted: false,
+        isVideoOff: false,
+        duration: 0,
+      }));
+    } catch (error) {
+      console.error('Error hydrating incoming call from Firestore:', error);
+    }
+  }, [profile?.displayName, user?.uid]);
+
+  const handleSocketCallSignal = useCallback(async (event: ChatV2CallSignalPayload & { fromUid?: string; timestamp?: number; toUid?: string }) => {
+    if (!user) return;
+    if (event.fromUid && event.fromUid === user.uid) return;
+
+    const current = callStateRef.current;
+    if (current.callId && current.callId !== event.callId && current.status !== 'idle') {
+      return;
+    }
+
+    if (event.signalType === 'ring') {
+      await handleIncomingCallDoc(event.callId);
+      return;
+    }
+
+    if (event.signalType === 'offer') {
+      const offer = toRtcSessionDescription({ type: 'offer', sdp: event.sdp });
+      if (offer) {
+        pendingOfferRef.current = offer;
+      }
+      return;
+    }
+
+    if (event.signalType === 'accept') {
+      return;
+    }
+
+    if (event.signalType === 'answer') {
+      if (!peerConnection.current || !event.sdp || appliedRemoteAnswerRef.current) return;
+      try {
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: event.sdp }));
+        appliedRemoteAnswerRef.current = true;
+        setCallState(prev => ({ ...prev, status: 'active' }));
+        startDurationTimer();
+      } catch (error) {
+        console.error('Error applying socket answer:', error);
+      }
+      return;
+    }
+
+    if (event.signalType === 'ice' && peerConnection.current) {
+      await attachRemoteIceCandidate(peerConnection.current, event.candidate);
+      return;
+    }
+
+    if (event.signalType === 'decline' || event.signalType === 'busy' || event.signalType === 'end') {
+      cleanup();
+    }
+  }, [attachRemoteIceCandidate, cleanup, handleIncomingCallDoc, startDurationTimer, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setSocketCallReady(false);
+      return;
+    }
+
+    if (!socketCallEnabled) {
+      setSocketCallReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    const unsubscribeStatus = bridge.subscribeStatus(status => {
+      setSocketCallReady(status.mode === 'connected');
+    });
+    const unsubscribeSignals = subscribeCallSignals(handleSocketCallSignal);
+
+    void user.getIdToken().then((token) => {
+      if (cancelled) return;
+      void connectCallSignaling({
+        token,
+        deviceId: `call-${user.uid}`,
+        appVersion: process.env.NEXT_PUBLIC_APP_VERSION || 'chat-v2',
+      });
+    }).catch((error) => {
+      console.error('Failed to connect call signaling socket:', error);
+      setSocketCallReady(false);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribeStatus();
+      unsubscribeSignals();
+      setSocketCallReady(false);
+    };
+  }, [bridge, handleSocketCallSignal, socketCallEnabled, user]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -94,16 +382,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach(change => {
-        if (change.type === 'added' && callState.status === 'idle') {
-          const data = change.doc.data();
+        if (change.type === 'added' && callStateRef.current.status === 'idle') {
+          const data = change.doc.data() as Record<string, unknown>;
+          pendingOfferRef.current = toRtcSessionDescription(data.offer) ?? pendingOfferRef.current;
           setCallState(prev => ({
             ...prev,
             callId: change.doc.id,
+            callerId: typeof data.callerId === 'string' ? data.callerId : '',
             status: 'ringing',
-            type: data.type || 'voice',
+            type: data.type === 'video' ? 'video' : 'voice',
             isIncoming: true,
-            callerName: data.callerName || 'משתמש',
-            callerPhoto: data.callerPhoto || null,
+            callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
+            callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
             receiverId: user.uid,
             receiverName: profile?.displayName || '',
           }));
@@ -111,48 +401,39 @@ export function CallProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    attachTeardown(unsubscribe);
     return () => unsubscribe();
-  }, [user, profile, callState.status]);
-
-  const cleanup = useCallback(() => {
-    if (peerConnection.current) {
-      peerConnection.current.close();
-      peerConnection.current = null;
-    }
-    stopStream(callState.localStream);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setCallState(initialCallState);
-  }, [callState.localStream]);
+  }, [attachTeardown, profile?.displayName, user]);
 
   const startCall = async (receiverId: string, receiverName: string, type: 'voice' | 'video') => {
     if (!user || !profile) return;
 
     try {
-      const localStream = await getLocalStream(type === 'video');
+      cleanup();
+      pendingOfferRef.current = null;
+      appliedRemoteAnswerRef.current = false;
+      seenCandidateKeysRef.current.clear();
 
-      // Create peer connection
+      const localStream = await getLocalStream(type === 'video');
+      localStreamRef.current = localStream;
+
       const pc = new RTCPeerConnection(rtcConfig);
       peerConnection.current = pc;
 
-      // Add local tracks
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      // Handle remote stream
       const remoteStream = new MediaStream();
       pc.ontrack = (event) => {
         event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
         setCallState(prev => ({ ...prev, remoteStream }));
       };
 
-      // Create offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Create call document in Firestore
-      const callRef = await addDoc(collection(db, 'calls'), {
+      const callRef = doc(collection(db, 'calls'));
+      const callId = callRef.id;
+      const callRecord = {
         callerId: user.uid,
         callerName: profile.displayName,
         callerPhoto: profile.photoURL,
@@ -162,20 +443,40 @@ export function CallProvider({ children }: { children: ReactNode }) {
         status: 'ringing',
         offer: { type: offer.type, sdp: offer.sdp },
         createdAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(callRef, callRecord);
 
-      // Handle ICE candidates
       pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          await addDoc(collection(db, 'calls', callRef.id, 'candidates'), {
-            candidate: event.candidate.toJSON(),
-            from: user.uid,
-          });
-        }
+        if (!event.candidate) return;
+        const candidate = event.candidate.toJSON();
+        void emitCallSignal('call:ice', {
+          callId,
+          targetUid: receiverId,
+          signalType: 'ice',
+          candidate,
+        });
+        await addDoc(collection(db, 'calls', callId, 'candidates'), {
+          candidate,
+          from: user.uid,
+        });
       };
 
+      void emitCallSignal('call:ring', {
+        callId,
+        targetUid: receiverId,
+        signalType: 'ring',
+      });
+      void emitCallSignal('call:offer', {
+        callId,
+        targetUid: receiverId,
+        signalType: 'offer',
+        sdp: offer.sdp ?? undefined,
+      });
+
       setCallState({
-        callId: callRef.id,
+        callId,
+        callerId: user.uid,
         status: 'calling',
         type,
         isIncoming: false,
@@ -190,46 +491,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         duration: 0,
       });
 
-      // Listen for answer
-      onSnapshot(doc(db, 'calls', callRef.id), async (snapshot) => {
-        const data = snapshot.data();
-        if (!data) return;
-
-        if (data.status === 'active' && data.answer && pc.signalingState !== 'closed') {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            setCallState(prev => ({ ...prev, status: 'active' }));
-
-            // Start timer
-            timerRef.current = setInterval(() => {
-              setCallState(prev => ({ ...prev, duration: prev.duration + 1 }));
-            }, 1000);
-          } catch (err) {
-            console.error('Error setting remote description:', err);
-          }
-        }
-
-        if (data.status === 'ended' || data.status === 'declined') {
-          cleanup();
-        }
-      });
-
-      // Listen for remote ICE candidates
-      onSnapshot(collection(db, 'calls', callRef.id, 'candidates'), (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            if (data.from !== user.uid && pc.remoteDescription) {
-              try {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-              } catch (err) {
-                console.error('Error adding ICE candidate:', err);
-              }
-            }
-          }
-        });
-      });
-
+      subscribeFirestoreOutgoingCall(callId, pc);
     } catch (err) {
       console.error('Error starting call:', err);
       cleanup();
@@ -237,10 +499,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   const answerCall = async () => {
-    if (!callState.callId || !user || !profile) return;
+    const currentCall = callStateRef.current;
+    if (!currentCall.callId || !user || !profile) return;
 
     try {
-      const localStream = await getLocalStream(callState.type === 'video');
+      const localStream = await getLocalStream(currentCall.type === 'video');
+      localStreamRef.current = localStream;
 
       const pc = new RTCPeerConnection(rtcConfig);
       peerConnection.current = pc;
@@ -253,72 +517,82 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setCallState(prev => ({ ...prev, remoteStream }));
       };
 
-      // Get offer from Firestore
-      const callDoc = await new Promise<Record<string, unknown>>((resolve) => {
-        const unsub = onSnapshot(doc(db, 'calls', callState.callId!), (snap) => {
-          unsub();
-          resolve(snap.data() as Record<string, unknown>);
-        });
-      });
+      let offer = pendingOfferRef.current;
+      if (!offer) {
+        const callDoc = await getDoc(doc(db, 'calls', currentCall.callId));
+        if (callDoc.exists()) {
+          offer = toRtcSessionDescription((callDoc.data() as Record<string, unknown>).offer) ?? null;
+        }
+      }
+      if (!offer) {
+        throw new Error('Missing call offer');
+      }
 
-      const offer = callDoc.offer as { type: RTCSdpType; sdp: string };
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Update call with answer
-      await updateDoc(doc(db, 'calls', callState.callId), {
+      const updateData = {
         answer: { type: answer.type, sdp: answer.sdp },
         status: 'active',
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(doc(db, 'calls', currentCall.callId), updateData);
+
+      void emitCallSignal('call:accept', {
+        callId: currentCall.callId,
+        targetUid: currentCall.callerId,
+        signalType: 'accept',
+      });
+      void emitCallSignal('call:answer', {
+        callId: currentCall.callId,
+        targetUid: currentCall.callerId,
+        signalType: 'answer',
+        sdp: answer.sdp ?? undefined,
       });
 
-      // Handle ICE candidates
       pc.onicecandidate = async (event) => {
-        if (event.candidate && callState.callId) {
-          await addDoc(collection(db, 'calls', callState.callId, 'candidates'), {
-            candidate: event.candidate.toJSON(),
-            from: user.uid,
-          });
-        }
+        if (!event.candidate) return;
+        const candidate = event.candidate.toJSON();
+        void emitCallSignal('call:ice', {
+          callId: currentCall.callId!,
+          targetUid: currentCall.callerId,
+          signalType: 'ice',
+          candidate,
+        });
+        await addDoc(collection(db, 'calls', currentCall.callId!, 'candidates'), {
+          candidate,
+          from: user.uid,
+        });
       };
 
-      // Listen for remote ICE candidates
-      onSnapshot(collection(db, 'calls', callState.callId, 'candidates'), (snapshot) => {
+      const unsubCandidates = onSnapshot(collection(db, 'calls', currentCall.callId, 'candidates'), (snapshot) => {
         snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            if (data.from !== user.uid) {
-              try {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-              } catch (err) {
-                console.error('Error adding ICE candidate:', err);
-              }
-            }
-          }
+          if (change.type !== 'added') return;
+          const data = change.doc.data();
+          if (data.from === user.uid) return;
+          await attachRemoteIceCandidate(pc, data.candidate ?? data);
         });
       });
+      const unsubCall = onSnapshot(doc(db, 'calls', currentCall.callId), (snapshot) => {
+        const data = snapshot.data() as Record<string, unknown> | undefined;
+        if (!data) return;
+        if (data.status === 'ended') {
+          cleanup();
+        }
+      });
+      attachTeardown(unsubCandidates);
+      attachTeardown(unsubCall);
 
+      appliedRemoteAnswerRef.current = true;
       setCallState(prev => ({
         ...prev,
         status: 'active',
         localStream,
         remoteStream,
       }));
-
-      // Start timer
-      timerRef.current = setInterval(() => {
-        setCallState(prev => ({ ...prev, duration: prev.duration + 1 }));
-      }, 1000);
-
-      // Listen for call end
-      onSnapshot(doc(db, 'calls', callState.callId), (snapshot) => {
-        const data = snapshot.data();
-        if (data?.status === 'ended') {
-          cleanup();
-        }
-      });
-
+      startDurationTimer();
     } catch (err) {
       console.error('Error answering call:', err);
       cleanup();
@@ -326,9 +600,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   const endCall = async () => {
-    if (callState.callId) {
+    const currentCall = callStateRef.current;
+    if (currentCall.callId) {
       try {
-        await updateDoc(doc(db, 'calls', callState.callId), { status: 'ended' });
+        await updateDoc(doc(db, 'calls', currentCall.callId), {
+          status: 'ended',
+          updatedAt: serverTimestamp(),
+        });
+        void emitCallSignal('call:end', {
+          callId: currentCall.callId,
+          targetUid: currentCall.isIncoming ? currentCall.callerId : currentCall.receiverId,
+          signalType: 'end',
+        });
       } catch (err) {
         console.error('Error ending call:', err);
       }
@@ -337,9 +620,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   const declineCall = async () => {
-    if (callState.callId) {
+    const currentCall = callStateRef.current;
+    if (currentCall.callId) {
       try {
-        await updateDoc(doc(db, 'calls', callState.callId), { status: 'declined' });
+        await updateDoc(doc(db, 'calls', currentCall.callId), {
+          status: 'declined',
+          updatedAt: serverTimestamp(),
+        });
+        void emitCallSignal('call:decline', {
+          callId: currentCall.callId,
+          targetUid: currentCall.callerId,
+          signalType: 'decline',
+        });
       } catch (err) {
         console.error('Error declining call:', err);
       }
@@ -348,8 +640,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleMute = () => {
-    if (callState.localStream) {
-      callState.localStream.getAudioTracks().forEach(track => {
+    const currentStream = localStreamRef.current;
+    if (currentStream) {
+      currentStream.getAudioTracks().forEach(track => {
         track.enabled = !track.enabled;
       });
       setCallState(prev => ({ ...prev, isMuted: !prev.isMuted }));
@@ -357,8 +650,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleVideo = () => {
-    if (callState.localStream) {
-      callState.localStream.getVideoTracks().forEach(track => {
+    const currentStream = localStreamRef.current;
+    if (currentStream) {
+      currentStream.getVideoTracks().forEach(track => {
         track.enabled = !track.enabled;
       });
       setCallState(prev => ({ ...prev, isVideoOff: !prev.isVideoOff }));
