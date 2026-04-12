@@ -135,6 +135,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const callStateRef = useRef<CallState>(initialCallState);
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const pendingRemoteCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const appliedRemoteAnswerRef = useRef(false);
   const seenCandidateKeysRef = useRef<Set<string>>(new Set());
   const teardownRef = useRef<Array<() => void>>([]);
@@ -179,6 +180,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     stopStream(localStreamRef.current);
     localStreamRef.current = null;
     pendingOfferRef.current = null;
+    pendingRemoteCandidatesRef.current = [];
     appliedRemoteAnswerRef.current = false;
     seenCandidateKeysRef.current.clear();
     setCallState(initialCallState);
@@ -197,6 +199,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }, 1000);
   }, []);
 
+  const flushPendingRemoteCandidates = useCallback(async (pc: RTCPeerConnection) => {
+    if (!pc.remoteDescription || pendingRemoteCandidatesRef.current.length === 0) return;
+
+    const queued = [...pendingRemoteCandidatesRef.current];
+    pendingRemoteCandidatesRef.current = [];
+
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error('Error flushing queued ICE candidate:', error);
+      }
+    }
+  }, []);
+
   const attachRemoteIceCandidate = useCallback(async (pc: RTCPeerConnection, candidateValue: unknown) => {
     const candidate = toRtcIceCandidate(candidateValue);
     if (!candidate) return;
@@ -204,7 +221,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (seenCandidateKeysRef.current.has(key)) return;
     seenCandidateKeysRef.current.add(key);
 
-    if (!pc.remoteDescription) return;
+    if (!pc.remoteDescription) {
+      pendingRemoteCandidatesRef.current.push(candidate);
+      return;
+    }
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -232,6 +252,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          await flushPendingRemoteCandidates(pc);
           appliedRemoteAnswerRef.current = true;
           setCallState(prev => ({ ...prev, status: 'active' }));
           startDurationTimer();
@@ -254,7 +275,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
     attachTeardown(unsubCall);
     attachTeardown(unsubCandidates);
-  }, [attachRemoteIceCandidate, attachTeardown, cleanup, startDurationTimer]);
+  }, [attachRemoteIceCandidate, attachTeardown, cleanup, flushPendingRemoteCandidates, startDurationTimer]);
 
   const handleIncomingCallDoc = useCallback(async (callId: string) => {
     if (callStateRef.current.status !== 'idle') return;
@@ -311,6 +332,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
 
     if (event.signalType === 'accept') {
+      setCallState(prev => (prev.callId === event.callId && prev.status === 'calling'
+        ? { ...prev, status: 'calling' }
+        : prev));
       return;
     }
 
@@ -318,6 +342,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (!peerConnection.current || !event.sdp || appliedRemoteAnswerRef.current) return;
       try {
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: event.sdp }));
+        await flushPendingRemoteCandidates(peerConnection.current);
         appliedRemoteAnswerRef.current = true;
         setCallState(prev => ({ ...prev, status: 'active' }));
         startDurationTimer();
@@ -335,7 +360,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (event.signalType === 'decline' || event.signalType === 'busy' || event.signalType === 'end') {
       cleanup();
     }
-  }, [attachRemoteIceCandidate, cleanup, handleIncomingCallDoc, startDurationTimer, user]);
+  }, [attachRemoteIceCandidate, cleanup, flushPendingRemoteCandidates, handleIncomingCallDoc, startDurationTimer, user]);
 
   useEffect(() => {
     if (!user) {
@@ -529,6 +554,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushPendingRemoteCandidates(pc);
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);

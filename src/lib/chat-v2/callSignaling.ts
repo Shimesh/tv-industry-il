@@ -10,6 +10,33 @@ export function getCallSignalingBridge() {
   return getChatSocketBridge();
 }
 
+async function waitForBridgeConnection(timeoutMs = 6000): Promise<boolean> {
+  const bridge = getChatSocketBridge();
+  if (!bridge.enabled) return false;
+  if (bridge.connected) return true;
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      resolve(false);
+    }, timeoutMs);
+
+    const unsubscribe = bridge.subscribeStatus((status) => {
+      if (status.mode === 'connected') {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(true);
+      }
+
+      if (status.mode === 'error' || status.mode === 'degraded') {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(false);
+      }
+    });
+  });
+}
+
 export async function connectCallSignaling(auth?: ChatV2AuthPayload | null): Promise<boolean> {
   const bridge = getChatSocketBridge();
   if (!bridge.enabled) return false;
@@ -22,7 +49,7 @@ export async function connectCallSignaling(auth?: ChatV2AuthPayload | null): Pro
     bridge.connect(auth ?? undefined);
   }
 
-  return bridge.connected;
+  return waitForBridgeConnection();
 }
 
 export function subscribeCallSignals(handler: (payload: ChatV2CallEventPayload) => void): () => void {
@@ -43,7 +70,8 @@ export async function emitCallSignal(
     socket.connect(payload.token ? { token: payload.token } : undefined);
   }
 
-  if (!socket.connected) return false;
+  const connected = await waitForBridgeConnection();
+  if (!connected) return false;
 
   socket.emit(eventName, {
     ...payload,

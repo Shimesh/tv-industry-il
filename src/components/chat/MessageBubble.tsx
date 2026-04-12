@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import {
@@ -70,6 +70,31 @@ function getReplyPreviewText(message: ChatUiMessage): string {
   if (message.type === 'image') return 'תמונה';
   if (message.type === 'file') return `קובץ ${message.fileName || ''}`.trim();
   return message.text || '';
+}
+
+function getUploadProgress(message: ChatUiMessage): number | null {
+  return typeof message.upload?.progress === 'number'
+    ? Math.max(0, Math.min(100, Math.round(message.upload.progress)))
+    : null;
+}
+
+function getPendingLabel(message: ChatUiMessage): string {
+  const progress = getUploadProgress(message);
+  const localStatus = message.localStatusText?.trim();
+
+  if (message.localState === 'failed') {
+    return localStatus || 'שליחה נכשלה';
+  }
+
+  if (message.upload?.state === 'uploading') {
+    return progress !== null ? `מעלה... ${progress}%` : 'מעלה קובץ...';
+  }
+
+  if (message.type === 'voice' || message.type === 'video') {
+    return localStatus || 'ממתין לאישור השליחה';
+  }
+
+  return localStatus || 'שולח...';
 }
 
 function VoiceMessagePlayer({
@@ -260,8 +285,16 @@ export default function MessageBubble({
             <div className="mb-1 rounded-md border border-dashed border-white/10 bg-black/20 p-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-                <span className="text-[12px] text-[#E9EDEF]">{message.fileName || 'תמונה'} - בהעלאה</span>
+                <span className='text-[12px] text-[#E9EDEF]'>{message.fileName || 'תמונה'} - {getPendingLabel(message)}</span>
               </div>
+              {getUploadProgress(message) !== null && (
+                <div className="mt-2 h-1.5 rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-[#00A884] transition-all duration-300"
+                    style={{ width: `${getUploadProgress(message)}%` }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -289,8 +322,8 @@ export default function MessageBubble({
                 <FileIcon className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] text-[#E9EDEF] truncate">{message.fileName || 'קובץ'}</p>
-                <p className="text-[11px] text-[#8696a0]">{isPending ? 'מועלה...' : 'ממתין לקישור'}</p>
+                <p className='text-[13px] text-[#E9EDEF] truncate'>{message.fileName || 'קובץ'}</p>
+                <p className='text-[11px] text-[#8696a0]'>{getPendingLabel(message)}</p>
               </div>
               <Loader2 className="w-4 h-4 text-[#8696a0] animate-spin shrink-0" />
             </div>
@@ -305,7 +338,7 @@ export default function MessageBubble({
           {message.type === 'voice' && !message.fileURL && (
             <div className="mb-1 flex items-center gap-2 rounded-full bg-[#00000026] px-3 py-2">
               <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-              <span className="text-[12px] text-[#8696a0]">{isPending ? 'מקליט...' : 'ממתין להעלאה'}</span>
+              <span className='text-[12px] text-[#8696a0]'>{getPendingLabel(message)}</span>
             </div>
           )}
 
@@ -323,7 +356,7 @@ export default function MessageBubble({
           {message.type === 'video' && !message.fileURL && (
             <div className="mb-1 flex items-center gap-2 rounded-xl bg-[#00000026] px-3 py-3 border border-dashed border-white/10">
               <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-              <span className="text-[12px] text-[#8696a0]">{isPending ? 'מעלה וידאו...' : 'ממתין להעלאה'}</span>
+              <span className='text-[12px] text-[#8696a0]'>{getPendingLabel(message)}</span>
             </div>
           )}
 
@@ -360,6 +393,28 @@ export default function MessageBubble({
               </span>
             )}
           </div>
+
+          {isFailed && isOwn && (onRetry || onDismissOptimistic) && (
+            <div className="mt-2 flex items-center justify-end gap-2 rounded-lg bg-[#111B21]/60 px-2 py-1.5 text-[11px]" dir="rtl">
+              <span className="text-red-300">השליחה נכשלה</span>
+              {onRetry && message.localPayload && (
+                <button
+                  onClick={() => onRetry(message)}
+                  className="rounded-md bg-white/10 px-2 py-1 text-amber-200 transition-colors hover:bg-white/15"
+                >
+                  נסה שוב
+                </button>
+              )}
+              {onDismissOptimistic && (
+                <button
+                  onClick={() => onDismissOptimistic(message.id)}
+                  className="rounded-md bg-white/10 px-2 py-1 text-[#AEBAC1] transition-colors hover:bg-white/15"
+                >
+                  הסר
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className={`absolute top-[2px] ${isOwn ? 'left-[2px]' : 'right-[2px]'} opacity-0 group-hover:opacity-100 transition-opacity z-10`}>
@@ -367,7 +422,7 @@ export default function MessageBubble({
             <button
               onClick={() => onReply(message)}
               className="p-1.5 hover:bg-[#ffffff15] transition-colors"
-              title="השב"
+              title='השב'
             >
               <Reply className="w-3.5 h-3.5 text-[#aebac1]" />
             </button>
@@ -375,7 +430,7 @@ export default function MessageBubble({
               <button
                 onClick={() => navigator.clipboard.writeText(message.text)}
                 className="p-1.5 hover:bg-[#ffffff15] transition-colors"
-                title="העתק"
+                title='העתק'
               >
                 <Copy className="w-3.5 h-3.5 text-[#aebac1]" />
               </button>
@@ -384,7 +439,7 @@ export default function MessageBubble({
               <button
                 onClick={() => onDelete(message.id)}
                 className="p-1.5 hover:bg-[#ffffff15] transition-colors"
-                title="מחק"
+                title='מחק'
               >
                 <Trash2 className="w-3.5 h-3.5 text-red-400" />
               </button>
@@ -393,7 +448,7 @@ export default function MessageBubble({
               <button
                 onClick={() => onRetry(message)}
                 className="p-1.5 hover:bg-[#ffffff15] transition-colors"
-                title="נסה שוב"
+                title='נסה שוב'
               >
                 <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
               </button>
@@ -402,7 +457,7 @@ export default function MessageBubble({
               <button
                 onClick={() => onDismissOptimistic(message.id)}
                 className="p-1.5 hover:bg-[#ffffff15] transition-colors"
-                title="הסר"
+                title='הסר'
               >
                 <Trash2 className="w-3.5 h-3.5 text-red-400" />
               </button>

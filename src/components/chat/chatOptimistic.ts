@@ -81,7 +81,7 @@ export function buildOptimisticMessage({
     createdAt: localCreatedAt,
     localCreatedAt,
     localState: 'sending',
-    localStatusText: '׳ ׳©׳׳— ׳‘׳׳•׳₪׳ ׳׳§׳•׳׳™',
+    localStatusText: 'נשלח באופן מקומי',
     localPayload: payload,
   };
 }
@@ -123,7 +123,7 @@ export function settleOptimisticMessages(
   });
 }
 
-export function markOptimisticFailed(message: ChatUiMessage, errorText = '׳ ׳›׳©׳ ׳‘׳©׳׳™׳—׳”'): ChatUiMessage {
+export function markOptimisticFailed(message: ChatUiMessage, errorText = 'נכשל בשליחה'): ChatUiMessage {
   return {
     ...message,
     localState: 'failed',
@@ -135,6 +135,6 @@ export function refreshOptimisticSending(message: ChatUiMessage): ChatUiMessage 
   return {
     ...message,
     localState: 'sending',
-    localStatusText: '׳׳׳×׳™׳ ׳׳©׳׳™׳—׳”',
+    localStatusText: 'ממתין לשליחה',
   };
 }

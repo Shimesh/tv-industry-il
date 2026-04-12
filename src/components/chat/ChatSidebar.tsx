@@ -26,16 +26,16 @@ function formatTime(timestamp: number): string {
   const isYesterday = date.toDateString() === yesterday.toDateString();
 
   if (isToday) return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-  if (isYesterday) return '׳׳×׳׳•׳';
+  if (isYesterday) return 'אתמול';
   return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
 }
 
 function getChatName(chat: ChatRoom, currentUserId: string): string {
   if (chat.type === 'private') {
     const other = chat.membersInfo?.find(m => m.uid !== currentUserId);
-    return other?.displayName || '׳¦\'׳׳˜';
+    return other?.displayName || 'צ׳אט';
   }
-  return chat.name || '׳¦\'׳׳˜';
+  return chat.name || 'צ׳אט';
 }
 
 function getChatPhoto(chat: ChatRoom, currentUserId: string): string | null {
@@ -48,6 +48,20 @@ function getChatPhoto(chat: ChatRoom, currentUserId: string): string | null {
 
 function getChatInitial(chat: ChatRoom, currentUserId: string): string {
   return getChatName(chat, currentUserId).charAt(0);
+}
+
+function getLastMessagePreview(chat: ChatRoom): string {
+  const message = chat.lastMessage;
+  if (!message) return 'שיחה חדשה';
+
+  const text = (message.text || '').trim();
+  const type = message.kind;
+
+  if (type === 'image') return text || 'תמונה';
+  if (type === 'file') return text || 'קובץ';
+  if (type === 'voice') return text || 'הודעה קולית';
+  if (type === 'video') return text || 'וידאו';
+  return text || 'הודעה חדשה';
 }
 
 export default function ChatSidebar({
@@ -66,11 +80,11 @@ export default function ChatSidebar({
     <div className="flex flex-col h-full bg-[#111B21] border-l border-[#2A3942]">
       {/* Header */}
       <div className="px-4 py-3 bg-[#202C33] flex items-center justify-between">
-        <h2 className="text-[#E9EDEF] font-bold text-lg">׳¦&apos;׳׳˜׳™׳</h2>
+        <h2 className="text-[#E9EDEF] font-bold text-lg">צ׳אטים</h2>
         <button
           onClick={onNewChat}
           className="p-2 rounded-full hover:bg-[#2A3942] transition-colors"
-          title="׳©׳™׳—׳” ׳—׳“׳©׳”"
+          title="שיחה חדשה"
         >
           <Plus className="w-5 h-5 text-[#AEBAC1]" />
         </button>
@@ -84,7 +98,7 @@ export default function ChatSidebar({
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="׳—׳₪׳© ׳׳• ׳”׳×׳—׳ ׳©׳™׳—׳” ׳—׳“׳©׳”"
+            placeholder="חפש או התחל שיחה חדשה"
             className="w-full pr-10 pl-3 py-[7px] rounded-lg text-[13px] outline-none bg-[#202C33] text-[#E9EDEF] placeholder:text-[#8696a0] border border-transparent focus:border-[#00A884] transition-colors"
           />
         </div>
@@ -99,10 +113,10 @@ export default function ChatSidebar({
           <div className="p-8 text-center">
             <MessageCircle className="w-12 h-12 text-[#3B4A54] mx-auto mb-3" />
             <p className="text-[13px] text-[#8696a0]">
-              {search ? '׳׳ ׳ ׳׳¦׳׳• ׳©׳™׳—׳•׳×' : '׳׳™׳ ׳©׳™׳—׳•׳× ׳¢׳“׳™׳™׳'}
+              {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
             </p>
             <p className="text-[11px] text-[#667781] mt-1">
-              ׳׳—׳¦׳• + ׳›׳“׳™ ׳׳”׳×׳—׳™׳ ׳©׳™׳—׳” ׳—׳“׳©׳”
+              לחצו על `+` כדי להתחיל שיחה חדשה
             </p>
           </div>
         ) : (
@@ -156,10 +170,10 @@ export default function ChatSidebar({
                           {chat.type !== 'private' && (
                             <span className="text-[#E9EDEF99]">{chat.lastMessage.senderName}: </span>
                           )}
-                          {chat.lastMessage.text}
+                          {getLastMessagePreview(chat)}
                         </>
                       ) : (
-                        <span className="italic">׳©׳™׳—׳” ׳—׳“׳©׳”</span>
+                        <span className="italic">שיחה חדשה</span>
                       )}
                     </p>
                     {unreadCount > 0 && (

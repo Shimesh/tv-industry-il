@@ -54,9 +54,9 @@ interface ChatWindowProps {
 }
 
 const EMOJI_LIST = [
-  'נ˜', 'ג₪ן¸', 'נ˜‚', 'נ‘', 'נ™', 'נ˜', 'נ”¥', 'נ¬', 'נ“·', 'נ¥',
-  'ג­', 'נ’¥', 'נ’”', 'נ‘', 'נ«¶', 'נ“¸', 'נµ', 'נ’¯', 'נ˜', 'נ₪',
-  'נ˜¢', 'נ­', 'נ‘‹', 'ג…', 'ג', 'נ’¬', 'נ“', 'נן¸', 'נ§', 'נ¬',
+  '😊', '❤️', '😂', '👍', '🙏', '😍', '🔥', '🎬', '📷', '🎥',
+  '⭐', '💥', '💕', '👏', '🚶', '📸', '🎵', '💯', '😎', '✅',
+  '😢', '🎭', '👋', '…', '✌️', '💬', '📎', '🎞️', '🎧', '🎬',
 ];
 
 function getDateLabel(timestamp: number): string {
@@ -65,17 +65,17 @@ function getDateLabel(timestamp: number): string {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (date.toDateString() === today.toDateString()) return '׳”׳™׳•׳';
-  if (date.toDateString() === yesterday.toDateString()) return '׳׳×׳׳•׳';
+  if (date.toDateString() === today.toDateString()) return 'היום';
+  if (date.toDateString() === yesterday.toDateString()) return 'אתמול';
   return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function getChatDisplayName(chat: ChatRoom, currentUserId: string): string {
   if (chat.type === 'private') {
     const other = chat.membersInfo?.find((m) => m.uid !== currentUserId);
-    return other?.displayName || '׳¦׳³׳׳˜';
+    return other?.displayName || 'צ׳אט';
   }
-  return chat.name || '׳¦׳³׳׳˜';
+  return chat.name || 'צ׳אט';
 }
 
 function getChatDisplayPhoto(chat: ChatRoom, currentUserId: string): string | null {
@@ -87,10 +87,10 @@ function getChatDisplayPhoto(chat: ChatRoom, currentUserId: string): string | nu
 }
 
 function getReplyPreviewText(message: ChatUiMessage): string {
-  if (message.type === 'voice') return '׳”׳•׳“׳¢׳× ׳§׳•׳';
-  if (message.type === 'video') return '׳”׳•׳“׳¢׳× ׳•׳™׳“׳׳•';
-  if (message.type === 'image') return '׳×׳׳•׳ ׳”';
-  if (message.type === 'file') return `׳§׳•׳‘׳¥ ${message.fileName || ''}`.trim();
+  if (message.type === 'voice') return 'הודעת קול';
+  if (message.type === 'video') return 'הודעת וידאו';
+  if (message.type === 'image') return 'תמונה';
+  if (message.type === 'file') return `קובץ ${message.fileName || ''}`.trim();
   return message.text || '';
 }
 
@@ -292,29 +292,29 @@ export default function ChatWindow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <h3 className="text-[15px] font-medium text-[#E9EDEF] truncate">{chatName}</h3>
-            <span title="׳¦׳³׳׳˜ ׳׳•׳’׳">
+            <span title="צ׳אט מוגן">
               <Lock className="w-3 h-3 text-[#00A884] shrink-0" />
             </span>
           </div>
           <p className="text-[12px] text-[#8696a0]">
             {typingUsers.length > 0 ? (
-              <span className="text-[#00A884]">{typingUsers.join(', ')} ׳׳§׳׳™׳“/׳”...</span>
+              <span className="text-[#00A884]">{typingUsers.join(', ')} מקליד/ה...</span>
             ) : isGroup ? (
-              `${chat.members.length} ׳׳©׳×׳×׳₪׳™׳`
+              `${chat.members.length} משתתפים`
             ) : (
-              '׳׳—׳¦׳• ׳›׳׳ ׳׳₪׳¨׳˜׳™ ׳׳™׳© ׳”׳§׳©׳¨'
+              'לחצו כאן לפרטי איש הקשר'
             )}
           </p>
         </div>
 
         {v2Enabled && (
           <span className="hidden xl:inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
-            V2 {connectionState?.mode === 'connected' ? '׳׳—׳•׳‘׳¨' : '׳׳•׳›׳'}
+            V2 {connectionState?.mode === 'connected' ? 'מחובר' : 'מוכן'}
           </span>
         )}
 
         <span className="hidden xl:inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-[#AEBAC1]">
-          {signalingMode === 'socket-ready' ? '׳©׳™׳—׳•׳× ׳׳•׳›׳ ׳•׳× ׳ײ¾Socket.IO' : '׳©׳™׳—׳•׳× ׳“׳¨׳ Firestore'}
+          {signalingMode === 'socket-ready' ? 'שיחות מוכנות דרך Socket.IO' : 'שיחות דרך Firestore'}
         </span>
 
         {chat.type === 'private' && otherMember?.uid && (
@@ -323,7 +323,7 @@ export default function ChatWindow({
               onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'voice')}
               disabled={!canCall}
               className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="׳©׳™׳—׳× ׳§׳•׳"
+              title="שיחת קול"
             >
               <Phone className="w-5 h-5 text-[#AEBAC1]" />
             </button>
@@ -331,7 +331,7 @@ export default function ChatWindow({
               onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'video')}
               disabled={!canCall}
               className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="׳©׳™׳—׳× ׳•׳™׳“׳׳•"
+              title="שיחת וידאו"
             >
               <Video className="w-5 h-5 text-[#AEBAC1]" />
             </button>
@@ -365,7 +365,7 @@ export default function ChatWindow({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="׳—׳™׳₪׳•׳© ׳‘׳”׳•׳“׳¢׳•׳×..."
+              placeholder="חיפוש בהודעות..."
               className="w-full bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696a0] rounded-lg pr-10 pl-4 py-2.5 outline-none"
               dir="rtl"
             />
@@ -390,7 +390,7 @@ export default function ChatWindow({
               )}
             </div>
             <p className="text-[14px] text-[#8696a0]" dir="rtl">
-              {searchQuery.trim() ? `׳׳™׳ ׳×׳•׳¦׳׳•׳× ׳¢׳‘׳•׳¨ "${searchQuery}"` : '׳©׳׳—׳• ׳׳× ׳”׳”׳•׳“׳¢׳” ׳”׳¨׳׳©׳•׳ ׳”'}
+              {searchQuery.trim() ? `אין תוצאות עבור "${searchQuery}"` : 'שלחו את ההודעה הראשונה'}
             </p>
           </div>
         ) : (
@@ -446,15 +446,6 @@ export default function ChatWindow({
         <div ref={bottomRef} />
       </div>
 
-      {uploadProgress !== null && (
-        <div className="h-1 bg-[#2A3942]">
-          <div
-            className="h-full bg-[#00A884] transition-all duration-300"
-            style={{ width: `${uploadProgress}%` }}
-          />
-        </div>
-      )}
-
       {replyTo && !isRecording && (
         <div className="flex items-center gap-3 px-4 py-2 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
           <div className="flex-1 min-w-0 border-r-[3px] border-[#00A884] pr-3">
@@ -495,7 +486,7 @@ export default function ChatWindow({
             <div className="w-12 h-12 rounded-full bg-[#BF59CF] flex items-center justify-center">
               <ImageIcon className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">׳×׳׳•׳ ׳”</span>
+            <span className="text-[11px] text-[#8696a0]">תמונה</span>
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -504,7 +495,7 @@ export default function ChatWindow({
             <div className="w-12 h-12 rounded-full bg-[#5157AE] flex items-center justify-center">
               <FileText className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">׳׳¡׳׳</span>
+            <span className="text-[11px] text-[#8696a0]">מסמך</span>
           </button>
           <button
             onClick={handleStartVideo}
@@ -513,7 +504,7 @@ export default function ChatWindow({
             <div className="w-12 h-12 rounded-full bg-[#E03E3E] flex items-center justify-center">
               <VideoIcon className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">׳•׳™׳“׳׳•</span>
+            <span className="text-[11px] text-[#8696a0]">וידאו</span>
           </button>
         </div>
       )}
@@ -557,7 +548,7 @@ export default function ChatWindow({
           <button
             onClick={handleCancelRecording}
             className="p-2 rounded-full bg-[#2A3942] hover:bg-[#3A4952] transition-colors shrink-0"
-            title="׳‘׳™׳˜׳•׳"
+            title="ביטול"
           >
             <X className="w-5 h-5 text-[#8696a0]" />
           </button>
@@ -565,14 +556,14 @@ export default function ChatWindow({
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-full bg-[#2A3942]">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
             <span className="text-[13px] text-[#E9EDEF] font-medium">
-              {recordingMode === 'video' ? '׳•׳™׳“׳׳•' : '׳§׳•׳'} ׳׳§׳׳™׳˜... {formatRecordingDuration(duration)}
+              {recordingMode === 'video' ? 'וידאו' : 'קול'} מקליט... {formatRecordingDuration(duration)}
             </span>
           </div>
 
           <button
             onClick={handleStopAndSend}
             className="p-2.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] transition-colors shrink-0"
-            title="׳©׳׳—"
+            title="שלח"
           >
             <Send className="w-5 h-5 text-[#111B21]" />
           </button>
@@ -605,7 +596,7 @@ export default function ChatWindow({
               value={text}
               onChange={handleTextChange}
               onKeyDown={handleKeyDown}
-              placeholder="׳”׳§׳׳“ ׳”׳•׳“׳¢׳”"
+              placeholder="הקלד הודעה"
               rows={1}
               dir="auto"
               className="w-full px-3 py-[9px] rounded-lg text-[14px] text-[#E9EDEF] bg-[#2A3942] placeholder:text-[#8696a0] outline-none resize-none leading-[20px] max-h-[120px]"
@@ -624,7 +615,7 @@ export default function ChatWindow({
             <button
               onClick={handleStartVoice}
               className="p-2 rounded-full text-[#8696a0] hover:text-[#E9EDEF] hover:bg-[#2A3942] transition-colors shrink-0"
-              title="׳׳—׳¥ ׳׳”׳§׳׳˜׳× ׳”׳•׳“׳¢׳” ׳§׳•׳׳™׳×"
+              title="לחץ להקלטת הודעה קולית"
             >
               <Mic className="w-6 h-6" />
             </button>
