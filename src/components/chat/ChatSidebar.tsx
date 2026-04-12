@@ -105,19 +105,33 @@ export default function ChatSidebar({
       </div>
 
       {/* Online Users */}
-      <OnlineUsers users={onlineUsers} onSelectUser={onSelectOnlineUser} />
+      <OnlineUsers users={onlineUsers} onSelectUser={onSelectOnlineUser} onNewChat={onNewChat} />
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto pb-20">
         {filteredChats.length === 0 ? (
-          <div className="p-8 text-center">
-            <MessageCircle className="w-12 h-12 text-[#3B4A54] mx-auto mb-3" />
-            <p className="text-[13px] text-[#8696a0]">
-              {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
-            </p>
-            <p className="text-[11px] text-[#667781] mt-1">
-              לחצו על `+` כדי להתחיל שיחה חדשה
-            </p>
+          <div className="p-8 text-center flex flex-col items-center gap-3">
+            <div className="w-16 h-16 rounded-full bg-[#00A884]/10 flex items-center justify-center">
+              <MessageCircle className="w-8 h-8 text-[#00A884]" />
+            </div>
+            <div>
+              <p className="text-[13px] text-[#8696a0]">
+                {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
+              </p>
+              {!search && (
+                <p className="text-[11px] text-[#667781] mt-1">
+                  שלחו הודעה לכל משתמש — לא צריך ליצור צוות!
+                </p>
+              )}
+            </div>
+            {!search && (
+              <button
+                onClick={onNewChat}
+                className="mt-1 px-4 py-2 rounded-lg bg-[#00A884] text-white text-sm font-medium hover:bg-[#06CF9C] transition-colors"
+              >
+                התחל שיחה
+              </button>
+            )}
           </div>
         ) : (
           filteredChats.map(chat => {
