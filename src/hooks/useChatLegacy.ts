@@ -13,6 +13,9 @@ import {
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
 } from '@/lib/encryption';
 
+const FIRESTORE_USERS_REST_BASE =
+  'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents/users';
+
 export interface ChatRoom {
   id: string;
   type: 'private' | 'group' | 'general';
@@ -48,6 +51,84 @@ export interface Message {
   createdAt: number;
 }
 
+function fromFsValue(value: Record<string, unknown> | undefined): unknown {
+  if (!value) return undefined;
+  if ('stringValue' in value) return value.stringValue;
+  if ('booleanValue' in value) return value.booleanValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('nullValue' in value) return null;
+  if ('arrayValue' in value) {
+    const arrayValue = value.arrayValue as { values?: Array<Record<string, unknown>> };
+    return (arrayValue.values ?? []).map((item) => fromFsValue(item));
+  }
+  return undefined;
+}
+
+function fromFsFields(
+  fields: Record<string, Record<string, unknown>> | undefined,
+  uid: string
+): UserProfile {
+  const mapped: Partial<UserProfile> = { uid };
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    (mapped as Record<string, unknown>)[key] = fromFsValue(value);
+  }
+
+  return {
+    uid,
+    displayName: String(mapped.displayName || ''),
+    email: String(mapped.email || ''),
+    photoURL: mapped.photoURL ? String(mapped.photoURL) : null,
+    department: String(mapped.department || ''),
+    role: String(mapped.role || ''),
+    phone: String(mapped.phone || ''),
+    linkedContactId: typeof mapped.linkedContactId === 'number' ? mapped.linkedContactId : undefined,
+    skills: Array.isArray(mapped.skills) ? (mapped.skills as string[]) : [],
+    bio: String(mapped.bio || ''),
+    status: (mapped.status as UserProfile['status']) || 'offline',
+    isOnline: Boolean(mapped.isOnline),
+    onboardingComplete: Boolean(mapped.onboardingComplete),
+    theme: String(mapped.theme || 'dark'),
+    siteRole: mapped.siteRole as UserProfile['siteRole'],
+    openToWork: mapped.openToWork as boolean | undefined,
+    city: mapped.city ? String(mapped.city) : undefined,
+    yearsOfExperience:
+      typeof mapped.yearsOfExperience === 'number' ? mapped.yearsOfExperience : undefined,
+    credits: Array.isArray(mapped.credits) ? (mapped.credits as string[]) : undefined,
+    gear: Array.isArray(mapped.gear) ? (mapped.gear as string[]) : undefined,
+    preferredRoles: Array.isArray(mapped.preferredRoles)
+      ? (mapped.preferredRoles as string[])
+      : undefined,
+    preferredRegions: Array.isArray(mapped.preferredRegions)
+      ? (mapped.preferredRegions as string[])
+      : undefined,
+    notificationsEnabled: mapped.notificationsEnabled as boolean | undefined,
+    soundEnabled: mapped.soundEnabled as boolean | undefined,
+    showPhone: mapped.showPhone as boolean | undefined,
+    encryptionPublicKey: mapped.encryptionPublicKey ? String(mapped.encryptionPublicKey) : undefined,
+    crewName: mapped.crewName ? String(mapped.crewName) : undefined,
+  };
+}
+
+function mergeUserProfiles(primary: UserProfile[], fallback: UserProfile[]): UserProfile[] {
+  const merged = new Map<string, UserProfile>();
+
+  for (const user of fallback) {
+    if (!user.uid) continue;
+    merged.set(user.uid, user);
+  }
+
+  for (const user of primary) {
+    if (!user.uid) continue;
+    const existing = merged.get(user.uid);
+    merged.set(user.uid, existing ? { ...existing, ...user } : user);
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    (left.displayName || '').localeCompare(right.displayName || '', 'he')
+  );
+}
+
 export function useChat() {
   const { user, profile } = useAuth();
   const [chats, setChats] = useState<ChatRoom[]>([]);
@@ -56,6 +137,7 @@ export function useChat() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const userFetchFallbackRef = useRef(false);
 
   // Cache: chatId → decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
@@ -123,18 +205,93 @@ export function useChat() {
     }
   }, []);
 
+  const fetchUsersViaRest = useCallback(async (): Promise<UserProfile[]> => {
+    if (!user) return [];
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${FIRESTORE_USERS_REST_BASE}?pageSize=500`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`users_rest_${response.status}`);
+      }
+
+      const payload = (await response.json()) as {
+        documents?: Array<{ name?: string; fields?: Record<string, Record<string, unknown>> }>;
+      };
+
+      return (payload.documents ?? [])
+        .map((document) => {
+          const name = document.name || '';
+          const uid = name.split('/').pop() || '';
+          if (!uid) return null;
+          return fromFsFields(document.fields, uid);
+        })
+        .filter((item): item is UserProfile => Boolean(item && item.uid));
+    } catch (error) {
+      console.warn('[useChatLegacy] users REST fallback failed:', error);
+      return [];
+    }
+  }, [user]);
+
   // Fetch all users
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const users: UserProfile[] = [];
-      snapshot.forEach(d => {
-        users.push({ uid: d.id, ...d.data() } as UserProfile);
-      });
-      setAllUsers(users);
-    });
-    return () => unsubscribe();
-  }, [user]);
+    let cancelled = false;
+    let sdkLoaded = false;
+
+    const applyUsers = (nextUsers: UserProfile[]) => {
+      if (cancelled) return;
+      setAllUsers((current) => mergeUserProfiles(nextUsers, current));
+    };
+
+    const loadFallbackUsers = async () => {
+      if (userFetchFallbackRef.current) return;
+      userFetchFallbackRef.current = true;
+      const restUsers = await fetchUsersViaRest();
+      if (!cancelled && restUsers.length) {
+        applyUsers(restUsers);
+      }
+    };
+
+    const fallbackTimer = setTimeout(() => {
+      if (!sdkLoaded) {
+        void loadFallbackUsers();
+      }
+    }, 1500);
+
+    const unsubscribe = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
+        sdkLoaded = true;
+        const users: UserProfile[] = [];
+        snapshot.forEach((d) => {
+          users.push({ uid: d.id, ...d.data() } as UserProfile);
+        });
+
+        if (users.length) {
+          applyUsers(users);
+          return;
+        }
+
+        void loadFallbackUsers();
+      },
+      () => {
+        void loadFallbackUsers();
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
+  }, [fetchUsersViaRest, user]);
 
   // Subscribe to chats
   useEffect(() => {
