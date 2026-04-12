@@ -386,6 +386,8 @@ export function useChat() {
     legacy.displayPhoto || profile?.photoURL || user?.photoURL || null;
   const activeChatId = legacy.activeChatData?.id || legacy.activeChat || null;
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const deliveredReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
+  const readReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
 
   const [snapshotFallback, setSnapshotFallback] = useState<{
     chat: ChatRoom | null;
@@ -496,6 +498,21 @@ export function useChat() {
       }
     },
     [activeChatId, mergeRoomSummary, updateRoomRecord, user?.uid]
+  );
+
+  const queueReceiptIds = useCallback(
+    (cacheRef: { current: Map<string, Set<string>> }, chatId: string, messageIds: string[]) => {
+      if (!messageIds.length) return [];
+
+      const existing = cacheRef.current.get(chatId) ?? new Set<string>();
+      const nextIds = messageIds.filter((messageId) => !existing.has(messageId));
+      if (!nextIds.length) return [];
+
+      nextIds.forEach((messageId) => existing.add(messageId));
+      cacheRef.current.set(chatId, existing);
+      return nextIds;
+    },
+    []
   );
   useEffect(() => {
     if (!activeChatId) {
@@ -631,7 +648,9 @@ export function useChat() {
     },
     onMessageAccepted: (payload) => {
       updateRoomRecord(payload.chatId, (current) => ({
-        ...current,
+        chat: mergeRoomSummary(payload.chatId, {
+          lastServerSequence: payload.serverSequence,
+        }) ?? current.chat,
         messages: updateMessageLifecycle(current.messages, {
           chatId: payload.chatId,
           messageId: payload.serverMessageId,
@@ -644,6 +663,15 @@ export function useChat() {
       }));
 
       if (activeChatId && payload.chatId === activeChatId) {
+        setTransportChat((current) =>
+          mergeChatPatch(
+            current,
+            {
+              lastServerSequence: payload.serverSequence,
+            },
+            user?.uid ?? null
+          )
+        );
         setTransportMessages((current) =>
           updateMessageLifecycle(current, {
             chatId: payload.chatId,
@@ -733,10 +761,14 @@ export function useChat() {
         !message.deletedAt
     );
 
-    const deliverIds = incomingMessages
+    const deliverIds = queueReceiptIds(
+      deliveredReceiptCacheRef,
+      activeChatId,
+      incomingMessages
       .filter((message) => !message.deliveredTo?.[user.uid])
       .map((message) => message.serverMessageId || message.id)
-      .filter(Boolean);
+      .filter(Boolean)
+    );
 
     if (deliverIds.length) {
       transport.sendDeliveredReceipt({
@@ -746,10 +778,14 @@ export function useChat() {
       });
     }
 
-    const readIds = incomingMessages
+    const readIds = queueReceiptIds(
+      readReceiptCacheRef,
+      activeChatId,
+      incomingMessages
       .filter((message) => !message.readBy?.[user.uid])
       .map((message) => message.serverMessageId || message.id)
-      .filter(Boolean);
+      .filter(Boolean)
+    );
 
     if (readIds.length) {
       transport.sendReadReceipt({
@@ -758,7 +794,7 @@ export function useChat() {
         serverCursor: getCurrentCursor(messages),
       });
     }
-  }, [activeChatId, featureFlags.socketEnabled, messages, transport, user?.uid]);
+  }, [activeChatId, featureFlags.socketEnabled, messages, queueReceiptIds, transport, user?.uid]);
 
   useEffect(() => {
     if (!activeChatId) return;
@@ -817,14 +853,53 @@ export function useChat() {
       });
 
       if (!file || type === 'text') {
-        await transport.sendMessage(activeChatId, {
+        const optimisticMessage = normalizeMessage({
+          ...createOptimisticMessage({
+            chatId: activeChatId,
+            userId: user.uid,
+            displayName,
+            displayPhoto,
+            payload: {
+              text,
+              type,
+              replyTo: replyTo ?? null,
+            },
+          }),
+          id: clientMessageId,
+          clientMessageId,
+          optimisticId: clientMessageId,
+          createdAt: createdAtClient,
+          createdAtClient,
+          status: 'sending',
+        });
+
+        const lastMessagePatch: Partial<ChatV2ChatRoom> = {
+          lastMessage: {
+            text: previewText,
+            senderId: user.uid,
+            senderName: displayName,
+            timestamp: createdAtClient,
+            kind: type,
+          },
+        };
+
+        upsertLocalMessage(activeChatId, optimisticMessage, lastMessagePatch);
+
+        const messageSendResponse = (await transport.sendMessage(activeChatId, {
           clientMessageId,
           text,
           kind: type,
           replyTo: replyTo ?? null,
           createdAtClient,
           encrypted: false,
-        });
+        })) as { ok?: boolean; error?: string } | null;
+
+        if (!messageSendResponse?.ok) {
+          throw new Error(messageSendResponse?.error || 'message_send_failed');
+        }
+      }
+
+      if (!file || type === 'text') {
         return;
       }
 
