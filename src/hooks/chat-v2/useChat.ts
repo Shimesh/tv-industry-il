@@ -214,6 +214,26 @@ function mapProtocolMessage(message: ChatV2Message): Message {
   });
 }
 
+function buildRoomPatchFromMessages(messages: Message[]): Partial<ChatV2ChatRoom> | undefined {
+  const lastMessage = messages[messages.length - 1];
+  if (!lastMessage) return undefined;
+
+  return {
+    lastMessage: {
+      text: lastMessage.text,
+      senderId: lastMessage.senderId,
+      senderName: lastMessage.senderName,
+      timestamp:
+        lastMessage.createdAtServer ??
+        lastMessage.createdAtClient ??
+        lastMessage.createdAt ??
+        Date.now(),
+      kind: lastMessage.type,
+    },
+    lastServerSequence: lastMessage.serverSequence ?? null,
+  };
+}
+
 function mergeRooms(base: ChatRoom | null, patch: ChatRoom | null): ChatRoom | null {
   if (!base) return patch;
   if (!patch) return base;
@@ -551,9 +571,10 @@ export function useChat() {
     onDelta: (payload: ChatV2DeltaPayload) => {
       const deltaMessages = payload.messages ?? [];
       const nextDeltaMessages = deltaMessages.map(mapProtocolMessage);
+      const derivedChatPatch = payload.chat ?? buildRoomPatchFromMessages(nextDeltaMessages);
 
       updateRoomRecord(payload.chatId, (current) => ({
-        chat: mergeRoomSummary(payload.chatId, payload.chat) ?? current.chat,
+        chat: mergeRoomSummary(payload.chatId, derivedChatPatch) ?? current.chat,
         messages: nextDeltaMessages.length
           ? trimMessages(mergeMessages(current.messages, nextDeltaMessages))
           : current.messages,
@@ -562,8 +583,8 @@ export function useChat() {
       }));
 
       if (activeChatId && payload.chatId === activeChatId) {
-        if (payload.chat) {
-          setTransportChat((current) => mergeChatPatch(current, payload.chat, user?.uid ?? null));
+        if (derivedChatPatch) {
+          setTransportChat((current) => mergeChatPatch(current, derivedChatPatch, user?.uid ?? null));
         }
         if (nextDeltaMessages.length) {
           setTransportMessages((current) => mergeMessages(current, nextDeltaMessages));

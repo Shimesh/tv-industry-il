@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search, Plus, MessageCircle } from 'lucide-react';
 import type { ChatRoom } from '@/hooks/useChat';
 import type { UserProfile } from '@/contexts/AuthContext';
@@ -56,9 +56,11 @@ export default function ChatSidebar({
 }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
 
-  const filteredChats = search
-    ? chats.filter(c => getChatName(c, currentUserId).toLowerCase().includes(search.toLowerCase()))
-    : chats;
+  const filteredChats = useMemo(() => {
+    if (!search) return chats;
+    const query = search.toLowerCase();
+    return chats.filter((chat) => getChatName(chat, currentUserId).toLowerCase().includes(query));
+  }, [chats, currentUserId, search]);
 
   return (
     <div className="flex flex-col h-full bg-[#111B21] border-l border-[#2A3942]">
@@ -109,6 +111,7 @@ export default function ChatSidebar({
             const chatName = getChatName(chat, currentUserId);
             const chatPhoto = getChatPhoto(chat, currentUserId);
             const chatInitial = getChatInitial(chat, currentUserId);
+            const unreadCount = chat.unreadCountByUser?.[currentUserId] ?? chat.unreadCount;
 
             return (
               <button
@@ -139,8 +142,8 @@ export default function ChatSidebar({
                       {chatName}
                     </span>
                     {chat.lastMessage && (
-                      <span className={`text-[12px] shrink-0 mr-2 ${
-                        chat.unreadCount > 0 ? 'text-[#00A884]' : 'text-[#8696a0]'
+                    <span className={`text-[12px] shrink-0 mr-2 ${
+                        unreadCount > 0 ? 'text-[#00A884]' : 'text-[#8696a0]'
                       }`}>
                         {formatTime(chat.lastMessage.timestamp)}
                       </span>
@@ -159,9 +162,9 @@ export default function ChatSidebar({
                         <span className="italic">׳©׳™׳—׳” ׳—׳“׳©׳”</span>
                       )}
                     </p>
-                    {chat.unreadCount > 0 && (
+                    {unreadCount > 0 && (
                       <span className="shrink-0 mr-2 min-w-[20px] h-[20px] px-[5px] rounded-full bg-[#00A884] text-white text-[11px] font-bold flex items-center justify-center">
-                        {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+                        {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )}
                   </div>
