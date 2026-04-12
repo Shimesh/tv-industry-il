@@ -49,6 +49,7 @@ export interface PersistedUploadCompletionResult {
 
 export interface ChatPersistence {
   loadChatSnapshot(chatId: string, viewerUid: string, lastKnownServerCursor?: number | null): Promise<ChatV2SnapshotPayload>;
+  getChatMembers(chatId: string, viewerUid: string): Promise<string[]>;
   persistMessage(input: PersistedMessageInput): Promise<PersistedMessageResult>;
   markDelivered(chatId: string, messageIds: string[], viewerUid: string): Promise<PersistedReceiptResult>;
   markRead(chatId: string, messageIds: string[], viewerUid: string): Promise<PersistedReceiptResult>;
@@ -198,6 +199,11 @@ export class FirestoreChatPersistence implements ChatPersistence {
     );
 
     return { chat, messages, cursor };
+  }
+
+  async getChatMembers(chatId: string, viewerUid: string): Promise<string[]> {
+    const { members } = await this.getAuthorizedChat(chatId, viewerUid);
+    return members;
   }
 
   async persistMessage(input: PersistedMessageInput): Promise<PersistedMessageResult> {

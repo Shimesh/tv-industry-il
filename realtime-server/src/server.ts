@@ -464,10 +464,36 @@ export function createRealtimeServer({ persistence }: RealtimeDependencies = { p
       }
     });
 
-    const forwardCallSignal = (payload: { callId: string; chatId?: string; toUid?: string; targetUid?: string; fromUid?: string; signalType: ChatV2CallEventPayload['signalType']; sdp?: string; candidate?: unknown }) => {
+    const forwardCallSignal = async (payload: { callId: string; chatId?: string; toUid?: string; targetUid?: string; fromUid?: string; signalType: ChatV2CallEventPayload['signalType']; sdp?: string; candidate?: unknown }) => {
+      if (!socket.data.authed || !socket.data.uid) {
+        socket.emit(chatV2EventNames.server.errorEvent, createErrorPayload('unauthorized', 'Socket is not authenticated for call signaling'));
+        return;
+      }
+
+      const toUid = payload.toUid ?? payload.targetUid;
+      let authorizedMembers: string[] | null = null;
+
+      if (payload.chatId) {
+        try {
+          authorizedMembers = await persistence.getChatMembers(payload.chatId, socket.data.uid);
+        } catch (error) {
+          socket.emit(chatV2EventNames.server.errorEvent, createErrorPayload('forbidden', 'Call signal rejected for this chat', error instanceof Error ? error.message : error));
+          return;
+        }
+
+        if (toUid && !authorizedMembers.includes(toUid)) {
+          socket.emit(chatV2EventNames.server.errorEvent, createErrorPayload('forbidden', 'Target user is not a member of this chat'));
+          return;
+        }
+      } else if (!toUid) {
+        socket.emit(chatV2EventNames.server.errorEvent, createErrorPayload('invalid_payload', 'Call signal is missing target user'));
+        return;
+      }
+
       const callEvent = {
         ...payload,
-        toUid: payload.toUid ?? payload.targetUid,
+        fromUid: payload.fromUid ?? socket.data.uid,
+        toUid,
         timestamp: Date.now(),
       } satisfies ChatV2CallEventPayload;
 
@@ -481,13 +507,13 @@ export function createRealtimeServer({ persistence }: RealtimeDependencies = { p
       persistence.persistCallEvent(callEvent).catch(() => undefined);
     };
 
-    socket.on(chatV2EventNames.client.callRing, payload => forwardCallSignal({ ...payload, signalType: 'ring' }));
-    socket.on(chatV2EventNames.client.callAccept, payload => forwardCallSignal({ ...payload, signalType: 'accept' }));
-    socket.on(chatV2EventNames.client.callDecline, payload => forwardCallSignal({ ...payload, signalType: 'decline' }));
-    socket.on(chatV2EventNames.client.callOffer, payload => forwardCallSignal({ ...payload, signalType: 'offer' }));
-    socket.on(chatV2EventNames.client.callAnswer, payload => forwardCallSignal({ ...payload, signalType: 'answer' }));
-    socket.on(chatV2EventNames.client.callIce, payload => forwardCallSignal({ ...payload, signalType: 'ice' }));
-    socket.on(chatV2EventNames.client.callEnd, payload => forwardCallSignal({ ...payload, signalType: 'end' }));
+    socket.on(chatV2EventNames.client.callRing, payload => { void forwardCallSignal({ ...payload, signalType: 'ring' }); });
+    socket.on(chatV2EventNames.client.callAccept, payload => { void forwardCallSignal({ ...payload, signalType: 'accept' }); });
+    socket.on(chatV2EventNames.client.callDecline, payload => { void forwardCallSignal({ ...payload, signalType: 'decline' }); });
+    socket.on(chatV2EventNames.client.callOffer, payload => { void forwardCallSignal({ ...payload, signalType: 'offer' }); });
+    socket.on(chatV2EventNames.client.callAnswer, payload => { void forwardCallSignal({ ...payload, signalType: 'answer' }); });
+    socket.on(chatV2EventNames.client.callIce, payload => { void forwardCallSignal({ ...payload, signalType: 'ice' }); });
+    socket.on(chatV2EventNames.client.callEnd, payload => { void forwardCallSignal({ ...payload, signalType: 'end' }); });
 
     socket.on('disconnect', () => {
       if (socket.data.uid) {
