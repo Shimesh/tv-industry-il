@@ -16,6 +16,10 @@ import {
   normalizeMessage,
   trimMessages,
 } from '@/lib/chat-v2/messageModel';
+import {
+  buildSeededGroupRoom,
+  buildSeededPrivateRoom,
+} from '@/lib/chat-v2/roomCreation';
 import type {
   ChatConnectionState,
   ChatRoom,
@@ -1180,6 +1184,100 @@ export function useChat() {
     [legacy]
   );
 
+  const seedCreatedRoom = useCallback(
+    (room: ChatRoom | null) => {
+      if (!room) return;
+
+      updateRoomRecord(room.id, (current) => ({
+        chat: mergeRooms(current.chat, room) ?? room,
+        messages: current.messages,
+        cursor: current.cursor,
+        savedAt: Date.now(),
+      }));
+    },
+    [updateRoomRecord]
+  );
+
+  const createPrivateChat = useCallback(
+    async (otherUserId: string): Promise<string | null> => {
+      const chatId = await legacy.createPrivateChat(otherUserId);
+      if (!chatId || !user) return chatId;
+
+      const existingRoom = resolveRoomBase(chatId);
+      if (existingRoom) {
+        seedCreatedRoom(existingRoom);
+        return chatId;
+      }
+
+      const otherUser = legacy.allUsers.find((candidate) => candidate.uid === otherUserId);
+      if (!otherUser) return chatId;
+
+      seedCreatedRoom(
+        buildSeededPrivateRoom({
+          chatId,
+          currentUser: {
+            uid: user.uid,
+            displayName,
+            photoURL: displayPhoto,
+            isOnline: true,
+            status: 'available',
+          },
+          otherUser: {
+            uid: otherUser.uid,
+            displayName: otherUser.displayName,
+            photoURL: otherUser.photoURL,
+            isOnline: Boolean(otherUser.isOnline),
+            status: otherUser.status,
+          },
+        })
+      );
+
+      return chatId;
+    },
+    [displayName, displayPhoto, legacy, resolveRoomBase, seedCreatedRoom, user]
+  );
+
+  const createGroup = useCallback(
+    async (name: string, memberIds: string[]): Promise<string | null> => {
+      const chatId = await legacy.createGroup(name, memberIds);
+      if (!chatId || !user) return chatId;
+
+      const existingRoom = resolveRoomBase(chatId);
+      if (existingRoom) {
+        seedCreatedRoom(existingRoom);
+        return chatId;
+      }
+
+      const members = memberIds
+        .map((memberId) => legacy.allUsers.find((candidate) => candidate.uid === memberId))
+        .filter((member): member is NonNullable<typeof member> => Boolean(member));
+
+      seedCreatedRoom(
+        buildSeededGroupRoom({
+          chatId,
+          name,
+          currentUser: {
+            uid: user.uid,
+            displayName,
+            photoURL: displayPhoto,
+            isOnline: true,
+            status: 'available',
+          },
+          members: members.map((member) => ({
+            uid: member.uid,
+            displayName: member.displayName,
+            photoURL: member.photoURL,
+            isOnline: Boolean(member.isOnline),
+            status: member.status,
+          })),
+        })
+      );
+
+      return chatId;
+    },
+    [displayName, displayPhoto, legacy, resolveRoomBase, seedCreatedRoom, user]
+  );
+
   const connectionState: ChatConnectionState = useMemo(
     () => ({
       ...transport.connectionState,
@@ -1202,8 +1300,8 @@ export function useChat() {
     setActiveChat,
     sendMessage,
     deleteMessage: legacy.deleteMessage,
-    createPrivateChat: legacy.createPrivateChat,
-    createGroup: legacy.createGroup,
+    createPrivateChat,
+    createGroup,
     setTyping,
     displayName,
     displayPhoto,
