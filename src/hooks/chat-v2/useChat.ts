@@ -711,6 +711,41 @@ export function useChat() {
         setTransportMessages((current) => applyReceiptUpdate(current, payload));
       }
     },
+    onUploadUrl: (payload) => {
+      updateRoomRecord(payload.chatId, (current) => ({
+        ...current,
+        messages: updateMessageLifecycle(current.messages, {
+          chatId: payload.chatId,
+          messageId: payload.clientMessageId,
+          clientMessageId: payload.clientMessageId,
+          upload: {
+            uploadId: payload.uploadId,
+            storagePath: payload.storagePath,
+            url: payload.url ?? null,
+            status: 'uploading',
+            progress: 0,
+          },
+        }),
+        savedAt: Date.now(),
+      }));
+
+      if (activeChatId && payload.chatId === activeChatId) {
+        setTransportMessages((current) =>
+          updateMessageLifecycle(current, {
+            chatId: payload.chatId,
+            messageId: payload.clientMessageId,
+            clientMessageId: payload.clientMessageId,
+            upload: {
+              uploadId: payload.uploadId,
+              storagePath: payload.storagePath,
+              url: payload.url ?? null,
+              status: 'uploading',
+              progress: 0,
+            },
+          })
+        );
+      }
+    },
     onTypingUpdate: handleTypingUpdate,
   });
 
@@ -885,17 +920,34 @@ export function useChat() {
 
         upsertLocalMessage(activeChatId, optimisticMessage, lastMessagePatch);
 
-        const messageSendResponse = (await transport.sendMessage(activeChatId, {
-          clientMessageId,
-          text,
-          kind: type,
-          replyTo: replyTo ?? null,
-          createdAtClient,
-          encrypted: false,
-        })) as { ok?: boolean; error?: string } | null;
+        try {
+          const messageSendResponse = (await transport.sendMessage(activeChatId, {
+            clientMessageId,
+            text,
+            kind: type,
+            replyTo: replyTo ?? null,
+            createdAtClient,
+            encrypted: false,
+          })) as { ok?: boolean; error?: string } | null;
 
-        if (!messageSendResponse?.ok) {
-          throw new Error(messageSendResponse?.error || 'message_send_failed');
+          if (!messageSendResponse?.ok) {
+            throw new Error(messageSendResponse?.error || 'message_send_failed');
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'message_send_failed';
+          updateLocalMessage(
+            activeChatId,
+            (message) => message.clientMessageId === clientMessageId || message.id === clientMessageId,
+            (message) =>
+              normalizeMessage({
+                ...message,
+                status: 'failed',
+                errorCode: errorMessage,
+                localState: 'failed',
+                localStatusText: 'שליחה נכשלה',
+              })
+          );
+          throw error;
         }
       }
 

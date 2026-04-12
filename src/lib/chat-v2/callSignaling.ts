@@ -40,9 +40,7 @@ export async function emitCallSignal(
 
   const socket = getCallSignalingBridge();
   if (!socket.connected) {
-    if (payload.token) {
-      socket.connect({ token: payload.token });
-    }
+    socket.connect(payload.token ? { token: payload.token } : undefined);
   }
 
   if (!socket.connected) return false;
