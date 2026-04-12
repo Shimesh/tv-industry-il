@@ -1194,6 +1194,14 @@ export function useChat() {
         cursor: current.cursor,
         savedAt: Date.now(),
       }));
+
+      saveCachedChatSnapshot({
+        chatId: room.id,
+        chat: room,
+        messages: roomStoreRef.current[room.id]?.messages ?? [],
+        cursor: roomStoreRef.current[room.id]?.cursor ?? 0,
+        savedAt: Date.now(),
+      });
     },
     [updateRoomRecord]
   );
