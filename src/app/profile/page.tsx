@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import {
@@ -31,7 +31,7 @@ export default function ProfilePage() {
 
 function ProfileContent() {
   const { profile, updateUserProfile, logout } = useAuth();
-  const { contacts: contactsList } = useContacts();
+  const { contacts: contactsList } = useAppData();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);

@@ -1,20 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   collection,
-  getDocs,
+  onSnapshot,
   doc,
   writeBatch,
-  deleteDoc,
-  updateDoc,
   serverTimestamp,
-  type DocumentData,
   type QueryDocumentSnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
-import { contacts as staticContacts, type Contact } from '@/data/contacts';
+import { type Contact } from '@/data/contacts'; // אנחנו מייבאים רק את סוג הנתונים (Type), לא את הרשימה הסטטית!
 import { splitName, inferDepartment } from '@/lib/contactsUtils';
 import {
   deduplicateCrewEntries,
@@ -24,129 +22,15 @@ import {
 } from '@/lib/crewNormalization';
 import type { CrewMember } from '@/lib/productionDiff';
 
-export interface DuplicateContactRecord {
-  key: string;
-  type: 'name' | 'phone';
-  count: number;
-}
-
 export interface ContactsHookResult {
   contacts: Contact[];
   loading: boolean;
-  ready: boolean; // true once real data (localStorage or Firestore) is loaded
-  duplicateContactsReport: DuplicateContactRecord[];
+  ready: boolean;
   ensureFromCrew: (crew: CrewMember[]) => Promise<void>;
 }
 
-type IndexedContact = Contact & {
-  source: 'static' | 'firestore';
-  firestoreId?: string;
-  normalizedName: string;
-  normalizedPhone: string | null;
-};
-
-let cachedMergedContacts: Contact[] | null = null;
-let cachedFirestoreContacts: Contact[] = [];
-let cachedDuplicateReport: DuplicateContactRecord[] = [];
-let cacheLoadedAt = 0;
-const CACHE_TTL_MS = 45_000;
-const LS_KEY = 'contacts_cache_v1';
-const LS_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
-function loadLocalCache(): Contact[] | null {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(LS_KEY) : null;
-    if (!raw) return null;
-    const { contacts, savedAt } = JSON.parse(raw) as { contacts: Contact[]; savedAt: number };
-    if (Date.now() - savedAt > LS_TTL_MS) return null;
-    return contacts;
-  } catch { return null; }
-}
-
-function saveLocalCache(contacts: Contact[]) {
-  try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(LS_KEY, JSON.stringify({ contacts, savedAt: Date.now() }));
-    }
-  } catch { /* storage full or unavailable */ }
-}
-
-function toIndexedContact(contact: Contact, source: 'static' | 'firestore', firestoreId?: string): IndexedContact {
-  const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
-  return {
-    ...contact,
-    source,
-    firestoreId,
-    normalizedName: normalizeName(fullName),
-    normalizedPhone: normalizePhone(contact.phone || null),
-  };
-}
-
-function mergeContacts(base: Contact[], extra: Contact[]): Contact[] {
-  const map = new Map<string, Contact>();
-
-  const upsert = (c: Contact, priority: boolean) => {
-    const fullName = `${c.firstName || ''} ${c.lastName || ''}`.trim();
-    const key = normalizeName(fullName) || String(c.id);
-    const existing = map.get(key);
-    if (!existing) {
-      map.set(key, { ...c });
-      return;
-    }
-
-    if (priority) {
-      // Firestore (extra) data wins, fall back to existing for missing fields
-      map.set(key, {
-        ...existing,
-        ...c,
-        phone: c.phone || existing.phone,
-        role: c.role || existing.role,
-        department: c.department || existing.department,
-        availability: c.availability || existing.availability,
-      });
-    } else {
-      // Static (base) data: only fill in if no existing record
-      map.set(key, {
-        ...existing,
-        phone: existing.phone || c.phone,
-        role: existing.role || c.role,
-        department: existing.department || c.department,
-        availability: existing.availability || c.availability,
-      });
-    }
-  };
-
-  base.forEach((c) => upsert(c, false));
-  extra.forEach((c) => upsert(c, true));
-  return Array.from(map.values());
-}
-
-function buildDuplicateReport(indexed: IndexedContact[]): DuplicateContactRecord[] {
-  const nameCount = new Map<string, number>();
-  const phoneCount = new Map<string, number>();
-
-  indexed.forEach((item) => {
-    if (item.normalizedName) {
-      nameCount.set(item.normalizedName, (nameCount.get(item.normalizedName) || 0) + 1);
-    }
-    if (item.normalizedPhone) {
-      phoneCount.set(item.normalizedPhone, (phoneCount.get(item.normalizedPhone) || 0) + 1);
-    }
-  });
-
-  const report: DuplicateContactRecord[] = [];
-  nameCount.forEach((count, key) => {
-    if (count > 1) report.push({ key, type: 'name', count });
-  });
-  phoneCount.forEach((count, key) => {
-    if (count > 1) report.push({ key, type: 'phone', count });
-  });
-
-  return report;
-}
-
 function mapSnapshotToContact(d: QueryDocumentSnapshot<DocumentData>): Contact {
-  const data = d.data() as Record<string, unknown>;
+  const data = d.data();
   return {
     id: d.id,
     firstName: String(data.firstName || ''),
@@ -160,237 +44,63 @@ function mapSnapshotToContact(d: QueryDocumentSnapshot<DocumentData>): Contact {
   };
 }
 
-/**
- * Silently resolves duplicate contacts:
- * - Groups by normalized name
- * - Merges info (phone, role, department) into the best record
- * - Deletes redundant Firestore records
- */
-async function autoResolveDuplicates(indexed: IndexedContact[], firestoreContacts: Contact[]) {
-  try {
-    const byName = new Map<string, IndexedContact[]>();
-    for (const c of indexed) {
-      if (!c.normalizedName || c.normalizedName.length < 2) continue;
-      const group = byName.get(c.normalizedName) || [];
-      group.push(c);
-      byName.set(c.normalizedName, group);
-    }
-
-    const batch = writeBatch(db);
-    let batchCount = 0;
-    const MAX_BATCH = 450; // Firestore batch limit is 500
-
-    for (const [, group] of byName) {
-      if (group.length < 2) continue;
-      if (batchCount >= MAX_BATCH) break;
-
-      // Pick the best record: prefer one with phone, then firestore over static
-      const sorted = [...group].sort((a, b) => {
-        if (a.normalizedPhone && !b.normalizedPhone) return -1;
-        if (!a.normalizedPhone && b.normalizedPhone) return 1;
-        if (a.source === 'firestore' && b.source !== 'firestore') return -1;
-        if (a.source !== 'firestore' && b.source === 'firestore') return 1;
-        return 0;
-      });
-
-      const winner = sorted[0];
-      const losers = sorted.slice(1);
-
-      // Merge missing info into winner
-      let needsUpdate = false;
-      for (const loser of losers) {
-        if (!winner.phone && loser.phone) { winner.phone = loser.phone; winner.normalizedPhone = loser.normalizedPhone; needsUpdate = true; }
-        if (!winner.role && loser.role) { winner.role = loser.role; needsUpdate = true; }
-        if (!winner.department && loser.department) { winner.department = loser.department; needsUpdate = true; }
-        if (!winner.email && loser.email) { winner.email = loser.email; needsUpdate = true; }
-      }
-
-      // Update winner in Firestore if it gained new info
-      if (needsUpdate && winner.source === 'firestore' && winner.firestoreId) {
-        batch.update(doc(db, 'contacts', winner.firestoreId), {
-          phone: winner.phone || null,
-          role: winner.role || '',
-          department: winner.department || '',
-          updatedAt: serverTimestamp(),
-        });
-        batchCount++;
-      }
-
-      // If winner is static and gained info from firestore losers, persist it as a new firestore record
-      if (needsUpdate && winner.source === 'static') {
-        const newRef = doc(collection(db, 'contacts'));
-        batch.set(newRef, {
-          firstName: winner.firstName || '',
-          lastName: winner.lastName || '',
-          phone: winner.phone || null,
-          role: winner.role || '',
-          department: winner.department || '',
-          availability: winner.availability || 'available',
-          source: 'merged',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        batchCount++;
-      }
-
-      // Delete loser Firestore records
-      for (const loser of losers) {
-        if (loser.source === 'firestore' && loser.firestoreId) {
-          batch.delete(doc(db, 'contacts', loser.firestoreId));
-          batchCount++;
-        }
-      }
-    }
-
-    if (batchCount > 0) {
-      await batch.commit();
-      // Invalidate cache so next load picks up clean data
-      cachedMergedContacts = null;
-      cacheLoadedAt = 0;
-      console.log(`[useContacts] Auto-resolved ${batchCount} duplicate contact operations`);
-    }
-  } catch (err) {
-    console.warn('[useContacts] Auto-resolve duplicates failed:', err);
-  }
-}
-
 export function useContacts(): ContactsHookResult {
   const { user } = useAuth();
-  const [contacts, setContacts] = useState<Contact[]>(() => {
-    if (cachedMergedContacts) return cachedMergedContacts;
-    const local = loadLocalCache();
-    if (local) { cachedMergedContacts = local; return local; }
-    return staticContacts;
-  });
-  const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(() => {
-    // ready immediately if we have cached/localStorage data
-    if (cachedMergedContacts) return true;
-    return loadLocalCache() !== null;
-  });
-  const [duplicateContactsReport, setDuplicateContactsReport] = useState<DuplicateContactRecord[]>(cachedDuplicateReport);
-
-  const loadedRef = useRef(false);
-  const alertShownRef = useRef(false);
-  const indexedContactsRef = useRef<IndexedContact[]>([]);
+  // מתחילים עם מערך ריק לחלוטין - אין יותר 91 רוחות רפאים!
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
+    if (!user) {
+      setContacts([]);
+      setLoading(false);
+      setReady(false);
+      return;
+    }
 
-    const load = async () => {
-      if (!user) {
-        // Don't overwrite cached/localStorage data just because auth hasn't resolved yet.
-        // Only fall back to static if we truly have no cached data at all.
-        if (mounted && !cachedMergedContacts) {
-          const local = loadLocalCache();
-          if (!local) {
-            setContacts(staticContacts);
-            setDuplicateContactsReport([]);
-          }
-        }
-        return;
-      }
+    setLoading(true);
 
-      const now = Date.now();
-      if (cachedMergedContacts && now - cacheLoadedAt < CACHE_TTL_MS) {
-        if (mounted) {
-          setContacts(cachedMergedContacts);
-          setDuplicateContactsReport(cachedDuplicateReport);
-          indexedContactsRef.current = [
-            ...staticContacts.map((c) => toIndexedContact(c, 'static')),
-            ...cachedFirestoreContacts.map((c) => toIndexedContact(c, 'firestore', String(c.id))),
-          ];
-          loadedRef.current = true;
-        }
-        return;
-      }
+    // האזנה חיה (Real-time) לפיירבייס.
+    // בזכות ה-Offline Persistence שהפעלנו, זה ייטען מיידית מהזיכרון של הטלפון!
+    const unsubscribe = onSnapshot(collection(db, 'contacts'), (snapshot) => {
+      const firestoreContacts = snapshot.docs.map(mapSnapshotToContact);
+      setContacts(firestoreContacts);
+      setReady(true);
+      setLoading(false);
+    }, (error) => {
+      console.error("[useContacts] Error listening to contacts:", error);
+      setLoading(false);
+    });
 
-      setLoading(true);
-
-      try {
-        const snap = await getDocs(collection(db, 'contacts'));
-        const firestoreContacts = snap.docs.map(mapSnapshotToContact);
-        // Merge: start from localStorage/cached data so Firestore being empty doesn't erase local data
-        const base = cachedMergedContacts && cachedMergedContacts.length > staticContacts.length
-          ? cachedMergedContacts
-          : staticContacts;
-        const merged = mergeContacts(base, firestoreContacts);
-
-        const indexed = [
-          ...staticContacts.map((c) => toIndexedContact(c, 'static')),
-          ...firestoreContacts.map((c) => toIndexedContact(c, 'firestore', String(c.id))),
-        ];
-
-        const report = buildDuplicateReport(indexed);
-
-        if (!mounted) return;
-        setContacts(merged);
-        setDuplicateContactsReport(report);
-        setReady(true);
-        indexedContactsRef.current = indexed;
-        loadedRef.current = true;
-
-        cachedMergedContacts = merged;
-        cachedFirestoreContacts = firestoreContacts;
-        cachedDuplicateReport = report;
-        cacheLoadedAt = Date.now();
-        saveLocalCache(merged);
-
-        // Auto-resolve duplicates silently
-        if (report.length > 0 && !alertShownRef.current) {
-          alertShownRef.current = true;
-          void autoResolveDuplicates(indexed, firestoreContacts);
-        }
-      } catch {
-        if (!mounted) return;
-        setContacts(staticContacts);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      mounted = false;
-    };
+    return () => unsubscribe();
   }, [user]);
 
   const ensureFromCrew = useCallback(async (crew: CrewMember[]) => {
-    if (!user || !crew?.length) return;
-
-    // If contacts aren't loaded yet, build index from cached/static data so we don't miss writes
-    if (!loadedRef.current) {
-      const base = cachedMergedContacts || staticContacts;
-      if (base.length > 0 && indexedContactsRef.current.length === 0) {
-        indexedContactsRef.current = base.map(c => toIndexedContact(c, 'static'));
-      }
-      // Still proceed — better to create a duplicate (auto-resolved later) than miss the data
-    }
+    if (!user || !crew?.length || !ready) return;
 
     const normalizedCrew = deduplicateCrewEntries(crew);
     if (!normalizedCrew.length) return;
 
-    const byName = new Map<string, IndexedContact[]>();
-    const byPhone = new Map<string, IndexedContact[]>();
-    for (const contact of indexedContactsRef.current) {
-      if (contact.normalizedName) {
-        const existing = byName.get(contact.normalizedName) || [];
-        existing.push(contact);
-        byName.set(contact.normalizedName, existing);
-      }
-      if (contact.normalizedPhone) {
-        const existing = byPhone.get(contact.normalizedPhone) || [];
-        existing.push(contact);
-        byPhone.set(contact.normalizedPhone, existing);
-      }
-    }
+    // בונים רשימת חיפוש מהירה מתוך הנתונים שכבר יש לנו מפיירבייס
+    const existingNames = new Set(contacts.map(c => normalizeName(`${c.firstName} ${c.lastName}`)).filter(Boolean));
+    const existingPhones = new Set(contacts.map(c => normalizePhone(c.phone)).filter(Boolean));
 
     const batch = writeBatch(db);
-    const updates: Array<{ id: string; phone: string }> = [];
-    const creates: Contact[] = [];
+    let addedCount = 0;
 
-    const queueCreate = (member: CrewMember, nameKey: string, phoneKey: string | null) => {
+    for (const member of normalizedCrew) {
+      const nameKey = normalizeName(member.name || '');
+      const phoneKey = normalizePhone(member.phone);
+
+      if (!nameKey || nameKey.length < 2) continue;
+
+      // אם איש הצוות כבר קיים במסד הנתונים (לפי שם או טלפון), מדלגים
+      if (existingNames.has(nameKey) || (phoneKey && existingPhones.has(phoneKey))) {
+          continue;
+      }
+
+      // יצירת איש צוות חדש
       const { firstName, lastName } = splitName(nameKey);
       const role = normalizeRole(member.roleDetail || member.role || '');
       const department = inferDepartment(role);
@@ -399,109 +109,26 @@ export function useContacts(): ContactsHookResult {
       batch.set(newRef, {
         firstName,
         lastName,
-        phone: phoneKey,
+        phone: phoneKey || null,
         role,
         department,
         availability: 'available',
-        source: 'schedule',
+        source: 'schedule', // סמן שנוסף מהלוח
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      const created: Contact = {
-        id: newRef.id,
-        firstName,
-        lastName,
-        phone: phoneKey || undefined,
-        role,
-        department,
-        availability: 'available',
-      };
-
-      creates.push(created);
-      const indexed = toIndexedContact(created, 'firestore', newRef.id);
-      indexedContactsRef.current.push(indexed);
-      byName.set(nameKey, [...(byName.get(nameKey) || []), indexed]);
-      if (phoneKey) byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), indexed]);
-    };
-
-    for (const member of normalizedCrew) {
-      const nameKey = normalizeName(member.name || '');
-      const phoneKey = normalizePhone(member.phone);
-      if (!nameKey || nameKey.length < 2) continue;
-
-      const sameName = byName.get(nameKey) || [];
-      const strongMatch = phoneKey ? sameName.find((c) => c.normalizedPhone === phoneKey) : undefined;
-      if (strongMatch) continue;
-
-      const weakMatch = sameName[0];
-      if (weakMatch) {
-        if (
-          phoneKey &&
-          !weakMatch.normalizedPhone &&
-          weakMatch.source === 'firestore' &&
-          weakMatch.firestoreId
-        ) {
-          updates.push({ id: weakMatch.firestoreId, phone: phoneKey });
-          weakMatch.phone = phoneKey;
-          weakMatch.normalizedPhone = phoneKey;
-          byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), weakMatch]);
-        } else if (phoneKey && !weakMatch.normalizedPhone && weakMatch.source === 'static') {
-          if (!byPhone.get(phoneKey)?.length) {
-            queueCreate(member, nameKey, phoneKey);
-          }
-        }
-        continue;
-      }
-
-      if (phoneKey) {
-        const byPhoneMatch = byPhone.get(phoneKey)?.[0];
-        if (byPhoneMatch) {
-          continue;
-        }
-      }
-
-      queueCreate(member, nameKey, phoneKey);
+      // מוסיפים לרשימה המקומית כדי למנוע כפילויות באותו הוספה (Batch)
+      existingNames.add(nameKey);
+      if (phoneKey) existingPhones.add(phoneKey);
+      addedCount++;
     }
 
-    for (const update of updates) {
-      batch.update(doc(db, 'contacts', update.id), {
-        phone: update.phone,
-        updatedAt: serverTimestamp(),
-      });
+    if (addedCount > 0) {
+      await batch.commit();
+      console.log(`[useContacts] Added ${addedCount} new crew members from schedule.`);
     }
+  }, [user, contacts, ready]);
 
-    if (!updates.length && !creates.length) return;
-
-    await batch.commit();
-
-    setContacts((prev) => {
-      const updated = prev.map((item) => {
-        const match = updates.find((u) => String(item.id) === u.id);
-        return match ? { ...item, phone: match.phone } : item;
-      });
-      const merged = mergeContacts(updated, creates);
-      cachedMergedContacts = merged;
-      const createdFirestore = creates.map((c) => ({ ...c }));
-      cachedFirestoreContacts = [
-        ...cachedFirestoreContacts.map((c) => {
-          const match = updates.find((u) => String(c.id) === u.id);
-          return match ? { ...c, phone: match.phone } : c;
-        }),
-        ...createdFirestore,
-      ];
-      cacheLoadedAt = Date.now();
-      saveLocalCache(merged);
-      return merged;
-    });
-
-    setDuplicateContactsReport((prev) => {
-      const indexed = indexedContactsRef.current;
-      const nextReport = buildDuplicateReport(indexed);
-      cachedDuplicateReport = nextReport;
-      return nextReport.length ? nextReport : [];
-    });
-  }, [user]);
-
-  return { contacts, loading, ready, duplicateContactsReport, ensureFromCrew };
+  return { contacts, loading, ready, ensureFromCrew };
 }

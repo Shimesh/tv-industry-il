@@ -26,7 +26,7 @@ import {
   normalizeName,
   normalizeRole,
 } from '@/lib/crewNormalization';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search } from 'lucide-react';
@@ -81,7 +81,7 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
-  const { ensureFromCrew } = useContacts();
+  const { ensureFromCrew } = useAppData();
   const { addNotification } = useNotifications();
   const { teams } = useTeam();
   const searchParams = useSearchParams();

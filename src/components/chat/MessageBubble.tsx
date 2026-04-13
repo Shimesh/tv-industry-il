@@ -196,6 +196,23 @@ export default function MessageBubble({
   const isPending = isOwn && message.localState === 'sending';
   const isFailed = isOwn && message.localState === 'failed';
 
+  if (message.deletedAt) {
+    return (
+      <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-[3px] px-[4.5%]`}>
+        {!isOwn && isGroup && <div className="w-[34px] shrink-0" />}
+        <div
+          className={`flex items-center gap-1.5 px-[9px] py-[6px] rounded-[7.5px] shadow-sm ${
+            isOwn ? 'rounded-tr-[0px] bg-[#005C4B]' : 'rounded-tl-[0px] bg-[#202C33]'
+          }`}
+        >
+          <span className="text-[13px] italic text-[#8696a0]">
+            {isOwn ? 'מחקת הודעה זו' : 'הודעה זו נמחקה'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   if (message.type === 'system') {
     return (
       <div className="flex justify-center my-3 px-4">

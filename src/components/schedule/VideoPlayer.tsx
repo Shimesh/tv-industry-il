@@ -26,18 +26,50 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const [loading, setLoading] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load HLS stream
+  // Dynamic stream state for channels resolved at runtime
+  const [dynamicStreamUrl, setDynamicStreamUrl] = useState<string | null>(null);
+  const [dynamicEmbedUrl, setDynamicEmbedUrl] = useState<string | null>(null);
+  const [dynamicLoading, setDynamicLoading] = useState(false);
+
+  // Reset dynamic state when channel changes
   useEffect(() => {
-    if (!videoRef.current || !stream?.streamUrl) return;
+    setDynamicStreamUrl(null);
+    setDynamicEmbedUrl(null);
+    setError(null);
+  }, [channel.id]);
+
+  // Fetch stream URL at runtime for channels with dynamicStream flag
+  useEffect(() => {
+    if (!stream?.dynamicStream) return;
+
+    setDynamicLoading(true);
+    setError(null);
+
+    fetch(`/api/stream-token/${channel.id}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.type === 'kaltura' && data.embedUrl) {
+          setDynamicEmbedUrl(data.embedUrl);
+        } else if (data?.url) {
+          setDynamicStreamUrl(data.url);
+        }
+        // No URL found → fall through to placeholder (no error overlay)
+      })
+      .catch(() => { /* network error → fall through to placeholder */ })
+      .finally(() => setDynamicLoading(false));
+  }, [channel.id, stream?.dynamicStream]);
+
+  // Load HLS stream (either static streamUrl or dynamic URL fetched from API)
+  useEffect(() => {
+    const hlsUrl = dynamicStreamUrl ?? stream?.streamUrl;
+    if (!videoRef.current || !hlsUrl) return;
 
     let hlsInstance: import('hls.js').default | null = null;
     setLoading(true);
     setError(null);
 
     const loadStream = async () => {
-      const url = stream.streamUrl!;
-
-      if (url.includes('.m3u8')) {
+      if (hlsUrl.includes('.m3u8')) {
         const HlsModule = await import('hls.js');
         const Hls = HlsModule.default;
 
@@ -46,7 +78,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             enableWorker: true,
             lowLatencyMode: true,
           });
-          hlsInstance.loadSource(url);
+          hlsInstance.loadSource(hlsUrl);
           hlsInstance.attachMedia(videoRef.current!);
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             videoRef.current?.play().then(() => {
@@ -64,7 +96,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           });
         } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari native HLS
-          videoRef.current.src = url;
+          videoRef.current.src = hlsUrl;
           videoRef.current.play().then(() => {
             setIsPlaying(true);
             setLoading(false);
@@ -81,7 +113,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     return () => {
       hlsInstance?.destroy();
     };
-  }, [stream?.streamUrl]);
+  }, [stream?.streamUrl, dynamicStreamUrl]);
 
   // Set volume on video element
   useEffect(() => {
@@ -143,7 +175,18 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     objectFit: 'contain' as const,
   };
 
-  const hasDirectStream = stream?.hasLiveStream && stream?.streamUrl;
+  // Resolve final URLs: HLS takes priority over iframe embed
+  const resolvedEmbedUrl = stream?.embedUrl ?? dynamicEmbedUrl;
+  const resolvedHlsUrl = stream?.streamUrl ?? dynamicStreamUrl;
+  const hasDirectStream = !!resolvedHlsUrl;
+  const hasEmbed = !!resolvedEmbedUrl;
+
+  // Rendering priority: HLS stream > iframe embed > loading spinner > fallback placeholder
+  const showHls = hasDirectStream && !error;
+  const showEmbed = !showHls && hasEmbed && !error;
+  const showLiveBadge = showHls || showEmbed;
+  const showDynamicLoading = !!(stream?.dynamicStream && dynamicLoading && !hasDirectStream && !hasEmbed);
+  const showFallback = !showEmbed && !showHls && !showDynamicLoading;
 
   return (
     <div
@@ -153,7 +196,16 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       onMouseMove={resetHideTimer}
       onClick={resetHideTimer}
     >
-      {hasDirectStream ? (
+      {showEmbed ? (
+        <iframe
+          key={resolvedEmbedUrl}
+          src={resolvedEmbedUrl}
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          className="absolute inset-0 w-full h-full border-0"
+          title={channel.name}
+        />
+      ) : showHls ? (
         <>
           <video
             ref={videoRef}
@@ -175,7 +227,15 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             </div>
           )}
         </>
-      ) : (
+      ) : showDynamicLoading ? (
+        /* Fetching dynamic stream URL */
+        <div className="absolute inset-0 flex items-center justify-center bg-black">
+          <div className="flex flex-col items-center gap-3 text-white">
+            <div className="w-10 h-10 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+            <span className="text-white/70 text-sm">מתחבר לשידור...</span>
+          </div>
+        </div>
+      ) : showFallback ? (
         /* No direct stream - styled placeholder */
         <div className="flex flex-col items-center justify-center h-full text-white relative overflow-hidden">
           {/* Animated background gradient */}
@@ -238,7 +298,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             )}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Error overlay */}
       {error && (
@@ -264,7 +324,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
         <div className="absolute top-0 inset-x-0 bg-gradient-to-b from-black/70 to-transparent p-3 sm:p-4 pointer-events-auto">
           <div className="flex items-center justify-between text-white">
             <div className="flex items-center gap-2.5">
-              {(hasDirectStream || stream?.type === 'youtube') && (
+              {showLiveBadge && (
                 <span className="bg-red-600 px-2 py-0.5 rounded text-[10px] font-black tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                   LIVE
@@ -326,8 +386,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
               ⏮
             </button>
 
-            {/* Play/Pause */}
-            {hasDirectStream && (
+            {/* Play/Pause (HLS only) */}
+            {showHls && (
               <button
                 onClick={togglePlay}
                 className="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center hover:bg-white/25 transition-colors text-sm"
@@ -341,20 +401,22 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
               ⏭
             </button>
 
-            {/* Volume */}
-            <div className="flex items-center gap-1.5 max-w-28">
-              <button
-                onClick={() => setVolume(v => v === 0 ? 80 : 0)}
-                className="text-sm shrink-0 hover:text-blue-400 transition-colors"
-              >
-                {volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}
-              </button>
-              <input
-                type="range" min="0" max="100" value={volume}
-                onChange={e => setVolume(Number(e.target.value))}
-                className="w-full accent-white h-0.5 cursor-pointer"
-              />
-            </div>
+            {/* Volume (HLS only — iframe controls its own audio) */}
+            {showHls && (
+              <div className="flex items-center gap-1.5 max-w-28">
+                <button
+                  onClick={() => setVolume(v => v === 0 ? 80 : 0)}
+                  className="text-sm shrink-0 hover:text-blue-400 transition-colors"
+                >
+                  {volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}
+                </button>
+                <input
+                  type="range" min="0" max="100" value={volume}
+                  onChange={e => setVolume(Number(e.target.value))}
+                  className="w-full accent-white h-0.5 cursor-pointer"
+                />
+              </div>
+            )}
 
             {/* Spacer */}
             <div className="flex-1" />

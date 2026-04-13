@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { normalizeContactName } from '@/lib/contactsUtils';
 import { deduplicateCrewEntries, normalizePhone } from '@/lib/crewNormalization';
 import { X, MapPin, Clock, Users, Phone, PhoneOff, Star, MessageCircle } from 'lucide-react';
@@ -206,7 +206,7 @@ const shareMenuVariants = {
 export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeDepartment, setActiveDepartment] = useState<Department | 'הכל'>('הכל');
-  const { contacts, ensureFromCrew } = useContacts();
+  const { contacts, ensureFromCrew } = useAppData();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, contacts);

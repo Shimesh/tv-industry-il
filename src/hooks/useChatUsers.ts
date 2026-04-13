@@ -47,11 +47,11 @@ export function useChatUsers(): UserProfile[] {
       };
       return (payload.documents ?? []).flatMap((d) => {
         const uid = d.name?.split('/').pop() || '';
-        if (!uid) return [];
+        if (!uid) return [] as UserProfile[];
         const f = d.fields ?? {};
         const str = (key: string) => (f[key]?.stringValue ? String(f[key].stringValue) : '');
         const bool = (key: string) => Boolean(f[key]?.booleanValue);
-        return [{
+        const profile: UserProfile = {
           uid,
           displayName: str('displayName'),
           email: str('email'),
@@ -66,7 +66,8 @@ export function useChatUsers(): UserProfile[] {
           onboardingComplete: bool('onboardingComplete'),
           skills: [],
           encryptionPublicKey: str('encryptionPublicKey') || undefined,
-        } satisfies UserProfile];
+        };
+        return [profile];
       });
     } catch {
       return [];

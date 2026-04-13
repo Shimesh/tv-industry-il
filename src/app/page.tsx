@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { contacts } from '@/data/contacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { mockJobs } from '@/data/jobs';
 import { channels, generateSchedule, getCurrentProgram } from '@/data/channels';
 import { industryEvents, categoryLabels } from '@/data/news';
@@ -83,8 +83,8 @@ function getGreeting(): string {
 }
 
 export default function HomePage() {
-  const availableCount = contacts.filter(c => c.availability === 'available').length;
-  const openToWorkCount = contacts.filter(c => c.openToWork).length;
+  // Single source of truth — live count synced with Firestore via shared context
+  const { contacts, totalCount, availableCount, openToWorkCount } = useAppData();
   const uniqueDepts = new Set(contacts.map(c => c.department)).size;
 
   const [greeting, setGreeting] = useState('');
@@ -102,7 +102,7 @@ export default function HomePage() {
   }, []);
 
   const stats = [
-    { label: 'אנשי מקצוע', value: contacts.length, icon: Users, color: 'bg-purple-500' },
+    { label: 'אנשי מקצוע', value: totalCount, icon: Users, color: 'bg-purple-500' },
     { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: 'bg-green-500' },
     { label: 'ערוצי טלוויזיה', value: channels.length, icon: Tv, color: 'bg-blue-500' },
     { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: 'bg-orange-500' },
@@ -111,7 +111,7 @@ export default function HomePage() {
   const newsCount = liveNews.length || 0;
   const allNavItems = [
     { href: '/schedule', label: 'לוח שידורים', desc: 'לוח שידורים חי של כל הערוצים', icon: Calendar, gradient: 'from-blue-600 to-cyan-500', iconBg: 'bg-blue-500/15', preview: `${channels.length} ערוצים` },
-    { href: '/directory', label: 'אלפון מקצועי', desc: `${contacts.length} אנשי מקצוע • ${availableCount} זמינים`, icon: Users, gradient: 'from-purple-600 to-pink-500', iconBg: 'bg-purple-500/15', preview: `${uniqueDepts} מחלקות` },
+    { href: '/directory', label: 'אלפון מקצועי', desc: `${totalCount} אנשי מקצוע • ${availableCount} זמינים`, icon: Users, gradient: 'from-purple-600 to-pink-500', iconBg: 'bg-purple-500/15', preview: `${uniqueDepts} מחלקות` },
     { href: '/chat', label: 'צ\'אט מקצועי', desc: 'שוחחו עם קולגות בזמן אמת', icon: MessageCircle, gradient: 'from-green-600 to-emerald-500', iconBg: 'bg-green-500/15', preview: 'הודעות חדשות' },
     { href: '/news', label: 'חדשות ואירועים', desc: 'כותרות בזמן אמת מאתרי חדשות', icon: Newspaper, gradient: 'from-emerald-600 to-teal-500', iconBg: 'bg-emerald-500/15', preview: newsCount > 0 ? `${newsCount}+ כתבות` : 'חדשות חמות' },
     { href: '/board', label: 'לוח מודעות', desc: 'דרושים, ציוד ושיתופי פעולה', icon: Megaphone, gradient: 'from-amber-600 to-yellow-500', iconBg: 'bg-amber-500/15', preview: 'מודעות חמות' },

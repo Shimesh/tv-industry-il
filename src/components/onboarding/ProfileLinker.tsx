@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, X, Search, Link2, UserCheck } from 'lucide-react';
 
@@ -57,7 +57,7 @@ function OnboardingModal({
   onDismiss: () => void;
 }) {
   const [step, setStep] = useState(1);
-  const { contacts: contactsList } = useContacts();
+  const { contacts: contactsList } = useAppData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContact, setSelectedContact] = useState<any | null>(null);
   const [form, setForm] = useState({

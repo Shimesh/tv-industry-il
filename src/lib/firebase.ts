@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+// הוספנו כאן את הכלים לאתחול חכם וזיכרון מקומי
+import { getFirestore, initializeFirestore, persistentLocalCache } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
@@ -15,7 +16,24 @@ const firebaseConfig = {
 // Singleton - only initialize once
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const db = getFirestore(app);
+// הגדרה חכמה של Firestore (שלב 1 שלנו)
+let firestoreDb;
+try {
+  if (typeof window !== 'undefined') {
+    // אנחנו רצים בדפדפן של המשתמש - אפשר להפעיל זיכרון מקומי!
+    firestoreDb = initializeFirestore(app, {
+      localCache: persistentLocalCache()
+    });
+  } else {
+    // אנחנו רצים בשרת (SSR) - אתחול רגיל בלי זיכרון מקומי
+    firestoreDb = getFirestore(app);
+  }
+} catch (error) {
+  // רשת ביטחון: במקרה של Hot Reload בסביבת הפיתוח שגורם לאתחול כפול
+  firestoreDb = getFirestore(app);
+}
+
+export const db = firestoreDb;
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();

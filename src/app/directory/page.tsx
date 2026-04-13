@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 import AuthGuard from '@/components/AuthGuard';
@@ -85,7 +85,7 @@ export default function DirectoryPage() {
 
 function DirectoryContent() {
   const { profile, loading: authLoading } = useAuth();
-  const { contacts: contactsList, loading: contactsLoading } = useContacts();
+  const { contacts: contactsList, contactsLoading } = useAppData();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
@@ -227,50 +227,6 @@ function DirectoryContent() {
               />
             </div>
 
-            {/* Department Filter Pills */}
-            <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-              <motion.button
-                variants={filterPillVariants}
-                animate={!deptFilter ? 'active' : 'inactive'}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setDeptFilter('')}
-                className={`px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
-                  !deptFilter
-                    ? 'border-purple-500/50 bg-purple-500/15 text-purple-300 shadow-sm shadow-purple-500/10'
-                    : 'hover:border-purple-500/30'
-                }`}
-                style={deptFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
-              >
-                הכל
-              </motion.button>
-              {departments.map(d => {
-                const isActive = deptFilter === d.label;
-                return (
-                  <motion.button
-                    key={d.id}
-                    variants={filterPillVariants}
-                    animate={isActive ? 'active' : 'inactive'}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setDeptFilter(isActive ? '' : d.label)}
-                    className={`relative px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
-                      isActive
-                        ? 'border-purple-500/50 bg-purple-500/15 text-purple-300 shadow-sm shadow-purple-500/10'
-                        : 'hover:border-purple-500/30'
-                    }`}
-                    style={!isActive ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
-                  >
-                    {d.icon} {d.label}
-                    {/* Floating count badge */}
-                    <span className={`absolute -top-2 -left-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                      isActive ? 'bg-purple-500 text-white' : 'bg-gray-600/80 text-gray-300'
-                    }`}>
-                      {deptCounts[d.label] || 0}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </div>
-
             {/* Availability Filter */}
             <select
               value={availFilter}
@@ -342,6 +298,56 @@ function DirectoryContent() {
               </motion.button>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Department Filter — large card buttons */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-2">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {/* All */}
+          <motion.button
+            whileHover={{ y: -3, transition: { duration: 0.2 } }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setDeptFilter('')}
+            className={`relative p-4 rounded-2xl border text-center transition-all duration-300 overflow-hidden ${
+              !deptFilter ? 'border-purple-500/50 shadow-lg shadow-purple-500/10' : 'hover:shadow-md'
+            }`}
+            style={deptFilter ? { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' } : undefined}
+          >
+            <div className={`absolute inset-0 bg-gradient-to-br from-purple-500 to-violet-600 transition-opacity duration-300 ${!deptFilter ? 'opacity-15' : 'opacity-0'}`} />
+            <div className="relative">
+              <span className="text-2xl block">🔍</span>
+              <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{contactsList.length}</div>
+              <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>הכל</div>
+            </div>
+          </motion.button>
+
+          {departments.map((dept, i) => {
+            const count = deptCounts[dept.label] || 0;
+            const isActive = deptFilter === dept.label;
+            return (
+              <motion.button
+                key={dept.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04, duration: 0.3 }}
+                whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setDeptFilter(isActive ? '' : dept.label)}
+                className={`relative p-4 rounded-2xl border text-center transition-all duration-300 overflow-hidden ${
+                  isActive ? 'border-purple-500/50 shadow-lg shadow-purple-500/10' : 'hover:shadow-md'
+                } ${deptGlowColors[dept.label] || ''}`}
+                style={!isActive ? { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' } : undefined}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${deptColors[dept.label] || 'from-gray-500 to-gray-600'} transition-opacity duration-300 ${isActive ? 'opacity-15' : 'opacity-0'}`} />
+                <div className="relative">
+                  <span className="text-2xl block">{dept.icon}</span>
+                  <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{count}</div>
+                  <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>{dept.label}</div>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
       </section>
 
@@ -527,52 +533,6 @@ function DirectoryContent() {
         )}
       </section>
 
-      {/* Department Summary */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-12">
-        <motion.h3
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="text-lg font-bold mb-4 transition-colors"
-          style={{ color: 'var(--theme-text)' }}
-        >
-          לפי מחלקה
-        </motion.h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {departments.map((dept, i) => {
-            const count = deptCounts[dept.label] || 0;
-            const isActive = deptFilter === dept.label;
-            return (
-              <motion.button
-                key={dept.id}
-                initial={{ opacity: 0, y: 15 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05, duration: 0.3 }}
-                whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setDeptFilter(isActive ? '' : dept.label)}
-                className={`relative p-5 rounded-2xl border text-center transition-all duration-300 overflow-hidden ${
-                  isActive
-                    ? 'border-purple-500/50 shadow-lg shadow-purple-500/10'
-                    : 'hover:shadow-md'
-                } ${deptGlowColors[dept.label] || ''}`}
-                style={!isActive ? { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' } : undefined}
-              >
-                {/* Gradient background for active/hover */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${deptColors[dept.label] || 'from-gray-500 to-gray-600'} transition-opacity duration-300 ${
-                  isActive ? 'opacity-15' : 'opacity-0'
-                }`} />
-                <div className="relative">
-                  <span className="text-3xl block">{dept.icon}</span>
-                  <div className="font-black text-2xl mt-2 transition-colors" style={{ color: 'var(--theme-text)' }}>{count}</div>
-                  <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>{dept.label}</div>
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
-      </section>
 
       {/* Contact Detail Modal - Glass Morphism Dark */}
       <AnimatePresence>

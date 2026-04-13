@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import ScrollToTop from "@/components/ScrollToTop";
 
 export const metadata: Metadata = {
   title: "TV Industry IL - פלטפורמת תעשיית הטלוויזיה הישראלית",
@@ -44,6 +45,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased min-h-screen flex flex-col" style={{ background: 'var(--theme-bg, #030712)', color: 'var(--theme-text, #f3f4f6)' }}>
         <Providers>
+          <ScrollToTop />
           <Navigation />
           <main className="flex-1 pt-16">
             <ErrorBoundary>{children}</ErrorBoundary>
