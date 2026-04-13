@@ -4,17 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import {
-  collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, getDoc,
-  serverTimestamp, where, setDoc, updateDoc, limit, Timestamp, increment, writeBatch
+  collection, query, orderBy, onSnapshot, addDoc, doc, getDoc,
+  serverTimestamp, where, setDoc, updateDoc, limit, Timestamp, increment, writeBatch,
+  getDocs, startAfter, type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
   getKeyPair, generateSymmetricKey, encryptChatKeyForMember,
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
 } from '@/lib/encryption';
-
-const FIRESTORE_USERS_REST_BASE =
-  'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents/users';
 
 export interface ChatRoom {
   id: string;
@@ -49,95 +47,22 @@ export interface Message {
   readBy: Record<string, number>;
   deliveredTo: Record<string, number>;
   createdAt: number;
+  deletedAt?: number | null;
 }
 
-function fromFsValue(value: Record<string, unknown> | undefined): unknown {
-  if (!value) return undefined;
-  if ('stringValue' in value) return value.stringValue;
-  if ('booleanValue' in value) return value.booleanValue;
-  if ('integerValue' in value) return Number(value.integerValue);
-  if ('doubleValue' in value) return Number(value.doubleValue);
-  if ('nullValue' in value) return null;
-  if ('arrayValue' in value) {
-    const arrayValue = value.arrayValue as { values?: Array<Record<string, unknown>> };
-    return (arrayValue.values ?? []).map((item) => fromFsValue(item));
-  }
-  return undefined;
-}
-
-function fromFsFields(
-  fields: Record<string, Record<string, unknown>> | undefined,
-  uid: string
-): UserProfile {
-  const mapped: Partial<UserProfile> = { uid };
-  for (const [key, value] of Object.entries(fields ?? {})) {
-    (mapped as Record<string, unknown>)[key] = fromFsValue(value);
-  }
-
-  return {
-    uid,
-    displayName: String(mapped.displayName || ''),
-    email: String(mapped.email || ''),
-    photoURL: mapped.photoURL ? String(mapped.photoURL) : null,
-    department: String(mapped.department || ''),
-    role: String(mapped.role || ''),
-    phone: String(mapped.phone || ''),
-    linkedContactId: typeof mapped.linkedContactId === 'number' ? mapped.linkedContactId : undefined,
-    skills: Array.isArray(mapped.skills) ? (mapped.skills as string[]) : [],
-    bio: String(mapped.bio || ''),
-    status: (mapped.status as UserProfile['status']) || 'offline',
-    isOnline: Boolean(mapped.isOnline),
-    onboardingComplete: Boolean(mapped.onboardingComplete),
-    theme: String(mapped.theme || 'dark'),
-    siteRole: mapped.siteRole as UserProfile['siteRole'],
-    openToWork: mapped.openToWork as boolean | undefined,
-    city: mapped.city ? String(mapped.city) : undefined,
-    yearsOfExperience:
-      typeof mapped.yearsOfExperience === 'number' ? mapped.yearsOfExperience : undefined,
-    credits: Array.isArray(mapped.credits) ? (mapped.credits as string[]) : undefined,
-    gear: Array.isArray(mapped.gear) ? (mapped.gear as string[]) : undefined,
-    preferredRoles: Array.isArray(mapped.preferredRoles)
-      ? (mapped.preferredRoles as string[])
-      : undefined,
-    preferredRegions: Array.isArray(mapped.preferredRegions)
-      ? (mapped.preferredRegions as string[])
-      : undefined,
-    notificationsEnabled: mapped.notificationsEnabled as boolean | undefined,
-    soundEnabled: mapped.soundEnabled as boolean | undefined,
-    showPhone: mapped.showPhone as boolean | undefined,
-    encryptionPublicKey: mapped.encryptionPublicKey ? String(mapped.encryptionPublicKey) : undefined,
-    crewName: mapped.crewName ? String(mapped.crewName) : undefined,
-  };
-}
-
-function mergeUserProfiles(primary: UserProfile[], fallback: UserProfile[]): UserProfile[] {
-  const merged = new Map<string, UserProfile>();
-
-  for (const user of fallback) {
-    if (!user.uid) continue;
-    merged.set(user.uid, user);
-  }
-
-  for (const user of primary) {
-    if (!user.uid) continue;
-    const existing = merged.get(user.uid);
-    merged.set(user.uid, existing ? { ...existing, ...user } : user);
-  }
-
-  return [...merged.values()].sort((left, right) =>
-    (left.displayName || '').localeCompare(right.displayName || '', 'he')
-  );
-}
-
-export function useChat() {
+export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const { user, profile } = useAuth();
   const [chats, setChats] = useState<ChatRoom[]>([]);
   const [activeChat, setActiveChatState] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const userFetchFallbackRef = useRef(false);
+
+  // Pagination state
+  const [olderMessages, setOlderMessages] = useState<Message[]>([]);
+  const [liveMessages, setLiveMessages] = useState<Message[]>([]);
+  const [lastVisible, setLastVisible] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Cache: chatId → decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
@@ -156,20 +81,9 @@ export function useChat() {
     const myKeyPair = getKeyPair(user.uid);
     if (!myKeyPair) return null;
 
-    // Find who created the chat (first member that isn't us, or use our own key if self-chat)
-    // For decryption we need the sender's public key. Store creator UID in chat or use our own private key.
-    // We use nacl.box.open with our private key + the other's public key.
-    // But the key was encrypted by any member — we need the encryptor's public key.
-    // Solution: store encryptedKeys per-member using self-encryption (box with own keypair) so each member
-    // can decrypt with their own keys. We'll use nacl.secretbox for direct symmetric encryption instead.
-    // Actually: use nacl.box where the "sender" is the chat creator and recipient is each member.
-    // The creator's public key is stored in allUsers.
-    // For simplicity: use the CREATOR's public key. We store creatorId in the chat data.
-    // For now, fallback: try to use our own key pair as both sender and receiver (works for self-sent keys)
     const chatData = chats.find(c => c.id === chatId);
     if (!chatData) return null;
 
-    // Try to find who encrypted our key — try all members' public keys
     for (const member of chatData.membersInfo) {
       if (!member.uid) continue;
       const memberUser = allUsers.find(u => u.uid === member.uid);
@@ -204,94 +118,6 @@ export function useChat() {
       localStorage.removeItem('tv-chat-active');
     }
   }, []);
-
-  const fetchUsersViaRest = useCallback(async (): Promise<UserProfile[]> => {
-    if (!user) return [];
-
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${FIRESTORE_USERS_REST_BASE}?pageSize=500`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`users_rest_${response.status}`);
-      }
-
-      const payload = (await response.json()) as {
-        documents?: Array<{ name?: string; fields?: Record<string, Record<string, unknown>> }>;
-      };
-
-      return (payload.documents ?? [])
-        .map((document) => {
-          const name = document.name || '';
-          const uid = name.split('/').pop() || '';
-          if (!uid) return null;
-          return fromFsFields(document.fields, uid);
-        })
-        .filter((item): item is UserProfile => Boolean(item && item.uid));
-    } catch (error) {
-      console.warn('[useChatLegacy] users REST fallback failed:', error);
-      return [];
-    }
-  }, [user]);
-
-  // Fetch all users
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    let sdkLoaded = false;
-
-    const applyUsers = (nextUsers: UserProfile[]) => {
-      if (cancelled) return;
-      setAllUsers((current) => mergeUserProfiles(nextUsers, current));
-    };
-
-    const loadFallbackUsers = async () => {
-      if (userFetchFallbackRef.current) return;
-      userFetchFallbackRef.current = true;
-      const restUsers = await fetchUsersViaRest();
-      if (!cancelled && restUsers.length) {
-        applyUsers(restUsers);
-      }
-    };
-
-    const fallbackTimer = setTimeout(() => {
-      if (!sdkLoaded) {
-        void loadFallbackUsers();
-      }
-    }, 1500);
-
-    const unsubscribe = onSnapshot(
-      collection(db, 'users'),
-      (snapshot) => {
-        sdkLoaded = true;
-        const users: UserProfile[] = [];
-        snapshot.forEach((d) => {
-          users.push({ uid: d.id, ...d.data() } as UserProfile);
-        });
-
-        if (users.length) {
-          applyUsers(users);
-          return;
-        }
-
-        void loadFallbackUsers();
-      },
-      () => {
-        void loadFallbackUsers();
-      }
-    );
-
-    return () => {
-      cancelled = true;
-      clearTimeout(fallbackTimer);
-      unsubscribe();
-    };
-  }, [fetchUsersViaRest, user]);
 
   // Subscribe to chats
   useEffect(() => {
@@ -331,19 +157,28 @@ export function useChat() {
   // Subscribe to messages + mark delivery + decrypt
   useEffect(() => {
     if (!activeChat || !user) {
-      setMessages([]);
+      setLiveMessages([]);
+      setOlderMessages([]);
+      setLastVisible(null);
+      setHasMore(false);
       return;
     }
+    // Reset older messages when switching chats
+    setOlderMessages([]);
+    setLastVisible(null);
+    setHasMore(false);
+
     const q = query(
       collection(db, 'chats', activeChat, 'messages'),
-      orderBy('createdAt', 'asc'),
-      limit(200)
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
     const unsubscribe = onSnapshot(q, async (snapshot) => {
+      // snapshot.docs are in desc order (newest first). Reverse to chronological.
+      const ascDocs = snapshot.docs.slice().reverse();
       const now = Date.now();
       const oneDayAgo = now - 86400000;
 
-      // Get chat key for decryption (may be null for unencrypted chats)
       const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
       const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
       const chatKey = encryptedKeys ? await getChatKey(activeChat, encryptedKeys) : null;
@@ -351,7 +186,7 @@ export function useChat() {
       const msgs: Message[] = [];
       const decryptPromises: Promise<void>[] = [];
 
-      snapshot.forEach(docSnap => {
+      ascDocs.forEach(docSnap => {
         const data = docSnap.data();
         const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || now);
         const rawText = data.text || '';
@@ -372,10 +207,12 @@ export function useChat() {
           readBy: data.readBy || {},
           deliveredTo: data.deliveredTo || {},
           createdAt,
+          deletedAt: data.deletedAt instanceof Timestamp
+            ? data.deletedAt.toMillis()
+            : (data.deletedAt ?? null),
         };
         msgs.push(msg);
 
-        // Decrypt text if needed
         if (chatKey && rawText && looksEncrypted(rawText) && data.type !== 'system') {
           decryptPromises.push(
             decryptMessage(rawText, chatKey).then(plain => {
@@ -386,10 +223,13 @@ export function useChat() {
         }
       });
 
-      // Wait for all decryptions
       if (decryptPromises.length > 0) await Promise.all(decryptPromises);
 
-      setMessages(msgs);
+      setLiveMessages(msgs);
+      // Oldest doc in snapshot (last in desc order) is the cursor for loading more
+      const oldestDoc = snapshot.docs[snapshot.docs.length - 1];
+      setLastVisible(oldestDoc ?? null);
+      setHasMore(snapshot.docs.length === 50);
 
       // Batch-mark delivery for messages we received (not our own, not yet delivered, last 24h)
       const toDeliver = msgs.filter(m =>
@@ -437,7 +277,7 @@ export function useChat() {
       [`unreadCount.${user.uid}`]: 0,
       [`lastRead.${user.uid}`]: Date.now(),
     }).catch(() => {});
-  }, [activeChat, user, messages.length]);
+  }, [activeChat, user, liveMessages.length]);
 
   const sendMessage = useCallback(async (
     text: string,
@@ -483,15 +323,13 @@ export function useChat() {
       }
     }
 
-    // Preview text for lastMessage
     const previewText = type === 'voice' ? '🎤 הודעה קולית'
       : type === 'video' ? '🎥 הודעת וידאו'
       : type === 'text' ? text
       : `📎 ${file?.name || 'קובץ'}`;
 
-    // Encrypt message text if chat has a key
     let messageText = type === 'text' ? text : (type === 'voice' || type === 'video' ? '' : file?.name || text);
-    if (true) { // always try to encrypt if key available
+    {
       const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
       const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
       if (encryptedKeys) {
@@ -523,7 +361,6 @@ export function useChat() {
     try {
       await addDoc(collection(db, 'chats', activeChat, 'messages'), messageData);
 
-      // Update chat's lastMessage + increment unread for other members
       const chat = chats.find(c => c.id === activeChat);
       const unreadUpdates: Record<string, unknown> = {};
       if (chat) {
@@ -544,7 +381,6 @@ export function useChat() {
         ...unreadUpdates,
       });
 
-      // Clear typing indicator
       await setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
         isTyping: false,
         name: displayName,
@@ -558,15 +394,90 @@ export function useChat() {
 
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!activeChat || !user) return;
-    // Only allow sender to delete their own messages
-    const msg = messages.find(m => m.id === messageId);
+    const allMsgs = [...olderMessages, ...liveMessages];
+    const msg = allMsgs.find(m => m.id === messageId);
     if (!msg || msg.senderId !== user.uid) return;
     try {
-      await deleteDoc(doc(db, 'chats', activeChat, 'messages', messageId));
+      await updateDoc(doc(db, 'chats', activeChat, 'messages', messageId), {
+        deletedAt: serverTimestamp(),
+        text: '',
+        fileURL: null,
+        fileName: null,
+        fileSize: null,
+        mimeType: null,
+        duration: null,
+      });
     } catch (err) {
       console.error('Delete error:', err);
     }
-  }, [activeChat, user, messages]);
+  }, [activeChat, user, olderMessages, liveMessages]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (!activeChat || !lastVisible || loadingMore || !user) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, 'chats', activeChat, 'messages'),
+        orderBy('createdAt', 'desc'),
+        startAfter(lastVisible),
+        limit(50)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) { setHasMore(false); return; }
+
+      let chatKey: string | null = chatKeyCache.current.get(activeChat) ?? null;
+      if (!chatKey) {
+        const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
+        const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
+        if (encryptedKeys) chatKey = await getChatKey(activeChat, encryptedKeys);
+      }
+
+      const now = Date.now();
+      const msgs: Message[] = [];
+      const decryptPromises: Promise<void>[] = [];
+
+      snap.docs.slice().reverse().forEach(docSnap => {
+        const data = docSnap.data();
+        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || now);
+        const rawText = data.text || '';
+        const msg: Message = {
+          id: docSnap.id,
+          senderId: data.senderId,
+          senderName: data.senderName,
+          senderPhoto: data.senderPhoto || null,
+          text: rawText,
+          type: data.type || 'text',
+          fileURL: data.fileURL || null,
+          fileName: data.fileName || null,
+          fileSize: data.fileSize || null,
+          duration: data.duration || null,
+          mimeType: data.mimeType || null,
+          replyTo: data.replyTo || null,
+          readBy: data.readBy || {},
+          deliveredTo: data.deliveredTo || {},
+          createdAt,
+          deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toMillis() : (data.deletedAt ?? null),
+        };
+        msgs.push(msg);
+        if (chatKey && rawText && looksEncrypted(rawText) && data.type !== 'system') {
+          decryptPromises.push(
+            decryptMessage(rawText, chatKey).then(plain => { msg.text = plain ?? '[הודעה מוצפנת]'; })
+              .catch(() => { msg.text = '[הודעה מוצפנת]'; })
+          );
+        }
+      });
+
+      if (decryptPromises.length) await Promise.all(decryptPromises);
+
+      setOlderMessages(prev => [...msgs, ...prev]);
+      setLastVisible(snap.docs[snap.docs.length - 1]);
+      setHasMore(snap.docs.length === 50);
+    } catch (err) {
+      console.error('Load more messages error:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeChat, lastVisible, loadingMore, user, getChatKey]);
 
   const createPrivateChat = useCallback(async (otherUserId: string): Promise<string | null> => {
     if (!user) return null;
@@ -580,19 +491,16 @@ export function useChat() {
     if (!otherUser) return null;
 
     try {
-      // Generate E2E symmetric key for this chat
       const chatKey = await generateSymmetricKey();
       const myKeyPair = getKeyPair(user.uid);
       const encryptedKeys: Record<string, string> = {};
 
       if (chatKey && myKeyPair) {
-        // Encrypt for myself (so I can also decrypt my sent messages)
         const myPub = profile?.encryptionPublicKey;
         if (myPub) {
           const enc = await encryptChatKeyForMember(chatKey, myPub, myKeyPair.privateKey);
           if (enc) encryptedKeys[user.uid] = enc;
         }
-        // Encrypt for the other user
         if (otherUser.encryptionPublicKey) {
           const enc = await encryptChatKeyForMember(chatKey, otherUser.encryptionPublicKey, myKeyPair.privateKey);
           if (enc) encryptedKeys[otherUserId] = enc;
@@ -613,7 +521,6 @@ export function useChat() {
         createdAt: serverTimestamp(),
       });
 
-      // Cache the key immediately
       if (chatKey) chatKeyCache.current.set(chatRef.id, chatKey);
 
       return chatRef.id;
@@ -633,7 +540,6 @@ export function useChat() {
     });
 
     try {
-      // Generate E2E symmetric key for this group
       const chatKey = await generateSymmetricKey();
       const myKeyPair = getKeyPair(user.uid);
       const encryptedKeys: Record<string, string> = {};
@@ -690,6 +596,8 @@ export function useChat() {
   const activeChatData = chats.find(c => c.id === activeChat) || null;
   const onlineUsers = allUsers.filter(u => u.isOnline && u.uid !== user?.uid);
 
+  const messages = [...olderMessages, ...liveMessages];
+
   return {
     chats,
     activeChat,
@@ -702,6 +610,9 @@ export function useChat() {
     setActiveChat,
     sendMessage,
     deleteMessage,
+    loadMoreMessages,
+    hasMore,
+    loadingMore,
     createPrivateChat,
     createGroup,
     setTyping,

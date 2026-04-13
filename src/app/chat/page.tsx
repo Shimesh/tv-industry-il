@@ -7,9 +7,9 @@ import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
 import { useChat } from '@/hooks/useChat';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
-import { useContacts } from '@/hooks/useContacts';
+import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/contexts/ToastContext';
 import type {
   ChatConnectionState as ChatBannerConnectionState,
@@ -146,20 +146,23 @@ export default function ChatPage() {
 
 function ChatContent() {
   const { user } = useAuth();
-  const { contacts } = useContacts();
+  const { contacts } = useAppData();
   const { showToast } = useToast();
+  const allUsers = useChatUsers();
   const {
     chats,
     activeChat,
     activeChatData,
     messages,
-    allUsers,
     onlineUsers,
     typingUsers,
     uploadProgress,
     setActiveChat,
     sendMessage,
     deleteMessage,
+    loadMoreMessages,
+    hasMore,
+    loadingMore,
     createPrivateChat,
     createGroup,
     setTyping,
@@ -167,15 +170,13 @@ function ChatContent() {
     transportMode,
     socketReady,
     lastSyncAt,
-  } = useChat();
+  } = useChat({ allUsers });
 
   const chatV2Enabled = isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI);
   const effectiveV2Enabled = chatV2Enabled || transportMode === 'hybrid';
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [optimisticMessagesByChat, setOptimisticMessagesByChat] = useState<Record<string, ChatUiMessage[]>>({});
-
-  useOnlineStatus(user?.uid);
 
   const activeChatId = activeChatData?.id ?? activeChat ?? null;
   const bannerConnectionState = useMemo(
@@ -468,6 +469,10 @@ function ChatContent() {
             onBack={() => setMobileShowChat(false)}
             onRetryOptimisticMessage={handleRetryOptimisticMessage}
             onDismissOptimisticMessage={handleDismissOptimisticMessage}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onLoadMore={loadMoreMessages}
+            onlineUsers={onlineUsers}
           />
         ) : (
           <ChatEmptyState

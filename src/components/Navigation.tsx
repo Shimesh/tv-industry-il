@@ -14,6 +14,7 @@ import {
   MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
   Palette, ChevronDown, Settings, CheckCircle, Clapperboard, Shield, UsersRound
 } from 'lucide-react';
+import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
@@ -34,6 +35,7 @@ export default function Navigation() {
   const router = useRouter();
   const { user, profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const totalUnread = useGlobalUnread();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -103,6 +105,7 @@ export default function Navigation() {
             {filteredLinks.map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
+              const isChat = link.href === '/chat';
               return (
                 <Link
                   key={link.href}
@@ -118,7 +121,14 @@ export default function Navigation() {
                     boxShadow: `inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 20%, transparent)`,
                   } : undefined}
                 >
-                  <Icon className="w-4 h-4" />
+                  <div className="relative">
+                    <Icon className="w-4 h-4" />
+                    {isChat && totalUnread > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {totalUnread > 99 ? '99+' : totalUnread}
+                      </span>
+                    )}
+                  </div>
                   {link.label}
                 </Link>
               );
@@ -278,6 +288,7 @@ export default function Navigation() {
             {filteredLinks.map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
+              const isChat = link.href === '/chat';
               return (
                 <Link
                   key={link.href}
@@ -290,7 +301,14 @@ export default function Navigation() {
                   }`}
                   style={isActive ? { background: 'var(--theme-accent-glow)' } : undefined}
                 >
-                  <Icon className="w-5 h-5" />
+                  <div className="relative">
+                    <Icon className="w-5 h-5" />
+                    {isChat && totalUnread > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {totalUnread > 99 ? '99+' : totalUnread}
+                      </span>
+                    )}
+                  </div>
                   {link.label}
                 </Link>
               );

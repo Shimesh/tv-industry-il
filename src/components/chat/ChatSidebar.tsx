@@ -126,6 +126,12 @@ export default function ChatSidebar({
             const chatPhoto = getChatPhoto(chat, currentUserId);
             const chatInitial = getChatInitial(chat, currentUserId);
             const unreadCount = chat.unreadCountByUser?.[currentUserId] ?? chat.unreadCount;
+            const otherMemberUid = chat.type === 'private'
+              ? chat.membersInfo?.find(m => m.uid !== currentUserId)?.uid
+              : null;
+            const isOtherOnline = otherMemberUid
+              ? onlineUsers.some(u => u.uid === otherMemberUid)
+              : false;
 
             return (
               <button
@@ -135,19 +141,24 @@ export default function ChatSidebar({
                   isActive ? 'bg-[#2A3942]' : 'hover:bg-[#202C33]'
                 }`}
               >
-                {/* Avatar */}
-                {chatPhoto ? (
-                  <img src={chatPhoto} alt="" className="w-[49px] h-[49px] rounded-full object-cover shrink-0" />
-                ) : (
-                  <div
-                    className="w-[49px] h-[49px] rounded-full flex items-center justify-center shrink-0 text-white font-bold text-lg"
-                    style={{
-                      backgroundColor: chat.type === 'group' ? '#00A884' : '#6B7C85',
-                    }}
-                  >
-                    {chatInitial}
-                  </div>
-                )}
+                {/* Avatar with optional online dot */}
+                <div className="relative shrink-0">
+                  {chatPhoto ? (
+                    <img src={chatPhoto} alt="" className="w-[49px] h-[49px] rounded-full object-cover" />
+                  ) : (
+                    <div
+                      className="w-[49px] h-[49px] rounded-full flex items-center justify-center text-white font-bold text-lg"
+                      style={{
+                        backgroundColor: chat.type === 'group' ? '#00A884' : '#6B7C85',
+                      }}
+                    >
+                      {chatInitial}
+                    </div>
+                  )}
+                  {isOtherOnline && (
+                    <span className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full bg-[#00A884] border-2 border-[#111B21]" />
+                  )}
+                </div>
 
                 {/* Info */}
                 <div className="flex-1 min-w-0 border-b border-[#2A3942] py-[2px]">

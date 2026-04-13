@@ -22,6 +22,7 @@ import type { ChatRoom } from '@/hooks/useChat';
 import { useCall } from '@/contexts/CallContext';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import type { ChatConnectionState, ChatUiMessage } from './chatTypes';
+import type { UserProfile } from '@/contexts/AuthContext';
 
 interface ReplyTarget {
   messageId: string;
@@ -51,6 +52,10 @@ interface ChatWindowProps {
   onBack: () => void;
   onRetryOptimisticMessage?: (message: ChatUiMessage) => void;
   onDismissOptimisticMessage?: (messageId: string) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
+  onlineUsers?: UserProfile[];
 }
 
 const EMOJI_LIST = [
@@ -115,6 +120,10 @@ export default function ChatWindow({
   onBack,
   onRetryOptimisticMessage,
   onDismissOptimisticMessage,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
+  onlineUsers = [],
 }: ChatWindowProps) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatUiMessage | null>(null);
@@ -125,7 +134,10 @@ export default function ChatWindow({
   const [searchQuery, setSearchQuery] = useState('');
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevScrollHeightRef = useRef(0);
+  const isAtBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -169,7 +181,18 @@ export default function ChatWindow({
   }, [isRecording, audioBlob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (prevScrollHeightRef.current > 0) {
+      // Older messages were prepended — restore scroll position
+      const diff = container.scrollHeight - prevScrollHeightRef.current;
+      if (diff > 0) container.scrollTop = diff;
+      prevScrollHeightRef.current = 0;
+      isAtBottomRef.current = false;
+    } else if (isAtBottomRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages, typingUsers, pendingCount]);
 
   useEffect(() => {
@@ -180,7 +203,20 @@ export default function ChatWindow({
     setShowAttach(false);
     setShowSearch(false);
     setSearchQuery('');
+    prevScrollHeightRef.current = 0;
+    isAtBottomRef.current = true;
   }, [chat.id]);
+
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    isAtBottomRef.current = distFromBottom < 80;
+    if (container.scrollTop < 80 && hasMore && !loadingMore && onLoadMore) {
+      prevScrollHeightRef.current = container.scrollHeight;
+      onLoadMore();
+    }
+  }, [hasMore, loadingMore, onLoadMore]);
 
   const handleTyping = useCallback(() => {
     onSetTyping(true);
@@ -278,16 +314,28 @@ export default function ChatWindow({
           <ArrowRight className="w-5 h-5 text-[#AEBAC1]" />
         </button>
 
-        {chatPhoto ? (
-          <img src={chatPhoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
-        ) : (
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-bold"
-            style={{ backgroundColor: isGroup ? '#00A884' : '#6B7C85' }}
-          >
-            {chatName.charAt(0)}
-          </div>
-        )}
+        {(() => {
+          const isOtherOnline = !isGroup && otherMember?.uid
+            ? onlineUsers.some(u => u.uid === otherMember.uid)
+            : false;
+          return (
+            <div className="relative shrink-0">
+              {chatPhoto ? (
+                <img src={chatPhoto} alt="" className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                  style={{ backgroundColor: isGroup ? '#00A884' : '#6B7C85' }}
+                >
+                  {chatName.charAt(0)}
+                </div>
+              )}
+              {isOtherOnline && (
+                <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full bg-[#00A884] border-2 border-[#202C33]" />
+              )}
+            </div>
+          );
+        })()}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
@@ -374,12 +422,19 @@ export default function ChatWindow({
       )}
 
       <div
+        ref={messagesContainerRef}
         className="flex-1 overflow-y-auto py-2"
         dir="ltr"
+        onScroll={handleScroll}
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       >
+        {loadingMore && (
+          <div className="flex justify-center py-3">
+            <div className="w-5 h-5 border-2 border-[#00A884] border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-20 h-20 rounded-full bg-[#00A88415] flex items-center justify-center">
@@ -542,6 +597,20 @@ export default function ChatWindow({
           e.target.value = '';
         }}
       />
+
+      {uploadProgress !== null && (
+        <div className="px-4 py-1.5 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#8696a0] shrink-0">מעלה... {uploadProgress}%</span>
+            <div className="flex-1 h-1 rounded-full bg-[#2A3942] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#00A884] transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {isRecording ? (
         <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
+import type { UserProfile } from '@/contexts/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
@@ -379,10 +380,10 @@ function applyReceiptUpdate(
   });
 }
 
-export function useChat() {
+export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const { user, profile } = useAuth();
   const featureFlags = useMemo(() => getChatV2FeatureFlags(), []);
-  const legacy = useLegacyChat();
+  const legacy = useLegacyChat({ allUsers });
   const legacyChatsByIdRef = useRef<Map<string, ChatRoom>>(new Map());
   const displayName =
     legacy.displayName || profile?.displayName || user?.displayName || 'משתמש';
@@ -1308,6 +1309,9 @@ export function useChat() {
     setActiveChat,
     sendMessage,
     deleteMessage: legacy.deleteMessage,
+    loadMoreMessages: legacy.loadMoreMessages,
+    hasMore: legacy.hasMore,
+    loadingMore: legacy.loadingMore,
     createPrivateChat,
     createGroup,
     setTyping,
