@@ -9,7 +9,5 @@ export interface Contact {
   phone?: string;
   skills?: string[];
   source?: string;
-  [key: string]: any; // מאפשר גמישות לשדות נוספים שאולי קיימים בפיירבייס
+  [key: string]: any; 
 }
-
-// אין פה מערך `contacts`! הדאטה מגיע עכשיו רק מ-Firestore.
