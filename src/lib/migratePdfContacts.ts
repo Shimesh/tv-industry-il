@@ -1,6 +1,6 @@
 import {
   collection,
-  getDocs,
+  getDocsFromServer,
   doc,
   writeBatch,
   serverTimestamp,
@@ -245,7 +245,11 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
  * Uses pdf-{phone} or pdf-{name-slug} as doc ID → fully idempotent on re-runs.
  */
 export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationResult> {
-  const snapshot = await getDocs(collection(db, 'contacts'));
+  // Force server read — bypasses IndexedDB offline cache.
+  // The cache may contain stale locally-committed docs from a previous run that
+  // were never synced to the server; if we used getDocs() we'd see 187 "existing"
+  // contacts and skip everything.  getDocsFromServer gives the true 90 we have.
+  const snapshot = await getDocsFromServer(collection(db, 'contacts'));
 
   // Use RAW stored values — no normalization — to avoid format-mismatch bugs
   const existingPhones = new Set<string>();
