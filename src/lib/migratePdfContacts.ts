@@ -236,23 +236,28 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
 }
 
 /**
- * Upserts all 187 PDF contacts into Firestore.
- * Skips any contact already present (matched by normalized phone OR name).
- * Safe to run multiple times — fully idempotent.
+ * Upserts all 187 PDF contacts into Firestore using deterministic doc IDs.
+ * Dedup strategy:
+ *   1. Exact raw-phone match against stored Firestore phone strings (no normalization —
+ *      avoids format-mismatch false-positives that caused all 187 to be skipped).
+ *   2. Lowercase full-name match as fallback (catches same person with different phone
+ *      recorded in the original static migration).
+ * Uses pdf-{phone} or pdf-{name-slug} as doc ID → fully idempotent on re-runs.
  */
 export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationResult> {
   const snapshot = await getDocs(collection(db, 'contacts'));
 
-  const existingNames = new Set<string>();
+  // Use RAW stored values — no normalization — to avoid format-mismatch bugs
   const existingPhones = new Set<string>();
+  const existingNameKeys = new Set<string>();
 
   for (const d of snapshot.docs) {
     const data = d.data();
-    const fullName = `${data.firstName || ''} ${data.lastName || ''}`.trim();
-    const nName = normalizeName(fullName);
-    const nPhone = normalizePhone(data.phone);
-    if (nName) existingNames.add(nName);
-    if (nPhone) existingPhones.add(nPhone);
+    const rawPhone = data.phone as string | null;
+    if (rawPhone) existingPhones.add(rawPhone);
+
+    const nameKey = `${data.firstName || ''} ${data.lastName || ''}`.trim().toLowerCase();
+    if (nameKey) existingNameKeys.add(nameKey);
   }
 
   const BATCH_SIZE = 499;
@@ -262,26 +267,29 @@ export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationRes
   let skipped = 0;
 
   for (const [fullName, role, rawPhone] of PDF_CONTACTS) {
-    const nName = normalizeName(fullName);
-    const nPhone = rawPhone ? normalizePhone(rawPhone) : '';
+    // 1. Skip if exact phone already in Firestore
+    if (rawPhone && existingPhones.has(rawPhone)) { skipped++; continue; }
 
-    // Skip duplicates
-    if (!nName || nName.length < 2) { skipped++; continue; }
-    if (existingNames.has(nName) || (nPhone && existingPhones.has(nPhone))) {
-      skipped++;
-      continue;
-    }
+    // 2. Skip if exact (case-insensitive) name already in Firestore
+    const nameKey = fullName.toLowerCase();
+    if (existingNameKeys.has(nameKey)) { skipped++; continue; }
 
     const { firstName, lastName } = splitName(fullName);
+    const nPhone = rawPhone ? normalizePhone(rawPhone) : null;
     const department = inferDepartment(role);
-    const newRef = doc(collection(db, 'contacts'));
 
-    batch.set(newRef, {
+    // Deterministic doc ID so re-running is always safe
+    const docId = rawPhone
+      ? `pdf-${rawPhone}`
+      : `pdf-${fullName.replace(/[\s'"\\]/g, '-')}`;
+    const ref = doc(db, 'contacts', docId);
+
+    batch.set(ref, {
       firstName,
       lastName,
       role,
       department,
-      phone: nPhone || null,
+      phone: nPhone ?? rawPhone ?? null,
       availability: 'available',
       openToWork: null,
       city: null,
@@ -294,8 +302,9 @@ export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationRes
       updatedAt: serverTimestamp(),
     });
 
-    existingNames.add(nName);
-    if (nPhone) existingPhones.add(nPhone);
+    // Track in-session dedup
+    if (rawPhone) existingPhones.add(rawPhone);
+    existingNameKeys.add(nameKey);
     added++;
     batchCount++;
 
@@ -306,9 +315,7 @@ export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationRes
     }
   }
 
-  if (batchCount > 0) {
-    await batch.commit();
-  }
+  if (batchCount > 0) await batch.commit();
 
   return { added, skipped, total: PDF_CONTACTS.length };
 }
