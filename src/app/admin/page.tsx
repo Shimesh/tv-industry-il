@@ -259,7 +259,11 @@ export default function AdminPage() {
     if (!user || !noAdminExists) return;
     setClaiming(true);
     try {
-      await updateUserProfile({ siteRole: 'admin' });
+      // Must use SDK updateDoc (not REST-API updateUserProfile) so the local
+      // IndexedDB cache is updated. After reload, getDocs(adminQ) reads from
+      // the cache — REST writes bypass the cache, so the bootstrap query would
+      // still see no admin and render this screen again.
+      await updateDoc(doc(db, 'users', user.uid), { siteRole: 'admin' });
       window.location.reload();
     } catch {
       setClaiming(false);
