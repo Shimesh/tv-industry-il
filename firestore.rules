@@ -29,7 +29,7 @@ service cloud.firestore {
       // Sub-collections under user (schedules synced from crew)
       match /{sub=**} {
         allow read: if isAuth();
-        allow write: if isOwner(userId) || isAuth();
+        allow write: if isOwner(userId) || isAdmin();
       }
     }
 
@@ -41,9 +41,16 @@ service cloud.firestore {
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
 
+    // ── App config (maintenance mode, global announcements) ──────
+    match /appConfig/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
     // ── Chat rooms ────────────────────────────────────────────────
     match /chats/{chatId} {
-      allow read: if isAuth() && request.auth.uid in resource.data.members;
+      // Admins can read all chats (for dashboard count)
+      allow read: if isAuth() && (request.auth.uid in resource.data.members || isAdmin());
       allow create: if isAuth();
       allow update: if isAuth() && (
         request.auth.uid in resource.data.members ||
@@ -93,18 +100,18 @@ service cloud.firestore {
 
       match /{sub=**} {
         allow read: if isAuth();
-        allow write: if isOwner(userId) || isAuth();
+        allow write: if isOwner(userId) || isAdmin();
       }
     }
 
     // ── User schedules ────────────────────────────────────────────
     match /userSchedules/{userId} {
       allow read: if isAuth();
-      allow write: if isOwner(userId) || isAuth();
+      allow write: if isOwner(userId) || isAdmin();
 
       match /{sub=**} {
         allow read: if isAuth();
-        allow write: if isOwner(userId) || isAuth();
+        allow write: if isOwner(userId) || isAdmin();
       }
     }
 
@@ -117,7 +124,8 @@ service cloud.firestore {
     match /contacts/{contactId} {
       allow read: if isAuth();
       allow create: if isAuth();
-      allow update, delete: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isModeratorOrAbove();
     }
 
     // ── Teams ─────────────────────────────────────────────────────
