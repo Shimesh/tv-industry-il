@@ -1,13 +1,10 @@
 import {
   collection,
-  getDocsFromServer,
-  enableNetwork,
+  getDocs,
   doc,
   writeBatch,
   serverTimestamp,
   type Firestore,
-  type QuerySnapshot,
-  type DocumentData,
 } from 'firebase/firestore';
 import { inferDepartment } from '@/lib/contactsUtils';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
@@ -247,43 +244,22 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
  *      recorded in the original static migration).
  * Uses pdf-{phone} or pdf-{name-slug} as doc ID → fully idempotent on re-runs.
  */
-/** Force a server read, retrying up to 3 times.
- *  The Firestore client may be in exponential-backoff mode after previous
- *  silent write failures — a short delay lets the WebSocket reconnect. */
-async function readContactsFromServer(db: Firestore): Promise<QuerySnapshot<DocumentData>> {
-  // Re-enable network in case the SDK went offline (e.g. after repeated errors)
-  try { await enableNetwork(db); } catch { /* no-op if already enabled */ }
-
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
-      await new Promise(r => setTimeout(r, 1500 * attempt)); // 1.5s, 3s
-    }
-    try {
-      return await getDocsFromServer(collection(db, 'contacts'));
-    } catch (err) {
-      lastErr = err;
-    }
-  }
-  throw new Error(
-    'לא ניתן להתחבר לשרת Firestore לאחר 3 ניסיונות. ' +
-    'בדוק שיש חיבור לאינטרנט ונסה שוב. ' +
-    `(${lastErr instanceof Error ? lastErr.message : String(lastErr)})`
-  );
-}
-
 export async function migratePdfContacts(db: Firestore): Promise<PdfMigrationResult> {
-  // Force server read — bypasses IndexedDB offline cache.
-  // The cache may contain stale locally-committed docs from a previous run that
-  // were never synced to the server; if we used getDocs() we'd see 187 "existing"
-  // contacts and skip everything.  getDocsFromServer gives the true 90 we have.
-  const snapshot = await readContactsFromServer(db);
+  // getDocs reads from the local IndexedDB cache (Firestore offline persistence).
+  // A previous failed migration run may have left phantom 'pdf-*' docs in the
+  // cache (locally committed but never confirmed by the server — that is why
+  // the old code saw 187 "existing" contacts and skipped everything).
+  // By filtering out any doc whose ID starts with 'pdf-' we only count the ~90
+  // genuine static-migration contacts as existing, and correctly detect the ~97
+  // missing ones.
+  const snapshot = await getDocs(collection(db, 'contacts'));
+  const realDocs = snapshot.docs.filter(d => !d.id.startsWith('pdf-'));
 
   // Use RAW stored values — no normalization — to avoid format-mismatch bugs
   const existingPhones = new Set<string>();
   const existingNameKeys = new Set<string>();
 
-  for (const d of snapshot.docs) {
+  for (const d of realDocs) {
     const data = d.data();
     const rawPhone = data.phone as string | null;
     if (rawPhone) existingPhones.add(rawPhone);
