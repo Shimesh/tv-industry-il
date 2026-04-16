@@ -154,7 +154,7 @@ function OnboardingModal({
                       style={{ background: 'var(--theme-bg-secondary)' }}
                     >
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                        {c.firstName[0]}{c.lastName[0]}
+                        {(c.firstName?.[0] || '') + (c.lastName?.[0] || '')}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{c.firstName} {c.lastName}</p>

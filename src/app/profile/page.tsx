@@ -130,7 +130,9 @@ function ProfileContent() {
         {showOnboarding && (
           <OnboardingModal
             profile={profile}
-            contacts={contactsList}
+            contacts={contactsList.filter((c): c is { id: string | number; firstName: string; lastName: string; role: string; department: string; phone?: string } =>
+              Boolean(c.firstName && c.lastName && c.role && c.department)
+            )}
             onComplete={handleOnboardingComplete}
             onDismiss={() => setShowOnboarding(false)}
           />

@@ -144,7 +144,9 @@ function DirectoryContent() {
   const deptCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contactsList.forEach(c => {
-      counts[c.department] = (counts[c.department] || 0) + 1;
+      const department = c.department;
+      if (!department) return;
+      counts[department] = (counts[department] || 0) + 1;
     });
     return counts;
   }, [contactsList]);
@@ -382,7 +384,7 @@ function DirectoryContent() {
                       }}
                       className={`rounded-2xl border p-5 cursor-pointer transition-all duration-300 relative group ${
                         isMeCard ? 'ring-2 ring-[var(--theme-accent)]' : ''
-                      } hover:shadow-xl ${deptGlowColors[contact.department] || 'hover:shadow-gray-500/10'}`}
+                      } hover:shadow-xl ${deptGlowColors[contact.department || ''] || 'hover:shadow-gray-500/10'}`}
                       style={{
                         background: isMeCard ? 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-card))' : 'var(--theme-bg-card)',
                         borderColor: isMeCard ? 'var(--theme-accent)' : 'var(--theme-border)',
@@ -406,11 +408,11 @@ function DirectoryContent() {
                       <div className="flex items-start gap-3 relative">
                         {/* Gradient avatar with glow */}
                         <div className="relative">
-                          <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
-                          <div className={`relative w-13 h-13 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
+                          <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
+                          <div className={`relative w-13 h-13 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
                             isMeCard ? 'ring-2 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg-card)]' : ''
                           }`}>
-                            {contact.firstName[0]}{contact.lastName[0]}
+                            {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -426,7 +428,7 @@ function DirectoryContent() {
                             <span className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
                               {contact.role}
                             </span>
-                            <span className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                               {contact.department}
                             </span>
                           </div>
@@ -488,8 +490,8 @@ function DirectoryContent() {
                       style={i > 0 ? { borderTop: '1px solid var(--theme-border)' } : undefined}
                     >
                       {isMeRow && <Star className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />}
-                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
-                        {contact.firstName[0]}{contact.lastName[0]}
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
+                        {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
                       </div>
                       <div className="flex-1 min-w-0 flex items-center gap-1.5">
                         <span className="font-medium text-sm" style={{ color: isMeRow ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
@@ -501,8 +503,8 @@ function DirectoryContent() {
                         )}
                       </div>
                       <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department] || 'bg-gray-700/50 text-gray-300'}`}>
-                        {contact.department}
+                      <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
+                        {contact.department || 'לא מוגדר'}
                       </span>
                       <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'}`} />
                       {contact.phone && (
@@ -559,7 +561,7 @@ function DirectoryContent() {
               }}
             >
               {/* Top gradient bar */}
-              <div className={`h-1.5 w-full bg-gradient-to-l ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'}`} />
+              <div className={`h-1.5 w-full bg-gradient-to-l ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'}`} />
 
               {/* Close button */}
               <motion.button
@@ -583,11 +585,11 @@ function DirectoryContent() {
                     className="relative inline-block"
                   >
                     {/* Avatar glow */}
-                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} blur-xl opacity-30`} />
-                    <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-3xl shadow-2xl ${
+                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'} blur-xl opacity-30`} />
+                    <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-3xl shadow-2xl ${
                       isCurrentUser(selectedContact) ? 'ring-3 ring-[var(--theme-accent)] ring-offset-4 ring-offset-[var(--theme-bg)]' : ''
                     }`}>
-                      {selectedContact.firstName[0]}{selectedContact.lastName[0]}
+                      {(selectedContact.firstName?.[0] || '') + (selectedContact.lastName?.[0] || '')}
                     </div>
                   </motion.div>
 
@@ -620,8 +622,8 @@ function DirectoryContent() {
                     <span className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
                       <Briefcase className="w-3.5 h-3.5" />{selectedContact.role}
                     </span>
-                    <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department]}`}>
-                      {selectedContact.department}
+                    <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
+                      {selectedContact.department || 'לא מוגדר'}
                     </span>
                   </motion.div>
 
@@ -658,7 +660,7 @@ function DirectoryContent() {
                       <Star className="w-3 h-3" /> מיומנויות
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {selectedContact.skills.map((skill, i) => (
+                      {selectedContact.skills.map((skill: string, i: number) => (
                         <motion.span
                           key={skill}
                           initial={{ opacity: 0, scale: 0.8 }}
@@ -706,7 +708,7 @@ function DirectoryContent() {
                       <Film className="w-3 h-3" /> קרדיטים / הפקות
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {selectedContact.credits.map((credit, i) => (
+                      {selectedContact.credits.map((credit: string, i: number) => (
                         <motion.span
                           key={credit}
                           initial={{ opacity: 0, scale: 0.8 }}
@@ -733,7 +735,7 @@ function DirectoryContent() {
                       <Wrench className="w-3 h-3" /> ציוד
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {selectedContact.gear.map((item, i) => (
+                      {selectedContact.gear.map((item: string, i: number) => (
                         <motion.span
                           key={item}
                           initial={{ opacity: 0, scale: 0.8 }}

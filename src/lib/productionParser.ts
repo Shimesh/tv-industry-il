@@ -222,7 +222,7 @@ function matchCrewMember(name: string, role: string): CrewAssignment {
       c.firstName === normalized ||
       c.lastName === normalized ||
       fullName.includes(normalized) ||
-      normalized.includes(c.firstName) && normalized.includes(c.lastName)
+      (c.firstName && c.lastName && normalized.includes(c.firstName) && normalized.includes(c.lastName))
     );
   });
 

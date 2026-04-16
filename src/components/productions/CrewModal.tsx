@@ -209,7 +209,10 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
   const { contacts, ensureFromCrew } = useAppData();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
-  const uniqueCrew = enrichCrewWithPhones(rawDeduped, contacts);
+  const normalizedContacts = contacts.filter((c): c is { id: string | number; firstName: string; lastName: string; phone?: string } =>
+    Boolean(c.firstName && c.lastName)
+  );
+  const uniqueCrew = enrichCrewWithPhones(rawDeduped, normalizedContacts);
 
   useEffect(() => {
     void ensureFromCrew(rawDeduped);
