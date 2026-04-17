@@ -16,6 +16,9 @@ import {
   AlertTriangle, Megaphone, Trash2, CheckCircle, Save, Settings,
 } from 'lucide-react';
 
+/* ─── Firestore REST base (same pattern as AuthContext) ────────── */
+const FS_REST = 'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents';
+
 /* ─── Types ─────────────────────────────────────────────────── */
 
 interface AdminUser {
@@ -165,8 +168,9 @@ export default function AdminPage() {
       setError(null);
       configInitialized.current = false;
 
-      // Guard: db can be null when firebase.ts runs on the server (isBrowser=false)
-      if (!db) { setDataLoading(false); return; }
+      // Guards: both checked by the outer useEffect, but narrowed here for TypeScript
+      if (!user) { setDataLoading(false); return; }
+      if (!db)   { setDataLoading(false); return; }
 
       try {
         // Bootstrap: does ANY admin account exist?
@@ -181,17 +185,57 @@ export default function AdminPage() {
           return;
         }
 
-        /* Users — real-time listener ───────────────────────── */
+        /* Users — Phase 1: REST API fetch (immediate, bypasses SDK cache) ── */
+        user.getIdToken().then(async token => {
+          const r = await fetch(`${FS_REST}/users?pageSize=200`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!r.ok) return;
+          const data = await r.json() as {
+            documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }>;
+          };
+          const docs = data.documents ?? [];
+          const h24 = Date.now() - 86_400_000;
+          const str = (f: Record<string, Record<string, unknown>>, k: string) =>
+            (f[k]?.stringValue as string | undefined) ?? '';
+          const usersData: AdminUser[] = docs.map(d => ({
+            uid: d.name.split('/').pop()!,
+            displayName: str(d.fields, 'displayName'),
+            email:       str(d.fields, 'email'),
+            role:        str(d.fields, 'role'),
+            department:  str(d.fields, 'department'),
+            siteRole:    str(d.fields, 'siteRole') || undefined,
+            isOnline:    (d.fields['isOnline']?.booleanValue as boolean | undefined) ?? false,
+            lastSeen:    d.fields['lastSeen']?.timestampValue ?? d.fields['lastSeen']?.stringValue,
+            onboardingComplete: (d.fields['onboardingComplete']?.booleanValue as boolean | undefined) ?? false,
+            photoURL:    str(d.fields, 'photoURL') || null,
+            city:        str(d.fields, 'city') || undefined,
+          } as AdminUser));
+          setUsers(usersData);
+          setStats(prev => ({
+            ...prev,
+            totalUsers:  usersData.length,
+            onlineNow:   usersData.filter(u => u.isOnline === true).length,
+            active24h:   usersData.filter(u => { const ms = toMs(u.lastSeen); return ms !== null && ms > h24; }).length,
+            admins:      usersData.filter(u => u.siteRole === 'admin').length,
+            moderators:  usersData.filter(u => u.siteRole === 'moderator').length,
+          }));
+          setDataLoading(false);
+        }).catch(() => {});
+
+        /* Users — Phase 2: SDK onSnapshot for live updates ─────────────── */
         unsubs.push(onSnapshot(
           collection(db, 'users'),
           (snap) => {
+            // Skip empty snapshots served from local cache — REST already populated state.
+            // When the SDK eventually syncs from server (fromCache=false), take over.
+            if (snap.empty && snap.metadata.fromCache) { setDataLoading(false); return; }
             const h24 = Date.now() - 86_400_000;
             const usersData: AdminUser[] = snap.docs.map(d => ({
               uid: d.id, displayName: '', email: '', role: '',
               department: '', isOnline: false,
               ...d.data(),
             } as AdminUser));
-
             setUsers(usersData);
             setStats(prev => ({
               ...prev,
@@ -264,31 +308,56 @@ export default function AdminPage() {
     if (!user || !noAdminExists) return;
     setClaiming(true);
     try {
-      // Use REST-API updateUserProfile — never hangs, even when the Firestore SDK
-      // has a backlog of queued/phantom mutations in IndexedDB that block updateDoc.
-      // updateUserProfile writes to the Firestore server AND immediately calls
-      // setProfile({ siteRole: 'admin' }) in AuthContext → isAdmin becomes true.
-      // We also set noAdminExists=false directly so the screen disappears immediately
-      // without a page reload. The useEffect re-runs (isAdmin dependency changed) and
-      // setup() is guarded above to not override noAdminExists when isAdmin is true.
-      await updateUserProfile({ siteRole: 'admin' });
-      setNoAdminExists(false);
-    } catch {
+      // Write directly via Firestore REST API — bypasses the SDK phantom-write queue
+      // that would cause updateDoc to hang. We verify the response before proceeding
+      // so the user knows immediately if the write failed (no silent swallow).
+      const token = await user.getIdToken(true);
+      const res = await fetch(
+        `${FS_REST}/users/${user.uid}?updateMask.fieldPaths=siteRole`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { siteRole: { stringValue: 'admin' } } }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
+        throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+      }
+      // Reload so fetchOrCreateProfile re-reads the updated profile from the server.
+      // On reload: isAdmin=true → setup() guard prevents noAdminExists flip → dashboard shows.
+      window.location.reload();
+    } catch (err) {
+      setError('שגיאה בהגדרת מנהל: ' + (err instanceof Error ? err.message : String(err)));
       setClaiming(false);
     }
   }
 
   /* ── Change user role ────────────────────────────────────── */
   async function setUserRole(uid: string, newSiteRole: 'admin' | 'moderator' | null) {
-    if (!isAdmin) return;
+    if (!isAdmin || !user) return;
     setUpdatingRole(uid);
     setOpenDropdown(null);
     try {
-      await updateDoc(doc(db, 'users', uid), {
-        siteRole: newSiteRole,
-        updatedAt: serverTimestamp(),
-      });
-      // onSnapshot updates state automatically
+      // REST API — avoids SDK phantom-write hang (same reason as claimAdmin)
+      const token = await user.getIdToken();
+      const fields = newSiteRole
+        ? { siteRole: { stringValue: newSiteRole } }
+        : { siteRole: { nullValue: null } };
+      const res = await fetch(
+        `${FS_REST}/users/${uid}?updateMask.fieldPaths=siteRole`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Optimistic update — onSnapshot will eventually sync from server too
+      setUsers(prev => prev.map(u =>
+        u.uid === uid ? { ...u, siteRole: newSiteRole ?? undefined } : u,
+      ));
+      showToast('ok', 'הרשאות עודכנו בהצלחה');
     } catch (err) {
       showToast('err', 'שגיאה בשינוי הרשאות: ' + (err instanceof Error ? err.message : ''));
     } finally {
