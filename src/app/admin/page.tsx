@@ -165,11 +165,16 @@ export default function AdminPage() {
       setError(null);
       configInitialized.current = false;
 
+      // Guard: db can be null when firebase.ts runs on the server (isBrowser=false)
+      if (!db) { setDataLoading(false); return; }
+
       try {
         // Bootstrap: does ANY admin account exist?
         const adminQ = query(collection(db, 'users'), where('siteRole', '==', 'admin'), limit(1));
         const adminSnap = await getDocs(adminQ);
-        setNoAdminExists(adminSnap.empty);
+        // Guard: if the current user just claimed admin this session (isAdmin=true from
+        // REST profile update), don't let a stale SDK cache result flip noAdminExists back.
+        setNoAdminExists(adminSnap.empty && !isAdmin);
 
         if (!isAdmin && !adminSnap.empty) {
           setDataLoading(false);
@@ -259,12 +264,15 @@ export default function AdminPage() {
     if (!user || !noAdminExists) return;
     setClaiming(true);
     try {
-      // Must use SDK updateDoc (not REST-API updateUserProfile) so the local
-      // IndexedDB cache is updated. After reload, getDocs(adminQ) reads from
-      // the cache — REST writes bypass the cache, so the bootstrap query would
-      // still see no admin and render this screen again.
-      await updateDoc(doc(db, 'users', user.uid), { siteRole: 'admin' });
-      window.location.reload();
+      // Use REST-API updateUserProfile — never hangs, even when the Firestore SDK
+      // has a backlog of queued/phantom mutations in IndexedDB that block updateDoc.
+      // updateUserProfile writes to the Firestore server AND immediately calls
+      // setProfile({ siteRole: 'admin' }) in AuthContext → isAdmin becomes true.
+      // We also set noAdminExists=false directly so the screen disappears immediately
+      // without a page reload. The useEffect re-runs (isAdmin dependency changed) and
+      // setup() is guarded above to not override noAdminExists when isAdmin is true.
+      await updateUserProfile({ siteRole: 'admin' });
+      setNoAdminExists(false);
     } catch {
       setClaiming(false);
     }
