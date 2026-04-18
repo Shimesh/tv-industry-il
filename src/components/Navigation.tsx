@@ -75,7 +75,7 @@ export default function Navigation() {
   });
 
   return (
-    <nav className="fixed top-0 right-0 left-0 z-50 backdrop-blur-xl border-b transition-colors" style={{
+    <nav className="fixed top-0 right-0 left-0 z-[300] backdrop-blur-xl border-b transition-colors" style={{
       background: 'var(--theme-nav-bg)',
       borderColor: 'var(--theme-border)',
     }}>

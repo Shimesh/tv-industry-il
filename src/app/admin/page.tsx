@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
   collection, doc, onSnapshot, updateDoc, setDoc, getDocs,
-  query, where, limit, serverTimestamp,
+  serverTimestamp,
   clearIndexedDbPersistence, terminate, type Timestamp,
 } from 'firebase/firestore';
 import Link from 'next/link';
@@ -173,14 +173,31 @@ export default function AdminPage() {
       if (!db)   { setDataLoading(false); return; }
 
       try {
-        // Bootstrap: does ANY admin account exist?
-        const adminQ = query(collection(db, 'users'), where('siteRole', '==', 'admin'), limit(1));
-        const adminSnap = await getDocs(adminQ);
-        // Guard: if the current user just claimed admin this session (isAdmin=true from
-        // REST profile update), don't let a stale SDK cache result flip noAdminExists back.
-        setNoAdminExists(adminSnap.empty && !isAdmin);
+        // Bootstrap: does ANY admin exist? — REST runQuery bypasses SDK phantom-write queue
+        // so this responds immediately even when IndexedDB has 187 pending contact writes.
+        const bootstrapToken = await user.getIdToken();
+        const adminRes = await fetch(`${FS_REST}:runQuery`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${bootstrapToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: 'users' }],
+              where: {
+                fieldFilter: {
+                  field: { fieldPath: 'siteRole' },
+                  op: 'EQUAL',
+                  value: { stringValue: 'admin' },
+                },
+              },
+              limit: 1,
+            },
+          }),
+        });
+        const adminDocs = await adminRes.json() as Array<{ document?: unknown }>;
+        const adminExists = adminDocs.some(r => r.document != null);
+        setNoAdminExists(!adminExists && !isAdmin);
 
-        if (!isAdmin && !adminSnap.empty) {
+        if (!isAdmin && adminExists) {
           setDataLoading(false);
           return;
         }

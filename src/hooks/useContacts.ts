@@ -62,12 +62,16 @@ export function useContacts(): ContactsHookResult {
     setLoading(true);
 
     // האזנה חיה (Real-time) לפיירבייס.
-    // בזכות ה-Offline Persistence שהפעלנו, זה ייטען מיידית מהזיכרון של הטלפון!
+    // contacts מתעדכן מיידית מהקאש אבל ready=true רק כשהשרת אישר (fromCache=false).
+    // זה מונע שהמובייל יציג 188 והדסקטופ 198 מ-IndexedDB שונים.
     const unsubscribe = onSnapshot(collection(db, 'contacts'), (snapshot) => {
       const firestoreContacts = snapshot.docs.map(mapSnapshotToContact);
       setContacts(firestoreContacts);
-      setReady(true);
       setLoading(false);
+      // Mark ready only once the server confirms the count (not stale local cache)
+      if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+        setReady(true);
+      }
     }, (error) => {
       console.error("[useContacts] Error listening to contacts:", error);
       setLoading(false);
