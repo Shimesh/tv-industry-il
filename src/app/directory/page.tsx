@@ -85,9 +85,17 @@ export default function DirectoryPage() {
 
 function DirectoryContent() {
   const { profile, loading: authLoading } = useAuth();
-  const { contacts: contactsList, contactsLoading } = useAppData();
+  const {
+    contacts: contactsList,
+    totalCount,
+    contactsLoading,
+    contactsReady,
+    contactsServerConfirmed,
+    contactsError,
+  } = useAppData();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [workAreaFilter, setWorkAreaFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -109,16 +117,17 @@ function DirectoryContent() {
 
   const filtered = useMemo(() => {
     return contactsList.filter(c => {
-      const matchSearch = !search || `${c.firstName} ${c.lastName} ${c.role} ${c.department}`.includes(search);
+      const matchSearch = !search || `${c.firstName} ${c.lastName} ${c.role} ${c.department} ${c.workArea || ''}`.includes(search);
       const matchDept = !deptFilter || c.department === deptFilter;
+      const matchWorkArea = !workAreaFilter || c.workArea === workAreaFilter;
       const matchAvail = !availFilter ||
         (availFilter === 'available' && c.availability === 'available') ||
         (availFilter === 'unavailable' && c.availability === 'unavailable') ||
         (availFilter === 'maybe' && c.availability === 'maybe');
       const matchOpenToWork = !openToWorkFilter || c.openToWork === true;
-      return matchSearch && matchDept && matchAvail && matchOpenToWork;
+      return matchSearch && matchDept && matchWorkArea && matchAvail && matchOpenToWork;
     });
-  }, [search, deptFilter, availFilter, openToWorkFilter, contactsList]);
+  }, [search, deptFilter, workAreaFilter, availFilter, openToWorkFilter, contactsList]);
 
   // Sort: current user first
   const sortedFiltered = useMemo(() => {
@@ -151,7 +160,16 @@ function DirectoryContent() {
     return counts;
   }, [contactsList]);
 
-  if (authLoading || contactsLoading) return <DirectorySkeleton />;
+  const workAreaCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contactsList.forEach((contact) => {
+      if (!contact.workArea) return;
+      counts[contact.workArea] = (counts[contact.workArea] || 0) + 1;
+    });
+    return counts;
+  }, [contactsList]);
+
+  if (authLoading || (contactsLoading && !contactsReady)) return <DirectorySkeleton />;
 
   return (
     <div className="min-h-screen">
@@ -190,9 +208,27 @@ function DirectoryContent() {
             className="flex items-center gap-4 mt-4 text-sm"
             style={{ color: 'var(--theme-text-secondary)' }}
           >
+            {!contactsServerConfirmed && (
+              <>
+                <span className="flex items-center gap-1.5 text-amber-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  מסנכרן מול השרת
+                </span>
+                <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.3 }}>|</span>
+              </>
+            )}
+            {contactsError && (
+              <>
+                <span className="flex items-center gap-1.5 text-red-400">
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  שגיאת סנכרון
+                </span>
+                <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.3 }}>|</span>
+              </>
+            )}
             <span className="flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5" />
-              {contactsList.length} אנשי מקצוע
+              {totalCount} אנשי מקצוע
             </span>
             <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.3 }}>|</span>
             <span className="flex items-center gap-1.5 text-green-400">
@@ -213,7 +249,7 @@ function DirectoryContent() {
       </section>
 
       {/* Search & Filters */}
-      <section className="sticky top-16 z-30 backdrop-blur-xl border-b" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)' }}>
+      <section className="sticky z-30 backdrop-blur-xl border-b" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search - glass morphism */}
@@ -277,6 +313,30 @@ function DirectoryContent() {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <button
+              onClick={() => setWorkAreaFilter('')}
+              className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                !workAreaFilter ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
+              }`}
+              style={!workAreaFilter ? undefined : { borderColor: 'var(--theme-border)' }}
+            >
+              כל אזורי העבודה
+            </button>
+            {['אולפן', 'קונטרול'].map((area) => (
+              <button
+                key={area}
+                onClick={() => setWorkAreaFilter(workAreaFilter === area ? '' : area)}
+                className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                  workAreaFilter === area ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
+                }`}
+                style={workAreaFilter === area ? undefined : { borderColor: 'var(--theme-border)' }}
+              >
+                {area} {workAreaCounts[area] || 0}
+              </button>
+            ))}
+          </div>
+
           {/* Active Filters & Count */}
           <div className="flex items-center justify-between mt-3">
             <motion.span
@@ -288,12 +348,12 @@ function DirectoryContent() {
             >
               {filtered.length} תוצאות
             </motion.span>
-            {(search || deptFilter || availFilter || openToWorkFilter) && (
+            {(search || deptFilter || workAreaFilter || availFilter || openToWorkFilter) && (
               <motion.button
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
-                onClick={() => { setSearch(''); setDeptFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
+                onClick={() => { setSearch(''); setDeptFilter(''); setWorkAreaFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
                 className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> נקה פילטרים
@@ -319,12 +379,12 @@ function DirectoryContent() {
             <div className={`absolute inset-0 bg-gradient-to-br from-purple-500 to-violet-600 transition-opacity duration-300 ${!deptFilter ? 'opacity-15' : 'opacity-0'}`} />
             <div className="relative">
               <span className="text-2xl block">🔍</span>
-              <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{contactsList.length}</div>
+              <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{totalCount}</div>
               <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>הכל</div>
             </div>
           </motion.button>
 
-          {departments.map((dept, i) => {
+          {departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || deptFilter === dept.label).map((dept, i) => {
             const count = deptCounts[dept.label] || 0;
             const isActive = deptFilter === dept.label;
             return (
@@ -431,6 +491,11 @@ function DirectoryContent() {
                             <span className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                               {contact.department}
                             </span>
+                            {contact.workArea && (
+                              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/5 text-white/80 border border-white/10">
+                                {contact.workArea}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -506,6 +571,11 @@ function DirectoryContent() {
                       <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                         {contact.department || 'לא מוגדר'}
                       </span>
+                      {contact.workArea && (
+                        <span className="text-xs px-2 py-0.5 rounded-full hidden md:block bg-white/5 text-white/80 border border-white/10">
+                          {contact.workArea}
+                        </span>
+                      )}
                       <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'}`} />
                       {contact.phone && (
                         <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
@@ -625,6 +695,11 @@ function DirectoryContent() {
                     <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                       {selectedContact.department || 'לא מוגדר'}
                     </span>
+                    {selectedContact.workArea && (
+                      <span className="text-sm px-3 py-1.5 rounded-full bg-white/5 text-white/80 border border-white/10">
+                        {selectedContact.workArea}
+                      </span>
+                    )}
                   </motion.div>
 
                   <motion.div

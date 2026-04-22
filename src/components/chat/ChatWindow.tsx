@@ -181,6 +181,16 @@ export default function ChatWindow({
   }, [isRecording, audioBlob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      onSetTyping(false);
+    };
+  }, [onSetTyping]);
+
+  useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
@@ -205,6 +215,11 @@ export default function ChatWindow({
     setSearchQuery('');
     prevScrollHeightRef.current = 0;
     isAtBottomRef.current = true;
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    onSetTyping(false);
   }, [chat.id]);
 
   const handleScroll = useCallback(() => {
@@ -221,7 +236,10 @@ export default function ChatWindow({
   const handleTyping = useCallback(() => {
     onSetTyping(true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => onSetTyping(false), 2000);
+    typingTimeoutRef.current = setTimeout(() => {
+      onSetTyping(false);
+      typingTimeoutRef.current = null;
+    }, 2000);
   }, [onSetTyping]);
 
   const handleSend = useCallback(async () => {
@@ -234,7 +252,10 @@ export default function ChatWindow({
     setReplyTo(null);
     setShowEmoji(false);
     onSetTyping(false);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
     if (inputRef.current) inputRef.current.style.height = 'auto';
   }, [onSendMessage, onSetTyping, replyTo, text]);
 
@@ -276,6 +297,7 @@ export default function ChatWindow({
   const handleCancelRecording = () => {
     cancelRecording();
     setRecordingMode(null);
+    onSetTyping(false);
   };
 
   const handleStopAndSend = () => {

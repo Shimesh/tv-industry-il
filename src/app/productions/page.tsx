@@ -26,7 +26,6 @@ import {
   normalizeName,
   normalizeRole,
 } from '@/lib/crewNormalization';
-import { useAppData } from '@/contexts/AppDataContext';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search } from 'lucide-react';
@@ -81,7 +80,6 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
 
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
-  const { ensureFromCrew } = useAppData();
   const { addNotification } = useNotifications();
   const { teams } = useTeam();
   const searchParams = useSearchParams();
@@ -287,6 +285,29 @@ function ProductionsContent() {
     return Array.from(dedupMap.values());
   }, [parseFirestoreArray]);
 
+  const reconcileContactsFromServer = useCallback(async (prods: Production[], token: string) => {
+    if (!prods.length) return;
+
+    const response = await fetch('/api/contacts/reconcile', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        productions: prods.map((production) => ({
+          id: production.id,
+          crew: sanitizeCrewForFirestore(deduplicateCrew(production.crew)),
+        })),
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(payload.error || 'Failed to reconcile contacts');
+    }
+  }, []);
+
   // Load existing week data via REST API - supports both personal and team paths
   const loadExistingWeek = useCallback(async (weekId: string): Promise<Production[]> => {
     if (!user) return [];
@@ -490,13 +511,15 @@ function ProductionsContent() {
 
       console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
 
+      await reconcileContactsFromServer(prods, token);
+
       // Auto-update crew member profiles (pass token to avoid second refresh)
       await syncCrewProfiles(weekId, prods, wStart, wEnd, token);
     } catch (error) {
       console.error('[saveToFirestore] FAILED:', error);
       setStatusMessage('שגיאה בשמירת הנתונים: ' + (error instanceof Error ? error.message : String(error)));
     }
-  }, [user, profile, workerName, selectedTeamId]);
+  }, [user, profile, workerName, selectedTeamId, reconcileContactsFromServer]);
 
   // Sync crew members with registered user profiles (via REST API)
   // token is passed in from saveToFirestore to avoid a second getIdToken() round-trip
@@ -1170,15 +1193,9 @@ function ProductionsContent() {
   }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
   useEffect(() => {
     if (!productions.length) return;
-    const allCrew = productions.flatMap(p => p.crew || []);
-    // Build a fingerprint so we only call ensureFromCrew when crew actually changes
-    const crewKey = allCrew.map(c => c.identityKey || c.name).sort().join(',');
-    if (crewKey === lastCrewKeyRef.current) return;
-    lastCrewKeyRef.current = crewKey;
-    void ensureFromCrew(allCrew);
-  }, [productions, ensureFromCrew]);
-
-  // Duplicates are auto-resolved silently by useContacts hook
+    const allCrew = productions.flatMap((production) => production.crew || []);
+    lastCrewKeyRef.current = allCrew.map((member) => member.identityKey || member.name).sort().join(',');
+  }, [productions]);
 
   // Check for recent pending requests on mount (via REST API)
   useEffect(() => {

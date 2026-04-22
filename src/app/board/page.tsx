@@ -475,7 +475,7 @@ export default function BoardPage() {
       </section>
 
       {/* Main Tabs */}
-      <section className="sticky top-16 z-30 border-b border-[var(--theme-border)] backdrop-blur-xl" style={{ background: 'var(--theme-nav-bg)' }}>
+      <section className="sticky z-30 border-b border-[var(--theme-border)] backdrop-blur-xl" style={{ background: 'var(--theme-nav-bg)', top: 'var(--app-header-offset)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Tab switcher */}
           <div className="flex gap-0 border-b border-[var(--theme-border)]">

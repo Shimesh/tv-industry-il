@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseScheduleHTML, parseManualText } from '@/lib/productionScheduleParser';
+import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { url, manualText, rawHtml } = body;
 
-    // If raw HTML provided (from browser fetch), parse it server-side
     if (rawHtml) {
       const parsed = parseScheduleHTML(rawHtml, '');
+      await recordRouteMetric({ route: '/api/productions/fetch-schedule', ok: true, statusCode: 200 });
       return NextResponse.json({
         success: true,
         data: parsed,
@@ -16,9 +17,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // If manual text provided, parse it directly
     if (manualText) {
       const parsed = parseManualText(manualText);
+      await recordRouteMetric({ route: '/api/productions/fetch-schedule', ok: true, statusCode: 200 });
       return NextResponse.json({
         success: true,
         data: parsed,
@@ -27,46 +28,52 @@ export async function POST(request: NextRequest) {
     }
 
     if (!url) {
+      await recordRouteMetric({
+        route: '/api/productions/fetch-schedule',
+        ok: false,
+        statusCode: 400,
+        error: 'missing_url',
+      });
       return NextResponse.json(
         { error: 'missing_url', message: 'לא סופק לינק' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Validate URL
     try {
       new URL(url);
     } catch {
+      await recordRouteMetric({
+        route: '/api/productions/fetch-schedule',
+        ok: false,
+        statusCode: 400,
+        error: 'invalid_url',
+      });
       return NextResponse.json(
         { error: 'invalid_url', message: 'הלינק לא תקין' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Server-side fetch with SSL bypass for self-signed certs
     let personalHtml = '';
     let deptHtml = '';
 
     try {
-      // Server-side fetch - note: browser CORS proxy is the primary path
-      // This is a fallback for when the server CAN reach the URL
       const fetchOptions: RequestInit = {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
         },
         // @ts-expect-error - Node.js 20 experimental option
         rejectUnauthorized: false,
       };
 
-      // Build department URL variants
       const deptUrl = new URL(url);
       deptUrl.searchParams.set('HSELWEBprgnameShowFmp', '1');
       const deptUrl2 = new URL(url);
       deptUrl2.searchParams.set('showdept', '1');
 
-      // Fetch personal view and department view in parallel
       const [personalResponse, deptResult] = await Promise.all([
         fetch(url, fetchOptions),
         fetch(deptUrl.toString(), fetchOptions)
@@ -76,21 +83,43 @@ export async function POST(request: NextRequest) {
       if (!personalResponse.ok) {
         throw new Error(`HTTP ${personalResponse.status}`);
       }
-      personalHtml = await personalResponse.text();
 
+      personalHtml = await personalResponse.text();
       if (deptResult && deptResult.ok) {
         deptHtml = await deptResult.text();
       }
     } catch (error) {
       console.error('Server fetch error:', error);
+      await Promise.all([
+        recordRouteMetric({
+          route: '/api/productions/fetch-schedule',
+          ok: false,
+          statusCode: 502,
+          error,
+        }),
+        recordJobMetric({
+          job: 'productions-fetch-schedule',
+          ok: false,
+          message: 'שליפת לוח ההפקות מהשרת נכשלה',
+          detail: error instanceof Error ? error.message : error,
+        }),
+      ]);
       return NextResponse.json({
         error: 'network',
-        message: 'השרת לא הצליח לגשת ללינק. נסה את ה-CORS proxy (הגישה מהדפדפן).',
+        message: 'השרת לא הצליח לגשת ללינק. נסה את ה־CORS proxy מהדפדפן.',
       }, { status: 502 });
     }
 
-    // Parse HTML
     const parsed = parseScheduleHTML(personalHtml, deptHtml);
+    await Promise.all([
+      recordRouteMetric({ route: '/api/productions/fetch-schedule', ok: true, statusCode: 200 }),
+      recordJobMetric({
+        job: 'productions-fetch-schedule',
+        ok: true,
+        message: 'שליפת לוח ההפקות הושלמה בהצלחה',
+        detail: { productions: parsed.productions.length, source: 'server' },
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -101,9 +130,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('API error:', error);
+    await recordRouteMetric({
+      route: '/api/productions/fetch-schedule',
+      ok: false,
+      statusCode: 500,
+      error,
+    });
     return NextResponse.json(
       { error: 'server', message: 'שגיאת שרת' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

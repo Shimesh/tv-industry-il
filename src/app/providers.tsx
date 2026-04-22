@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppDataProvider } from '@/contexts/AppDataContext';
@@ -18,6 +20,25 @@ function PresenceManager() {
   return null;
 }
 
+function UsageTracker() {
+  const pathname = usePathname();
+  const lastTrackedPath = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!pathname || lastTrackedPath.current === pathname) return;
+    lastTrackedPath.current = pathname;
+
+    void fetch('/api/metrics/page-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pathname }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [pathname]);
+
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
@@ -30,6 +51,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <CallProvider>
                 <OnboardingWrapper>
                   <PresenceManager />
+                  <UsageTracker />
                   {children}
                   <IncomingCall />
                   <CallScreen />

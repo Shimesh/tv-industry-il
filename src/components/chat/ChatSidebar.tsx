@@ -69,10 +69,11 @@ export default function ChatSidebar({
   onSelectChat, onNewChat, onSelectOnlineUser,
 }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
+  const onlineUserIds = useMemo(() => new Set(onlineUsers.map((user) => user.uid)), [onlineUsers]);
 
   const filteredChats = useMemo(() => {
-    if (!search) return chats;
-    const query = search.toLowerCase();
+    const query = search.trim().toLowerCase();
+    if (!query) return chats;
     return chats.filter((chat) => getChatName(chat, currentUserId).toLowerCase().includes(query));
   }, [chats, currentUserId, search]);
 
@@ -130,7 +131,7 @@ export default function ChatSidebar({
               ? chat.membersInfo?.find(m => m.uid !== currentUserId)?.uid
               : null;
             const isOtherOnline = otherMemberUid
-              ? onlineUsers.some(u => u.uid === otherMemberUid)
+              ? onlineUserIds.has(otherMemberUid)
               : false;
 
             return (

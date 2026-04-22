@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { getChatV2TransportMode, isChatSocketEnabled } from '@/lib/chat-v2/featureFlags';
 import { getChatSocketBridge, type ChatSocketBridge } from '@/lib/chat-v2/socketClient';
 import type {
@@ -29,6 +28,8 @@ import type {
   ChatV2TypingUpdatePayload,
   ChatV2UploadUrlPayload,
 } from '@/lib/chat-v2/protocol';
+
+let transportConsumerCount = 0;
 
 export interface ChatTransportHandlers {
   onSnapshot?: (payload: ChatV2SnapshotPayload) => void;
@@ -100,16 +101,54 @@ export function useChatTransport({
   onError,
   onCallEvent,
 }: UseChatTransportOptions): ChatTransportActions {
-  const { user } = useAuth();
   const bridge = useMemo(() => getChatSocketBridge(), []);
   const pendingQueueRef = useRef(0);
+  const mountedRef = useRef(true);
+  const connectedRef = useRef(false);
+  const handlersRef = useRef<ChatTransportHandlers>({});
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [socketMode, setSocketMode] = useState<ChatSocketMode>(bridge.getStatus().mode);
   const [connectionState, setConnectionState] = useState<ChatConnectionState>(() =>
     createBaseConnectionState(bridge.getStatus().mode, 0, null)
   );
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    handlersRef.current = {
+      onSnapshot,
+      onDelta,
+      onMessageAccepted,
+      onMessage,
+      onMessageUpdate,
+      onReceiptUpdate,
+      onTypingUpdate,
+      onPresenceUpdate,
+      onUploadUrl,
+      onError,
+      onCallEvent,
+    };
+  }, [
+    onCallEvent,
+    onDelta,
+    onError,
+    onMessage,
+    onMessageAccepted,
+    onMessageUpdate,
+    onPresenceUpdate,
+    onReceiptUpdate,
+    onSnapshot,
+    onTypingUpdate,
+    onUploadUrl,
+  ]);
+
   const updateConnectionState = useCallback((next: Partial<ChatConnectionState> & { socket?: ChatSocketMode }) => {
+    if (!mountedRef.current) return;
     setConnectionState((current) => ({
       ...current,
       ...next,
@@ -122,21 +161,33 @@ export function useChatTransport({
 
   useEffect(() => {
     const unsubscribeStatus = bridge.subscribeStatus((status) => {
+      if (!mountedRef.current) return;
       setSocketMode(status.mode);
       updateConnectionState({
         socket: status.mode,
-        lastSyncAt: status.connectedAt ?? lastSyncAt,
+        lastSyncAt: status.connectedAt ?? null,
       });
     });
 
     return unsubscribeStatus;
-  }, [bridge, lastSyncAt, updateConnectionState]);
+  }, [bridge, updateConnectionState]);
 
   useEffect(() => {
     if (!enabled || !currentUserId || !getIdToken) {
-      bridge.disconnect();
+      if (connectedRef.current) {
+        transportConsumerCount = Math.max(0, transportConsumerCount - 1);
+        connectedRef.current = false;
+      }
+      if (transportConsumerCount === 0) {
+        bridge.disconnect();
+      }
       updateConnectionState({ socket: enabled ? 'idle' : 'disabled' });
       return;
+    }
+
+    if (!connectedRef.current) {
+      transportConsumerCount += 1;
+      connectedRef.current = true;
     }
 
     let cancelled = false;
@@ -153,7 +204,7 @@ export function useChatTransport({
           token,
           deviceId: `web-${currentUserId}`,
           appVersion: process.env.NEXT_PUBLIC_APP_VERSION || 'chat-v2',
-          lastKnownServerCursor: lastSyncAt,
+          lastKnownServerCursor: null,
         });
       })
       .catch((error) => {
@@ -173,73 +224,80 @@ export function useChatTransport({
 
     return () => {
       cancelled = true;
+      if (connectedRef.current) {
+        transportConsumerCount = Math.max(0, transportConsumerCount - 1);
+        connectedRef.current = false;
+      }
+      if (transportConsumerCount === 0) {
+        bridge.disconnect();
+      }
     };
-  }, [bridge, currentUserId, enabled, getIdToken, lastSyncAt, onError, updateConnectionState]);
+  }, [bridge, currentUserId, enabled, getIdToken, onError, updateConnectionState]);
 
   useEffect(() => {
-    if (!enabled || !activeChatId) return;
-    bridge.joinChat(activeChatId, lastSyncAt);
-    return () => {
-      bridge.leaveChat(activeChatId);
+    if (!enabled) return;
+
+    const handleNavigationStart = () => {
+      if (activeChatId) {
+        bridge.leaveChat(activeChatId);
+      }
+      if (connectedRef.current) {
+        transportConsumerCount = Math.max(0, transportConsumerCount - 1);
+        connectedRef.current = false;
+      }
+      bridge.disconnect();
+      updateConnectionState({ socket: 'idle' });
     };
-  }, [activeChatId, bridge, enabled, lastSyncAt]);
+
+    window.addEventListener('app:navigation-start', handleNavigationStart as EventListener);
+    return () => {
+      window.removeEventListener('app:navigation-start', handleNavigationStart as EventListener);
+    };
+  }, [activeChatId, bridge, enabled, updateConnectionState]);
 
   useEffect(() => {
     const cleanups: Array<() => void> = [];
-    if (onSnapshot) cleanups.push(bridge.on('chat:snapshot', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onSnapshot(payload);
+    const markSync = () => {
+      const now = Date.now();
+      if (!mountedRef.current) return;
+      setLastSyncAt(now);
+      updateConnectionState({ lastSyncAt: now });
+    };
+
+    cleanups.push(bridge.on('chat:snapshot', (payload) => {
+      markSync();
+      handlersRef.current.onSnapshot?.(payload);
     }));
-    if (onDelta) cleanups.push(bridge.on('chat:delta', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onDelta(payload);
+    cleanups.push(bridge.on('chat:delta', (payload) => {
+      markSync();
+      handlersRef.current.onDelta?.(payload);
     }));
-    if (onMessageAccepted) cleanups.push(bridge.on('message:accepted', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onMessageAccepted(payload);
+    cleanups.push(bridge.on('message:accepted', (payload) => {
+      markSync();
+      handlersRef.current.onMessageAccepted?.(payload);
     }));
-    if (onMessage) cleanups.push(bridge.on('message:new', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onMessage(payload);
+    cleanups.push(bridge.on('message:new', (payload) => {
+      markSync();
+      handlersRef.current.onMessage?.(payload);
     }));
-    if (onMessageUpdate) cleanups.push(bridge.on('message:update', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onMessageUpdate(payload);
+    cleanups.push(bridge.on('message:update', (payload) => {
+      markSync();
+      handlersRef.current.onMessageUpdate?.(payload);
     }));
-    if (onReceiptUpdate) cleanups.push(bridge.on('receipt:update', (payload) => {
-      setLastSyncAt(Date.now());
-      updateConnectionState({ lastSyncAt: Date.now() });
-      onReceiptUpdate(payload);
+    cleanups.push(bridge.on('receipt:update', (payload) => {
+      markSync();
+      handlersRef.current.onReceiptUpdate?.(payload);
     }));
-    if (onTypingUpdate) cleanups.push(bridge.on('typing:update', (payload) => onTypingUpdate(payload)));
-    if (onPresenceUpdate) cleanups.push(bridge.on('presence:update', (payload) => onPresenceUpdate(payload)));
-    if (onUploadUrl) cleanups.push(bridge.on('upload:url', (payload) => onUploadUrl(payload)));
-    if (onError) cleanups.push(bridge.on('error:event', onError));
-    if (onCallEvent) cleanups.push(bridge.on('call:event', onCallEvent));
+    cleanups.push(bridge.on('typing:update', (payload) => handlersRef.current.onTypingUpdate?.(payload)));
+    cleanups.push(bridge.on('presence:update', (payload) => handlersRef.current.onPresenceUpdate?.(payload)));
+    cleanups.push(bridge.on('upload:url', (payload) => handlersRef.current.onUploadUrl?.(payload)));
+    cleanups.push(bridge.on('error:event', (payload) => handlersRef.current.onError?.(payload)));
+    cleanups.push(bridge.on('call:event', (payload) => handlersRef.current.onCallEvent?.(payload)));
 
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [
-    bridge,
-    onCallEvent,
-    onDelta,
-    onError,
-    onMessage,
-    onMessageAccepted,
-    onMessageUpdate,
-    onPresenceUpdate,
-    onReceiptUpdate,
-    onSnapshot,
-    onTypingUpdate,
-    onUploadUrl,
-    updateConnectionState,
-  ]);
+  }, [bridge, updateConnectionState]);
 
   const emitWithPendingAck = useCallback(async (event: keyof ChatV2ClientToServerEvents, payload: unknown) => {
     if (!enabled) return null;
@@ -329,7 +387,7 @@ export function useChatTransport({
     emitFireAndForget(`call:${payload.signalType}` as keyof ChatV2ClientToServerEvents, payload);
   }, [emitFireAndForget, enabled]);
 
-  return {
+  return useMemo(() => ({
     connectionState,
     transportMode: enabled ? 'hybrid' : 'firestore',
     socketReady: socketMode === 'connected',
@@ -345,5 +403,21 @@ export function useChatTransport({
     sendCallSignal,
     lastSyncAt,
     bridge,
-  };
+  }), [
+    bridge,
+    connectionState,
+    enabled,
+    lastSyncAt,
+    sendCallSignal,
+    sendDeliveredReceipt,
+    sendMessage,
+    sendPresenceHeartbeat,
+    sendReadReceipt,
+    sendTyping,
+    sendUploadComplete,
+    sendUploadInit,
+    socketMode,
+    subscribe,
+    unsubscribe,
+  ]);
 }

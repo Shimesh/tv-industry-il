@@ -31,7 +31,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-6 left-4 z-[9999] flex flex-col gap-2 items-start max-w-sm" style={{ direction: 'rtl' }}>
+      <div
+        className="fixed left-4 z-[9999] flex flex-col gap-2 items-start max-w-sm"
+        style={{ direction: 'rtl', bottom: 'calc(1.5rem + var(--safe-area-bottom))' }}
+      >
         {toasts.map(toast => {
           const icons = { success: CheckCircle, error: XCircle, info: Info };
           const colors = {

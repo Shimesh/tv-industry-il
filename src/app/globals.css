@@ -4,6 +4,12 @@
 :root {
   --background: #030712;
   --foreground: #f3f4f6;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --app-header-height: 4rem;
+  --app-header-offset: calc(var(--app-header-height) + var(--safe-area-top));
 
   /* Theme System Variables */
   --theme-bg: #030712;
@@ -30,6 +36,7 @@
 html {
   direction: rtl;
   scroll-behavior: smooth;
+  min-height: 100%;
 }
 
 body {
@@ -37,7 +44,27 @@ body {
   color: var(--theme-text, #f3f4f6);
   font-family: 'Heebo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   min-height: 100vh;
+  min-height: 100dvh;
   transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+
+body,
+#__next {
+  width: 100%;
+}
+
+.app-safe-top {
+  padding-top: var(--safe-area-top);
+}
+
+.app-safe-bottom {
+  padding-bottom: var(--safe-area-bottom);
+}
+
+.app-safe-x {
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
 }
 
 /* Custom Scrollbar - theme aware */

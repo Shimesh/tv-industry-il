@@ -14,7 +14,7 @@ const footerLinks = [
 
 export default function Footer() {
   return (
-    <footer className="border-t transition-colors" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+    <footer className="border-t transition-colors app-safe-bottom" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Brand */}

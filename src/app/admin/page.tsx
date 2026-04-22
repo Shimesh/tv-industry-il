@@ -1,441 +1,389 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/firebase';
-import {
-  collection, doc, onSnapshot, updateDoc, setDoc, getDocs,
-  serverTimestamp,
-  clearIndexedDbPersistence, terminate, type Timestamp,
-} from 'firebase/firestore';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  Users, Contact2, FileText, MessageCircle, ShieldCheck, Activity,
-  Search, RefreshCw, Crown, Shield, UserIcon, Eye, Ban, ChevronDown,
-  ArrowLeft, Wrench, Database, BarChart3, Wifi, WifiOff,
-  AlertTriangle, Megaphone, Trash2, CheckCircle, Save, Settings,
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  BarChart3,
+  CheckCircle,
+  Contact2,
+  Crown,
+  FileText,
+  Megaphone,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  Settings,
+  Shield,
+  ShieldCheck,
+  UserIcon,
+  Users,
+  Wifi,
+  WifiOff,
+  Wrench,
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import type { AdminOverview, AdminRole, AdminUserSummary, SystemEventRecord } from '@/lib/adminTypes';
 
-/* ─── Firestore REST base (same pattern as AuthContext) ────────── */
-const FS_REST = 'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents';
+type ToastState = {
+  type: 'ok' | 'err';
+  msg: string;
+} | null;
 
-/* ─── Types ─────────────────────────────────────────────────── */
-
-interface AdminUser {
-  uid: string;
-  displayName: string;
-  email: string;
-  role: string;
-  department: string;
-  siteRole?: string;
-  isOnline: boolean;
-  lastSeen?: unknown;     // ISO string OR Firestore Timestamp
-  onboardingComplete?: boolean;
-  photoURL?: string | null;
-  city?: string;
-}
-
-interface Stats {
-  totalUsers: number;
-  onlineNow: number;
-  active24h: number;
-  admins: number;
-  moderators: number;
-  totalContacts: number;
-  totalPosts: number;
-  totalChats: number;
-}
-
-interface AppConfig {
-  maintenanceMode: boolean;
-  boardAnnouncement: string;
-}
-
-/* ─── Helpers ───────────────────────────────────────────────── */
-
-/** Normalise any lastSeen representation → ms epoch (or null). */
-function toMs(v: unknown): number | null {
-  if (!v) return null;
-  if (typeof v === 'string') return new Date(v).getTime();
-  if (typeof v === 'number') return v;
-  if (typeof v === 'object' && 'toDate' in (v as object)) {
-    return (v as Timestamp).toDate().getTime();
-  }
-  return null;
-}
-
-function formatLastSeen(v: unknown): string {
-  const ms = toMs(v);
-  if (!ms || isNaN(ms)) return '—';
-  const diff = Date.now() - ms;
-  if (diff < 60_000)     return 'עכשיו';
-  if (diff < 3_600_000)  return `לפני ${Math.floor(diff / 60_000)} דק׳`;
-  if (diff < 86_400_000) return `לפני ${Math.floor(diff / 3_600_000)} ש׳`;
-  return new Date(ms).toLocaleDateString('he-IL');
-}
-
-/* ─── Sub-components ────────────────────────────────────────── */
-
-const ROLE_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  admin:     { label: 'מנהל',  color: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10', icon: Crown },
-  moderator: { label: 'מנחה',  color: 'text-blue-400 border-blue-400/30 bg-blue-400/10',       icon: Shield },
-  user:      { label: 'משתמש', color: 'text-gray-400 border-gray-500/30 bg-gray-500/10',        icon: UserIcon },
+const EMPTY_OVERVIEW: AdminOverview = {
+  generatedAt: '',
+  presenceWindowMs: 120000,
+  stats: {
+    totalUsers: 0,
+    onlineNow: 0,
+    active24h: 0,
+    admins: 0,
+    moderators: 0,
+    stalePresence: 0,
+    totalContacts: 0,
+    totalPosts: 0,
+    totalChats: 0,
+  },
+  appConfig: {
+    maintenanceMode: false,
+    boardAnnouncement: '',
+    updatedAt: null,
+  },
+  contactsByDepartment: [],
+  contactsByWorkArea: [],
+  users: [],
+  onlineUsers: [],
+  staleUsers: [],
+  recentEvents: [],
+  usage: {
+    topPages: [],
+    routeHealth: [],
+    jobs: [],
+  },
 };
 
-function RoleBadge({ role }: { role?: string }) {
-  const cfg = ROLE_CONFIG[role ?? 'user'] ?? ROLE_CONFIG.user;
-  const Icon = cfg.icon;
+const ROLE_OPTIONS: Array<{ value: AdminRole; label: string; icon: typeof Crown; classes: string }> = [
+  { value: 'admin', label: 'מנהל', icon: Crown, classes: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10' },
+  { value: 'moderator', label: 'מנחה', icon: Shield, classes: 'text-blue-400 border-blue-400/30 bg-blue-400/10' },
+  { value: 'user', label: 'משתמש', icon: UserIcon, classes: 'text-gray-300 border-gray-600/40 bg-gray-600/10' },
+];
+
+function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return '—';
+  const diff = Date.now() - parsed;
+  if (diff < 60_000) return 'עכשיו';
+  if (diff < 3_600_000) return `לפני ${Math.floor(diff / 60_000)} דק׳`;
+  if (diff < 86_400_000) return `לפני ${Math.floor(diff / 3_600_000)} ש׳`;
+  return new Date(parsed).toLocaleString('he-IL');
+}
+
+function rolePresentation(role: AdminRole) {
+  return ROLE_OPTIONS.find((option) => option.value === role) || ROLE_OPTIONS[2];
+}
+
+function PresenceBadge({ user }: { user: AdminUserSummary }) {
+  if (user.onlineNow) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">
+        <Wifi className="h-3 w-3" />
+        מחובר
+      </span>
+    );
+  }
+
+  if (user.stalePresence) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs text-orange-300">
+        <AlertTriangle className="h-3 w-3" />
+        נוכחות ישנה
+      </span>
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border ${cfg.color}`}>
-      <Icon className="w-3 h-3" />
-      {cfg.label}
+    <span className="inline-flex items-center gap-1 rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+      <WifiOff className="h-3 w-3" />
+      לא מחובר
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: AdminRole }) {
+  const current = rolePresentation(role);
+  const Icon = current.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${current.classes}`}>
+      <Icon className="h-3 w-3" />
+      {current.label}
     </span>
   );
 }
 
 function StatCard({
-  icon: Icon, label, value, color, live = false,
+  icon: Icon,
+  label,
+  value,
+  color,
+  live = false,
 }: {
-  icon: React.ElementType; label: string; value: number; color: string; live?: boolean;
+  icon: typeof Users;
+  label: string;
+  value: number;
+  color: string;
+  live?: boolean;
 }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-        <Icon className="w-6 h-6" />
+    <div className="flex items-center gap-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${color}`}>
+        <Icon className="h-6 w-6" />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-2xl font-bold text-white">{value}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+        <p className="mt-0.5 text-xs text-gray-400">{label}</p>
       </div>
-      {live && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" title="שידור חי" />}
+      {live ? <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400 animate-pulse" /> : null}
     </div>
   );
 }
 
-/* ─── Constants ─────────────────────────────────────────────── */
+function EventRow({ event }: { event: SystemEventRecord }) {
+  const color =
+    event.level === 'error'
+      ? 'text-red-300 border-red-500/30 bg-red-500/10'
+      : event.level === 'warn'
+        ? 'text-orange-300 border-orange-500/30 bg-orange-500/10'
+        : event.level === 'success'
+          ? 'text-green-300 border-green-500/30 bg-green-500/10'
+          : 'text-blue-300 border-blue-500/30 bg-blue-500/10';
 
-const EMPTY_STATS: Stats = {
-  totalUsers: 0, onlineNow: 0, active24h: 0,
-  admins: 0, moderators: 0,
-  totalContacts: 0, totalPosts: 0, totalChats: 0,
-};
-
-/* ─── Main Component ────────────────────────────────────────── */
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <span className={`rounded-full border px-2 py-0.5 text-xs ${color}`}>{event.type}</span>
+        <span className="text-xs text-gray-500">{formatRelativeTime(event.createdAt)}</span>
+      </div>
+      <p className="text-sm text-white">{event.message}</p>
+      <p className="mt-1 text-xs text-gray-500">
+        {event.source}
+        {event.route ? ` • ${event.route}` : ''}
+        {event.job ? ` • ${event.job}` : ''}
+      </p>
+      {event.detail ? <p className="mt-2 text-xs text-gray-400">{event.detail}</p> : null}
+    </div>
+  );
+}
 
 export default function AdminPage() {
-  const { user, profile, loading: authLoading, updateUserProfile } = useAuth();
-
-  const [users, setUsers]               = useState<AdminUser[]>([]);
-  const [stats, setStats]               = useState<Stats>(EMPTY_STATS);
-  const [contactDepts, setContactDepts] = useState<Record<string, number>>({});
-  const [appConfig, setAppConfig]       = useState<AppConfig>({ maintenanceMode: false, boardAnnouncement: '' });
-  const [dataLoading, setDataLoading]   = useState(true);
-  const [error, setError]               = useState<string | null>(null);
-  const [noAdminExists, setNoAdminExists] = useState(false);
-  const [claiming, setClaiming]         = useState(false);
-
-  // User table
-  const [search, setSearch]             = useState('');
-  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-
-  // Admin controls
+  const { user, profile, loading: authLoading } = useAuth();
+  const [overview, setOverview] = useState<AdminOverview>(EMPTY_OVERVIEW);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [announcementDraft, setAnnouncementDraft] = useState('');
-  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
-  const [togglingMaintenance, setTogglingMaintenance] = useState(false);
-  const [clearingCache, setClearingCache] = useState(false);
-  const [toast, setToast] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [noAdminExists, setNoAdminExists] = useState(false);
+  const [claimingAdmin, setClaimingAdmin] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [runningSync, setRunningSync] = useState(false);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const draftDirtyRef = useRef(false);
 
-  const configInitialized = useRef(false);
   const isAdmin = profile?.siteRole === 'admin';
 
-  /* ── Toast helper ─────────────────────────────────────────── */
   function showToast(type: 'ok' | 'err', msg: string) {
     setToast({ type, msg });
-    setTimeout(() => setToast(null), 3000);
+    window.setTimeout(() => setToast(null), 3000);
   }
 
-  /* ── Real-time data setup ─────────────────────────────────── */
-  useEffect(() => {
-    // Wait for Firebase Auth + profile to fully resolve before deciding access
-    if (authLoading) return;
-    if (!user) { setDataLoading(false); return; }
+  async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
+    if (!user) {
+      throw new Error('יש להתחבר תחילה');
+    }
 
-    const unsubs: (() => void)[] = [];
+    const token = await user.getIdToken();
+    const response = await fetch(path, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+      cache: 'no-store',
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message =
+        typeof payload?.error === 'string'
+          ? payload.error
+          : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    return payload as T;
+  }
+
+  async function loadOverview(silent = false) {
+    if (!user || !isAdmin) return;
+    if (!silent) setLoading(true);
+    if (silent) setRefreshing(true);
+
+    try {
+      const data = await fetchWithAuth<AdminOverview>('/api/admin/overview');
+      setOverview(data);
+      if (!draftDirtyRef.current) {
+        setAnnouncementDraft(data.appConfig.boardAnnouncement || '');
+      }
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'שגיאה בטעינת לוח הניהול');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      setLoading(false);
+      setNoAdminExists(false);
+      return;
+    }
+
+    let cancelled = false;
 
     async function setup() {
-      setDataLoading(true);
-      setError(null);
-      configInitialized.current = false;
-
-      // Guards: both checked by the outer useEffect, but narrowed here for TypeScript
-      if (!user) { setDataLoading(false); return; }
-      if (!db)   { setDataLoading(false); return; }
-
       try {
-        // Bootstrap: does ANY admin exist? — REST runQuery bypasses SDK phantom-write queue
-        // so this responds immediately even when IndexedDB has 187 pending contact writes.
-        const bootstrapToken = await user.getIdToken();
-        const adminRes = await fetch(`${FS_REST}:runQuery`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${bootstrapToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            structuredQuery: {
-              from: [{ collectionId: 'users' }],
-              where: {
-                fieldFilter: {
-                  field: { fieldPath: 'siteRole' },
-                  op: 'EQUAL',
-                  value: { stringValue: 'admin' },
-                },
-              },
-              limit: 1,
-            },
-          }),
-        });
-        const adminDocs = await adminRes.json() as Array<{ document?: unknown }>;
-        const adminExists = adminDocs.some(r => r.document != null);
-        setNoAdminExists(!adminExists && !isAdmin);
-
-        if (!isAdmin && adminExists) {
-          setDataLoading(false);
+        if (!isAdmin) {
+          const bootstrap = await fetchWithAuth<{ adminExists: boolean; canClaim: boolean }>('/api/admin/bootstrap');
+          if (!cancelled) {
+            setNoAdminExists(!bootstrap.adminExists && bootstrap.canClaim);
+            setLoading(false);
+          }
           return;
         }
 
-        /* Users — Phase 1: REST API fetch (immediate, bypasses SDK cache) ── */
-        user.getIdToken().then(async token => {
-          const r = await fetch(`${FS_REST}/users?pageSize=200`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!r.ok) return;
-          const data = await r.json() as {
-            documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }>;
-          };
-          const docs = data.documents ?? [];
-          const h24 = Date.now() - 86_400_000;
-          const str = (f: Record<string, Record<string, unknown>>, k: string) =>
-            (f[k]?.stringValue as string | undefined) ?? '';
-          const usersData: AdminUser[] = docs.map(d => ({
-            uid: d.name.split('/').pop()!,
-            displayName: str(d.fields, 'displayName'),
-            email:       str(d.fields, 'email'),
-            role:        str(d.fields, 'role'),
-            department:  str(d.fields, 'department'),
-            siteRole:    str(d.fields, 'siteRole') || undefined,
-            isOnline:    (d.fields['isOnline']?.booleanValue as boolean | undefined) ?? false,
-            lastSeen:    d.fields['lastSeen']?.timestampValue ?? d.fields['lastSeen']?.stringValue,
-            onboardingComplete: (d.fields['onboardingComplete']?.booleanValue as boolean | undefined) ?? false,
-            photoURL:    str(d.fields, 'photoURL') || null,
-            city:        str(d.fields, 'city') || undefined,
-          } as AdminUser));
-          setUsers(usersData);
-          setStats(prev => ({
-            ...prev,
-            totalUsers:  usersData.length,
-            onlineNow:   usersData.filter(u => u.isOnline === true).length,
-            active24h:   usersData.filter(u => { const ms = toMs(u.lastSeen); return ms !== null && ms > h24; }).length,
-            admins:      usersData.filter(u => u.siteRole === 'admin').length,
-            moderators:  usersData.filter(u => u.siteRole === 'moderator').length,
-          }));
-          setDataLoading(false);
-        }).catch(() => {});
-
-        /* Users — Phase 2: SDK onSnapshot for live updates ─────────────── */
-        unsubs.push(onSnapshot(
-          collection(db, 'users'),
-          (snap) => {
-            // Skip empty snapshots served from local cache — REST already populated state.
-            // When the SDK eventually syncs from server (fromCache=false), take over.
-            if (snap.empty && snap.metadata.fromCache) { setDataLoading(false); return; }
-            const h24 = Date.now() - 86_400_000;
-            const usersData: AdminUser[] = snap.docs.map(d => ({
-              uid: d.id, displayName: '', email: '', role: '',
-              department: '', isOnline: false,
-              ...d.data(),
-            } as AdminUser));
-            setUsers(usersData);
-            setStats(prev => ({
-              ...prev,
-              totalUsers:  usersData.length,
-              onlineNow:   usersData.filter(u => u.isOnline === true).length,
-              active24h:   usersData.filter(u => { const ms = toMs(u.lastSeen); return ms !== null && ms > h24; }).length,
-              admins:      usersData.filter(u => u.siteRole === 'admin').length,
-              moderators:  usersData.filter(u => u.siteRole === 'moderator').length,
-            }));
-            setDataLoading(false);
-          },
-          (err) => {
-            setError('שגיאה בטעינת משתמשים: ' + err.message);
-            setDataLoading(false);
-          },
-        ));
-
-        /* Contacts — real-time listener ────────────────────── */
-        unsubs.push(onSnapshot(
-          collection(db, 'contacts'),
-          (snap) => {
-            const depts: Record<string, number> = {};
-            for (const d of snap.docs) {
-              const dept = (d.data().department as string) || 'כללי';
-              depts[dept] = (depts[dept] ?? 0) + 1;
-            }
-            setContactDepts(depts);
-            setStats(prev => ({ ...prev, totalContacts: snap.size }));
-          },
-        ));
-
-        /* Posts — one-time (sufficient for a count) ────────── */
-        getDocs(collection(db, 'posts'))
-          .then(snap => setStats(prev => ({ ...prev, totalPosts: snap.size })))
-          .catch(() => {});
-
-        /* Chats — one-time (admin rule allows full read) ───── */
-        getDocs(collection(db, 'chats'))
-          .then(snap => setStats(prev => ({ ...prev, totalChats: snap.size })))
-          .catch(() => {});
-
-        /* App config — real-time listener ──────────────────── */
-        unsubs.push(onSnapshot(
-          doc(db, 'appConfig', 'global'),
-          (snap) => {
-            if (snap.exists()) {
-              const data = snap.data() as AppConfig;
-              setAppConfig(data);
-              // Initialise draft only on first load — don't override unsaved edits
-              if (!configInitialized.current) {
-                setAnnouncementDraft(data.boardAnnouncement || '');
-                configInitialized.current = true;
-              }
-            }
-          },
-        ));
-
-      } catch (err) {
-        setError('שגיאה בטעינת נתוני ניהול: ' + (err instanceof Error ? err.message : String(err)));
-        setDataLoading(false);
+        setNoAdminExists(false);
+        await loadOverview();
+      } catch (setupError) {
+        if (!cancelled) {
+          setLoading(false);
+          setError(setupError instanceof Error ? setupError.message : 'שגיאה בטעינת מצב ניהול');
+        }
       }
     }
 
-    setup();
-    return () => unsubs.forEach(fn => fn());
-  }, [user, isAdmin, authLoading]);
+    void setup();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, isAdmin]);
 
-  /* ── Claim first admin ───────────────────────────────────── */
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    const interval = window.setInterval(() => {
+      void loadOverview(true);
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [user, isAdmin]);
+
   async function claimAdmin() {
-    if (!user || !noAdminExists) return;
-    setClaiming(true);
+    setClaimingAdmin(true);
     try {
-      // Write directly via Firestore REST API — bypasses the SDK phantom-write queue
-      // that would cause updateDoc to hang. We verify the response before proceeding
-      // so the user knows immediately if the write failed (no silent swallow).
-      const token = await user.getIdToken(true);
-      const res = await fetch(
-        `${FS_REST}/users/${user.uid}?updateMask.fieldPaths=siteRole`,
-        {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { siteRole: { stringValue: 'admin' } } }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
-        throw new Error(body.error?.message ?? `HTTP ${res.status}`);
-      }
-      // Reload so fetchOrCreateProfile re-reads the updated profile from the server.
-      // On reload: isAdmin=true → setup() guard prevents noAdminExists flip → dashboard shows.
+      await fetchWithAuth('/api/admin/bootstrap', { method: 'POST' });
       window.location.reload();
-    } catch (err) {
-      setError('שגיאה בהגדרת מנהל: ' + (err instanceof Error ? err.message : String(err)));
-      setClaiming(false);
+    } catch (claimError) {
+      setError(claimError instanceof Error ? claimError.message : 'שגיאה בהגדרת מנהל ראשון');
+      setClaimingAdmin(false);
     }
   }
 
-  /* ── Change user role ────────────────────────────────────── */
-  async function setUserRole(uid: string, newSiteRole: 'admin' | 'moderator' | null) {
-    if (!isAdmin || !user) return;
+  async function updateUserRole(uid: string, siteRole: AdminRole) {
     setUpdatingRole(uid);
-    setOpenDropdown(null);
     try {
-      // REST API — avoids SDK phantom-write hang (same reason as claimAdmin)
-      const token = await user.getIdToken();
-      const fields = newSiteRole
-        ? { siteRole: { stringValue: newSiteRole } }
-        : { siteRole: { nullValue: null } };
-      const res = await fetch(
-        `${FS_REST}/users/${uid}?updateMask.fieldPaths=siteRole`,
-        {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields }),
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // Optimistic update — onSnapshot will eventually sync from server too
-      setUsers(prev => prev.map(u =>
-        u.uid === uid ? { ...u, siteRole: newSiteRole ?? undefined } : u,
-      ));
-      showToast('ok', 'הרשאות עודכנו בהצלחה');
-    } catch (err) {
-      showToast('err', 'שגיאה בשינוי הרשאות: ' + (err instanceof Error ? err.message : ''));
+      await fetchWithAuth(`/api/admin/users/${uid}/role`, {
+        method: 'POST',
+        body: JSON.stringify({ siteRole }),
+      });
+      showToast('ok', 'הרשאת המשתמש עודכנה');
+      await loadOverview(true);
+    } catch (roleError) {
+      showToast('err', roleError instanceof Error ? roleError.message : 'שגיאה בעדכון הרשאה');
     } finally {
       setUpdatingRole(null);
     }
   }
 
-  /* ── Toggle maintenance mode ─────────────────────────────── */
-  async function toggleMaintenance() {
-    setTogglingMaintenance(true);
+  async function saveAppConfig(next: { maintenanceMode?: boolean; boardAnnouncement?: string }) {
+    setSavingConfig(true);
     try {
-      await setDoc(doc(db, 'appConfig', 'global'), {
-        maintenanceMode: !appConfig.maintenanceMode,
-        boardAnnouncement: appConfig.boardAnnouncement || '',
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      showToast('ok', appConfig.maintenanceMode ? 'מצב תחזוקה כובה' : 'מצב תחזוקה הופעל');
-    } catch (err) {
-      showToast('err', 'שגיאה: ' + (err instanceof Error ? err.message : ''));
+      const payload = {
+        maintenanceMode:
+          typeof next.maintenanceMode === 'boolean'
+            ? next.maintenanceMode
+            : overview.appConfig.maintenanceMode,
+        boardAnnouncement:
+          typeof next.boardAnnouncement === 'string'
+            ? next.boardAnnouncement
+            : announcementDraft,
+      };
+
+      await fetchWithAuth('/api/admin/app-config', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      draftDirtyRef.current = false;
+      showToast('ok', 'הגדרות המערכת נשמרו');
+      await loadOverview(true);
+    } catch (configError) {
+      showToast('err', configError instanceof Error ? configError.message : 'שגיאה בשמירת הגדרות');
     } finally {
-      setTogglingMaintenance(false);
+      setSavingConfig(false);
     }
   }
 
-  /* ── Save announcement ───────────────────────────────────── */
-  async function saveAnnouncement() {
-    setSavingAnnouncement(true);
+  async function runContactsSync() {
+    if (!window.confirm('להריץ עכשיו סנכרון אנשי קשר מלא?')) return;
+    setRunningSync(true);
     try {
-      await setDoc(doc(db, 'appConfig', 'global'), {
-        boardAnnouncement: announcementDraft.trim(),
-        maintenanceMode: appConfig.maintenanceMode,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      showToast('ok', 'ההודעה נשמרה בהצלחה');
-    } catch (err) {
-      showToast('err', 'שגיאה בשמירה: ' + (err instanceof Error ? err.message : ''));
+      const result = await fetchWithAuth<{ created?: number; updated?: number; deletedDuplicates?: number }>(
+        '/api/admin/contacts-sync',
+        { method: 'POST' },
+      );
+      showToast(
+        'ok',
+        `סנכרון הושלם: ${result.created || 0} נוצרו, ${result.updated || 0} עודכנו, ${result.deletedDuplicates || 0} כפילויות הוסרו`,
+      );
+      await loadOverview(true);
+    } catch (syncError) {
+      showToast('err', syncError instanceof Error ? syncError.message : 'שגיאה בסנכרון אנשי קשר');
     } finally {
-      setSavingAnnouncement(false);
+      setRunningSync(false);
     }
   }
 
-  /* ── Clear IndexedDB offline cache ───────────────────────── */
-  async function clearCache() {
-    if (!confirm('פעולה זו תאפס את ה-Cache המקומי ותטען את הדף מחדש. להמשיך?')) return;
-    setClearingCache(true);
-    try {
-      await terminate(db);
-      await clearIndexedDbPersistence(db);
-      window.location.reload();
-    } catch (err) {
-      showToast('err', 'שגיאה בניקוי Cache: ' + (err instanceof Error ? err.message : ''));
-      setClearingCache(false);
-    }
-  }
+  const filteredUsers = useMemo(() => {
+    if (!search) return overview.users;
+    const term = search.trim().toLowerCase();
+    return overview.users.filter((entry) =>
+      [entry.displayName, entry.email, entry.role, entry.department, entry.city || '']
+        .join(' ')
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [overview.users, search]);
 
-  /* ─────────────────────────────── Guards ─────────────────── */
-
-  if (authLoading || dataLoading) {
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center gap-3 bg-gray-950" dir="rtl">
-        <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-gray-950" dir="rtl">
+        <RefreshCw className="h-5 w-5 animate-spin text-purple-400" />
         <p className="text-gray-400">טוען נתוני ניהול...</p>
       </div>
     );
@@ -443,7 +391,7 @@ export default function AdminPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950" dir="rtl">
+      <div className="flex min-h-screen items-center justify-center bg-gray-950" dir="rtl">
         <p className="text-gray-400">יש להתחבר תחילה</p>
       </div>
     );
@@ -451,29 +399,23 @@ export default function AdminPage() {
 
   if (noAdminExists) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-8 p-8 bg-gray-950" dir="rtl">
-        <div className="text-center space-y-4 max-w-md">
-          <div className="w-20 h-20 rounded-full bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center mx-auto">
-            <Crown className="w-10 h-10 text-yellow-400" />
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-gray-950 p-8" dir="rtl">
+        <div className="max-w-md space-y-4 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-yellow-400/30 bg-yellow-400/10">
+            <Crown className="h-10 w-10 text-yellow-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">הגדרת מנהל ראשון</h1>
-          <p className="text-gray-400 leading-relaxed">
-            לא קיים מנהל מערכת. כבעלים של{' '}
-            <span className="text-white font-medium">TV Industry IL</span>,
-            לחץ לקחת גישת מנהל מלאה.
+          <p className="leading-relaxed text-gray-400">
+            עדיין לא הוגדר מנהל מערכת. אפשר לקחת עכשיו גישת מנהל ראשונה כדי להפעיל את לוח הניהול.
           </p>
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-right space-y-1">
-            <p className="text-gray-300">👤 {profile?.displayName || user.email}</p>
-            <p className="text-gray-500">{user.email}</p>
-          </div>
         </div>
         <button
           onClick={claimAdmin}
-          disabled={claiming}
-          className="px-10 py-4 bg-yellow-500 hover:bg-yellow-400 text-black rounded-2xl font-bold text-lg transition-colors disabled:opacity-50 flex items-center gap-3"
+          disabled={claimingAdmin}
+          className="flex items-center gap-3 rounded-2xl bg-yellow-500 px-10 py-4 text-lg font-bold text-black transition-colors hover:bg-yellow-400 disabled:opacity-50"
         >
-          <Crown className="w-5 h-5" />
-          {claiming ? 'מגדיר גישת מנהל...' : 'קח גישת מנהל'}
+          <Crown className="h-5 w-5" />
+          {claimingAdmin ? 'מגדיר גישת מנהל...' : 'קח גישת מנהל'}
         </button>
       </div>
     );
@@ -481,460 +423,476 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 bg-gray-950" dir="rtl">
-        <Ban className="w-16 h-16 text-red-400" />
-        <p className="text-red-400 font-bold text-xl">גישה מוגבלת למנהלים בלבד</p>
-        <Link href="/" className="text-purple-400 hover:underline">חזרה לדף הבית</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-950 p-8" dir="rtl">
+        <ShieldCheck className="h-16 w-16 text-red-400" />
+        <p className="text-xl font-bold text-red-400">הגישה ללוח הניהול זמינה למנהלים בלבד</p>
+        <Link href="/" className="text-purple-400 hover:underline">
+          חזרה לדף הבית
+        </Link>
       </div>
     );
   }
 
-  /* ─────────────────────── Derived data ──────────────────── */
-
-  const filtered = search
-    ? users.filter(u => {
-        const t = search.toLowerCase();
-        return (
-          u.displayName?.toLowerCase().includes(t) ||
-          u.email?.toLowerCase().includes(t) ||
-          u.role?.toLowerCase().includes(t) ||
-          u.department?.toLowerCase().includes(t)
-        );
-      })
-    : users;
-
-  const deptEntries = Object.entries(contactDepts).sort((a, b) => b[1] - a[1]);
-  const totalContacts = stats.totalContacts || 1; // prevent /0
-
-  /* ─────────────────────────── Render ────────────────────── */
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-16" dir="rtl">
-
-      {/* Floating toast */}
-      {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl shadow-xl text-sm font-medium pointer-events-none ${
-          toast.type === 'ok'
-            ? 'bg-green-900/95 border border-green-500/40 text-green-300'
-            : 'bg-red-900/95 border border-red-500/40 text-red-300'
-        }`}>
-          {toast.type === 'ok'
-            ? <CheckCircle className="w-4 h-4" />
-            : <AlertTriangle className="w-4 h-4" />
-          }
+    <div className="min-h-screen bg-gray-950 pb-16 text-white" dir="rtl">
+      {toast ? (
+        <div
+          className={`fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-medium shadow-xl ${
+            toast.type === 'ok'
+              ? 'border border-green-500/40 bg-green-900/95 text-green-300'
+              : 'border border-red-500/40 bg-red-900/95 text-red-300'
+          }`}
+        >
+          {toast.type === 'ok' ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
           {toast.msg}
         </div>
-      )}
+      ) : null}
 
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-
-        {/* Error banner */}
-        {error && (
-          <div className="bg-red-900/30 border border-red-500/40 rounded-2xl p-4 flex items-center gap-3 text-red-400">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-            <p className="text-sm flex-1">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-500 hover:text-red-300 text-lg leading-none"
-            >
-              ✕
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8">
+        {error ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-red-500/40 bg-red-900/30 p-4 text-red-300">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <p className="flex-1 text-sm">{error}</p>
+            <button onClick={() => setError(null)} className="text-lg leading-none text-red-200">
+              ×
             </button>
           </div>
-        )}
+        ) : null}
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck className="w-7 h-7 text-yellow-400" />
+            <div className="mb-1 flex items-center gap-2">
+              <ShieldCheck className="h-7 w-7 text-yellow-400" />
               <h1 className="text-3xl font-bold">לוח ניהול</h1>
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" title="שידור חי" />
+              <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
             </div>
-            <p className="text-gray-400 text-sm">
-              TV Industry IL · שלום,{' '}
-              <span className="text-white">{profile?.displayName}</span>
+            <p className="text-sm text-gray-400">
+              מקור אמת שרתי • עודכן {formatRelativeTime(overview.generatedAt)}
+              {refreshing ? ' • מרענן…' : ''}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-gray-700 bg-gray-900 px-3 py-1 text-gray-300">
+                רשומים: {overview.stats.totalUsers}
+              </span>
+              <span className="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-green-300">
+                פעילים עכשיו: {overview.stats.onlineNow}
+              </span>
+              <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-teal-300">
+                פעילים ב־24 שעות: {overview.stats.active24h}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={() => window.location.reload()}
-              className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-              title="רענן נתונים"
+              onClick={() => void loadOverview(true)}
+              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-700"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              רענון
+            </button>
+            <button
+              onClick={() => void runContactsSync()}
+              disabled={runningSync}
+              className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-purple-700 disabled:opacity-60"
+            >
+              {runningSync ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+              סנכרון אנשי קשר
             </button>
             <Link
               href="/admin/sync"
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl text-sm font-semibold transition-colors"
+              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
             >
-              <Wrench className="w-4 h-4" />
               כלי סנכרון
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
             </Link>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard icon={Users}         label="משתמשים רשומים"   value={stats.totalUsers}    color="bg-blue-500/20 text-blue-400" />
-          <StatCard icon={Wifi}          label="מחוברים עכשיו"    value={stats.onlineNow}     color="bg-green-500/20 text-green-400"   live />
-          <StatCard icon={Activity}      label="פעילים ב-24 שעות" value={stats.active24h}     color="bg-teal-500/20 text-teal-400"     live />
-          <StatCard icon={Crown}         label="מנהלים"           value={stats.admins}        color="bg-yellow-500/20 text-yellow-400" />
-          <StatCard icon={Contact2}      label="אנשי קשר"         value={stats.totalContacts} color="bg-purple-500/20 text-purple-400" live />
-          <StatCard icon={FileText}      label="פוסטים בלוח"      value={stats.totalPosts}    color="bg-pink-500/20 text-pink-400" />
-          <StatCard icon={MessageCircle} label="שיחות צ'אט"       value={stats.totalChats}    color="bg-indigo-500/20 text-indigo-400" />
-          <StatCard icon={Shield}        label="מנחים"            value={stats.moderators}    color="bg-sky-500/20 text-sky-400" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
+          <StatCard icon={Wifi} label="מחוברים עכשיו" value={overview.stats.onlineNow} color="bg-green-500/20 text-green-400" live />
+          <StatCard icon={Activity} label="פעילים ב־24 שעות" value={overview.stats.active24h} color="bg-teal-500/20 text-teal-400" />
+          <StatCard icon={Contact2} label="אנשי קשר" value={overview.stats.totalContacts} color="bg-purple-500/20 text-purple-400" live />
+          <StatCard icon={FileText} label="פוסטים בלוח" value={overview.stats.totalPosts} color="bg-pink-500/20 text-pink-400" />
+          <StatCard icon={MessageCircle} label="שיחות צ׳אט" value={overview.stats.totalChats} color="bg-indigo-500/20 text-indigo-400" />
+          <StatCard icon={Crown} label="מנהלים" value={overview.stats.admins} color="bg-yellow-500/20 text-yellow-400" />
+          <StatCard icon={AlertTriangle} label="נוכחות מיושנת" value={overview.stats.stalePresence} color="bg-orange-500/20 text-orange-400" />
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-
-          {/* User Management Table */}
-          <div className="xl:col-span-3 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+          <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 xl:col-span-3">
+            <div className="flex flex-col gap-3 border-b border-gray-800 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-purple-400" />
-                <h2 className="font-bold text-lg">ניהול משתמשים</h2>
-                <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
-                  {stats.totalUsers}
-                </span>
+                <Users className="h-5 w-5 text-purple-400" />
+                <h2 className="text-lg font-bold">ניהול משתמשים</h2>
+                <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
               </div>
               <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <input
                   type="text"
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="חיפוש משתמש..."
-                  className="pr-9 pl-4 py-2 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 w-56"
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="חיפוש משתמש, תפקיד או עיר..."
+                  className="w-64 rounded-xl border border-gray-700 bg-gray-800 py-2 pl-4 pr-9 text-sm text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
                 />
               </div>
+            </div>
+            <div className="border-b border-gray-800 px-5 py-3 text-xs text-gray-500">
+              מחוברים עכשיו = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. נוכחות ישנה = `isOnline` נשאר פעיל אבל `lastSeen` כבר לא עדכני.
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800 text-gray-500 text-xs">
-                    <th className="text-right py-3 px-5 font-medium">משתמש</th>
-                    <th className="text-right py-3 px-4 font-medium hidden md:table-cell">אימייל</th>
-                    <th className="text-right py-3 px-4 font-medium hidden lg:table-cell">תפקיד / מחלקה</th>
-                    <th className="text-right py-3 px-4 font-medium">רמת גישה</th>
-                    <th className="text-right py-3 px-4 font-medium hidden sm:table-cell">פעילות אחרונה</th>
-                    <th className="py-3 px-4 font-medium">פעולות</th>
+                  <tr className="border-b border-gray-800 text-xs text-gray-500">
+                    <th className="px-5 py-3 text-right font-medium">משתמש</th>
+                    <th className="hidden px-4 py-3 text-right font-medium md:table-cell">אימייל</th>
+                    <th className="hidden px-4 py-3 text-right font-medium lg:table-cell">תפקיד / מחלקה</th>
+                    <th className="px-4 py-3 text-right font-medium">סטטוס</th>
+                    <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">נראה לאחרונה</th>
+                    <th className="px-4 py-3 text-right font-medium">הרשאה</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(u => (
-                    <tr
-                      key={u.uid}
-                      className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
-                    >
-                      {/* Name + avatar */}
-                      <td className="py-3 px-5">
+                  {filteredUsers.map((entry) => (
+                    <tr key={entry.uid} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                      <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="relative flex-shrink-0">
-                            {u.photoURL ? (
+                            {entry.photoURL ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={u.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <img src={entry.photoURL} alt="" className="h-9 w-9 rounded-full object-cover" />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
-                                {u.displayName?.charAt(0) || '?'}
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-600 text-sm font-bold">
+                                {entry.displayName?.charAt(0) || '?'}
                               </div>
                             )}
-                            {u.isOnline && (
-                              <span className="absolute -bottom-0.5 -left-0.5 w-3 h-3 bg-green-400 border-2 border-gray-900 rounded-full" />
-                            )}
+                            {entry.onlineNow ? (
+                              <span className="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full border-2 border-gray-900 bg-green-400" />
+                            ) : null}
                           </div>
-                          <div>
-                            <p className="font-medium text-white">{u.displayName || '—'}</p>
-                            <p className="text-xs text-gray-500 md:hidden">{u.email}</p>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                            <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
                           </div>
                         </div>
                       </td>
-
-                      {/* Email */}
-                      <td className="py-3 px-4 text-gray-400 hidden md:table-cell max-w-[160px]">
-                        <span className="truncate block">{u.email || '—'}</span>
+                      <td className="hidden max-w-[180px] px-4 py-3 text-gray-400 md:table-cell">
+                        <span className="block truncate">{entry.email || '—'}</span>
                       </td>
-
-                      {/* Role / Department */}
-                      <td className="py-3 px-4 hidden lg:table-cell">
-                        <p className="text-white">{u.role || '—'}</p>
-                        <p className="text-xs text-gray-500">{u.department || '—'}</p>
+                      <td className="hidden px-4 py-3 lg:table-cell">
+                        <p className="text-white">{entry.role || '—'}</p>
+                        <p className="text-xs text-gray-500">{entry.department || '—'}</p>
                       </td>
-
-                      {/* siteRole badge */}
-                      <td className="py-3 px-4">
-                        <RoleBadge role={u.siteRole} />
+                      <td className="px-4 py-3">
+                        <PresenceBadge user={entry} />
                       </td>
-
-                      {/* Last seen */}
-                      <td className="py-3 px-4 hidden sm:table-cell">
-                        <div className="flex items-center gap-1.5 text-gray-400 text-xs">
-                          {u.isOnline
-                            ? <><Wifi className="w-3 h-3 text-green-400" /><span className="text-green-400">מחובר</span></>
-                            : <><WifiOff className="w-3 h-3" />{formatLastSeen(u.lastSeen)}</>
-                          }
-                        </div>
+                      <td className="hidden px-4 py-3 text-xs text-gray-400 sm:table-cell">
+                        {formatRelativeTime(entry.lastSeen)}
                       </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-4">
-                        {u.uid === user?.uid ? (
-                          <span className="text-xs text-gray-600">אתה</span>
+                      <td className="px-4 py-3">
+                        {entry.uid === user.uid ? (
+                          <RoleBadge role={entry.siteRole} />
                         ) : (
-                          <div className="relative">
-                            <button
-                              onClick={() => setOpenDropdown(openDropdown === u.uid ? null : u.uid)}
-                              disabled={updatingRole === u.uid}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
-                            >
-                              {updatingRole === u.uid
-                                ? <RefreshCw className="w-3 h-3 animate-spin" />
-                                : <><Eye className="w-3 h-3" /><span>שנה גישה</span><ChevronDown className="w-3 h-3" /></>
-                              }
-                            </button>
-
-                            {openDropdown === u.uid && (
-                              <div className="absolute left-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-20 min-w-[140px] overflow-hidden">
-                                {[
-                                  { role: 'admin' as const,     label: 'מנהל',  icon: Crown,    color: 'text-yellow-400' },
-                                  { role: 'moderator' as const, label: 'מנחה',  icon: Shield,   color: 'text-blue-400'   },
-                                  { role: null,                 label: 'משתמש', icon: UserIcon, color: 'text-gray-400'   },
-                                ].map(opt => {
-                                  const Icon = opt.icon;
-                                  const current = (u.siteRole ?? null) === opt.role;
-                                  return (
-                                    <button
-                                      key={opt.label}
-                                      onClick={() => setUserRole(u.uid, opt.role as 'admin' | 'moderator' | null)}
-                                      disabled={current}
-                                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                                        current
-                                          ? 'bg-gray-700/50 cursor-default opacity-60'
-                                          : 'hover:bg-gray-700 cursor-pointer'
-                                      } ${opt.color}`}
-                                    >
-                                      <Icon className="w-3.5 h-3.5" />
-                                      {opt.label}
-                                      {current && (
-                                        <span className="mr-auto text-xs text-gray-500">נוכחי</span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
+                          <div className="flex flex-wrap gap-2">
+                            {ROLE_OPTIONS.map((option) => {
+                              const selected = entry.siteRole === option.value;
+                              return (
+                                <button
+                                  key={`${entry.uid}-${option.value}`}
+                                  onClick={() => void updateUserRole(entry.uid, option.value)}
+                                  disabled={selected || updatingRole === entry.uid}
+                                  className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                                    selected
+                                      ? option.classes
+                                      : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                  } ${updatingRole === entry.uid ? 'opacity-60' : ''}`}
+                                >
+                                  {updatingRole === entry.uid && !selected ? 'מעדכן…' : option.label}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </td>
                     </tr>
                   ))}
 
-                  {filtered.length === 0 && (
+                  {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-gray-500">
-                        {search ? 'לא נמצאו משתמשים' : 'אין משתמשים רשומים'}
+                      <td colSpan={6} className="px-5 py-12 text-center text-gray-500">
+                        לא נמצאו משתמשים
                       </td>
                     </tr>
-                  )}
+                  ) : null}
                 </tbody>
               </table>
             </div>
           </div>
-
-          {/* Sidebar */}
           <div className="space-y-4">
-
-            {/* Contacts by department */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-purple-400" />
-                <h3 className="font-bold">אנשי קשר לפי מחלקה</h3>
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-purple-400" />
+                <h3 className="font-bold">אנשי קשר לפי מקצוע</h3>
               </div>
               <div className="space-y-3">
-                {deptEntries.map(([dept, count]) => (
-                  <div key={dept}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-300">{dept}</span>
-                      <span className="text-xs text-gray-400 tabular-nums">
-                        {count} ({Math.round(count / totalContacts * 100)}%)
-                      </span>
+                {overview.contactsByDepartment.map((entry) => (
+                  <div key={entry.key}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-gray-300">{entry.label}</span>
+                      <span className="text-gray-500">{entry.count}</span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
                       <div
-                        className="h-full rounded-full bg-purple-500 transition-all duration-500"
-                        style={{ width: `${Math.round(count / totalContacts * 100)}%` }}
+                        className="h-full rounded-full bg-purple-500"
+                        style={{ width: `${Math.max(6, Math.round((entry.count / Math.max(overview.stats.totalContacts, 1)) * 100))}%` }}
                       />
                     </div>
                   </div>
                 ))}
-                {deptEntries.length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-2">אין נתונים</p>
-                )}
               </div>
             </div>
 
-            {/* Quick navigation */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Wrench className="w-5 h-5 text-purple-400" />
-                <h3 className="font-bold">ניווט מהיר</h3>
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Contact2 className="h-5 w-5 text-blue-400" />
+                <h3 className="font-bold">פילוח אולפן / קונטרול</h3>
               </div>
               <div className="space-y-2">
-                {[
-                  { href: '/admin/sync', icon: Database,       label: 'סנכרון וייבוא' },
-                  { href: '/directory',  icon: Contact2,       label: 'אלפון אנשי קשר' },
-                  { href: '/board',      icon: FileText,       label: 'לוח מודעות' },
-                  { href: '/chat',       icon: MessageCircle,  label: "שיחות צ'אט" },
-                ].map(({ href, icon: Icon, label }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors group"
-                  >
-                    <div className="flex items-center gap-2 text-sm">
-                      <Icon className="w-4 h-4 text-purple-400" />
-                      <span>{label}</span>
-                    </div>
-                    <ArrowLeft className="w-4 h-4 text-gray-500 group-hover:text-white transition-colors" />
-                  </Link>
+                {overview.contactsByWorkArea.map((entry) => (
+                  <div key={entry.key} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2 text-sm">
+                    <span className="text-gray-200">{entry.label}</span>
+                    <span className="font-semibold text-white">{entry.count}</span>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* System info */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="w-5 h-5 text-purple-400" />
-                <h3 className="font-bold">מידע מערכת</h3>
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-green-400" />
+                <h3 className="font-bold">נוכחות בזמן אמת</h3>
               </div>
-              {[
-                { label: 'Firebase Project', value: 'tv-industry-il' },
-                { label: 'Platform',         value: 'Vercel' },
-                { label: 'Runtime',          value: 'Next.js 16 App Router' },
-                { label: 'Database',         value: 'Firestore (real-time)' },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between text-xs">
-                  <span className="text-gray-500">{label}</span>
-                  <span className="text-gray-300 font-mono">{value}</span>
+              <div className="space-y-3">
+                {overview.onlineUsers.slice(0, 6).map((entry) => (
+                  <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
+                    <div>
+                      <p className="text-sm text-white">{entry.displayName || entry.email}</p>
+                      <p className="text-xs text-gray-500">{entry.role || entry.department || 'ללא תפקיד'}</p>
+                    </div>
+                    <span className="text-xs text-green-300">פעיל</span>
+                  </div>
+                ))}
+                {overview.onlineUsers.length === 0 ? (
+                  <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>
+                ) : null}
+                {overview.staleUsers.length > 0 ? (
+                  <p className="text-xs text-orange-300">
+                    {overview.staleUsers.length} משתמשים מסומנים כ־`isOnline`, אבל `lastSeen` שלהם כבר ישן.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+            <div className="mb-4 flex items-center gap-2">
+              <Settings className="h-5 w-5 text-purple-400" />
+              <h2 className="text-lg font-bold">בקרת מערכת</h2>
+            </div>
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-medium">מצב תחזוקה</span>
+                  <span className={`text-sm ${overview.appConfig.maintenanceMode ? 'text-orange-300' : 'text-gray-400'}`}>
+                    {overview.appConfig.maintenanceMode ? 'פעיל' : 'כבוי'}
+                  </span>
+                </div>
+                <p className="mb-3 text-xs leading-relaxed text-gray-500">
+                  מצב התחזוקה נשמר במסמך `appConfig/global` ומוכן לשימוש גלובלי בכל האפליקציה.
+                </p>
+                <button
+                  onClick={() => void saveAppConfig({ maintenanceMode: !overview.appConfig.maintenanceMode })}
+                  disabled={savingConfig}
+                  className={`w-full rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                    overview.appConfig.maintenanceMode
+                      ? 'bg-orange-500/20 text-orange-200 hover:bg-orange-500/30'
+                      : 'bg-gray-800 text-gray-200 hover:bg-gray-700'
+                  } disabled:opacity-60`}
+                >
+                  {savingConfig ? 'שומר...' : overview.appConfig.maintenanceMode ? 'כבה תחזוקה' : 'הפעל תחזוקה'}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-blue-400" />
+                  <span className="text-sm font-medium">הודעה גלובלית</span>
+                </div>
+                <textarea
+                  value={announcementDraft}
+                  onChange={(event) => {
+                    draftDirtyRef.current = true;
+                    setAnnouncementDraft(event.target.value);
+                  }}
+                  rows={4}
+                  placeholder="כתוב הודעה מערכתית ללוח..."
+                  className="w-full resize-none rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => void saveAppConfig({ boardAnnouncement: announcementDraft })}
+                  disabled={savingConfig}
+                  className="mt-3 w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {savingConfig ? 'שומר...' : 'שמור הודעה'}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-purple-400" />
+                  <span className="text-sm font-medium">פעולות מהירות</span>
+                </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => void runContactsSync()}
+                    disabled={runningSync}
+                    className="w-full rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-60"
+                  >
+                    {runningSync ? 'מריץ סנכרון...' : 'סנכרון אנשי קשר עכשיו'}
+                  </button>
+                  <Link
+                    href="/directory"
+                    className="flex w-full items-center justify-between rounded-xl bg-gray-800 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-700"
+                  >
+                    אלפון אנשי קשר
+                    <ArrowLeft className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href="/admin/sync"
+                    className="flex w-full items-center justify-between rounded-xl bg-gray-800 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-700"
+                  >
+                    מרכז סנכרון
+                    <ArrowLeft className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+            <div className="mb-4 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-green-400" />
+              <h2 className="text-lg font-bold">בריאות מערכת ונתיבים</h2>
+            </div>
+            <div className="space-y-3">
+              {overview.usage.routeHealth.map((route) => (
+                <div key={route.key} className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <span className="truncate text-sm text-white">{route.label}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${
+                        route.lastError ? 'bg-red-500/10 text-red-300' : 'bg-green-500/10 text-green-300'
+                      }`}
+                    >
+                      {route.lastError ? 'דורש טיפול' : 'תקין'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    הצלחות: {route.successCount} • כשלים: {route.failureCount}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    ריצה אחרונה: {formatRelativeTime(route.lastRunAt)}
+                  </p>
+                  {route.lastError ? <p className="mt-2 text-xs text-red-300">{route.lastError}</p> : null}
                 </div>
               ))}
+              {overview.usage.routeHealth.length === 0 ? (
+                <p className="text-sm text-gray-500">עדיין אין מדדי נתיבים. הם יתמלאו ככל שה־APIים יופעלו.</p>
+              ) : null}
+            </div>
+
+            <div className="mt-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-orange-400" />
+                <h3 className="font-bold">סטטוס עבודות וסנכרונים</h3>
+              </div>
+              <div className="space-y-3">
+                {overview.usage.jobs.map((job) => (
+                  <div key={job.key} className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span className="text-sm text-white">{job.label}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${
+                          job.lastStatus === 'failure'
+                            ? 'bg-red-500/10 text-red-300'
+                            : job.lastStatus === 'success'
+                              ? 'bg-green-500/10 text-green-300'
+                              : 'bg-gray-700 text-gray-400'
+                        }`}
+                      >
+                        {job.lastStatus === 'failure' ? 'נכשל' : job.lastStatus === 'success' ? 'תקין' : 'אין נתון'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      ריצות: {job.runs} • הצלחות: {job.successRuns} • כשלים: {job.failureRuns}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      ריצה אחרונה: {formatRelativeTime(job.lastRunAt)}
+                    </p>
+                    {job.lastError ? <p className="mt-2 text-xs text-red-300">{job.lastError}</p> : null}
+                  </div>
+                ))}
+                {overview.usage.jobs.length === 0 ? (
+                  <p className="text-sm text-gray-500">עדיין אין עבודות שנרשמו בטלמטריה.</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+            <div className="mb-4 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-400" />
+              <h2 className="text-lg font-bold">שימוש והתראות</h2>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="mb-3 text-sm font-semibold text-gray-300">דפים מובילים</h3>
+              <div className="space-y-2">
+                {overview.usage.topPages.map((page) => (
+                  <div key={page.key} className="flex items-center justify-between rounded-xl bg-gray-950/70 px-3 py-2">
+                    <div>
+                      <p className="text-sm text-white">{page.label}</p>
+                      <p className="text-xs text-gray-500">{formatRelativeTime(page.lastSeenAt)}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-blue-300">{page.count}</span>
+                  </div>
+                ))}
+                {overview.usage.topPages.length === 0 ? (
+                  <p className="text-sm text-gray-500">עדיין אין נתוני צפייה לדפים.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-gray-300">אירועים אחרונים</h3>
+              <p className="mb-3 text-xs text-gray-500">
+                אירועים דומים מאוחדים כדי לשמור על תמונה נקייה וברורה של תקלות ושינויים במערכת.
+              </p>
+              <div className="space-y-3">
+                {overview.recentEvents.map((event) => (
+                  <EventRow key={event.id} event={event} />
+                ))}
+                {overview.recentEvents.length === 0 ? (
+                  <p className="text-sm text-gray-500">עדיין אין אירועי מערכת מתועדים.</p>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* ── Admin Controls — full-width section ─────────────── */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="p-5 border-b border-gray-800 flex items-center gap-2">
-            <Settings className="w-5 h-5 text-purple-400" />
-            <h2 className="font-bold text-lg">בקרת מערכת</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-gray-800">
-
-            {/* 1. Maintenance mode */}
-            <div className="p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-orange-400" />
-                <h3 className="font-semibold text-sm">מצב תחזוקה</h3>
-              </div>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                כשמופעל, האתר יציג הודעת תחזוקה למשתמשים שאינם מנהלים.
-                מנהלים ממשיכים לגשת כרגיל.
-              </p>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm font-medium ${appConfig.maintenanceMode ? 'text-orange-400' : 'text-gray-400'}`}>
-                  {appConfig.maintenanceMode ? '⚠ פעיל' : 'כבוי'}
-                </span>
-                {/* Toggle — keep LTR so transform direction is predictable */}
-                <div dir="ltr">
-                  <button
-                    onClick={toggleMaintenance}
-                    disabled={togglingMaintenance}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                      appConfig.maintenanceMode ? 'bg-orange-500' : 'bg-gray-600'
-                    }`}
-                    aria-label="toggle maintenance"
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                        appConfig.maintenanceMode ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Board announcement */}
-            <div className="p-6 space-y-3">
-              <div className="flex items-center gap-2">
-                <Megaphone className="w-4 h-4 text-blue-400" />
-                <h3 className="font-semibold text-sm">הודעה גלובלית ללוח</h3>
-              </div>
-              <p className="text-xs text-gray-500">
-                מוצגת בראש לוח המודעות לכל המשתמשים. השאר ריק להסרה.
-              </p>
-              <textarea
-                value={announcementDraft}
-                onChange={e => setAnnouncementDraft(e.target.value)}
-                placeholder="כתוב הודעה לכל המשתמשים..."
-                rows={3}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
-              />
-              <button
-                onClick={saveAnnouncement}
-                disabled={savingAnnouncement}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 w-full justify-center"
-              >
-                {savingAnnouncement
-                  ? <RefreshCw className="w-4 h-4 animate-spin" />
-                  : <Save className="w-4 h-4" />
-                }
-                {savingAnnouncement ? 'שומר...' : 'שמור הודעה'}
-              </button>
-            </div>
-
-            {/* 3. Cache & tools */}
-            <div className="p-6 space-y-3">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-red-400" />
-                <h3 className="font-semibold text-sm">כלים טכניים</h3>
-              </div>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                ניקוי Cache מאפס את IndexedDB המקומי — פותר בעיות תצוגה לא עקבית (כמו
-                אנשי קשר שנראים קיימים למרות שנמחקו). הדף יטען מחדש.
-              </p>
-              <button
-                onClick={clearCache}
-                disabled={clearingCache}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 w-full justify-center"
-              >
-                {clearingCache
-                  ? <RefreshCw className="w-4 h-4 animate-spin" />
-                  : <Trash2 className="w-4 h-4" />
-                }
-                {clearingCache ? 'מנקה...' : 'נקה Cache מקומי'}
-              </button>
-              <Link
-                href="/admin/sync"
-                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm font-medium transition-colors w-full justify-center"
-              >
-                <Wrench className="w-4 h-4" />
-                כלי סנכרון נתונים
-              </Link>
-            </div>
-
-          </div>
-        </div>
-
       </div>
-
-      {/* Backdrop — closes the role dropdown */}
-      {openDropdown && (
-        <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-      )}
     </div>
   );
 }

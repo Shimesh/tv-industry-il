@@ -416,7 +416,7 @@ export default function NewsPage() {
       </section>
 
       {/* Tab Switcher */}
-      <section className="sticky top-16 z-30 backdrop-blur-xl border-b" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
+      <section className="sticky z-30 backdrop-blur-xl border-b" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex gap-1 py-3">
             <button

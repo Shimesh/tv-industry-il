@@ -79,14 +79,37 @@ function mergeCrewMember(
 
 export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember[] {
   const byIdentity = new Map<string, NormalizedCrewMember>();
-  const byName = new Map<string, string>();
+  const byPhone = new Map<string, string>();
+  const byComposite = new Map<string, string>();
+  const byNameWithoutPhone = new Map<string, string>();
 
   for (const member of crew || []) {
     const { normalizedName, normalizedPhone, identityKey } = buildCrewIdentity(member);
     if (!identityKey) continue;
 
-    const existingIdentityForName = byName.get(normalizedName);
-    const key = existingIdentityForName || identityKey;
+    let key = identityKey;
+
+    if (normalizedPhone && byPhone.has(normalizedPhone)) {
+      key = byPhone.get(normalizedPhone)!;
+    } else if (normalizedPhone && byComposite.has(identityKey)) {
+      key = byComposite.get(identityKey)!;
+    } else if (normalizedPhone && byNameWithoutPhone.has(normalizedName)) {
+      const partialKey = byNameWithoutPhone.get(normalizedName)!;
+      const partialExisting = byIdentity.get(partialKey);
+      if (partialExisting) {
+        byIdentity.delete(partialKey);
+        byNameWithoutPhone.delete(normalizedName);
+        byIdentity.set(identityKey, {
+          ...partialExisting,
+          phone: normalizedPhone,
+          normalizedPhone,
+          identityKey,
+        });
+      }
+      key = identityKey;
+    } else if (!normalizedPhone && byNameWithoutPhone.has(normalizedName)) {
+      key = byNameWithoutPhone.get(normalizedName)!;
+    }
 
     const normalized: NormalizedCrewMember = {
       ...member,
@@ -103,12 +126,24 @@ export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember
 
     if (!byIdentity.has(key)) {
       byIdentity.set(key, normalized);
-      byName.set(normalizedName, key);
+      if (normalizedPhone) {
+        byPhone.set(normalizedPhone, key);
+        byComposite.set(`${normalizedName}::${normalizedPhone}`, key);
+      } else {
+        byNameWithoutPhone.set(normalizedName, key);
+      }
       continue;
     }
 
     const merged = mergeCrewMember(byIdentity.get(key)!, normalized);
     byIdentity.set(key, merged);
+    if (merged.normalizedPhone) {
+      byPhone.set(merged.normalizedPhone, key);
+      byComposite.set(`${merged.normalizedName}::${merged.normalizedPhone}`, key);
+      byNameWithoutPhone.delete(merged.normalizedName);
+    } else {
+      byNameWithoutPhone.set(merged.normalizedName, key);
+    }
   }
 
   return Array.from(byIdentity.values());

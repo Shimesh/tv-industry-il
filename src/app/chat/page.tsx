@@ -436,10 +436,33 @@ function ChatContent() {
     [activeChatId, removeOptimisticMessage]
   );
 
+  useEffect(() => {
+    const handleNavigationStart = () => {
+      setShowNewChat(false);
+      setMobileShowChat(false);
+      if (activeChatId) {
+        setTyping(false);
+      }
+    };
+
+    window.addEventListener('app:navigation-start', handleNavigationStart as EventListener);
+
+    return () => {
+      window.removeEventListener('app:navigation-start', handleNavigationStart as EventListener);
+    };
+  }, [activeChatId, setTyping]);
+
   if (!user) return null;
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex overflow-hidden bg-[#111B21]" dir="rtl">
+    <div
+      className="relative z-0 flex overflow-hidden bg-[#111B21]"
+      dir="rtl"
+      style={{
+        minHeight: 'calc(100dvh - var(--app-header-offset))',
+        maxHeight: 'calc(100dvh - var(--app-header-offset))',
+      }}
+    >
       <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative ${mobileShowChat ? 'hidden lg:block' : 'block'}`}>
         <ChatSidebar
           chats={chats}

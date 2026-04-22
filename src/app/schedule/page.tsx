@@ -94,8 +94,8 @@ export default function SchedulePage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#0a0a0f' }}>
       {/* ===== MOBILE: Channel Rail (visible on small screens) ===== */}
-      <div className="lg:hidden sticky top-16 z-30 border-b border-white/[0.06] py-2 px-2"
-        style={{ backgroundColor: '#0d0d14' }}>
+      <div className="lg:hidden sticky z-30 border-b border-white/[0.06] py-2 px-2"
+          style={{ backgroundColor: '#0d0d14', top: 'var(--app-header-offset)' }}>
         <ChannelSidebar
           selectedChannelId={selectedChannelId}
           onSelectChannel={selectChannel}
@@ -104,7 +104,7 @@ export default function SchedulePage() {
       </div>
 
       {/* ===== MAIN LAYOUT ===== */}
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex" style={{ minHeight: 'calc(100dvh - var(--app-header-offset))' }}>
         {/* ===== SIDEBAR (desktop only) ===== */}
         <aside
           className={`hidden lg:block shrink-0 border-l border-white/[0.06] transition-all duration-300 overflow-hidden ${

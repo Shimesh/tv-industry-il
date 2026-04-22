@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,19 +30,55 @@ const navLinks = [
   { href: '/admin', label: 'ניהול', icon: Shield, auth: true, adminOnly: true },
 ];
 
+function emitNavigationStart() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('app:navigation-start'));
+}
+
 export default function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, logout } = useAuth();
+  const { user, profile, loading, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const totalUnread = useGlobalUnread();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [loadingBar, setLoadingBar] = useState(false);
+  const [cachedProfile, setCachedProfile] = useState<typeof profile>(null);
   const prevPathnameRef = useRef(pathname);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+  const effectiveProfile = profile ?? (loading ? cachedProfile : null);
+  const hasAuthUi = Boolean(user || (loading && cachedProfile));
+
+  const navigateFromNav = useCallback((href: string) => {
+    emitNavigationStart();
+    setMobileOpen(false);
+    setUserMenuOpen(false);
+    setThemeMenuOpen(false);
+    router.push(href);
+  }, [router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.sessionStorage.getItem('tv-auth-profile-cache');
+      if (!raw) {
+        setCachedProfile(null);
+        return;
+      }
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'profile' in parsed) {
+        const payload = parsed as { profile?: typeof profile };
+        setCachedProfile(payload.profile ?? null);
+      } else {
+        setCachedProfile((parsed as typeof profile) ?? null);
+      }
+    } catch {
+      setCachedProfile(null);
+    }
+  }, [pathname, profile]);
 
   // Show loading bar on route change
   useEffect(() => {
@@ -69,15 +105,17 @@ export default function Navigation() {
   }, []);
 
   const filteredLinks = navLinks.filter(link => {
-    if (link.auth && !user) return false;
-    if ('adminOnly' in link && link.adminOnly && profile?.siteRole !== 'admin') return false;
+    if (link.auth && !hasAuthUi) return false;
+    if ('adminOnly' in link && link.adminOnly && effectiveProfile?.siteRole !== 'admin') return false;
     return true;
   });
 
   return (
-    <nav className="fixed top-0 right-0 left-0 z-[9999] backdrop-blur-xl border-b transition-colors" style={{
+    <nav className="fixed right-0 left-0 z-[9999] backdrop-blur-xl border-b transition-colors app-safe-x" style={{
+      top: 'var(--safe-area-top)',
       background: 'var(--theme-nav-bg)',
       borderColor: 'var(--theme-border)',
+      minHeight: 'var(--app-header-height)',
     }}>
       {/* Navigation loading bar */}
       {loadingBar && (
@@ -91,11 +129,18 @@ export default function Navigation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center group-hover:shadow-lg group-hover:shadow-purple-500/20 transition-all">
+          <Link
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              navigateFromNav('/');
+            }}
+            className="flex items-center gap-2 group min-w-0 shrink-0"
+          >
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0 group-hover:shadow-lg group-hover:shadow-purple-500/20 transition-all">
               <Tv className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold gradient-text hidden sm:block">
+            <span className="text-lg font-bold leading-none whitespace-nowrap gradient-text hidden sm:block">
               TV Industry IL
             </span>
           </Link>
@@ -111,6 +156,10 @@ export default function Navigation() {
                   key={link.href}
                   href={link.href}
                   prefetch={true}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigateFromNav(link.href);
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
@@ -176,25 +225,25 @@ export default function Navigation() {
             </div>
 
             {/* User Menu / Login */}
-            {user ? (
+            {hasAuthUi ? (
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => { setUserMenuOpen(!userMenuOpen); setThemeMenuOpen(false); }}
                   className="flex items-center gap-2 p-1.5 rounded-xl transition-all hover:bg-[var(--theme-accent-glow)]"
                 >
                   <UserAvatar
-                    name={profile?.displayName || user.displayName || user.email || 'משתמש'}
-                    photoURL={profile?.photoURL || user.photoURL}
+                    name={effectiveProfile?.displayName || user?.displayName || user?.email || 'משתמש'}
+                    photoURL={effectiveProfile?.photoURL || user?.photoURL || null}
                     size="sm"
                     isOnline={true}
                   />
                   <span className="hidden sm:block text-sm font-medium text-[var(--theme-text)] max-w-[100px] truncate">
-                    {profile?.displayName || user.displayName || 'משתמש'}
+                    {effectiveProfile?.displayName || user?.displayName || 'משתמש'}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-[var(--theme-text-secondary)] hidden sm:block transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {userMenuOpen && (
+                {userMenuOpen && user && (
                   <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-[100]" style={{
                     background: 'var(--theme-bg-secondary)',
                     borderColor: 'var(--theme-border)',
@@ -202,29 +251,29 @@ export default function Navigation() {
                     {/* User info header */}
                     <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
                       <p className="text-sm font-bold text-[var(--theme-text)]">
-                        {profile?.displayName || user.displayName || 'משתמש'}
+                        {effectiveProfile?.displayName || user.displayName || 'משתמש'}
                       </p>
                       <p className="text-xs text-[var(--theme-text-secondary)] truncate">
-                        {profile?.email || user.email}
+                        {effectiveProfile?.email || user.email}
                       </p>
                       <div className="flex items-center gap-1.5 mt-1.5">
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                         <span className="text-xs text-[var(--theme-text-secondary)]">
-                          {profile?.status === 'busy' ? 'תפוס' : 'פנוי'}
+                          {effectiveProfile?.status === 'busy' ? 'תפוס' : 'פנוי'}
                         </span>
                       </div>
                     </div>
 
                     <div className="p-2">
                       <button
-                        onClick={() => { setUserMenuOpen(false); router.push('/profile'); }}
+                        onClick={() => navigateFromNav('/profile')}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <UserIcon className="w-4 h-4" />
                         <span className="font-medium">הפרופיל שלי</span>
                       </button>
                       <button
-                        onClick={() => { setUserMenuOpen(false); router.push('/settings'); }}
+                        onClick={() => navigateFromNav('/settings')}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
                       >
                         <Settings className="w-4 h-4" />
@@ -260,6 +309,10 @@ export default function Navigation() {
             ) : (
               <Link
                 href="/login"
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateFromNav('/login');
+                }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all bg-gradient-to-l from-purple-500 to-blue-600 text-white hover:shadow-lg hover:shadow-purple-500/20"
               >
                 <LogIn className="w-4 h-4" />
@@ -293,7 +346,10 @@ export default function Navigation() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigateFromNav(link.href);
+                  }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'

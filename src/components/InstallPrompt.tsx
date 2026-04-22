@@ -44,7 +44,10 @@ export function InstallPrompt() {
   if (!showPrompt || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 sm:left-auto sm:right-4 sm:max-w-sm animate-fade-in">
+    <div
+      className="fixed left-4 right-4 z-50 sm:left-auto sm:right-4 sm:max-w-sm animate-fade-in"
+      style={{ bottom: 'calc(1rem + var(--safe-area-bottom))' }}
+    >
       <div className="bg-gray-900 border border-purple-500/30 rounded-2xl p-4 shadow-2xl shadow-purple-500/10">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shrink-0">

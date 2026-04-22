@@ -15,6 +15,7 @@ import {
   getMessagePreviewText,
   mergeMessages,
   normalizeMessage,
+  settleOptimisticMessages,
   trimMessages,
 } from '@/lib/chat-v2/messageModel';
 import {
@@ -383,6 +384,7 @@ function applyReceiptUpdate(
 export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const { user, profile } = useAuth();
   const featureFlags = useMemo(() => getChatV2FeatureFlags(), []);
+  const socketTransportEnabled = false;
   const legacy = useLegacyChat({ allUsers });
   const legacyChatsByIdRef = useRef<Map<string, ChatRoom>>(new Map());
   const displayName =
@@ -393,6 +395,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const deliveredReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
   const readReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
+  const cacheSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const [snapshotFallback, setSnapshotFallback] = useState<{
     chat: ChatRoom | null;
@@ -406,6 +410,18 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const [roomStore, setRoomStore] = useState<Record<string, RoomRecord>>({});
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const roomStoreRef = useRef<Record<string, RoomRecord>>({});
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (cacheSaveTimeoutRef.current) {
+        clearTimeout(cacheSaveTimeoutRef.current);
+      }
+      typingTimersRef.current.forEach((timer) => clearTimeout(timer));
+      typingTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     roomStoreRef.current = roomStore;
@@ -532,7 +548,18 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     setTransportMessages([]);
   }, [activeChatId]);
 
+  useEffect(() => {
+    typingTimersRef.current.forEach((timer) => clearTimeout(timer));
+    typingTimersRef.current.clear();
+    setTransportTypingByChat((current) => {
+      if (!activeChatId) return {};
+      const nextTyping = current[activeChatId] ?? [];
+      return nextTyping.length ? { [activeChatId]: nextTyping } : {};
+    });
+  }, [activeChatId]);
+
   const handleTypingUpdate = useCallback((payload: ChatV2TypingUpdatePayload) => {
+    if (!mountedRef.current) return;
     if (payload.userId === user?.uid) return;
 
     setTransportTypingByChat((prev) => {
@@ -569,7 +596,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     displayName,
     displayPhoto,
     getIdToken: user ? () => user.getIdToken() : null,
-    enabled: featureFlags.socketEnabled,
+    enabled: socketTransportEnabled,
     onSnapshot: (payload: ChatV2SnapshotPayload) => {
       const nextChat = mapProtocolRoom(payload.chat, user?.uid ?? null);
       const nextMessages = trimMessages(payload.messages.map(mapProtocolMessage));
@@ -756,18 +783,68 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   useEffect(() => {
     if (!user?.uid) return;
+
     transport.sendPresenceHeartbeat('online', activeChatId);
-  }, [activeChatId, transport, user?.uid]);
+    const heartbeat = setInterval(() => {
+      transport.sendPresenceHeartbeat('online', activeChatId);
+    }, 30000);
+
+    return () => {
+      clearInterval(heartbeat);
+      transport.sendPresenceHeartbeat('away', null);
+    };
+  }, [activeChatId, transport.sendPresenceHeartbeat, user?.uid]);
 
   useEffect(() => {
-    if (!featureFlags.socketEnabled || !activeChatId) return;
+    const handleNavigationStart = () => {
+      typingTimersRef.current.forEach((timer) => clearTimeout(timer));
+      typingTimersRef.current.clear();
+      if (cacheSaveTimeoutRef.current) {
+        clearTimeout(cacheSaveTimeoutRef.current);
+        cacheSaveTimeoutRef.current = null;
+      }
+      setTransportTypingByChat({});
+      if (activeChatId) {
+        transport.sendTyping(activeChatId, false);
+      }
+      transport.sendPresenceHeartbeat('away', null);
+    };
 
-    const cursor = snapshotFallback?.cursor ?? getCurrentCursor(legacy.messages);
-    transport.subscribe(activeChatId, cursor);
+    window.addEventListener('app:navigation-start', handleNavigationStart as EventListener);
     return () => {
+      window.removeEventListener('app:navigation-start', handleNavigationStart as EventListener);
+    };
+  }, [activeChatId, transport.sendPresenceHeartbeat, transport.sendTyping]);
+
+  useEffect(() => {
+    if (!socketTransportEnabled || !activeChatId) return;
+
+    const cachedCursor = roomStoreRef.current[activeChatId]?.cursor ?? 0;
+    const fallbackCursor = snapshotFallback?.cursor ?? 0;
+    const legacyCursor =
+      legacy.activeChat === activeChatId ? getCurrentCursor(legacy.messages as Message[]) : 0;
+    const roomCursor = Math.max(
+      cachedCursor,
+      fallbackCursor,
+      legacyCursor
+    );
+
+    transport.sendPresenceHeartbeat('online', activeChatId);
+    transport.subscribe(activeChatId, roomCursor);
+    return () => {
+      transport.sendTyping(activeChatId, false);
       transport.unsubscribe(activeChatId);
     };
-  }, [activeChatId, featureFlags.socketEnabled, legacy.messages, snapshotFallback?.cursor, transport]);
+  }, [
+    activeChatId,
+    legacy.activeChat,
+    snapshotFallback?.cursor,
+    socketTransportEnabled,
+    transport.sendPresenceHeartbeat,
+    transport.sendTyping,
+    transport.subscribe,
+    transport.unsubscribe,
+  ]);
 
   const activeChatData = useMemo(() => {
     const base = (legacy.activeChatData as ChatRoom | null) ?? snapshotFallback?.chat ?? null;
@@ -780,10 +857,43 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       legacy.messages.length > 0 ? (legacy.messages as Message[]) : snapshotFallback?.messages ?? [];
 
     const roomMessages = activeChatId ? roomStore[activeChatId]?.messages ?? [] : [];
-    const mergedTransport = transportMessages.length ? mergeMessages(baseMessages, transportMessages) : baseMessages;
-    if (!roomMessages.length) return mergedTransport;
-    return mergeMessages(mergedTransport, roomMessages);
-  }, [activeChatId, legacy.messages, roomStore, snapshotFallback?.messages, transportMessages]);
+    const canonicalMessages = roomMessages.length
+      ? mergeMessages(baseMessages, roomMessages)
+      : baseMessages;
+
+    if (!transportMessages.length) {
+      return canonicalMessages;
+    }
+
+    const transportServerMessages = transportMessages.filter(
+      (message) =>
+        !message.localState ||
+        Boolean(message.serverMessageId) ||
+        typeof message.serverSequence === 'number' ||
+        Boolean(message.createdAtServer)
+    );
+    const transportOptimisticMessages = transportMessages.filter(
+      (message) =>
+        Boolean(message.localState) &&
+        !message.serverMessageId &&
+        typeof message.serverSequence !== 'number' &&
+        !message.createdAtServer
+    );
+
+    const mergedServerMessages = transportServerMessages.length
+      ? mergeMessages(canonicalMessages, transportServerMessages)
+      : canonicalMessages;
+
+    const settledOptimisticMessages = settleOptimisticMessages(
+      transportOptimisticMessages,
+      mergedServerMessages,
+      user?.uid ?? null
+    );
+
+    return settledOptimisticMessages.length
+      ? mergeMessages(mergedServerMessages, settledOptimisticMessages)
+      : mergedServerMessages;
+  }, [activeChatId, legacy.messages, roomStore, snapshotFallback?.messages, transportMessages, user?.uid]);
 
   const typingUsers = useMemo(() => {
     if (!activeChatId) return legacy.typingUsers;
@@ -792,7 +902,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   }, [activeChatId, legacy.typingUsers, transportTypingByChat]);
 
   useEffect(() => {
-    if (!featureFlags.socketEnabled || !transport.socketReady || !activeChatId || !user?.uid) return;
+    if (!socketTransportEnabled || !transport.socketReady || !activeChatId || !user?.uid) return;
 
     const incomingMessages = messages.filter(
       (message) =>
@@ -834,20 +944,33 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         serverCursor: getCurrentCursor(messages),
       });
     }
-  }, [activeChatId, featureFlags.socketEnabled, messages, queueReceiptIds, transport, user?.uid]);
+  }, [activeChatId, messages, queueReceiptIds, socketTransportEnabled, transport, user?.uid]);
 
   useEffect(() => {
     if (!activeChatId) return;
 
     const messagesToCache = trimMessages(messages);
-    saveCachedActiveChatId(activeChatId);
-    saveCachedChatSnapshot({
-      chatId: activeChatId,
-      chat: activeChatData,
-      messages: messagesToCache,
-      cursor: getCurrentCursor(messagesToCache),
-      savedAt: Date.now(),
-    });
+    if (cacheSaveTimeoutRef.current) {
+      clearTimeout(cacheSaveTimeoutRef.current);
+    }
+
+    cacheSaveTimeoutRef.current = setTimeout(() => {
+      saveCachedActiveChatId(activeChatId);
+      saveCachedChatSnapshot({
+        chatId: activeChatId,
+        chat: activeChatData,
+        messages: messagesToCache,
+        cursor: getCurrentCursor(messagesToCache),
+        savedAt: Date.now(),
+      });
+    }, 250);
+
+    return () => {
+      if (cacheSaveTimeoutRef.current) {
+        clearTimeout(cacheSaveTimeoutRef.current);
+        cacheSaveTimeoutRef.current = null;
+      }
+    };
   }, [activeChatData, activeChatId, messages]);
 
   const chats = useMemo(() => {
@@ -877,7 +1000,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     ) => {
       if (!activeChatId || !user) return;
 
-      const canUseSocketDirect = featureFlags.socketEnabled && transport.socketReady;
+      const canUseSocketDirect = socketTransportEnabled && transport.socketReady;
 
       if (!canUseSocketDirect) {
         await legacy.sendMessage(text, type, file, replyTo, duration, mimeType);
@@ -1004,7 +1127,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       };
 
       upsertLocalMessage(activeChatId, optimisticMessage, lastMessagePatch);
-      setUploadProgress(0);
+      if (mountedRef.current) {
+        setUploadProgress(0);
+      }
 
       try {
         const uploadInitResponse = (await transport.sendUploadInit({
@@ -1045,7 +1170,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
             'state_changed',
             (snapshot) => {
               const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-              setUploadProgress(progress);
+              if (mountedRef.current) {
+                setUploadProgress(progress);
+              }
               updateLocalMessage(
                 activeChatId,
                 (message) => message.clientMessageId === clientMessageId || message.id === clientMessageId,
@@ -1151,7 +1278,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         );
         throw error;
       } finally {
-        setUploadProgress(null);
+        if (mountedRef.current) {
+          setUploadProgress(null);
+        }
       }
     },
     [
@@ -1170,11 +1299,11 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const setTyping = useCallback(
     (isTyping: boolean) => {
       legacy.setTyping(isTyping);
-      if (activeChatId && featureFlags.socketEnabled) {
+      if (activeChatId && socketTransportEnabled) {
         transport.sendTyping(activeChatId, isTyping);
       }
     },
-    [activeChatId, featureFlags.socketEnabled, legacy, transport]
+    [activeChatId, legacy, socketTransportEnabled, transport]
   );
 
   const setActiveChat = useCallback(

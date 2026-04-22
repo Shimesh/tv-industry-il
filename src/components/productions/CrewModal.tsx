@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
 import { useAppData } from '@/contexts/AppDataContext';
 import { normalizeContactName } from '@/lib/contactsUtils';
@@ -206,17 +206,13 @@ const shareMenuVariants = {
 export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeDepartment, setActiveDepartment] = useState<Department | 'הכל'>('הכל');
-  const { contacts, ensureFromCrew } = useAppData();
+  const { contacts } = useAppData();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
   const normalizedContacts = contacts.filter((c): c is { id: string | number; firstName: string; lastName: string; phone?: string } =>
     Boolean(c.firstName && c.lastName)
   );
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, normalizedContacts);
-
-  useEffect(() => {
-    void ensureFromCrew(rawDeduped);
-  }, [rawDeduped, ensureFromCrew]);
 
   const taggedCrew = uniqueCrew.map((member) => {
     const isCurrent = currentUserName
