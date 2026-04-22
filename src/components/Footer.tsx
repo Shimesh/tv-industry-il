@@ -69,9 +69,10 @@ export default function Footer() {
             <Heart className="w-3 h-3 text-red-400" />
             לתעשיית הטלוויזיה
           </p>
-          <p className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.4 }}>
-            Powered by TV Industry IL
-          </p>
+            <div className="text-xs text-center sm:text-left" style={{ color: 'var(--theme-text-secondary)', opacity: 0.55 }}>
+              <p>Version 1.0.0</p>
+              <p>By Yaron Orbach</p>
+            </div>
         </div>
       </div>
     </footer>

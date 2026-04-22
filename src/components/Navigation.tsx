@@ -57,8 +57,12 @@ export default function Navigation() {
     setMobileOpen(false);
     setUserMenuOpen(false);
     setThemeMenuOpen(false);
+    if (pathname === '/chat' && typeof window !== 'undefined') {
+      window.location.href = href;
+      return;
+    }
     router.push(href);
-  }, [router]);
+  }, [pathname, router]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
