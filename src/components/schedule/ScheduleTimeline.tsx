@@ -28,11 +28,6 @@ export function ScheduleTimeline({ channel, onProgramClick }: ScheduleTimelinePr
     currentIndex < schedule.length - 1 ? schedule[currentIndex + 1] : null,
   ].filter(Boolean) as ScheduleItem[];
 
-  useEffect(() => {
-    setTimeout(() => {
-      currentRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }, 300);
-  }, [channel.id]);
 
   useEffect(() => {
     if (!modalOpen) return;

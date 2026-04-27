@@ -93,6 +93,9 @@ function getSourceColor(source: string): string {
   if (source.includes('Ynet') || source.includes('ynet')) return 'bg-red-500/15 text-red-400 border-red-500/20';
   if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/15 text-orange-400 border-orange-500/20';
   if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/15 text-blue-400 border-blue-500/20';
+  if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+  if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20';
+  if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20';
   return 'bg-purple-500/15 text-purple-400 border-purple-500/20';
 }
 
@@ -359,8 +362,8 @@ function NewsPageContent() {
     () => [
       { name: 'Ynet', desc: 'חדשות, ספורט, כלכלה ותרבות', url: 'https://www.ynet.co.il', color: 'from-red-500 to-red-600' },
       { name: 'Walla', desc: 'חדשות ותרבות', url: 'https://www.walla.co.il', color: 'from-purple-500 to-fuchsia-600' },
-      { name: 'Calcalist', desc: 'כלכלה ועסקים', url: 'https://www.calcalist.co.il', color: 'from-blue-500 to-cyan-600' },
-      { name: 'TV Industry IL', desc: 'חדשות התעשייה', url: 'https://tv-industry-il.vercel.app/news', color: 'from-emerald-500 to-green-600' },
+      { name: 'ICE', desc: 'מדיה, טלוויזיה ותקשורת', url: 'https://www.ice.co.il/media', color: 'from-cyan-500 to-teal-600' },
+      { name: 'Scopt', desc: 'ידיעות תקשורת ומדיה', url: 'https://scopt.co.il', color: 'from-emerald-500 to-green-600' },
     ],
     [],
   );

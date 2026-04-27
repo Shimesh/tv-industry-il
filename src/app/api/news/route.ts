@@ -11,6 +11,7 @@ interface RssNewsItem {
   source: string;
   sourceUrl: string;
   description: string;
+  newsType?: string;
   author?: string;
   category?: string;
 }
@@ -19,12 +20,33 @@ let cachedNews: RssNewsItem[] = [];
 let lastFetch = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
-const RSS_SOURCES = [
-  { name: 'Ynet - חדשות', url: 'https://www.ynet.co.il/Integration/StoryRss2.xml', sourceUrl: 'https://www.ynet.co.il' },
-  { name: 'Ynet - תקשורת', url: 'https://www.ynet.co.il/Integration/StoryRss1854.xml', sourceUrl: 'https://www.ynet.co.il' },
-  { name: 'Ynet - תרבות', url: 'https://www.ynet.co.il/Integration/StoryRss538.xml', sourceUrl: 'https://www.ynet.co.il' },
-  { name: 'Walla - חדשות', url: 'https://rss.walla.co.il/feed/1', sourceUrl: 'https://www.walla.co.il' },
-  { name: 'Walla - תרבות', url: 'https://rss.walla.co.il/feed/4', sourceUrl: 'https://www.walla.co.il' },
+type RssSource = {
+  name: string;
+  url: string;
+  sourceUrl: string;
+  newsType?: string;
+  filterLink?: (link: string) => boolean;
+};
+
+const RSS_SOURCES: RssSource[] = [
+  { name: 'Ynet - חדשות', url: 'https://www.ynet.co.il/Integration/StoryRss2.xml', sourceUrl: 'https://www.ynet.co.il', newsType: 'אקטואליה' },
+  { name: 'Ynet - תקשורת', url: 'https://www.ynet.co.il/Integration/StoryRss1854.xml', sourceUrl: 'https://www.ynet.co.il', newsType: 'תקשורת' },
+  { name: 'Ynet - תרבות', url: 'https://www.ynet.co.il/Integration/StoryRss538.xml', sourceUrl: 'https://www.ynet.co.il', newsType: 'תרבות' },
+  { name: 'Walla - חדשות', url: 'https://rss.walla.co.il/feed/1', sourceUrl: 'https://www.walla.co.il', newsType: 'אקטואליה' },
+  { name: 'Walla - תרבות', url: 'https://rss.walla.co.il/feed/4', sourceUrl: 'https://www.walla.co.il', newsType: 'תרבות' },
+  {
+    name: 'ICE - מדיה ותקשורת',
+    url: 'https://www.ice.co.il/rss/media',
+    sourceUrl: 'https://www.ice.co.il/media',
+    newsType: 'תקשורת',
+    filterLink: (link) => /ice\.co\.il\/(media|tv|culture)\//i.test(link),
+  },
+  {
+    name: 'Scopt - תקשורת',
+    url: 'https://scopt.co.il/feed/',
+    sourceUrl: 'https://scopt.co.il',
+    newsType: 'תקשורת',
+  },
 ];
 
 function decodeHtmlEntities(text: string): string {
@@ -65,7 +87,7 @@ function parseRssItems(xml: string): { title: string; link: string; pubDate: str
   return items;
 }
 
-async function fetchRssFeed(source: typeof RSS_SOURCES[number]): Promise<RssNewsItem[]> {
+async function fetchRssFeed(source: RssSource): Promise<RssNewsItem[]> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -73,7 +95,7 @@ async function fetchRssFeed(source: typeof RSS_SOURCES[number]): Promise<RssNews
     const res = await fetch(source.url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
       cache: 'no-store',
@@ -86,15 +108,21 @@ async function fetchRssFeed(source: typeof RSS_SOURCES[number]): Promise<RssNews
     }
 
     const xml = await res.text();
-    const parsedItems = parseRssItems(xml);
+    if (!xml || xml.length < 50) return [];
 
-    return parsedItems.slice(0, 8).map((item) => ({
+    const parsedItems = parseRssItems(xml);
+    const filtered = source.filterLink
+      ? parsedItems.filter((item) => source.filterLink!(item.link))
+      : parsedItems;
+
+    return filtered.slice(0, 8).map((item) => ({
       title: item.title,
       link: item.link || source.sourceUrl,
       pubDate: item.pubDate || new Date().toISOString(),
       source: source.name,
       sourceUrl: source.sourceUrl,
       description: item.description,
+      newsType: source.newsType,
     }));
   } catch (error) {
     console.log(`RSS error for ${source.name}:`, error instanceof Error ? error.message : 'unknown');
@@ -124,7 +152,12 @@ async function fetchAllNews(): Promise<RssNewsItem[]> {
     return true;
   });
 
+  // תקשורת/מדיה articles are prioritized — then by date within each group
+  const PRIORITY_TYPE = 'תקשורת';
   deduped.sort((a, b) => {
+    const aPriority = a.newsType === PRIORITY_TYPE ? 0 : 1;
+    const bPriority = b.newsType === PRIORITY_TYPE ? 0 : 1;
+    if (aPriority !== bPriority) return aPriority - bPriority;
     try {
       return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
     } catch {
