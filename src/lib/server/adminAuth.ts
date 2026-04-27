@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { assertIsAdmin } from '@/lib/server/contactsSync';
 
-function isAllowlistedAdmin(email: string | undefined): boolean {
+function isAllowlistedAdmin(email: string | null | undefined): boolean {
   if (!email) return false;
   const allowlist = (process.env.ADMIN_BOOTSTRAP_EMAIL_ALLOWLIST || '')
     .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
