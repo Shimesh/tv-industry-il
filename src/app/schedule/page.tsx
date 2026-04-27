@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { channels, generateSchedule, getCurrentProgram, getNextProgram } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
@@ -10,19 +11,33 @@ import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 const STORAGE_KEY = 'tv-last-channel';
 
 export default function SchedulePage() {
+  return (
+    <Suspense>
+      <SchedulePageInner />
+    </Suspense>
+  );
+}
+
+function SchedulePageInner() {
+  const searchParams = useSearchParams();
   const [selectedChannelId, setSelectedChannelId] = useState<string>('i24');
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && channels.find((channel) => channel.id === saved)) {
-      setSelectedChannelId(saved);
+    const urlChannel = searchParams.get('channelId');
+    if (urlChannel && channels.find((channel) => channel.id === urlChannel)) {
+      setSelectedChannelId(urlChannel);
+    } else {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && channels.find((channel) => channel.id === saved)) {
+        setSelectedChannelId(saved);
+      }
     }
     setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [searchParams]);
 
   const selectChannel = useCallback((id: string) => {
     setSelectedChannelId(id);
