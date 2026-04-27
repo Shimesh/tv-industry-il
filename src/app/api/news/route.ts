@@ -176,15 +176,10 @@ async function fetchAllNews(): Promise<RssNewsItem[]> {
 export async function GET() {
   try {
     const news = await fetchAllNews();
-    await Promise.all([
+    Promise.all([
       recordRouteMetric({ route: '/api/news', ok: true, statusCode: 200 }),
-      recordJobMetric({
-        job: 'news-fetch',
-        ok: true,
-        message: 'משיכת החדשות הושלמה בהצלחה',
-        detail: { count: news.length },
-      }),
-    ]);
+      recordJobMetric({ job: 'news-fetch', ok: true, message: 'משיכת החדשות הושלמה בהצלחה', detail: { count: news.length } }),
+    ]).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -193,15 +188,11 @@ export async function GET() {
       items: news,
     });
   } catch (error) {
-    await Promise.all([
+    Promise.all([
       recordRouteMetric({ route: '/api/news', ok: false, statusCode: 500, error }),
-      recordJobMetric({
-        job: 'news-fetch',
-        ok: false,
-        message: 'משיכת החדשות נכשלה',
-        detail: error instanceof Error ? error.message : error,
-      }),
-    ]);
+      recordJobMetric({ job: 'news-fetch', ok: false, message: 'משיכת החדשות נכשלה', detail: error instanceof Error ? error.message : error }),
+    ]).catch(() => {});
+
     return NextResponse.json({
       success: false,
       count: 0,
