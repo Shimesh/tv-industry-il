@@ -174,7 +174,11 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
   }
 
   if (Object.keys(patch).length > 0) {
-    await patchDocument(`users/${authUser.uid}`, patch);
+    try {
+      await patchDocument(`users/${authUser.uid}`, patch);
+    } catch (patchError) {
+      console.error('[sessionBootstrap] Firestore patch failed, returning computed profile:', patchError);
+    }
   }
 
   return { profile, repaired };

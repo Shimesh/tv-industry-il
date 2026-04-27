@@ -95,7 +95,7 @@ async function fetchRssFeed(source: RssSource): Promise<RssNewsItem[]> {
     const res = await fetch(source.url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/1.0; +https://tv-industry-il.vercel.app)',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
       cache: 'no-store',
