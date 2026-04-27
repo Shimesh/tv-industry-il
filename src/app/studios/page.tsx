@@ -125,7 +125,7 @@ export default function StudiosPage() {
               {/* Map Embed */}
               <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--theme-border)' }}>
                 <iframe
-                  src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(studio.address)}&zoom=15`}
+                  src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(studio.address)}&zoom=15`}
                   width="100%" height="180" style={{ border: 0 }}
                   allowFullScreen loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
@@ -145,7 +145,7 @@ export default function StudiosPage() {
           </h2>
           <div className="rounded-2xl overflow-hidden border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
             <iframe
-              src="https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=אולפני+טלוויזיה+ישראל&zoom=8"
+              src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=אולפני+טלוויזיה+ישראל&zoom=8`}
               width="100%" height="400" style={{ border: 0 }}
               allowFullScreen loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
