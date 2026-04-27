@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { splitName, inferDepartment, inferWorkArea } from '@/lib/contactsUtils';
+import { splitName, inferDepartment, inferSpecialty, inferWorkArea } from '@/lib/contactsUtils';
 import {
   deduplicateCrewEntries,
   normalizeName,
@@ -20,6 +20,7 @@ type ContactRecord = {
   lastName?: string;
   department?: string;
   workArea?: string | null;
+  specialty?: string;
   role?: string;
   phone?: string | null;
   source?: string;
@@ -61,6 +62,7 @@ type SyncCandidate = {
   role: string;
   department: string;
   workArea: string | null;
+  specialty: string;
   partialContact: boolean;
   sources: string[];
 };
@@ -114,6 +116,11 @@ function pickDepartment(existing: ContactRecord | null, candidate: SyncCandidate
 function pickWorkArea(existing: ContactRecord | null, candidate: SyncCandidate): string | null {
   if (existing?.workArea) return existing.workArea;
   return candidate.workArea;
+}
+
+function pickSpecialty(existing: ContactRecord | null, candidate: SyncCandidate): string {
+  if (existing?.specialty) return existing.specialty;
+  return candidate.specialty;
 }
 
 function scoreContact(contact: ContactRecord): number {
@@ -202,9 +209,15 @@ async function reclassifyAllContacts(
 
   for (const contact of contacts) {
     const role = String(contact.role || '');
-    const correctDepartment = inferDepartment(role);
-    const correctWorkArea = inferWorkArea(role);
-    if (contact.department === correctDepartment && (contact.workArea || null) === correctWorkArea) {
+    const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+    const correctDepartment = inferDepartment(role, fullName);
+    const correctWorkArea = inferWorkArea(role, fullName);
+    const correctSpecialty = inferSpecialty(role, fullName);
+    if (
+      contact.department === correctDepartment &&
+      (contact.workArea || null) === correctWorkArea &&
+      contact.specialty === correctSpecialty
+    ) {
       continue;
     }
 
@@ -213,6 +226,7 @@ async function reclassifyAllContacts(
       await patchDocument(`contacts/${contact.id}`, {
         department: correctDepartment,
         workArea: correctWorkArea,
+        specialty: correctSpecialty,
         updatedAt: nowIso(),
       });
     }
@@ -228,8 +242,9 @@ function toSyncCandidate(member: CrewInput): SyncCandidate | null {
   const normalizedPhone = normalizePhone(member.normalizedPhone || member.phone || null);
   const identityKey = normalizedPhone ? `${normalizedName}::${normalizedPhone}` : normalizedName;
   const role = normalizeRole(member.roleDetail || member.role || '');
-  const department = inferDepartment(role);
-  const workArea = inferWorkArea(role);
+  const department = inferDepartment(role, normalizedName);
+  const workArea = inferWorkArea(role, normalizedName);
+  const specialty = inferSpecialty(role, normalizedName);
   const { firstName, lastName } = splitName(normalizedName);
 
   return {
@@ -241,6 +256,7 @@ function toSyncCandidate(member: CrewInput): SyncCandidate | null {
     role,
     department,
     workArea,
+    specialty,
     partialContact: !normalizedPhone,
     sources: ['schedule'],
   };
@@ -269,6 +285,7 @@ function mergeContactData(existing: ContactRecord | null, candidate: SyncCandida
   const mergedRole = existing?.role || candidate.role;
   const mergedDepartment = pickDepartment(existing, candidate);
   const mergedWorkArea = pickWorkArea(existing, candidate);
+  const mergedSpecialty = pickSpecialty(existing, candidate);
   const createdAt = existing ? undefined : nowIso();
 
   return {
@@ -278,6 +295,7 @@ function mergeContactData(existing: ContactRecord | null, candidate: SyncCandida
     role: mergedRole,
     department: mergedDepartment,
     workArea: mergedWorkArea,
+    specialty: mergedSpecialty,
     normalizedName: candidate.normalizedName,
     normalizedPhone: mergedPhone || null,
     identityKey: mergedPhone ? `${candidate.normalizedName}::${mergedPhone}` : candidate.normalizedName,
@@ -347,9 +365,8 @@ export async function syncContactsFromProductions(
     const existing =
       (candidate.normalizedPhone && byPhone.get(candidate.normalizedPhone)) ||
       (candidate.normalizedPhone && byComposite.get(candidate.identityKey)) ||
-      byNameWithPhone.get(candidate.normalizedName) ||
       (!candidate.normalizedPhone ? byNameWithoutPhone.get(candidate.normalizedName) : null) ||
-      (candidate.normalizedPhone ? byNameWithoutPhone.get(candidate.normalizedName) : null) ||
+      (!candidate.normalizedPhone ? byNameWithPhone.get(candidate.normalizedName) : null) ||
       null;
 
     if (!existing && sampleMissing.length < 12) {
@@ -387,6 +404,7 @@ export async function syncContactsFromProductions(
       existing.role !== merged.role ||
       existing.department !== merged.department ||
       (existing.workArea || null) !== (merged.workArea || null) ||
+      existing.specialty !== merged.specialty ||
       existing.normalizedName !== merged.normalizedName ||
       existing.normalizedPhone !== merged.normalizedPhone ||
       existing.identityKey !== merged.identityKey ||

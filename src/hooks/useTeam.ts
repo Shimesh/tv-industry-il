@@ -74,62 +74,47 @@ export function useTeam() {
     return () => unsubscribe();
   }, [user]);
 
-  // Create a new team
-  const createTeam = useCallback(async (name: string, description?: string): Promise<string | null> => {
+  const createTeamViaApi = useCallback(async (name: string, description?: string): Promise<string | null> => {
     if (!user || !displayName) return null;
 
-    // Check max teams limit
     if (teams.length >= 10) {
       throw new Error('הגעת למקסימום 10 צוותים');
     }
 
-    const member: TeamMember = {
-      uid: user.uid,
-      displayName,
-      photoURL: displayPhoto,
-      role: 'owner',
-      joinedAt: Date.now(),
-    };
+    const token = await user.getIdToken();
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
 
-    // Create team chat first
-    const chatRef = await addDoc(collection(db, 'chats'), {
-      type: 'group',
-      name: `צוות: ${name}`,
-      members: [user.uid],
-      admins: [user.uid],
-      membersInfo: [{ uid: user.uid, displayName, photoURL: displayPhoto }],
-      unreadCount: {},
-      lastRead: {},
-      isTeamChat: true,
-      createdAt: serverTimestamp(),
-    });
+    let response: Response;
+    try {
+      response = await fetch('/api/teams', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          description: description || '',
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('יצירת הצוות ארכה יותר מדי זמן. נסה שוב בעוד רגע.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
 
-    // Add system message
-    await addDoc(collection(db, 'chats', chatRef.id, 'messages'), {
-      senderId: 'system',
-      senderName: 'מערכת',
-      text: `${displayName} יצר/ה את הצוות "${name}"`,
-      type: 'system',
-      createdAt: serverTimestamp(),
-    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof payload?.error === 'string' ? payload.error : 'יצירת הצוות נכשלה');
+    }
 
-    // Create team
-    const teamRef = await addDoc(collection(db, 'teams'), {
-      name,
-      description: description || '',
-      photoURL: null,
-      ownerId: user.uid,
-      members: [member],
-      memberUids: [user.uid],
-      adminUids: [user.uid],
-      editorUids: [user.uid],
-      chatId: chatRef.id,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    return teamRef.id;
-  }, [user, displayName, displayPhoto, teams.length]);
+    return typeof payload?.teamId === 'string' ? payload.teamId : null;
+  }, [user, displayName, teams.length]);
 
   // Update team settings
   const updateTeam = useCallback(async (teamId: string, data: { name?: string; description?: string; photoURL?: string | null }) => {
@@ -437,7 +422,7 @@ export function useTeam() {
     teams,
     invites,
     loading,
-    createTeam,
+    createTeam: createTeamViaApi,
     updateTeam,
     inviteToTeam,
     acceptInvite,

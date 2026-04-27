@@ -112,14 +112,35 @@ body,
   transform: translateY(-2px);
 }
 
-/* Breaking News Ticker */
-@keyframes ticker {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+/* Breaking News Marquee */
+@keyframes news-marquee {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
 }
 
-.ticker-animation {
-  animation: ticker 30s linear infinite;
+.news-marquee {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.news-marquee-track {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: max-content;
+  gap: 0;
+  animation: news-marquee 55s linear infinite;
+  will-change: transform;
+}
+
+.news-marquee-group {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: max-content;
+  white-space: nowrap;
 }
 
 /* Pulse Animation */

@@ -357,7 +357,7 @@ export default function WeeklyCalendarWidget() {
             </div>
             <div>
               <h2 className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>
-                לוח הפקות
+                יומן אישי
                 {isCurrentWeek && <span className="mr-1.5 text-[10px] font-medium opacity-50">השבוע</span>}
               </h2>
               {mounted && (
@@ -403,7 +403,7 @@ export default function WeeklyCalendarWidget() {
               className="flex items-center gap-0.5 text-xs font-medium opacity-50 hover:opacity-100 transition-opacity"
               style={{ color: 'var(--theme-accent)' }}
             >
-              לכל ההפקות
+              לכל האירועים
               <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -545,7 +545,7 @@ export default function WeeklyCalendarWidget() {
         {mounted && productions === null && (
           <div className="px-4 py-3 border-t text-center" style={{ borderColor: 'var(--theme-border)' }}>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              פתח את לוח ההפקות כדי לטעון את השבוע
+              פתח את היומן האישי כדי לטעון את השבוע
             </p>
           </div>
         )}

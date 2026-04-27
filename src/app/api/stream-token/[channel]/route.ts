@@ -24,11 +24,37 @@ function extractM3u8(html: string): string | null {
     /https:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/,
     /"(https:\/\/[^"]+\.m3u8[^"]*)"/,
     /'(https:\/\/[^']+\.m3u8[^']*)'/,
+    /https:\\\/\\\/[^"'<>]+\.m3u8[^"'<>]*/,
   ];
   for (const pattern of patterns) {
     const match = html.match(pattern);
-    if (match) return match[1] ?? match[0];
+    const rawUrl = match?.[1] ?? match?.[0];
+    if (!rawUrl) continue;
+    return rawUrl.replace(/\\\//g, '/').replace(/\\\\/g, '');
   }
+  return null;
+}
+
+async function resolveKeshet12Stream(): Promise<string | null> {
+  const candidateUrls = [
+    'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
+    'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=7c5076a9b8757810VgnVCM100000700a10acRCRD&videoChannelId=d1d6f5dfc8517810VgnVCM100000700a10acRCRD&vcmid=1e2258089b67f510VgnVCM2000002a0c10acRCRD&autoPlay=true',
+    'https://www.mako.co.il/live-news?partner=NavBar',
+  ];
+
+  for (const url of candidateUrls) {
+    const html = await fetchPage(url);
+    if (!html) continue;
+
+    const cloudFrontMatch = html.match(/https:\/\/[^"']+(?:cloudfront|akamaized|mako)[^"']+\.m3u8[^"']*/i);
+    if (cloudFrontMatch?.[0]) {
+      return cloudFrontMatch[0].replace(/\\\//g, '/');
+    }
+
+    const extracted = extractM3u8(html);
+    if (extracted) return extracted;
+  }
+
   return null;
 }
 
@@ -55,7 +81,7 @@ export async function GET(
 
     // === כאן 33 ===
     if (channel === 'kan33') {
-      const html = await fetchPage('https://www.kan.org.il/live/tv.aspx?stationid=3');
+      const html = await fetchPage('https://www.kan.org.il/live/tv.aspx?stationid=23');
       if (html) {
         const url = extractM3u8(html);
         if (url) return NextResponse.json({ url, expires: Date.now() + 3600000 });
@@ -78,6 +104,15 @@ export async function GET(
       return NextResponse.json({
         url: 'https://d2xg1g9o5vns8m.cloudfront.net/out/v1/66d4ac8748ce4a9298b4e40e48d1ae2f/index.m3u8',
         expires: Date.now() + 3600000,
+      });
+    }
+
+    // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
+    if (channel === 'keshet12') {
+      const url = await resolveKeshet12Stream();
+      return NextResponse.json({
+        url,
+        expires: Date.now() + (url ? 1800000 : 300000),
       });
     }
 

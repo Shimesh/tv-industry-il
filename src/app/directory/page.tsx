@@ -4,6 +4,11 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
+import {
+  DIRECTORY_WORK_AREAS,
+  areSemanticallySameRole,
+  normalizeDisplayRoleLabel,
+} from '@/lib/contactsUtils';
 import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
@@ -75,6 +80,21 @@ const filterPillVariants = {
   active: { scale: 1.05, transition: { type: 'spring' as const, stiffness: 400, damping: 20 } },
 };
 
+function getPrimaryRoleLabel(contact: Contact) {
+  return normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
+}
+
+function getSecondaryRoleLabel(contact: Contact) {
+  const role = normalizeDisplayRoleLabel(contact.role || '');
+  const specialty = normalizeDisplayRoleLabel(contact.specialty || '');
+
+  if (!role || !specialty || areSemanticallySameRole(role, specialty)) {
+    return null;
+  }
+
+  return role;
+}
+
 export default function DirectoryPage() {
   return (
     <AuthGuard>
@@ -84,6 +104,8 @@ export default function DirectoryPage() {
 }
 
 function DirectoryContent() {
+  const noWorkAreaCount = 0;
+  const unassignedWorkAreaKey = '__unassigned__';
   const { profile, loading: authLoading } = useAuth();
   const {
     contacts: contactsList,
@@ -96,10 +118,12 @@ function DirectoryContent() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [workAreaFilter, setWorkAreaFilter] = useState('');
+  const [specialtyFilter, setSpecialtyFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [openToWorkFilter, setOpenToWorkFilter] = useState(false);
+  const normalizedSearch = search.trim().toLocaleLowerCase('he');
 
   // Check if a contact matches the logged-in user
   const isCurrentUser = (contact: Contact): boolean => {
@@ -117,17 +141,21 @@ function DirectoryContent() {
 
   const filtered = useMemo(() => {
     return contactsList.filter(c => {
-      const matchSearch = !search || `${c.firstName} ${c.lastName} ${c.role} ${c.department} ${c.workArea || ''}`.includes(search);
+      const canonicalRole = normalizeDisplayRoleLabel(c.role || '');
+      const canonicalSpecialty = normalizeDisplayRoleLabel(c.specialty || '');
+      const haystack = `${c.firstName} ${c.lastName} ${c.role} ${canonicalRole} ${c.department} ${c.workArea || ''} ${c.specialty || ''} ${canonicalSpecialty}`.toLocaleLowerCase('he');
+      const matchSearch = !normalizedSearch || haystack.includes(normalizedSearch);
       const matchDept = !deptFilter || c.department === deptFilter;
       const matchWorkArea = !workAreaFilter || c.workArea === workAreaFilter;
+      const matchSpecialty = !specialtyFilter || normalizeDisplayRoleLabel(c.specialty || c.role || '') === specialtyFilter;
       const matchAvail = !availFilter ||
         (availFilter === 'available' && c.availability === 'available') ||
         (availFilter === 'unavailable' && c.availability === 'unavailable') ||
         (availFilter === 'maybe' && c.availability === 'maybe');
       const matchOpenToWork = !openToWorkFilter || c.openToWork === true;
-      return matchSearch && matchDept && matchWorkArea && matchAvail && matchOpenToWork;
+      return matchSearch && matchDept && matchWorkArea && matchSpecialty && matchAvail && matchOpenToWork;
     });
-  }, [search, deptFilter, workAreaFilter, availFilter, openToWorkFilter, contactsList]);
+  }, [normalizedSearch, deptFilter, workAreaFilter, specialtyFilter, availFilter, openToWorkFilter, contactsList]);
 
   // Sort: current user first
   const sortedFiltered = useMemo(() => {
@@ -168,6 +196,46 @@ function DirectoryContent() {
     });
     return counts;
   }, [contactsList]);
+  const specialtyCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contactsList.forEach((contact) => {
+      const specialty = normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
+      if (!specialty) return;
+      counts[specialty] = (counts[specialty] || 0) + 1;
+    });
+    return counts;
+  }, [contactsList]);
+
+  const specialtyOptions = useMemo(
+    () => Object.keys(specialtyCounts).sort((a, b) => a.localeCompare(b, 'he')),
+    [specialtyCounts],
+  );
+  const visibleSpecialtyCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contactsList.forEach((contact) => {
+      const matchesDepartment = !deptFilter || contact.department === deptFilter;
+      const matchesWorkArea = !workAreaFilter || contact.workArea === workAreaFilter;
+      const specialty = normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
+      if (!matchesDepartment || !matchesWorkArea || !specialty) {
+        return;
+      }
+      counts[specialty] = (counts[specialty] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he'))
+      .slice(0, 12);
+  }, [contactsList, deptFilter, workAreaFilter]);
+  const visibleWorkAreas = useMemo(
+    () => DIRECTORY_WORK_AREAS.filter((area) => (workAreaCounts[area] || 0) > 0 || workAreaFilter === area),
+    [workAreaCounts, workAreaFilter],
+  );
+  const workAreaSummary = useMemo(
+    () => visibleWorkAreas
+      .map((area) => `${area} ${workAreaCounts[area] || 0}`)
+      .join(' • '),
+    [visibleWorkAreas, workAreaCounts],
+  );
 
   if (authLoading || (contactsLoading && !contactsReady)) return <DirectorySkeleton />;
 
@@ -181,22 +249,22 @@ function DirectoryContent() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative max-w-7xl mx-auto px-4 sm:px-6 py-10"
+          className="relative max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10"
         >
-          <div className="flex items-center gap-4 mb-2">
+          <div className="flex items-center gap-3 sm:gap-4 mb-2">
             <motion.div
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 via-violet-500 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/25"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-purple-500 via-violet-500 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/25"
             >
-              <Users className="w-7 h-7 text-white" />
+              <Users className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             </motion.div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-l from-purple-400 via-violet-300 to-blue-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-4xl font-black bg-gradient-to-l from-purple-400 via-violet-300 to-blue-400 bg-clip-text text-transparent">
                 אלפון מקצועי
               </h1>
-              <p className="text-sm mt-1" style={{ color: 'var(--theme-text-secondary)' }}>
+              <p className="text-xs sm:text-sm mt-1" style={{ color: 'var(--theme-text-secondary)' }}>
                 מאגר אנשי המקצוע של תעשיית הטלוויזיה הישראלית
               </p>
             </div>
@@ -205,7 +273,7 @@ function DirectoryContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="flex items-center gap-4 mt-4 text-sm"
+            className="flex flex-wrap items-center gap-3 sm:gap-4 mt-3 sm:mt-4 text-xs sm:text-sm"
             style={{ color: 'var(--theme-text-secondary)' }}
           >
             {!contactsServerConfirmed && (
@@ -250,26 +318,27 @@ function DirectoryContent() {
 
       {/* Search & Filters */}
       <section className="sticky z-30 backdrop-blur-xl border-b" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
+          <div className="space-y-2">
             {/* Search - glass morphism */}
             <div className="relative flex-1 group">
-              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
               <input
                 type="text"
                 placeholder="חיפוש לפי שם, תפקיד..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-4 pr-11 py-3 rounded-xl border text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
+                className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border text-xs sm:text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
                 style={{ background: 'color-mix(in srgb, var(--theme-bg-secondary) 70%, transparent)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
               />
             </div>
 
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
             {/* Availability Filter */}
             <select
               value={availFilter}
               onChange={(e) => setAvailFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300"
+              className="px-3 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300 shrink-0"
               style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
             >
               <option value="">כל הסטטוסים</option>
@@ -278,11 +347,25 @@ function DirectoryContent() {
               <option value="unavailable">לא פנויים</option>
             </select>
 
+            <select
+              value={specialtyFilter}
+              onChange={(e) => setSpecialtyFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300 shrink-0"
+              style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            >
+              <option value="">כל המקצועות</option>
+              {specialtyOptions.map((specialty) => (
+                <option key={specialty} value={specialty}>
+                  {specialty}
+                </option>
+              ))}
+            </select>
+
             {/* Open to Work Toggle */}
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setOpenToWorkFilter(!openToWorkFilter)}
-              className={`px-4 py-2.5 rounded-xl border text-sm whitespace-nowrap transition-all duration-300 ${
+              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm whitespace-nowrap transition-all duration-300 shrink-0 ${
                 openToWorkFilter
                   ? 'border-green-500/50 bg-green-500/15 text-green-300 shadow-sm shadow-green-500/10'
                   : 'hover:border-green-500/30'
@@ -293,7 +376,7 @@ function DirectoryContent() {
             </motion.button>
 
             {/* View Toggle */}
-            <div className="flex rounded-xl border overflow-hidden" style={{ borderColor: 'var(--theme-border)' }}>
+            <div className="flex rounded-xl border overflow-hidden shrink-0" style={{ borderColor: 'var(--theme-border)' }}>
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setViewMode('grid')}
@@ -311,23 +394,24 @@ function DirectoryContent() {
                 <List className="w-4 h-4" />
               </motion.button>
             </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 mt-2.5 overflow-x-auto scrollbar-hide pb-1">
             <button
               onClick={() => setWorkAreaFilter('')}
-              className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+              className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
                 !workAreaFilter ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
               }`}
               style={!workAreaFilter ? undefined : { borderColor: 'var(--theme-border)' }}
             >
               כל אזורי העבודה
             </button>
-            {['אולפן', 'קונטרול'].map((area) => (
+            {visibleWorkAreas.map((area) => (
               <button
                 key={area}
                 onClick={() => setWorkAreaFilter(workAreaFilter === area ? '' : area)}
-                className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
                   workAreaFilter === area ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
                 }`}
                 style={workAreaFilter === area ? undefined : { borderColor: 'var(--theme-border)' }}
@@ -335,7 +419,44 @@ function DirectoryContent() {
                 {area} {workAreaCounts[area] || 0}
               </button>
             ))}
+            {false && noWorkAreaCount > 0 && (
+            <button
+              onClick={() => setWorkAreaFilter(workAreaFilter === unassignedWorkAreaKey ? '' : unassignedWorkAreaKey)}
+              className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                workAreaFilter === unassignedWorkAreaKey ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
+              }`}
+              style={workAreaFilter === unassignedWorkAreaKey ? undefined : { borderColor: 'var(--theme-border)' }}
+            >
+              ללא שיוך אזורי {noWorkAreaCount}
+            </button>
+            )}
           </div>
+
+          {visibleSpecialtyCounts.length > 0 && (
+            <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 mt-2.5 overflow-x-auto scrollbar-hide pb-1">
+              <button
+                onClick={() => setSpecialtyFilter('')}
+                className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
+                  !specialtyFilter ? 'bg-cyan-500/10 border-cyan-400/40 text-cyan-200' : 'text-[var(--theme-text-secondary)]'
+                }`}
+                style={specialtyFilter ? { borderColor: 'var(--theme-border)' } : undefined}
+              >
+                כל המקצועות
+              </button>
+              {visibleSpecialtyCounts.map(([specialty, count]) => (
+                <button
+                  key={specialty}
+                  onClick={() => setSpecialtyFilter(specialtyFilter === specialty ? '' : specialty)}
+                  className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
+                    specialtyFilter === specialty ? 'bg-cyan-500/10 border-cyan-400/40 text-cyan-200' : 'text-[var(--theme-text-secondary)]'
+                  }`}
+                  style={specialtyFilter === specialty ? undefined : { borderColor: 'var(--theme-border)' }}
+                >
+                  {specialty} {count}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Active Filters & Count */}
           <div className="flex items-center justify-between mt-3">
@@ -348,12 +469,15 @@ function DirectoryContent() {
             >
               {filtered.length} תוצאות
             </motion.span>
-            {(search || deptFilter || workAreaFilter || availFilter || openToWorkFilter) && (
+            <span className="text-xs hidden md:block" style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
+              {workAreaSummary} • סה״כ {totalCount}
+            </span>
+            {(search || deptFilter || workAreaFilter || specialtyFilter || availFilter || openToWorkFilter) && (
               <motion.button
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
-                onClick={() => { setSearch(''); setDeptFilter(''); setWorkAreaFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
+                onClick={() => { setSearch(''); setDeptFilter(''); setWorkAreaFilter(''); setSpecialtyFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
                 className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> נקה פילטרים
@@ -428,6 +552,8 @@ function DirectoryContent() {
               <AnimatePresence>
                 {sortedFiltered.map((contact, i) => {
                   const isMeCard = isCurrentUser(contact);
+                  const primaryRoleLabel = getPrimaryRoleLabel(contact);
+                  const secondaryRoleLabel = getSecondaryRoleLabel(contact);
                   return (
                     <motion.div
                       key={contact.id}
@@ -485,9 +611,16 @@ function DirectoryContent() {
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                              {contact.role}
-                            </span>
+                            {primaryRoleLabel && (
+                              <span className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                                {primaryRoleLabel}
+                              </span>
+                            )}
+                            {secondaryRoleLabel && (
+                              <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                {secondaryRoleLabel}
+                              </span>
+                            )}
                             <span className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                               {contact.department}
                             </span>
@@ -567,7 +700,9 @@ function DirectoryContent() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">מחפש עבודה</span>
                         )}
                       </div>
-                      <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>{contact.role}</span>
+                      <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>
+                        {getPrimaryRoleLabel(contact)}
+                      </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                         {contact.department || 'לא מוגדר'}
                       </span>
@@ -689,9 +824,16 @@ function DirectoryContent() {
                     transition={{ delay: 0.25, duration: 0.3 }}
                     className="flex items-center justify-center gap-2 mt-3"
                   >
-                    <span className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                      <Briefcase className="w-3.5 h-3.5" />{selectedContact.role}
-                    </span>
+                    {getPrimaryRoleLabel(selectedContact) && (
+                      <span className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                        <Briefcase className="w-3.5 h-3.5" />{getPrimaryRoleLabel(selectedContact)}
+                      </span>
+                    )}
+                    {getSecondaryRoleLabel(selectedContact) && (
+                      <span className="text-sm px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                        {getSecondaryRoleLabel(selectedContact)}
+                      </span>
+                    )}
                     <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
                       {selectedContact.department || 'לא מוגדר'}
                     </span>

@@ -1,161 +1,164 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 export type ThemeName = 'dark' | 'light' | 'midnight' | 'sunset' | 'forest';
 
-interface ThemeColors {
-  bg: string;
-  bgSecondary: string;
-  bgCard: string;
-  text: string;
-  textSecondary: string;
-  border: string;
-  accent: string;
-  accentSecondary: string;
-  accentGlow: string;
-  navBg: string;
-}
+type ThemeDefinition = {
+  label: string;
+  emoji: string;
+  colors: Record<string, string>;
+};
 
-export const themes: Record<ThemeName, { label: string; emoji: string; colors: ThemeColors }> = {
+type ThemeContextValue = {
+  theme: ThemeName;
+  setTheme: (theme: ThemeName) => void;
+};
+
+const STORAGE_KEY = 'tv-industry-theme';
+
+export const themes: Record<ThemeName, ThemeDefinition> = {
   dark: {
-    label: 'כהה',
+    label: 'לילה',
     emoji: '🌙',
     colors: {
-      bg: '#030712',
-      bgSecondary: '#111827',
-      bgCard: 'rgba(17, 24, 39, 0.5)',
-      text: '#f3f4f6',
-      textSecondary: '#9ca3af',
-      border: '#1f2937',
-      accent: '#a78bfa',
-      accentSecondary: '#60a5fa',
-      accentGlow: 'rgba(139, 92, 246, 0.15)',
-      navBg: 'rgba(17, 24, 39, 0.8)',
+      '--theme-bg': '#050816',
+      '--theme-bg-secondary': '#0c1328',
+      '--theme-bg-card': '#111a33',
+      '--theme-border': 'rgba(148, 163, 184, 0.18)',
+      '--theme-text': '#f8fafc',
+      '--theme-text-secondary': '#cbd5e1',
+      '--theme-accent': '#8b5cf6',
+      '--theme-accent-glow': 'rgba(139, 92, 246, 0.18)',
+      '--theme-success': '#22c55e',
+      '--theme-warning': '#f59e0b',
+      '--theme-danger': '#ef4444',
     },
   },
   light: {
-    label: 'בהיר',
+    label: 'יום',
     emoji: '☀️',
     colors: {
-      bg: '#f8fafc',
-      bgSecondary: '#eef2f7',
-      bgCard: 'rgba(255, 255, 255, 0.95)',
-      text: '#1e293b',
-      textSecondary: '#475569',
-      border: '#d1d5db',
-      accent: '#7c3aed',
-      accentSecondary: '#3b82f6',
-      accentGlow: 'rgba(124, 58, 237, 0.08)',
-      navBg: 'rgba(255, 255, 255, 0.95)',
+      '--theme-bg': '#f6f8fc',
+      '--theme-bg-secondary': '#ffffff',
+      '--theme-bg-card': '#ffffff',
+      '--theme-border': 'rgba(15, 23, 42, 0.10)',
+      '--theme-text': '#0f172a',
+      '--theme-text-secondary': '#475569',
+      '--theme-accent': '#2563eb',
+      '--theme-accent-glow': 'rgba(37, 99, 235, 0.12)',
+      '--theme-success': '#16a34a',
+      '--theme-warning': '#d97706',
+      '--theme-danger': '#dc2626',
     },
   },
   midnight: {
-    label: 'חצות',
+    label: 'כחול עמוק',
     emoji: '🌌',
     colors: {
-      bg: '#0f172a',
-      bgSecondary: '#1e293b',
-      bgCard: 'rgba(30, 41, 59, 0.5)',
-      text: '#e2e8f0',
-      textSecondary: '#94a3b8',
-      border: '#334155',
-      accent: '#22d3ee',
-      accentSecondary: '#3b82f6',
-      accentGlow: 'rgba(34, 211, 238, 0.15)',
-      navBg: 'rgba(15, 23, 42, 0.8)',
+      '--theme-bg': '#020617',
+      '--theme-bg-secondary': '#09111f',
+      '--theme-bg-card': '#0e172a',
+      '--theme-border': 'rgba(96, 165, 250, 0.18)',
+      '--theme-text': '#e2e8f0',
+      '--theme-text-secondary': '#93c5fd',
+      '--theme-accent': '#38bdf8',
+      '--theme-accent-glow': 'rgba(56, 189, 248, 0.16)',
+      '--theme-success': '#22c55e',
+      '--theme-warning': '#fbbf24',
+      '--theme-danger': '#f87171',
     },
   },
   sunset: {
     label: 'שקיעה',
-    emoji: '🌅',
+    emoji: '🌇',
     colors: {
-      bg: '#1c1917',
-      bgSecondary: '#292524',
-      bgCard: 'rgba(41, 37, 36, 0.5)',
-      text: '#fef3c7',
-      textSecondary: '#d6d3d1',
-      border: '#44403c',
-      accent: '#fb923c',
-      accentSecondary: '#f472b6',
-      accentGlow: 'rgba(251, 146, 60, 0.15)',
-      navBg: 'rgba(28, 25, 23, 0.8)',
+      '--theme-bg': '#1b1020',
+      '--theme-bg-secondary': '#26152d',
+      '--theme-bg-card': '#311b3b',
+      '--theme-border': 'rgba(251, 146, 60, 0.18)',
+      '--theme-text': '#fff7ed',
+      '--theme-text-secondary': '#fed7aa',
+      '--theme-accent': '#f97316',
+      '--theme-accent-glow': 'rgba(249, 115, 22, 0.18)',
+      '--theme-success': '#34d399',
+      '--theme-warning': '#fb7185',
+      '--theme-danger': '#ef4444',
     },
   },
   forest: {
     label: 'יער',
     emoji: '🌿',
     colors: {
-      bg: '#0c1a14',
-      bgSecondary: '#1a2e23',
-      bgCard: 'rgba(26, 46, 35, 0.7)',
-      text: '#e8f5e9',
-      textSecondary: '#a5d6a7',
-      border: '#2e4a38',
-      accent: '#66bb6a',
-      accentSecondary: '#26a69a',
-      accentGlow: 'rgba(102, 187, 106, 0.12)',
-      navBg: 'rgba(12, 26, 20, 0.92)',
+      '--theme-bg': '#07150f',
+      '--theme-bg-secondary': '#0d2118',
+      '--theme-bg-card': '#143126',
+      '--theme-border': 'rgba(74, 222, 128, 0.18)',
+      '--theme-text': '#f0fdf4',
+      '--theme-text-secondary': '#bbf7d0',
+      '--theme-accent': '#22c55e',
+      '--theme-accent-glow': 'rgba(34, 197, 94, 0.16)',
+      '--theme-success': '#4ade80',
+      '--theme-warning': '#facc15',
+      '--theme-danger': '#fb7185',
     },
   },
 };
 
-interface ThemeContextType {
-  theme: ThemeName;
-  setTheme: (theme: ThemeName) => void;
-  colors: ThemeColors;
-}
-
-const ThemeContext = createContext<ThemeContextType>({
+const ThemeContext = createContext<ThemeContextValue>({
   theme: 'dark',
   setTheme: () => {},
-  colors: themes.dark.colors,
 });
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeName>('dark');
-  const [mounted, setMounted] = useState(false);
+function applyTheme(theme: ThemeName) {
+  if (typeof document === 'undefined') {
+    return;
+  }
 
-  useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem('tv-theme') as ThemeName;
-    if (saved && themes[saved]) {
-      setThemeState(saved);
-    }
-  }, []);
+  const nextTheme = themes[theme] ?? themes.dark;
+  const root = document.documentElement;
 
-  useEffect(() => {
-    if (!mounted) return;
-    const colors = themes[theme].colors;
-    const root = document.documentElement;
+  Object.entries(nextTheme.colors).forEach(([variable, value]) => {
+    root.style.setProperty(variable, value);
+  });
 
-    root.style.setProperty('--theme-bg', colors.bg);
-    root.style.setProperty('--theme-bg-secondary', colors.bgSecondary);
-    root.style.setProperty('--theme-bg-card', colors.bgCard);
-    root.style.setProperty('--theme-text', colors.text);
-    root.style.setProperty('--theme-text-secondary', colors.textSecondary);
-    root.style.setProperty('--theme-border', colors.border);
-    root.style.setProperty('--theme-accent', colors.accent);
-    root.style.setProperty('--theme-accent-secondary', colors.accentSecondary);
-    root.style.setProperty('--theme-accent-glow', colors.accentGlow);
-    root.style.setProperty('--theme-nav-bg', colors.navBg);
-
-    // Update body classes
-    document.body.style.background = colors.bg;
-    document.body.style.color = colors.text;
-    document.body.setAttribute('data-theme', theme);
-  }, [theme, mounted]);
-
-  const setTheme = (newTheme: ThemeName) => {
-    setThemeState(newTheme);
-    localStorage.setItem('tv-theme', newTheme);
-  };
-
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, colors: themes[theme].colors }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  root.dataset.theme = theme;
 }
 
-export const useTheme = () => useContext(ThemeContext);
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<ThemeName>('dark');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storedTheme = window.localStorage.getItem(STORAGE_KEY) as ThemeName | null;
+    const initialTheme = storedTheme && storedTheme in themes ? storedTheme : 'dark';
+    setThemeState(initialTheme);
+    applyTheme(initialTheme);
+  }, []);
+
+  const setTheme = useCallback((nextTheme: ThemeName) => {
+    setThemeState(nextTheme);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, nextTheme);
+    }
+    applyTheme(nextTheme);
+  }, []);
+
+  const value = useMemo(() => ({ theme, setTheme }), [setTheme, theme]);
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export function useTheme() {
+  return useContext(ThemeContext);
+}

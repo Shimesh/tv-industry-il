@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeam } from '@/hooks/useTeam';
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 function TeamsContent() {
+  const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
   const {
@@ -36,10 +38,15 @@ function TeamsContent() {
     setCreating(true);
     setError('');
     try {
-      await createTeam(newName.trim(), newDesc.trim());
+      const teamId = await createTeam(newName.trim(), newDesc.trim());
+      if (!teamId) {
+        throw new Error('לא ניתן היה ליצור את הצוות כרגע');
+      }
+      showToast('הצוות נוצר בהצלחה', 'success');
       setShowCreate(false);
       setNewName('');
       setNewDesc('');
+      router.push(`/teams/${teamId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'שגיאה ביצירת הצוות');
     } finally {
@@ -90,6 +97,32 @@ function TeamsContent() {
             <Plus className="w-4 h-4" />
             צור צוות
           </button>
+        </div>
+
+        <div
+          className="mb-8 rounded-2xl border p-5"
+          style={{
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.10), rgba(59,130,246,0.07))',
+            borderColor: 'var(--theme-border)',
+          }}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--theme-text)] mb-1">
+                מה עושים כאן?
+              </h2>
+              <p className="text-sm text-[var(--theme-text-secondary)] max-w-2xl">
+                צוותים מרכזים אנשים, הרשאות ולוחות עבודה משותפים. אחרי יצירת צוות עוברים ישר לדף הצוות, ושם אפשר להזמין חברים ולהמשיך ליומן האישי.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all bg-white/5 text-[var(--theme-text)] hover:bg-white/10"
+            >
+              <Plus className="w-4 h-4" />
+              צור צוות חדש
+            </button>
+          </div>
         </div>
 
         {/* Pending Invites */}

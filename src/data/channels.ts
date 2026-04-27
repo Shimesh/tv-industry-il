@@ -18,17 +18,13 @@ export interface ScheduleItem {
 }
 
 export const channels: Channel[] = [
-  // ערוצים ראשיים
   { id: 'kan11', name: 'כאן 11', number: 11, logo: '📺', category: 'main', color: '#1e40af', group: 'ערוצים ראשיים' },
   { id: 'keshet12', name: 'קשת 12', number: 12, logo: '📺', category: 'main', color: '#dc2626', group: 'ערוצים ראשיים' },
   { id: 'reshet13', name: 'רשת 13', number: 13, logo: '📺', category: 'main', color: '#059669', group: 'ערוצים ראשיים' },
   { id: 'now14', name: 'עכשיו 14', number: 14, logo: '📺', category: 'main', color: '#7c3aed', group: 'ערוצים ראשיים' },
-  // חדשות ובינלאומי
   { id: 'i24', name: 'i24NEWS', number: 15, logo: '🌐', category: 'news', color: '#0891b2', group: 'חדשות' },
-  // ציבורי
   { id: 'knesset', name: 'ערוץ הכנסת', number: 99, logo: '🏛️', category: 'public', color: '#6366f1', group: 'ציבורי' },
   { id: 'kan33', name: 'כאן 33', number: 33, logo: '🎭', category: 'public', color: '#8b5cf6', group: 'ציבורי' },
-  // ספורט
   { id: 'sport55', name: 'ספורט 5', number: 55, logo: '⚽', category: 'sport', color: '#ea580c', group: 'ספורט' },
   { id: 'sport56', name: 'ספורט 5+', number: 56, logo: '⚽', category: 'sport', color: '#d97706', group: 'ספורט' },
   { id: 'gold', name: 'ספורט 5 GOLD', number: 0, logo: '🏆', category: 'sport', color: '#ca8a04', group: 'ספורט' },
@@ -182,7 +178,7 @@ export function generateSchedule(channelId: string): ScheduleItem[] {
     ],
   };
 
-  return schedules[channelId] || schedules['kan11'] || [];
+  return schedules[channelId] || schedules.kan11 || [];
 }
 
 export function getCurrentProgram(schedule: ScheduleItem[]): ScheduleItem | null {

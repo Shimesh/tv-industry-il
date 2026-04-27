@@ -312,7 +312,7 @@ export default function LoginPage() {
               מה מחכה לכם בפנים:
             </div>
             <div className="flex flex-wrap gap-2">
-              {['צ\'אט קבוצתי', 'שיחות וידאו', 'לוח מודעות', 'כלי הפקה', 'לוח שידורים'].map(f => (
+              {['צ\'אט קבוצתי', 'שיחות וידאו', 'לוח מודעות', 'כלי הפקה', 'שידור חי'].map(f => (
                 <span key={f} className="px-2.5 py-1 rounded-full bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] text-xs font-medium">
                   {f}
                 </span>

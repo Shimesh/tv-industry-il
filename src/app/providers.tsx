@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { AppConfigProvider } from '@/contexts/AppConfigContext';
 import { AppDataProvider } from '@/contexts/AppDataContext';
 import { CallProvider } from '@/contexts/CallContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
@@ -43,6 +44,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <AppConfigProvider>
         {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally.
             All children share exactly ONE useContacts() instance via Context. */}
         <AppDataProvider>
@@ -60,6 +62,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             </ToastProvider>
           </NotificationProvider>
         </AppDataProvider>
+        </AppConfigProvider>
       </AuthProvider>
     </ThemeProvider>
   );

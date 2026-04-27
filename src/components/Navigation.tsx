@@ -18,8 +18,8 @@ import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
-  { href: '/schedule', label: 'שידורים', icon: Calendar },
-  { href: '/productions', label: 'הפקות', icon: Clapperboard, auth: true },
+  { href: '/schedule', label: 'שידור חי', icon: Calendar },
+  { href: '/productions', label: 'יומן אישי', icon: Clapperboard, auth: true },
   { href: '/teams', label: 'צוותים', icon: UsersRound, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
   { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
@@ -164,7 +164,7 @@ export default function Navigation() {
                     event.preventDefault();
                     navigateFromNav(link.href);
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg text-sm font-medium leading-none transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
                       : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
@@ -239,7 +239,7 @@ export default function Navigation() {
                     name={effectiveProfile?.displayName || user?.displayName || user?.email || 'משתמש'}
                     photoURL={effectiveProfile?.photoURL || user?.photoURL || null}
                     size="sm"
-                    isOnline={true}
+                    isOnline={effectiveProfile?.isOnline !== false}
                   />
                   <span className="hidden sm:block text-sm font-medium text-[var(--theme-text)] max-w-[100px] truncate">
                     {effectiveProfile?.displayName || user?.displayName || 'משתמש'}
@@ -263,7 +263,11 @@ export default function Navigation() {
                       <div className="flex items-center gap-1.5 mt-1.5">
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                         <span className="text-xs text-[var(--theme-text-secondary)]">
-                          {effectiveProfile?.status === 'busy' ? 'תפוס' : 'פנוי'}
+                          {effectiveProfile?.status === 'busy'
+                            ? 'תפוס'
+                            : effectiveProfile?.status === 'offline'
+                              ? 'לא פעיל'
+                              : 'פנוי'}
                         </span>
                       </div>
                     </div>

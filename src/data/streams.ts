@@ -28,6 +28,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
     websiteUrl: 'https://www.kan.org.il/live/',
     requiresAuth: false,
     hasLiveStream: true,
+    dynamicStream: true,
     note: 'כאן 11 - שידור חי',
   },
 
@@ -43,10 +44,10 @@ export const streamConfigs: Record<string, StreamConfig> = {
 
   // i24NEWS — YouTube live embed (channel UCvHDpsWKADrDia0c99X37vg, confirmed 24/7)
   i24: {
-    type: 'youtube',
+    type: 'iframe',
     streamUrl: null,
-    embedUrl: 'https://www.youtube.com/embed/live_stream?channel=UCvHDpsWKADrDia0c99X37vg&autoplay=1',
-    websiteUrl: 'https://www.i24news.tv/en/tv/live',
+    embedUrl: 'https://video.i24news.tv/live/brightcove/he',
+    websiteUrl: 'https://www.isramedia.net/9568/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%97%D7%93%D7%A9%D7%95%D7%AA/i24news-%D7%91%D7%A2%D7%91%D7%A8%D7%99%D7%AA-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: false,
     hasLiveStream: true,
     note: 'שידור חי חינמי',
@@ -76,12 +77,12 @@ export const streamConfigs: Record<string, StreamConfig> = {
   },
 
   kan33: {
-    type: 'youtube',
+    type: 'hls',
     streamUrl: null,
-    embedUrl: 'https://www.youtube.com/embed/live_stream?channel=UCKqFqiCe1dCUxRe0_YNZ6gg&autoplay=1',
-    websiteUrl: 'https://www.kan.org.il/live/tv.aspx?stationid=3',
+    websiteUrl: 'https://www.isramedia.net/5628/%D7%A2%D7%A8%D7%95%D7%A6%D7%99%D7%9D-%D7%9E%D7%99%D7%A9%D7%A8%D7%90%D7%9C/%D7%A2%D7%A8%D7%95%D7%A5-33-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: false,
     hasLiveStream: true,
+    dynamicStream: true,
     note: 'כאן 33 - תרבות ואמנות',
   },
 
@@ -138,7 +139,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton1: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.charlton.co.il/',
+    websiteUrl: 'https://www.isramedia.net/56/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-1-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -147,7 +148,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton2: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.charlton.co.il/',
+    websiteUrl: 'https://www.isramedia.net/91/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-2-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -156,7 +157,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton3: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.charlton.co.il/',
+    websiteUrl: 'https://www.isramedia.net/14950/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-3-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -165,7 +166,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton4: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.charlton.co.il/',
+    websiteUrl: 'https://www.isramedia.net/14951/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-4-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -174,7 +175,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton6: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.charlton.co.il/',
+    websiteUrl: 'https://www.isramedia.net/14953/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-6-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",

@@ -226,6 +226,28 @@ export async function patchDocument(
   }
 }
 
+export async function createDocument<T = Record<string, unknown>>(
+  collectionPath: string,
+  data: Record<string, FirestorePrimitive>,
+  documentId?: string,
+): Promise<T> {
+  const response = await firestoreAdminFetch(
+    documentId
+      ? `${collectionPath}/${documentId}`
+      : `${collectionPath}?${new URLSearchParams({ documentId: crypto.randomUUID() }).toString()}`,
+    {
+      method: documentId ? 'PATCH' : 'POST',
+      body: JSON.stringify({ fields: toFirestoreFields(data) }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to create document in ${collectionPath}: ${response.status} ${await response.text()}`);
+  }
+
+  return fromFirestoreDocument<T>((await response.json()) as FirestoreDocument);
+}
+
 export async function deleteDocument(documentPath: string): Promise<void> {
   const response = await firestoreAdminFetch(documentPath, {
     method: 'DELETE',

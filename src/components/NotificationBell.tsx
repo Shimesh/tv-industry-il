@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { Bell, BellRing, Check, CheckCheck, Trash2, X, Calendar, Users, Upload, RefreshCw, Info } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Trash2, Calendar, Users, Upload, RefreshCw, Info, Bug } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const typeIcons: Record<string, typeof Bell> = {
@@ -11,6 +11,7 @@ const typeIcons: Record<string, typeof Bell> = {
   file_upload: Upload,
   status_change: RefreshCw,
   general: Info,
+  bug_report: Bug,
 };
 
 const typeColors: Record<string, string> = {
@@ -19,6 +20,7 @@ const typeColors: Record<string, string> = {
   file_upload: '#22c55e',
   status_change: '#a855f7',
   general: '#6b7280',
+  bug_report: '#f59e0b',
 };
 
 export default function NotificationBell() {

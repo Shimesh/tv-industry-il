@@ -1,10 +1,13 @@
+import type { ContactDepartment, ContactSpecialty, ContactWorkArea } from '@/lib/contactsUtils';
+
 export interface Contact {
   id: string | number;
   firstName?: string;
   lastName?: string;
   email?: string;
-  department?: string;
-  workArea?: string | null;
+  department?: ContactDepartment | string;
+  workArea?: ContactWorkArea | string | null;
+  specialty?: ContactSpecialty | string;
   role?: string;
   availability?: string;
   phone?: string;
@@ -12,7 +15,12 @@ export interface Contact {
   source?: string;
   credits?: string[];
   openToWork?: boolean;
-  [key: string]: any; 
+  status?: 'available' | 'busy' | 'offline';
+  isOnline?: boolean;
+  city?: string | null;
+  yearsOfExperience?: number | null;
+  gear?: string[] | null;
+  [key: string]: any;
 }
 
 export const contacts: Contact[] = [];

@@ -10,8 +10,8 @@ import ScrollToTop from "@/components/ScrollToTop";
 
 export const metadata: Metadata = {
   title: "TV Industry IL - פלטפורמת תעשיית הטלוויזיה הישראלית",
-  description: "הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - לוח שידורים, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד",
-  keywords: "טלוויזיה, ישראל, הפקה, שידורים, אלפון, תעשייה",
+  description: "הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - שידור חי, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד",
+  keywords: "טלוויזיה, ישראל, הפקה, שידור חי, אלפון, תעשייה",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -43,11 +43,14 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
-      <body className="antialiased min-h-screen flex flex-col app-safe-x app-safe-bottom" style={{ background: 'var(--theme-bg, #030712)', color: 'var(--theme-text, #f3f4f6)' }}>
+      <body
+        className="antialiased min-h-screen flex flex-col app-safe-x app-safe-bottom"
+        style={{ background: "var(--theme-bg, #030712)", color: "var(--theme-text, #f3f4f6)" }}
+      >
         <Providers>
           <ScrollToTop />
           <Navigation />
-          <main className="flex-1" style={{ paddingTop: 'var(--app-header-offset)', paddingBottom: 'var(--safe-area-bottom)' }}>
+          <main className="flex-1" style={{ paddingTop: "var(--app-header-offset)", paddingBottom: "var(--safe-area-bottom)" }}>
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
           <Footer />

@@ -117,6 +117,7 @@ function ProductionsContent() {
   const [useAI, setUseAI] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
@@ -1343,6 +1344,80 @@ function ProductionsContent() {
     }
   }, [addNotification]);
 
+  const getUpcomingPersonalProductions = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return productions.filter((prod) => prod.date >= today);
+  }, [productions]);
+
+  const exportOutlookIcs = useCallback(() => {
+    const upcomingProductions = getUpcomingPersonalProductions();
+    if (upcomingProductions.length === 0) {
+      setStatusMessage('אין הפקות עתידיות לייצוא');
+      return;
+    }
+
+    const events = upcomingProductions.map((prod) => {
+      const eventStart = `${prod.date.replaceAll('-', '')}T${prod.startTime.replace(':', '')}00`;
+      const eventEnd = `${prod.date.replaceAll('-', '')}T${prod.endTime.replace(':', '')}00`;
+      const location = [prod.studio].filter(Boolean).join(' | ');
+      const description = [
+        `הפקה: ${prod.name}`,
+        prod.studio ? `אולפן: ${prod.studio}` : '',
+        prod.day ? `יום: ${prod.day}` : '',
+      ]
+        .filter(Boolean)
+        .join('\\n');
+
+      return [
+        'BEGIN:VEVENT',
+        `UID:${prod.id}@tv-industry-il`,
+        `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`,
+        `DTSTART:${eventStart}`,
+        `DTEND:${eventEnd}`,
+        `SUMMARY:${prod.name}`,
+        `LOCATION:${location}`,
+        `DESCRIPTION:${description}`,
+        'END:VEVENT',
+      ].join('\r\n');
+    });
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//TV Industry IL//Personal Calendar//HE',
+      'CALSCALE:GREGORIAN',
+      ...events,
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'tv-industry-il-personal-calendar.ics';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+
+    setShowCalendarMenu(false);
+    setStatusMessage('קובץ Outlook / ICS נוצר בהצלחה');
+  }, [getUpcomingPersonalProductions]);
+
+  const syncUpcomingProductionsToGoogle = useCallback(async () => {
+    const upcomingProductions = getUpcomingPersonalProductions();
+    if (upcomingProductions.length === 0) {
+      setStatusMessage('אין הפקות עתידיות לסנכרון');
+      return;
+    }
+
+    for (const prod of upcomingProductions.slice(0, 20)) {
+      await syncToGoogleCalendar(prod);
+    }
+
+    setShowCalendarMenu(false);
+  }, [getUpcomingPersonalProductions, syncToGoogleCalendar]);
+
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
     console.warn('[handleFetch] url:', url?.substring(0, 50), 'manualText length:', manualText?.length, 'rawHtml length:', rawHtml?.length);
@@ -1521,7 +1596,7 @@ function ProductionsContent() {
           </div>
           <div>
             <h1 className="text-xl font-black" style={{ color: 'var(--theme-text)' }}>
-              לוח הפקות
+              יומן אישי
             </h1>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
               הדבק הודעת WhatsApp או לינק ללוח העבודה
@@ -1530,41 +1605,50 @@ function ProductionsContent() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* AI Toggle */}
-          <button
-            onClick={() => setUseAI(!useAI)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              useAI ? 'text-white shadow-lg shadow-purple-500/20' : ''
-            }`}
-            style={{
-              background: useAI ? 'linear-gradient(135deg, #7c3aed, #3b82f6)' : 'var(--theme-bg-secondary)',
-              color: useAI ? '#fff' : 'var(--theme-text-secondary)',
-            }}
-            title={useAI ? 'AI פעיל - לחץ לכיבוי' : 'הפעל פרסור AI חכם'}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            {useAI ? 'AI פעיל' : 'AI'}
-          </button>
-
-          {/* Google Calendar Sync */}
           {productions.length > 0 && (
-            <button
-              onClick={async () => {
-                const today = new Date().toISOString().split('T')[0];
-                const todayProds = productions.filter(p => p.date >= today);
-                if (todayProds.length === 0) { setStatusMessage('אין הפקות עתידיות לסנכרון'); return; }
-                for (const prod of todayProds.slice(0, 5)) {
-                  await syncToGoogleCalendar(prod);
-                }
-              }}
-              disabled={gcalSyncing !== null}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
-              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
-              title="סנכרן הפקות ל-Google Calendar"
-            >
-              {gcalSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
-              GCal
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowCalendarMenu((current) => !current)}
+                disabled={gcalSyncing !== null}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
+                style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+                title="סנכרון היומן האישי"
+              >
+                {gcalSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
+                סנכרון יומן
+              </button>
+
+              {showCalendarMenu && (
+                <div
+                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border p-3 shadow-2xl"
+                  style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+                >
+                  <div className="mb-2 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                    סנכרון היומן האישי
+                  </div>
+                  <p className="mb-3 text-xs leading-5" style={{ color: 'var(--theme-text-secondary)' }}>
+                    אפשר לסנכרן את כל ההפקות העתידיות שלך ישירות ל-Google Calendar או לייצא קובץ ICS ל-Outlook וליומנים נוספים.
+                  </p>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => void syncUpcomingProductionsToGoogle()}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white"
+                    >
+                      <CalendarPlus className="h-3.5 w-3.5" />
+                      סנכרון ל-Google Calendar
+                    </button>
+                    <button
+                      onClick={exportOutlookIcs}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold"
+                      style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)' }}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      ייצוא Outlook / ICS
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {productions.length > 0 && (

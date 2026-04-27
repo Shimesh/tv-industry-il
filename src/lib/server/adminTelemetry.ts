@@ -7,6 +7,7 @@ import type {
   UsageMetric,
 } from '@/lib/adminTypes';
 import {
+  createDocument,
   getDocument,
   listDocuments,
   patchDocument,
@@ -74,7 +75,7 @@ export async function recordSystemEvent(input: EventWriteInput): Promise<void> {
   const createdAt = nowIso();
   const docId = `event-${Date.now()}-${hashKey(`${input.type}-${input.source}-${Math.random()}`)}`;
 
-  await patchDocument(`systemEvents/${docId}`, {
+  await createDocument('systemEvents', {
     type: input.type,
     level: input.level,
     source: input.source,
@@ -84,7 +85,7 @@ export async function recordSystemEvent(input: EventWriteInput): Promise<void> {
     job: input.job || null,
     statusCode: input.statusCode ?? null,
     createdAt,
-  });
+  }, docId);
 }
 
 export async function incrementPageView(pathname: string): Promise<void> {

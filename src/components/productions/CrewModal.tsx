@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Production, CrewMember, formatDateShort } from '@/lib/productionDiff';
-import { useAppData } from '@/contexts/AppDataContext';
-import { normalizeContactName } from '@/lib/contactsUtils';
-import { deduplicateCrewEntries, normalizePhone } from '@/lib/crewNormalization';
-import { X, MapPin, Clock, Users, Phone, PhoneOff, Star, MessageCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
+import { useAppData } from '@/contexts/AppDataContext';
+import { classifyContactRole, normalizeContactName, type ContactDepartment, type ContactWorkArea } from '@/lib/contactsUtils';
+import { deduplicateCrewEntries, normalizePhone } from '@/lib/crewNormalization';
+import { type CrewMember, type Production, formatDateShort } from '@/lib/productionDiff';
 
 interface CrewModalProps {
   production: Production;
@@ -14,91 +14,78 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
-// --- Department inference ---
+type CrewBucket = Exclude<ContactWorkArea, null> | ContactDepartment;
+type ActiveDepartment = CrewBucket | 'הכל';
 
-type Department = 'אולפן' | 'קונטרול' | 'טכני' | 'תאורה' | 'הפקה' | 'כללי';
+const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'טכני', 'תאורה', 'צילום', 'סאונד'];
 
-const DEPARTMENT_ORDER: Department[] = ['אולפן', 'קונטרול', 'טכני', 'תאורה', 'הפקה', 'כללי'];
-
-function inferCrewDepartment(role: string, roleDetail?: string | null): Department {
-  const text = `${role || ''} ${roleDetail || ''}`.toLowerCase();
-
-  // קונטרול - ניתוב, בימוי, פרומפטר, עוזר במאי, CCU, סאונד
-  if (/ניתוב|נתב/u.test(text)) return 'קונטרול';
-  if (/במאי|בימוי|עוזר.?במאי/u.test(text)) return 'קונטרול';
-  if (/פרומפטר|טלפרומפטר|prompter/iu.test(text)) return 'קונטרול';
-  if (/ccu/i.test(text)) return 'קונטרול';
-  if (/סאונד|קול|מקליט|מיקרופון|boom|sound/iu.test(text)) return 'קונטרול';
-
-  // אולפן - צלמים + ניהול במה
-  if (/צלם|צילום|רחף|רחפן|סטדיקאם|סטדי|קאם|camera/iu.test(text)) return 'אולפן';
-  if (/במה|ניהול.?במה|stage/iu.test(text)) return 'אולפן';
-
-  // טכני
-  if (/טכני|vtr|שידור|מיקסר|ויז'ן|vision|technical/iu.test(text)) return 'טכני';
-
-  // תאורה
-  if (/תאורה|תאורן|אור|light/iu.test(text)) return 'תאורה';
-
-  // הפקה
-  if (/מפיק|הפקה|עורך|עיצוב|produc/iu.test(text)) return 'הפקה';
-
-  // Fallback - try to put in טכני rather than כללי
-  if (/גריפ|grip|גנרטור|generator|כבלים|cable/iu.test(text)) return 'טכני';
-
-  return 'כללי';
-}
-
-const DEPARTMENT_COLORS: Record<Department, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
-  'אולפן': {
+const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
+  אולפן: {
     bg: 'rgba(59, 130, 246, 0.10)',
     text: '#93c5fd',
     border: 'rgba(59, 130, 246, 0.25)',
     pill: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
     pillActive: 'bg-blue-500/25 text-blue-200 border-blue-400/50 shadow-blue-500/20 shadow-sm',
   },
-  'קונטרול': {
+  קונטרול: {
     bg: 'rgba(249, 115, 22, 0.10)',
     text: '#fdba74',
     border: 'rgba(249, 115, 22, 0.25)',
     pill: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
     pillActive: 'bg-orange-500/25 text-orange-200 border-orange-400/50 shadow-orange-500/20 shadow-sm',
   },
-  'טכני': {
-    bg: 'rgba(16, 185, 129, 0.10)',
-    text: '#6ee7b7',
-    border: 'rgba(16, 185, 129, 0.25)',
-    pill: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
-    pillActive: 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50 shadow-emerald-500/20 shadow-sm',
-  },
-  'תאורה': {
-    bg: 'rgba(245, 158, 11, 0.10)',
-    text: '#fcd34d',
-    border: 'rgba(245, 158, 11, 0.25)',
-    pill: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-    pillActive: 'bg-amber-500/25 text-amber-200 border-amber-400/50 shadow-amber-500/20 shadow-sm',
-  },
-  'הפקה': {
+  הפקה: {
     bg: 'rgba(139, 92, 246, 0.10)',
     text: '#c4b5fd',
     border: 'rgba(139, 92, 246, 0.25)',
     pill: 'bg-purple-500/10 text-purple-300 border-purple-500/20',
     pillActive: 'bg-purple-500/25 text-purple-200 border-purple-400/50 shadow-purple-500/20 shadow-sm',
   },
-  'כללי': {
-    bg: 'rgba(156, 163, 175, 0.10)',
-    text: '#d1d5db',
-    border: 'rgba(156, 163, 175, 0.25)',
-    pill: 'bg-gray-500/10 text-gray-300 border-gray-500/20',
-    pillActive: 'bg-gray-500/25 text-gray-200 border-gray-400/50 shadow-gray-500/20 shadow-sm',
+  פוסט: {
+    bg: 'rgba(168, 85, 247, 0.10)',
+    text: '#d8b4fe',
+    border: 'rgba(168, 85, 247, 0.25)',
+    pill: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20',
+    pillActive: 'bg-fuchsia-500/25 text-fuchsia-200 border-fuchsia-400/50 shadow-fuchsia-500/20 shadow-sm',
+  },
+  טכני: {
+    bg: 'rgba(16, 185, 129, 0.10)',
+    text: '#6ee7b7',
+    border: 'rgba(16, 185, 129, 0.25)',
+    pill: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+    pillActive: 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50 shadow-emerald-500/20 shadow-sm',
+  },
+  תאורה: {
+    bg: 'rgba(245, 158, 11, 0.10)',
+    text: '#fcd34d',
+    border: 'rgba(245, 158, 11, 0.25)',
+    pill: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+    pillActive: 'bg-amber-500/25 text-amber-200 border-amber-400/50 shadow-amber-500/20 shadow-sm',
+  },
+  צילום: {
+    bg: 'rgba(56, 189, 248, 0.10)',
+    text: '#7dd3fc',
+    border: 'rgba(56, 189, 248, 0.25)',
+    pill: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
+    pillActive: 'bg-sky-500/25 text-sky-200 border-sky-400/50 shadow-sky-500/20 shadow-sm',
+  },
+  סאונד: {
+    bg: 'rgba(236, 72, 153, 0.10)',
+    text: '#f9a8d4',
+    border: 'rgba(236, 72, 153, 0.25)',
+    pill: 'bg-pink-500/10 text-pink-300 border-pink-500/20',
+    pillActive: 'bg-pink-500/25 text-pink-200 border-pink-400/50 shadow-pink-500/20 shadow-sm',
   },
 };
 
-// --- Existing helpers (unchanged) ---
+function inferCrewBucket(role: string, roleDetail?: string | null): CrewBucket {
+  const classification = classifyContactRole(roleDetail || role || '');
+  return classification.workArea || classification.department;
+}
 
 function enrichCrewWithPhones(
   crew: CrewMember[],
-  contactList: { firstName: string; lastName: string; phone?: string }[]
+  contactList: { firstName: string; lastName: string; phone?: string }[],
 ): CrewMember[] {
   return crew.map((member) => {
     const memberPhone = normalizePhone(member.phone);
@@ -112,11 +99,11 @@ function enrichCrewWithPhones(
     const lastName = nameParts.slice(1).join(' ');
 
     const contact = contactList
-      .filter((c) => {
-        const fullName = `${c.firstName} ${c.lastName}`;
+      .filter((candidate) => {
+        const fullName = `${candidate.firstName} ${candidate.lastName}`;
         if (normalizeContactName(fullName) === normalized) return true;
-        if (firstName && lastName && c.firstName === firstName && c.lastName === lastName) return true;
-        if (firstName.length >= 2 && c.firstName === firstName && lastName && c.lastName.includes(lastName.split(' ')[0])) return true;
+        if (firstName && lastName && candidate.firstName === firstName && candidate.lastName === lastName) return true;
+        if (firstName.length >= 2 && candidate.firstName === firstName && lastName && candidate.lastName.includes(lastName.split(' ')[0])) return true;
         return false;
       })
       .sort((a, b) => {
@@ -153,7 +140,7 @@ function getInitials(name: string): string {
 
 function getGradient(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
+  for (let i = 0; i < name.length; i += 1) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return avatarGradients[Math.abs(hash) % avatarGradients.length];
@@ -201,16 +188,14 @@ const shareMenuVariants = {
   exit: { opacity: 0, scale: 0.9, y: 8, transition: { duration: 0.15 } },
 };
 
-// --- Component ---
-
 export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [activeDepartment, setActiveDepartment] = useState<Department | 'הכל'>('הכל');
+  const [activeDepartment, setActiveDepartment] = useState<ActiveDepartment>('הכל');
   const { contacts } = useAppData();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
-  const normalizedContacts = contacts.filter((c): c is { id: string | number; firstName: string; lastName: string; phone?: string } =>
-    Boolean(c.firstName && c.lastName)
+  const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string } =>
+    Boolean(contact.firstName && contact.lastName),
   );
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, normalizedContacts);
 
@@ -221,11 +206,10 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
         currentUserName.includes(member.name) ||
         (member.name.split(/\s+/)[0] === currentUserName.split(/\s+/)[0] && member.name.split(/\s+/)[0].length >= 2)
       : false;
-    const department = inferCrewDepartment(member.role, member.roleDetail);
+    const department = inferCrewBucket(member.role, member.roleDetail);
     return { ...member, isCurrentUser: isCurrent, department };
   });
 
-  // Sort: by department order, then current user first, then alphabetical
   const sortedCrew = useMemo(() => {
     return [...taggedCrew].sort((a, b) => {
       const deptA = DEPARTMENT_ORDER.indexOf(a.department);
@@ -237,29 +221,26 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
     });
   }, [taggedCrew]);
 
-  // Departments that actually exist in crew, in order
   const existingDepartments = useMemo(() => {
-    const deptSet = new Set(taggedCrew.map((m) => m.department));
-    return DEPARTMENT_ORDER.filter((d) => deptSet.has(d));
+    const departmentSet = new Set(taggedCrew.map((member) => member.department));
+    return DEPARTMENT_ORDER.filter((department) => departmentSet.has(department));
   }, [taggedCrew]);
 
-  // Count per department
   const departmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const m of taggedCrew) {
-      counts[m.department] = (counts[m.department] || 0) + 1;
+    for (const member of taggedCrew) {
+      counts[member.department] = (counts[member.department] || 0) + 1;
     }
     return counts;
   }, [taggedCrew]);
 
-  // Filtered crew
   const filteredCrew = useMemo(() => {
     if (activeDepartment === 'הכל') return sortedCrew;
-    return sortedCrew.filter((m) => m.department === activeDepartment);
+    return sortedCrew.filter((member) => member.department === activeDepartment);
   }, [sortedCrew, activeDepartment]);
 
   const shareMyDetails = () => {
-    const myEntry = sortedCrew.find((m) => m.isCurrentUser);
+    const myEntry = sortedCrew.find((member) => member.isCurrentUser);
     if (!myEntry) return;
 
     const text = [
@@ -267,9 +248,9 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
       `${production.day} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
       production.studio ? `${production.studio}` : '',
       '',
-      '*My details:*',
+      '*הפרטים שלי:*',
       `${myEntry.name} - ${myEntry.roleDetail || myEntry.role}`,
-        myEntry.phone ? `${myEntry.phone}` : '',
+      myEntry.phone ? `${myEntry.phone}` : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -279,7 +260,7 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
 
   const shareFullCrew = () => {
     const crewText = sortedCrew
-      .map((m) => `- ${m.name} - ${m.roleDetail || m.role}${m.phone ? ` | ${m.phone}` : ''}`)
+      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${member.phone ? ` | ${member.phone}` : ''}`)
       .join('\n');
 
     const text = [
@@ -287,7 +268,7 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
       `${production.day} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
       production.studio ? `${production.studio}` : '',
       '',
-      `*Crew (${sortedCrew.length}):*`,
+      `*צוות (${sortedCrew.length}):*`,
       crewText,
     ]
       .filter(Boolean)
@@ -296,20 +277,19 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // Build grouped list with department headers
   const renderCrewList = () => {
     const elements: React.ReactNode[] = [];
-    let currentDept: Department | null = null;
-    let animIdx = 0;
+    let currentDepartment: CrewBucket | null = null;
+    let animationIndex = 0;
 
     for (const member of filteredCrew) {
-      // Department header
-      if (member.department !== currentDept) {
-        currentDept = member.department;
-        const colors = DEPARTMENT_COLORS[currentDept];
+      if (member.department !== currentDepartment) {
+        currentDepartment = member.department;
+        const colors = DEPARTMENT_COLORS[currentDepartment];
+
         elements.push(
           <div
-            key={`dept-${currentDept}`}
+            key={`department-${currentDepartment}`}
             className="sticky top-0 z-10 flex items-center gap-2 py-1.5 px-1 mt-1 first:mt-0"
             style={{ backdropFilter: 'blur(12px)' }}
           >
@@ -321,21 +301,20 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
                 border: `1px solid ${colors.border}`,
               }}
             >
-              {currentDept}
+              {currentDepartment}
             </div>
             <div className="flex-1 h-px" style={{ background: colors.border }} />
             <span className="text-[10px] font-medium" style={{ color: colors.text }}>
-              {departmentCounts[currentDept] || 0}
+              {departmentCounts[currentDepartment] || 0}
             </span>
-          </div>
+          </div>,
         );
       }
 
-      // Crew card
       elements.push(
         <motion.div
-          key={`${member.name}-${animIdx}`}
-          custom={animIdx}
+          key={`${member.name}-${animationIndex}`}
+          custom={animationIndex}
           variants={cardVariants}
           initial="hidden"
           animate="visible"
@@ -352,13 +331,11 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               : 'none',
           }}
         >
-          {/* Current user glow effect */}
           {member.isCurrentUser && (
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-green-500/5 to-emerald-500/5 animate-pulse pointer-events-none" />
           )}
 
           <div className="relative flex items-center gap-3">
-            {/* Avatar */}
             <div className="relative flex-shrink-0">
               <div
                 className={`w-11 h-11 rounded-full bg-gradient-to-br ${getGradient(member.name)} flex items-center justify-center text-white font-bold text-sm shadow-lg`}
@@ -377,14 +354,13 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               )}
             </div>
 
-            {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-[15px] text-white/90 truncate">
                   {member.name}
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span
                   className="inline-block text-xs px-2 py-0.5 rounded-md font-medium"
                   style={{
@@ -403,7 +379,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               </div>
             </div>
 
-            {/* Phone button */}
             {member.phone ? (
               <motion.a
                 href={`tel:${member.phone}`}
@@ -433,9 +408,10 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               </div>
             )}
           </div>
-        </motion.div>
+        </motion.div>,
       );
-      animIdx++;
+
+      animationIndex += 1;
     }
 
     return elements;
@@ -444,7 +420,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4" dir="rtl">
-        {/* Backdrop */}
         <motion.div
           className="absolute inset-0 bg-black/70 backdrop-blur-md"
           variants={overlayVariants}
@@ -454,7 +429,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
           onClick={onClose}
         />
 
-        {/* Modal */}
         <motion.div
           className="relative w-full sm:max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl"
           variants={modalVariants}
@@ -466,13 +440,10 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
             border: '1px solid rgba(255, 255, 255, 0.08)',
           }}
         >
-          {/* Decorative gradient orbs */}
           <div className="absolute top-0 left-0 w-48 h-48 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute top-20 right-0 w-32 h-32 bg-rose-600/8 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Header */}
           <div className="relative p-5 pb-4">
-            {/* Close button */}
             <motion.button
               onClick={onClose}
               className="absolute top-4 left-4 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-all duration-200 group"
@@ -482,7 +453,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               <X className="w-5 h-5 text-white/50 group-hover:text-white/80 transition-colors" />
             </motion.button>
 
-            {/* Production name with gradient */}
             <h3
               className="text-xl font-black tracking-tight leading-tight ml-10"
               style={{
@@ -495,7 +465,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               {production.name}
             </h3>
 
-            {/* Meta info row */}
             <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
               {production.studio && (
                 <div className="flex items-center gap-1.5 text-white/60">
@@ -518,7 +487,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               </div>
             </div>
 
-            {/* Divider + crew count + share */}
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
               <div className="flex items-center gap-2">
                 <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/15">
@@ -527,7 +495,6 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
                 <span className="text-sm font-semibold text-white/70">{sortedCrew.length} אנשי צוות</span>
               </div>
 
-              {/* WhatsApp Share button */}
               <div className="relative">
                 <motion.button
                   onClick={() => setShowShareMenu(!showShareMenu)}
@@ -586,10 +553,8 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
               </div>
             </div>
 
-            {/* Department filter pills */}
             {existingDepartments.length > 1 && (
               <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-                {/* "All" pill */}
                 <button
                   onClick={() => setActiveDepartment('הכל')}
                   className={`flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-bold border transition-all duration-200 ${
@@ -600,18 +565,19 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
                 >
                   הכל ({sortedCrew.length})
                 </button>
-                {existingDepartments.map((dept) => {
-                  const colors = DEPARTMENT_COLORS[dept];
-                  const isActive = activeDepartment === dept;
+                {existingDepartments.map((department) => {
+                  const colors = DEPARTMENT_COLORS[department];
+                  const isActive = activeDepartment === department;
+
                   return (
                     <button
-                      key={dept}
-                      onClick={() => setActiveDepartment(dept)}
+                      key={department}
+                      onClick={() => setActiveDepartment(department)}
                       className={`flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-bold border transition-all duration-200 ${
                         isActive ? colors.pillActive : colors.pill
                       } hover:brightness-110`}
                     >
-                      {dept} ({departmentCounts[dept] || 0})
+                      {department} ({departmentCounts[department] || 0})
                     </button>
                   );
                 })}
@@ -619,12 +585,10 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
             )}
           </div>
 
-          {/* Crew list */}
           <div className="flex-1 overflow-y-auto px-4 pb-5 space-y-2 scrollbar-thin">
             {renderCrewList()}
           </div>
 
-          {/* Bottom safe area for mobile */}
           <div className="h-[env(safe-area-inset-bottom)] bg-transparent" />
         </motion.div>
       </div>

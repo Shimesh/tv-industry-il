@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { industryEvents, categoryLabels } from '@/data/news';
 import {
   Newspaper, Calendar, Clock, MapPin, ExternalLink, TrendingUp,
@@ -16,6 +17,7 @@ interface RssNewsItem {
   source: string;
   sourceUrl: string;
   description: string;
+  newsType: 'אקטואליה' | 'ספורט' | 'תרבות' | 'כלכלה' | 'טכנולוגיה' | 'תקשורת' | 'כללי';
 }
 
 interface ArticleContent {
@@ -263,7 +265,8 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
 }
 
 /* ===== Main Page ===== */
-export default function NewsPage() {
+function NewsPageContent() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'news' | 'events'>('news');
   const [eventCatFilter, setEventCatFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
@@ -274,6 +277,8 @@ export default function NewsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [highlightedLink, setHighlightedLink] = useState<string | null>(null);
+  const articleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Article modal state
   const [selectedNewsItem, setSelectedNewsItem] = useState<RssNewsItem | null>(null);
@@ -349,10 +354,39 @@ export default function NewsPage() {
   // Get unique sources for filter
   const sources = Array.from(new Set(news.map(n => n.source)));
   const filteredNews = news.filter(n => !sourceFilter || n.source === sourceFilter);
+  const requestedArticle = searchParams.get('article');
+  const sourceCards = useMemo(
+    () => [
+      { name: 'Ynet', desc: 'חדשות, ספורט, כלכלה ותרבות', url: 'https://www.ynet.co.il', color: 'from-red-500 to-red-600' },
+      { name: 'Walla', desc: 'חדשות ותרבות', url: 'https://www.walla.co.il', color: 'from-purple-500 to-fuchsia-600' },
+      { name: 'Calcalist', desc: 'כלכלה ועסקים', url: 'https://www.calcalist.co.il', color: 'from-blue-500 to-cyan-600' },
+      { name: 'TV Industry IL', desc: 'חדשות התעשייה', url: 'https://tv-industry-il.vercel.app/news', color: 'from-emerald-500 to-green-600' },
+    ],
+    [],
+  );
 
   const filteredEvents = industryEvents
     .filter(e => !eventCatFilter || e.category === eventCatFilter)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  useEffect(() => {
+    if (!requestedArticle || filteredNews.length === 0) return;
+
+    const target = filteredNews.find((item) => item.link === requestedArticle);
+    if (!target) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const node = articleRefs.current[target.link];
+      if (!node) return;
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedLink(target.link);
+      window.setTimeout(() => {
+        setHighlightedLink((current) => (current === target.link ? null : current));
+      }, 1200);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [filteredNews, requestedArticle]);
 
   return (
     <div className="min-h-screen">
@@ -504,8 +538,13 @@ export default function NewsPage() {
                 {/* Featured (first item large) */}
                 {filteredNews.length > 0 && (
                   <button
+                    ref={(node) => {
+                      articleRefs.current[filteredNews[0].link] = node;
+                    }}
                     onClick={() => openArticle(filteredNews[0])}
-                    className="w-full text-right rounded-xl border p-6 card-glow transition-all hover:border-purple-500/30 group"
+                    className={`w-full text-right rounded-xl border p-6 card-glow transition-all hover:border-purple-500/30 group ${
+                      highlightedLink === filteredNews[0].link ? 'ring-2 ring-yellow-400 border-yellow-400 shadow-[0_0_0_1px_rgba(250,204,21,0.45)]' : ''
+                    }`}
                     style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
                   >
                     <div className="flex items-center gap-2 mb-3">
@@ -536,8 +575,13 @@ export default function NewsPage() {
                   {filteredNews.slice(1).map((item, index) => (
                     <button
                       key={`${item.link}-${index}`}
+                      ref={(node) => {
+                        articleRefs.current[item.link] = node;
+                      }}
                       onClick={() => openArticle(item)}
-                      className="w-full text-right rounded-xl border p-5 card-glow transition-all hover:border-purple-500/30 group"
+                      className={`w-full text-right rounded-xl border p-5 card-glow transition-all hover:border-purple-500/30 group ${
+                        highlightedLink === item.link ? 'ring-2 ring-yellow-400 border-yellow-400 shadow-[0_0_0_1px_rgba(250,204,21,0.45)]' : ''
+                      }`}
                       style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
                     >
                       <div className="flex items-center gap-2 mb-2">
@@ -636,13 +680,8 @@ export default function NewsPage() {
           <TrendingUp className="w-5 h-5 text-purple-400" />
           מקורות חדשות
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { name: 'Ynet', desc: 'תקשורת ותרבות', url: 'https://www.ynet.co.il', color: 'from-red-500 to-red-600' },
-            { name: 'Mako', desc: 'בידור ותקשורת', url: 'https://www.mako.co.il', color: 'from-orange-500 to-orange-600' },
-            { name: 'Globes', desc: 'מדיה ועסקים', url: 'https://www.globes.co.il', color: 'from-blue-500 to-blue-600' },
-            { name: 'ice', desc: 'תעשיית המדיה', url: 'https://www.ice.co.il', color: 'from-purple-500 to-purple-600' },
-          ].map(src => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {sourceCards.map((src) => (
             <a
               key={src.name}
               href={src.url}
@@ -676,5 +715,13 @@ export default function NewsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function NewsPage() {
+  return (
+    <Suspense fallback={<NewsSkeleton />}>
+      <NewsPageContent />
+    </Suspense>
   );
 }

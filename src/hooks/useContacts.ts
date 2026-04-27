@@ -14,7 +14,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { type Contact } from '@/data/contacts';
-import { splitName, inferDepartment, inferWorkArea } from '@/lib/contactsUtils';
+import { splitName, inferDepartment, inferSpecialty, inferWorkArea } from '@/lib/contactsUtils';
 import {
   deduplicateCrewEntries,
   normalizeName,
@@ -103,12 +103,20 @@ function mapSnapshotToContact(d: QueryDocumentSnapshot<DocumentData>): Contact {
     email: data.email ? String(data.email) : undefined,
     department: String(data.department || ''),
     workArea: data.workArea ? String(data.workArea) : null,
+    specialty: data.specialty ? String(data.specialty) : undefined,
     role: String(data.role || ''),
     availability: (data.availability as Contact['availability']) || undefined,
     phone: data.phone ? String(data.phone) : undefined,
     skills: Array.isArray(data.skills) ? (data.skills as string[]) : undefined,
     source: data.source ? String(data.source) : undefined,
     openToWork: data.openToWork === true,
+    status:
+      data.status === 'busy' || data.status === 'offline'
+        ? data.status
+        : data.status === 'available'
+          ? 'available'
+          : undefined,
+    isOnline: data.isOnline === true,
   };
 }
 
@@ -184,6 +192,7 @@ export function useContacts(): ContactsHookResult {
           email: typeof contact.email === 'string' ? contact.email : undefined,
           department: String(contact.department || ''),
           workArea: typeof contact.workArea === 'string' ? contact.workArea : null,
+          specialty: typeof contact.specialty === 'string' ? contact.specialty : undefined,
           role: String(contact.role || ''),
           availability: typeof contact.availability === 'string' ? contact.availability as Contact['availability'] : undefined,
           phone: typeof contact.phone === 'string' ? contact.phone : undefined,
@@ -270,8 +279,9 @@ export function useContacts(): ContactsHookResult {
 
       const { firstName, lastName } = splitName(nameKey);
       const role = normalizeRole(member.roleDetail || member.role || '');
-      const department = inferDepartment(role);
-      const workArea = inferWorkArea(role);
+      const department = inferDepartment(role, member.name || nameKey);
+      const workArea = inferWorkArea(role, member.name || nameKey);
+      const specialty = inferSpecialty(role, member.name || nameKey);
       const newRef = doc(collection(db, 'contacts'));
 
       batch.set(newRef, {
@@ -281,7 +291,9 @@ export function useContacts(): ContactsHookResult {
         role,
         department,
         workArea,
+        specialty,
         availability: 'available',
+        status: 'available',
         source: 'schedule',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
