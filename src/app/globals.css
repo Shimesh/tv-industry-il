@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
-/* Theme CSS Variables - Default (Dark theme) */
+/* Theme CSS Variables - Default (DUSK theme) */
 :root {
-  --background: #030712;
-  --foreground: #f3f4f6;
+  --background: #0e0a1f;
+  --foreground: #f5ecdf;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
@@ -12,16 +12,36 @@
   --app-header-offset: calc(var(--app-header-height) + var(--safe-area-top));
 
   /* Theme System Variables */
-  --theme-bg: #030712;
-  --theme-bg-secondary: #111827;
-  --theme-bg-card: rgba(17, 24, 39, 0.5);
-  --theme-text: #f3f4f6;
-  --theme-text-secondary: #9ca3af;
-  --theme-border: #1f2937;
-  --theme-accent: #a78bfa;
-  --theme-accent-secondary: #60a5fa;
-  --theme-accent-glow: rgba(139, 92, 246, 0.15);
-  --theme-nav-bg: rgba(17, 24, 39, 0.8);
+  --theme-bg: #0e0a1f;
+  --theme-bg-secondary: #18122e;
+  --theme-bg-card: #211a3d;
+  --theme-text: #f5ecdf;
+  --theme-text-secondary: #b8a8c9;
+  --theme-border: rgba(245, 236, 223, 0.12);
+  --theme-accent: #e07a5f;
+  --theme-accent-secondary: #5fb0a8;
+  --theme-accent-glow: rgba(224, 122, 95, 0.20);
+  --theme-success: #22c55e;
+  --theme-warning: #f59e0b;
+  --theme-danger: #ef4444;
+  --theme-info: #38bdf8;
+  --theme-nav-bg: rgba(14, 10, 31, 0.85);
+
+  /* Brand gradient — sienna → coral → dusty teal */
+  --brand-grad-start: #c84e3e;
+  --brand-grad-mid:   #e8956b;
+  --brand-grad-end:   #5fb0a8;
+
+  /* Channel hues — vivid broadcaster identities */
+  --ch-kan11:    #1e6fd9;
+  --ch-keshet12: #f5c518;
+  --ch-reshet13: #0ea5a4;
+  --ch-now14:    #ef3b2c;
+  --ch-i24:      #0bc1d4;
+  --ch-knesset:  #8b5a2b;
+  --ch-kan33:    #a855f7;
+  --ch-sport:    #22c55e;
+  --ch-live:     #ff2d2d;
 }
 
 @theme inline {
@@ -88,14 +108,14 @@ body,
 
 /* Gradient Text Utility */
 .gradient-text {
-  background: linear-gradient(135deg, var(--theme-accent, #a78bfa), var(--theme-accent-secondary, #60a5fa), #34d399);
+  background: linear-gradient(135deg, var(--brand-grad-start, #c84e3e), var(--brand-grad-mid, #e8956b), var(--brand-grad-end, #5fb0a8));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .gradient-text-warm {
-  background: linear-gradient(135deg, #f472b6, #a78bfa, #60a5fa);
+  background: linear-gradient(135deg, #e07a5f, #e8956b, #5fb0a8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -188,7 +208,7 @@ body,
   inset: -1px;
   border-radius: 13px;
   padding: 1px;
-  background: linear-gradient(135deg, var(--theme-accent, #7c3aed), var(--theme-accent-secondary, #3b82f6), #10b981);
+  background: linear-gradient(135deg, var(--brand-grad-start, #c84e3e), var(--brand-grad-mid, #e8956b), var(--brand-grad-end, #5fb0a8));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -333,39 +353,62 @@ body,
   animation: confettiFall 3s ease-in forwards;
 }
 
-/* Light theme specific overrides */
+/* IVORY (light) theme overrides */
 [data-theme="light"] .gradient-text {
-  background: linear-gradient(135deg, #6d28d9, #2563eb, #059669);
+  background: linear-gradient(135deg, #c84e3e, #e8956b, #2f7a72);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 [data-theme="light"] .card-glow:hover {
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(200, 78, 62, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="light"] .gradient-border::before {
-  background: linear-gradient(135deg, #6d28d9, #2563eb, #059669);
+  background: linear-gradient(135deg, #c84e3e, #e8956b, #2f7a72);
 }
 
-/* Forest theme specific overrides */
+[data-theme="light"] .skeleton-shimmer {
+  background: linear-gradient(90deg, #f0e6d4 25%, #ddd0c0 50%, #f0e6d4 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* INDIGO (midnight) theme overrides */
+[data-theme="midnight"] .gradient-text {
+  background: linear-gradient(135deg, #f4a261, #e76f51, #a5b4d8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="midnight"] .card-glow:hover {
+  box-shadow: 0 0 20px rgba(244, 162, 97, 0.18), 0 0 40px rgba(231, 111, 81, 0.10);
+}
+
+/* COPPER (sunset) theme overrides */
+[data-theme="sunset"] .gradient-text {
+  background: linear-gradient(135deg, #d97757, #e8956b, #6b9080);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="sunset"] .card-glow:hover {
+  box-shadow: 0 0 20px rgba(217, 119, 87, 0.20), 0 0 40px rgba(107, 144, 128, 0.10);
+}
+
+/* SAGE (forest) theme overrides */
 [data-theme="forest"] .gradient-text {
-  background: linear-gradient(135deg, #66bb6a, #26a69a, #81c784);
+  background: linear-gradient(135deg, #d4a574, #e8c49a, #c84e3e);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 [data-theme="forest"] .card-glow:hover {
-  box-shadow: 0 0 20px rgba(102, 187, 106, 0.15), 0 0 40px rgba(38, 166, 154, 0.08);
-}
-
-/* Ensure good contrast on light backgrounds */
-[data-theme="light"] .skeleton-shimmer {
-  background: linear-gradient(90deg, #eef2f7 25%, #d1d5db 50%, #eef2f7 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(212, 165, 116, 0.18), 0 0 40px rgba(200, 78, 62, 0.08);
 }
 
 /* Broadcast countdown flash animation */
