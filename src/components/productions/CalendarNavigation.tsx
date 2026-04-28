@@ -1,6 +1,7 @@
 'use client';
 
-import { ChevronRight, ChevronLeft, Search, X, Calendar, List, LayoutGrid } from 'lucide-react';
+import { useRef } from 'react';
+import { ChevronRight, ChevronLeft, Search, X, Calendar, List, LayoutGrid, CalendarDays } from 'lucide-react';
 
 export type CalendarView = 'week' | 'month' | 'list';
 
@@ -11,6 +12,7 @@ interface CalendarNavigationProps {
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
+  onJumpToDate?: (dateStr: string) => void;
   isCurrentPeriod: boolean;
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -30,11 +32,14 @@ export default function CalendarNavigation({
   onPrev,
   onNext,
   onToday,
+  onJumpToDate,
   isCurrentPeriod,
   searchQuery,
   onSearchChange,
   loading = false,
 }: CalendarNavigationProps) {
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="flex flex-col gap-3 mb-4">
       {/* Top row: navigation + view switcher */}
@@ -80,6 +85,35 @@ export default function CalendarNavigation({
           >
             <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
+
+          {/* Date-jump: calendar icon opens native date picker */}
+          {onJumpToDate && (
+            <div className="relative flex items-center">
+              <button
+                onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
+                className="p-1.5 sm:p-2 rounded-lg transition-all hover:scale-105 active:scale-95"
+                style={{
+                  background: 'var(--theme-bg-secondary)',
+                  color: 'var(--theme-text-secondary)',
+                }}
+                title="קפוץ לתאריך"
+                aria-label="קפוץ לתאריך"
+              >
+                <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <input
+                ref={dateInputRef}
+                type="date"
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onJumpToDate(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </div>
+          )}
 
           {/* Today button - only when not on current period */}
           {!isCurrentPeriod && (

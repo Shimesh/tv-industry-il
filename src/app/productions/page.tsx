@@ -78,6 +78,39 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
   }));
 }
 
+// Compute Saturday date string from a Sunday-based weekId (YYYY-MM-DD)
+function getWeekEndStr(weekId: string): string {
+  const [y, m, d] = weekId.split('-').map(Number);
+  const sat = new Date(y, (m || 1) - 1, (d || 1) + 6);
+  return `${sat.getFullYear()}-${String(sat.getMonth() + 1).padStart(2, '0')}-${String(sat.getDate()).padStart(2, '0')}`;
+}
+
+// Returns true if any crew member's name matches the given display name
+function isCrewMatch(crew: Array<{ name?: string; normalizedName?: string }>, displayName: string): boolean {
+  if (!displayName) return false;
+  const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+  const target = norm(displayName);
+  return crew.some(
+    (c) => (c.name && norm(c.name) === target) || (c.normalizedName && norm(c.normalizedName) === target),
+  );
+}
+
+// Merge global productions into the user's own set; extras get isCurrentUserShift re-evaluated
+function mergeGlobalProductions(
+  userProds: Production[],
+  globalProds: Production[],
+  currentUserDisplayName: string,
+): Production[] {
+  const userIds = new Set(userProds.map((p) => p.id));
+  const extras = globalProds
+    .filter((p) => p.id && !userIds.has(p.id))
+    .map((p) => ({
+      ...p,
+      isCurrentUserShift: isCrewMatch(p.crew ?? [], currentUserDisplayName),
+    }));
+  return [...userProds, ...extras];
+}
+
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
   const { addNotification } = useNotifications();
@@ -319,19 +352,40 @@ function ProductionsContent() {
         : getUserProductionsRoot(user.uid);
       const path = `${root}/${weekId}/productions`;
       console.warn('[loadExistingWeek] Loading from:', path);
-      const prodDocs = await restListDocs(path);
-      console.warn('[loadExistingWeek] Found', prodDocs.length, 'docs for weekId:', weekId);
 
-      if (prodDocs.length > 0) {
-        return parseProductionDocs(prodDocs, weekId);
+      // In team mode skip global merge — the team path already acts as a shared source
+      if (selectedTeamId) {
+        const prodDocs = await restListDocs(path);
+        return prodDocs.length > 0 ? parseProductionDocs(prodDocs, weekId) : [];
       }
 
-      return [];
+      // Personal mode: fetch user's own data + global data in parallel
+      const weekStart = weekId;
+      const weekEnd = getWeekEndStr(weekId);
+      const token = await user.getIdToken().catch(() => '');
+
+      const [prodDocs, globalRes] = await Promise.all([
+        restListDocs(path),
+        token
+          ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
+      ]);
+
+      console.warn('[loadExistingWeek] user docs:', prodDocs.length, '/ global docs:', globalRes.productions?.length ?? 0);
+
+      const userProds = prodDocs.length > 0 ? parseProductionDocs(prodDocs, weekId) : [];
+      const displayName = profile?.crewName || profile?.displayName || user.displayName || '';
+
+      return mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
     } catch (error) {
       console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [user, selectedTeamId, restListDocs, parseProductionDocs]);
+  }, [user, selectedTeamId, restListDocs, parseProductionDocs, profile]);
 
   // Search all loaded productions for crew members matching a display name
   const findCrewMatches = useCallback((displayName: string) => {
@@ -1118,6 +1172,13 @@ function ProductionsContent() {
 
     setCurrentDate(target);
   }, [calendarView, currentDate]);
+
+  // Jump directly to the week containing a specific date (from date picker)
+  const handleJumpToDate = useCallback((dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    setCurrentDate(new Date(y, (m || 1) - 1, d || 1));
+    setNavLoading(true);
+  }, []);
 
   // Reset infinite scroll state whenever the list view resets (navigation or view switch)
   useEffect(() => {
@@ -1919,6 +1980,7 @@ function ProductionsContent() {
           workerName={workerName}
           currentUserName={profile?.displayName || user?.displayName || ''}
           onNavigate={handleCalendarNavigate}
+          onJumpToDate={handleJumpToDate}
           onViewChange={handleViewChange}
           calendarView={calendarView}
           calendarYear={calendarYear}

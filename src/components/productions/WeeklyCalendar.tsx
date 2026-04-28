@@ -18,6 +18,7 @@ interface WeeklyCalendarProps {
   currentUserName?: string;
   // Calendar navigation
   onNavigate?: (direction: 'prev' | 'next' | 'today') => void;
+  onJumpToDate?: (dateStr: string) => void;
   onViewChange?: (view: CalendarView) => void;
   calendarView?: CalendarView;
   calendarYear?: number;
@@ -38,6 +39,7 @@ export default function WeeklyCalendar({
   workerName,
   currentUserName,
   onNavigate,
+  onJumpToDate,
   onViewChange,
   calendarView = 'week',
   calendarYear,
@@ -146,6 +148,7 @@ export default function WeeklyCalendar({
           onPrev={() => onNavigate('prev')}
           onNext={() => onNavigate('next')}
           onToday={() => onNavigate('today')}
+          onJumpToDate={onJumpToDate}
           isCurrentPeriod={isCurrentPeriod}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
