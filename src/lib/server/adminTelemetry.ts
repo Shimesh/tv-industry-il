@@ -72,36 +72,44 @@ function serializeDetail(detail: unknown): string | null {
 }
 
 export async function recordSystemEvent(input: EventWriteInput): Promise<void> {
-  const createdAt = nowIso();
-  const docId = `event-${Date.now()}-${hashKey(`${input.type}-${input.source}-${Math.random()}`)}`;
+  try {
+    const createdAt = nowIso();
+    const docId = `event-${Date.now()}-${hashKey(`${input.type}-${input.source}-${Math.random()}`)}`;
 
-  await createDocument('systemEvents', {
-    type: input.type,
-    level: input.level,
-    source: input.source,
-    message: input.message,
-    detail: input.detail || null,
-    route: input.route || null,
-    job: input.job || null,
-    statusCode: input.statusCode ?? null,
-    createdAt,
-  }, docId);
+    await createDocument('systemEvents', {
+      type: input.type,
+      level: input.level,
+      source: input.source,
+      message: input.message,
+      detail: input.detail || null,
+      route: input.route || null,
+      job: input.job || null,
+      statusCode: input.statusCode ?? null,
+      createdAt,
+    }, docId);
+  } catch {
+    // telemetry must never break callers
+  }
 }
 
 export async function incrementPageView(pathname: string): Promise<void> {
-  const key = pathname || '/';
-  const docPath = `adminMetrics/${metricDocId('page', key)}`;
-  const existing = await getDocument<MetricRecord>(docPath);
-  const count = Number(existing?.count || 0) + 1;
+  try {
+    const key = pathname || '/';
+    const docPath = `adminMetrics/${metricDocId('page', key)}`;
+    const existing = await getDocument<MetricRecord>(docPath);
+    const count = Number(existing?.count || 0) + 1;
 
-  await patchDocument(docPath, {
-    metricType: 'page',
-    key,
-    label: toDisplayLabel(key),
-    count,
-    lastSeenAt: nowIso(),
-    updatedAt: nowIso(),
-  });
+    await patchDocument(docPath, {
+      metricType: 'page',
+      key,
+      label: toDisplayLabel(key),
+      count,
+      lastSeenAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+  } catch {
+    // telemetry must never break callers
+  }
 }
 
 export async function recordRouteMetric(input: {
@@ -110,38 +118,42 @@ export async function recordRouteMetric(input: {
   statusCode?: number | null;
   error?: unknown;
 }): Promise<void> {
-  const key = input.route;
-  const docPath = `adminMetrics/${metricDocId('route', key)}`;
-  const existing = await getDocument<MetricRecord>(docPath);
-  const successCount = Number(existing?.successCount || 0) + (input.ok ? 1 : 0);
-  const failureCount = Number(existing?.failureCount || 0) + (input.ok ? 0 : 1);
-  const timestamp = nowIso();
-  const lastError = input.ok ? null : serializeDetail(input.error);
+  try {
+    const key = input.route;
+    const docPath = `adminMetrics/${metricDocId('route', key)}`;
+    const existing = await getDocument<MetricRecord>(docPath);
+    const successCount = Number(existing?.successCount || 0) + (input.ok ? 1 : 0);
+    const failureCount = Number(existing?.failureCount || 0) + (input.ok ? 0 : 1);
+    const timestamp = nowIso();
+    const lastError = input.ok ? null : serializeDetail(input.error);
 
-  await patchDocument(docPath, {
-    metricType: 'route',
-    key,
-    label: key,
-    successCount,
-    failureCount,
-    lastRunAt: timestamp,
-    lastSuccessAt: input.ok ? timestamp : existing?.lastSuccessAt || null,
-    lastFailureAt: input.ok ? existing?.lastFailureAt || null : timestamp,
-    lastStatusCode: input.statusCode ?? null,
-    lastError,
-    updatedAt: timestamp,
-  });
-
-  if (!input.ok) {
-    await recordSystemEvent({
-      type: 'api_failure',
-      level: 'error',
-      source: 'api',
-      message: `קריאת API נכשלה בנתיב ${key}`,
-      detail: lastError,
-      route: key,
-      statusCode: input.statusCode ?? null,
+    await patchDocument(docPath, {
+      metricType: 'route',
+      key,
+      label: key,
+      successCount,
+      failureCount,
+      lastRunAt: timestamp,
+      lastSuccessAt: input.ok ? timestamp : existing?.lastSuccessAt || null,
+      lastFailureAt: input.ok ? existing?.lastFailureAt || null : timestamp,
+      lastStatusCode: input.statusCode ?? null,
+      lastError,
+      updatedAt: timestamp,
     });
+
+    if (!input.ok) {
+      await recordSystemEvent({
+        type: 'api_failure',
+        level: 'error',
+        source: 'api',
+        message: `קריאת API נכשלה בנתיב ${key}`,
+        detail: lastError,
+        route: key,
+        statusCode: input.statusCode ?? null,
+      });
+    }
+  } catch {
+    // telemetry must never break callers
   }
 }
 
@@ -151,38 +163,42 @@ export async function recordJobMetric(input: {
   message: string;
   detail?: unknown;
 }): Promise<void> {
-  const key = input.job;
-  const docPath = `adminMetrics/${metricDocId('job', key)}`;
-  const existing = await getDocument<MetricRecord>(docPath);
-  const timestamp = nowIso();
-  const successRuns = Number(existing?.successRuns || 0) + (input.ok ? 1 : 0);
-  const failureRuns = Number(existing?.failureRuns || 0) + (input.ok ? 0 : 1);
-  const runs = Number(existing?.runs || 0) + 1;
-  const lastError = input.ok ? null : serializeDetail(input.detail);
+  try {
+    const key = input.job;
+    const docPath = `adminMetrics/${metricDocId('job', key)}`;
+    const existing = await getDocument<MetricRecord>(docPath);
+    const timestamp = nowIso();
+    const successRuns = Number(existing?.successRuns || 0) + (input.ok ? 1 : 0);
+    const failureRuns = Number(existing?.failureRuns || 0) + (input.ok ? 0 : 1);
+    const runs = Number(existing?.runs || 0) + 1;
+    const lastError = input.ok ? null : serializeDetail(input.detail);
 
-  await patchDocument(docPath, {
-    metricType: 'job',
-    key,
-    label: key,
-    runs,
-    successRuns,
-    failureRuns,
-    lastRunAt: timestamp,
-    lastSuccessAt: input.ok ? timestamp : existing?.lastSuccessAt || null,
-    lastFailureAt: input.ok ? existing?.lastFailureAt || null : timestamp,
-    lastStatus: input.ok ? 'success' : 'failure',
-    lastError,
-    updatedAt: timestamp,
-  });
+    await patchDocument(docPath, {
+      metricType: 'job',
+      key,
+      label: key,
+      runs,
+      successRuns,
+      failureRuns,
+      lastRunAt: timestamp,
+      lastSuccessAt: input.ok ? timestamp : existing?.lastSuccessAt || null,
+      lastFailureAt: input.ok ? existing?.lastFailureAt || null : timestamp,
+      lastStatus: input.ok ? 'success' : 'failure',
+      lastError,
+      updatedAt: timestamp,
+    });
 
-  await recordSystemEvent({
-    type: 'job_run',
-    level: input.ok ? 'success' : 'error',
-    source: 'job',
-    message: input.message,
-    detail: serializeDetail(input.detail),
-    job: key,
-  });
+    await recordSystemEvent({
+      type: 'job_run',
+      level: input.ok ? 'success' : 'error',
+      source: 'job',
+      message: input.message,
+      detail: serializeDetail(input.detail),
+      job: key,
+    });
+  } catch {
+    // telemetry must never break callers
+  }
 }
 
 export async function getRecentSystemEvents(limit = 12): Promise<SystemEventRecord[]> {
