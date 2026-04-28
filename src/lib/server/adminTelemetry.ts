@@ -45,6 +45,18 @@ type EventWriteInput = {
   statusCode?: number | null;
 };
 
+// Per-instance debounce: skip metric writes if the same key was written recently.
+// Serverless instances stay warm for minutes so this cuts Firestore ops by ~95%.
+const lastMetricWriteAt: Record<string, number> = {};
+const METRIC_DEBOUNCE_MS = 60_000;
+
+function shouldWriteMetric(key: string): boolean {
+  const now = Date.now();
+  if (now - (lastMetricWriteAt[key] || 0) < METRIC_DEBOUNCE_MS) return false;
+  lastMetricWriteAt[key] = now;
+  return true;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -120,6 +132,19 @@ export async function recordRouteMetric(input: {
 }): Promise<void> {
   try {
     const key = input.route;
+    if (!input.ok) {
+      // Always record failures; skip successes if recently written
+      await recordSystemEvent({
+        type: 'api_failure',
+        level: 'error',
+        source: 'api',
+        message: `קריאת API נכשלה בנתיב ${key}`,
+        detail: serializeDetail(input.error),
+        route: key,
+        statusCode: input.statusCode ?? null,
+      });
+    }
+    if (!shouldWriteMetric(`route-${key}`)) return;
     const docPath = `adminMetrics/${metricDocId('route', key)}`;
     const existing = await getDocument<MetricRecord>(docPath);
     const successCount = Number(existing?.successCount || 0) + (input.ok ? 1 : 0);
@@ -140,18 +165,6 @@ export async function recordRouteMetric(input: {
       lastError,
       updatedAt: timestamp,
     });
-
-    if (!input.ok) {
-      await recordSystemEvent({
-        type: 'api_failure',
-        level: 'error',
-        source: 'api',
-        message: `קריאת API נכשלה בנתיב ${key}`,
-        detail: lastError,
-        route: key,
-        statusCode: input.statusCode ?? null,
-      });
-    }
   } catch {
     // telemetry must never break callers
   }
@@ -165,6 +178,7 @@ export async function recordJobMetric(input: {
 }): Promise<void> {
   try {
     const key = input.job;
+    if (!shouldWriteMetric(`job-${key}`)) return;
     const docPath = `adminMetrics/${metricDocId('job', key)}`;
     const existing = await getDocument<MetricRecord>(docPath);
     const timestamp = nowIso();
