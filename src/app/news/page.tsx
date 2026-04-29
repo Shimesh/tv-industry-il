@@ -7,7 +7,7 @@ import { industryEvents, categoryLabels } from '@/data/news';
 import {
   Newspaper, Calendar, Clock, MapPin, ExternalLink, TrendingUp,
   Filter, RefreshCw, X, ChevronLeft, Loader2, AlertCircle,
-  Globe, Rss, Eye
+  Globe, Rss, Eye, Play
 } from 'lucide-react';
 
 /* ===== Types ===== */
@@ -20,6 +20,7 @@ interface RssNewsItem {
   description: string;
   newsType: 'אקטואליה' | 'ספורט' | 'תרבות' | 'כלכלה' | 'טכנולוגיה' | 'תקשורת' | 'כללי';
   imageUrl?: string;
+  videoUrl?: string;
 }
 
 interface ArticleContent {
@@ -29,6 +30,8 @@ interface ArticleContent {
   source: string;
   coverImageUrl?: string;
   smartSummary?: string;
+  videoUrl?: string;
+  fallbackGradient?: { from: string; to: string; label: string };
 }
 
 const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
@@ -223,6 +226,18 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
             </div>
           )}
 
+          {/* Fallback gradient header when no cover image */}
+          {!coverImage && article?.fallbackGradient && (
+            <div
+              className="h-24 rounded-t-2xl flex items-center justify-center"
+              style={{ background: `linear-gradient(135deg, ${article.fallbackGradient.from}, ${article.fallbackGradient.to})` }}
+            >
+              {article.fallbackGradient.label && (
+                <span className="text-white font-bold text-lg opacity-70">{article.fallbackGradient.label}</span>
+              )}
+            </div>
+          )}
+
           {/* Header */}
           <div className={`flex items-center justify-between px-5 gap-3 ${coverImage ? 'pt-3 pb-2' : 'pt-5 pb-2'}`}>
             <button
@@ -281,7 +296,19 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
           </div>
 
           {/* Footer CTA */}
-          <div className="px-5 pb-6 pt-2">
+          <div className="px-5 pb-6 pt-2 space-y-2">
+            {article?.videoUrl && (
+              <a
+                href={article.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ background: '#5fb0a8', color: '#fff' }}
+              >
+                <Play className="w-4 h-4 fill-white" />
+                צפה בסרטון
+              </a>
+            )}
             <a
               href={newsItem.link}
               target="_blank"
@@ -371,6 +398,8 @@ function NewsPageContent() {
           source: data.source,
           coverImageUrl: data.coverImageUrl,
           smartSummary: data.smartSummary,
+          videoUrl: data.videoUrl,
+          fallbackGradient: data.fallbackGradient,
         });
       } else {
         setArticleError(data.error || 'לא ניתן לטעון את התוכן');
@@ -593,6 +622,13 @@ function NewsPageContent() {
                         <div className="relative h-52 sm:h-64 overflow-hidden">
                           <img src={featured.imageUrl} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                          {featured.videoUrl && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-12 h-12 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center border border-white/40 shadow-lg">
+                                <Play className="w-5 h-5 text-white fill-white translate-x-0.5" />
+                              </div>
+                            </div>
+                          )}
                           {isRatings && (
                             <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-400 text-black text-xs font-bold shadow">
                               ⭐ רייטינג
@@ -651,6 +687,13 @@ function NewsPageContent() {
                           <div className="relative h-32 overflow-hidden">
                             <img src={item.imageUrl} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                            {item.videoUrl && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="w-10 h-10 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center border border-white/40 shadow">
+                                  <Play className="w-4 h-4 text-white fill-white translate-x-0.5" />
+                                </div>
+                              </div>
+                            )}
                             {isRatings && (
                               <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-bold">⭐ רייטינג</div>
                             )}

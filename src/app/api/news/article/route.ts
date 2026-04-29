@@ -1,13 +1,30 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
 
 const anthropic = new Anthropic();
 
-// Simple article cache
-const articleCache = new Map<string, { content: string; title: string; date: string; source: string; coverImageUrl?: string; smartSummary?: string; fetchedAt: number }>();
-const ARTICLE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const articleCache = new Map<string, {
+  content: string; title: string; date: string; source: string;
+  coverImageUrl?: string; smartSummary?: string;
+  videoUrl?: string; fallbackGradient?: { from: string; to: string; label: string };
+  fetchedAt: number;
+}>();
+const ARTICLE_CACHE_TTL = 30 * 60 * 1000;
+
+const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
+
+function getSourceGradient(source: string, title: string): { from: string; to: string; label: string } {
+  if (RATINGS_KEYWORDS.some(kw => title.includes(kw))) {
+    return { from: '#b45309', to: '#78350f', label: '⭐ רייטינג' };
+  }
+  if (source.includes('ICE') || source.includes('ice')) return { from: '#0e7490', to: '#0f766e', label: 'ICE · מדיה ותקשורת' };
+  if (source.includes('Scopt') || source.includes('scopt')) return { from: '#047857', to: '#065f46', label: 'Scopt · תקשורת' };
+  if (source.includes('Ynet') || source.includes('ynet')) return { from: '#b91c1c', to: '#7f1d1d', label: 'Ynet' };
+  if (source.includes('Walla') || source.includes('walla')) return { from: '#6d28d9', to: '#4c1d95', label: 'Walla' };
+  return { from: '#e07a5f', to: '#5fb0a8', label: '' };
+}
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -38,14 +55,17 @@ function cleanHtml(html: string): string {
     .replace(/<!--[\s\S]*?-->/g, '');
 }
 
-function extractArticleContent(html: string, url: string): { title: string; content: string; date: string; source: string; coverImageUrl?: string } {
+function extractArticleContent(html: string, url: string): {
+  title: string; content: string; date: string; source: string;
+  coverImageUrl?: string; videoUrl?: string; fallbackGradient?: { from: string; to: string; label: string };
+} {
   let title = '';
   let content = '';
   let date = '';
   let source = '';
   let coverImageUrl: string | undefined;
+  let videoUrl: string | undefined;
 
-  // Extract title
   const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<meta[^>]*content=["']([^"']*?)["'][^>]*property=["']og:title["']/i);
   const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
@@ -58,7 +78,6 @@ function extractArticleContent(html: string, url: string): { title: string; cont
     ''
   );
 
-  // Extract source
   const siteNameMatch = html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<meta[^>]*content=["']([^"']*?)["'][^>]*property=["']og:site_name["']/i);
   source = decodeHtmlEntities(siteNameMatch?.[1] || '');
@@ -66,35 +85,63 @@ function extractArticleContent(html: string, url: string): { title: string; cont
     try { source = new URL(url).hostname.replace('www.', ''); } catch { source = ''; }
   }
 
-  // Extract date
   const dateMatch = html.match(/<meta[^>]*property=["']article:published_time["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<meta[^>]*name=["'](?:date|publish[_-]?date|pubdate)["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<time[^>]*datetime=["']([^"']*?)["']/i);
   date = dateMatch?.[1] || '';
 
-  // Extract og:image for cover
+  // Video extraction on raw HTML (before iframes are stripped by cleanHtml)
+  const ogVideoMatch = html.match(/<meta[^>]*property=["']og:video(?::url)?["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:video(?::url)?["']/i);
+  const youtubeMatch = html.match(/<iframe[^>]*src=["'][^"']*(?:youtube\.com\/embed|youtu\.be)\/([a-zA-Z0-9_-]{11})[^"']*["']/i);
+  const vimeoMatch = html.match(/<iframe[^>]*src=["']([^"']*player\.vimeo\.com\/video\/\d+[^"']*)["']/i);
+  const israeliPlayerMatch = html.match(/<iframe[^>]*src=["']([^"']*(?:mako\.co\.il|kan\.org\.il\/media|13tv\.co\.il)[^"']*)["']/i);
+
+  videoUrl = ogVideoMatch?.[1]
+    || (youtubeMatch ? `https://www.youtube.com/watch?v=${youtubeMatch[1]}` : undefined)
+    || vimeoMatch?.[1]
+    || israeliPlayerMatch?.[1]
+    || undefined;
+
+  // Image extraction chain: og:image -> twitter:image -> first substantial img
   const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
     || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
   coverImageUrl = ogImageMatch?.[1] || undefined;
 
-  // Clean the HTML
+  if (!coverImageUrl) {
+    const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
+    coverImageUrl = twitterImageMatch?.[1] || undefined;
+  }
+
+  if (!coverImageUrl) {
+    const imgMatches = [...html.matchAll(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi)];
+    for (const m of imgMatches) {
+      const imgTag = m[0];
+      const src = m[1];
+      if (src.startsWith('data:')) continue;
+      if (src.endsWith('.svg')) continue;
+      if (!src.startsWith('http')) continue;
+      const widthMatch = imgTag.match(/width=["']?(\d+)/i);
+      if (widthMatch && parseInt(widthMatch[1]) < 200) continue;
+      coverImageUrl = src;
+      break;
+    }
+  }
+
+  const fallbackGradient = coverImageUrl ? undefined : getSourceGradient(source, title);
+
   const cleanedHtml = cleanHtml(html);
 
-  // Ynet specific: look for "text" class divs
   const ynetArticle = cleanedHtml.match(/<div[^>]*class=["'][^"']*\btext\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
 
-  // Try various article container patterns
   const articlePatterns = [
-    // Ynet-specific
     /<div[^>]*class=["'][^"']*article[_-]?body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
     /<div[^>]*class=["'][^"']*article[_-]?content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
     /<div[^>]*class=["'][^"']*article[_-]?text[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-    // 13tv / Mako
     /<div[^>]*class=["'][^"']*story[_-]?body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
     /<div[^>]*class=["'][^"']*story[_-]?content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-    // Walla
     /<div[^>]*class=["'][^"']*item[_-]?body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-    // Generic
     /<article[^>]*>([\s\S]*?)<\/article>/i,
     /<div[^>]*class=["'][^"']*post[_-]?(?:body|content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
     /<div[^>]*class=["'][^"']*entry[_-]?(?:body|content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
@@ -113,24 +160,20 @@ function extractArticleContent(html: string, url: string): { title: string; cont
     }
   }
 
-  // If no container found, use whole body
   if (!articleHtml || articleHtml.length < 100) {
     articleHtml = cleanedHtml;
   }
 
-  // Extract text from paragraphs
   const paragraphs: string[] = [];
   const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
   let pMatch;
   while ((pMatch = pRegex.exec(articleHtml)) !== null) {
     const text = decodeHtmlEntities(pMatch[1].replace(/<[^>]+>/g, ''));
-    // Filter: must be real content (>15 chars), skip ad/navigation text
     if (text.length > 15 && !text.startsWith('function') && !text.includes('document.write')) {
       paragraphs.push(text);
     }
   }
 
-  // Also try <div> elements with text if paragraphs are sparse
   if (paragraphs.length < 3) {
     const divRegex = /<div[^>]*class=["'][^"']*(?:text|paragraph|body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
     let divMatch;
@@ -144,23 +187,19 @@ function extractArticleContent(html: string, url: string): { title: string; cont
 
   content = paragraphs.join('\n\n');
 
-  // Fallback: strip all HTML and get raw text
   if (content.length < 100) {
     const bodyMatch = cleanedHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyHtml = bodyMatch?.[1] || cleanedHtml;
     const strippedText = decodeHtmlEntities(bodyHtml.replace(/<[^>]+>/g, ' '));
-
-    // Try to get a reasonable portion from the middle (skip navigation)
     const lines = strippedText.split(/\s{3,}/).filter(l => l.length > 20);
     content = lines.slice(0, 20).join('\n\n');
   }
 
-  // Limit content length
   if (content.length > 5000) {
     content = content.slice(0, 5000) + '...';
   }
 
-  return { title, content, date, source, coverImageUrl };
+  return { title, content, date, source, coverImageUrl, videoUrl, fallbackGradient };
 }
 
 export async function GET(request: Request) {
@@ -172,20 +211,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: 'Missing url parameter' }, { status: 400 });
     }
 
-    // Validate URL
     try {
       new URL(articleUrl);
     } catch {
       return NextResponse.json({ success: false, error: 'Invalid URL' }, { status: 400 });
     }
 
-    // Check cache
     const cached = articleCache.get(articleUrl);
     if (cached && (Date.now() - cached.fetchedAt) < ARTICLE_CACHE_TTL) {
       return NextResponse.json({ success: true, ...cached });
     }
 
-    // Fetch the article
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
 
@@ -208,7 +244,6 @@ export async function GET(request: Request) {
     const html = await res.text();
     const extracted = extractArticleContent(html, articleUrl);
 
-    // Generate AI summary on-demand if content is substantial
     let smartSummary: string | undefined;
     if (extracted.content.length >= 100) {
       try {
@@ -224,15 +259,13 @@ export async function GET(request: Request) {
           smartSummary = msg.content[0].text;
         }
       } catch {
-        // Silent degradation — modal will show raw content excerpt as fallback
+        // Silent degradation
       }
     }
 
-    // Cache the result (including new fields)
     const result = { ...extracted, smartSummary, fetchedAt: Date.now() };
     articleCache.set(articleUrl, result);
 
-    // Limit cache size
     if (articleCache.size > 100) {
       const oldest = Array.from(articleCache.entries())
         .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];

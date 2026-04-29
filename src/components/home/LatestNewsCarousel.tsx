@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 interface RssNewsItem {
   title: string;
@@ -11,6 +11,7 @@ interface RssNewsItem {
   source: string;
   description: string;
   imageUrl?: string;
+  videoUrl?: string;
 }
 
 const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
@@ -130,6 +131,15 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
 
             {/* Dark gradient overlay for text readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+            {/* Play overlay for video articles */}
+            {item.videoUrl && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-10 h-10 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center border border-white/40 shadow">
+                  <Play className="w-4 h-4 text-white fill-white translate-x-0.5" />
+                </div>
+              </div>
+            )}
 
             {/* Ratings badge */}
             {isRatingsArticle(item.title) && (

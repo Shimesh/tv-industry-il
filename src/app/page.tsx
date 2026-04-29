@@ -28,6 +28,7 @@ import {
 import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
 import LiveNewsTicker from '@/components/home/LiveNewsTicker';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
+import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import { useAppData } from '@/contexts/AppDataContext';
 import { mockJobs } from '@/data/jobs';
 import { channels, generateSchedule, getCurrentProgram } from '@/data/channels';
@@ -239,30 +240,7 @@ export default function HomePage() {
               לוח מלא <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            {nowPlaying.map((item) => (
-              <Link
-                key={item.id}
-                href={`/schedule?channelId=${item.id}`}
-                className="group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all hover:shadow-sm"
-                style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
-              >
-                <div className="relative shrink-0">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
-                  <div className="absolute inset-0 rounded-full animate-ping opacity-30" style={{ background: item.color }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold truncate" style={{ color: 'var(--theme-text)' }}>{item.name}</div>
-                  <div className="text-[11px] truncate" style={{ color: 'var(--theme-text-secondary)' }}>
-                    {item.program?.title || 'שידור חי'}
-                  </div>
-                </div>
-                <span className="text-[10px] opacity-50 shrink-0" style={{ color: 'var(--theme-text-secondary)' }}>
-                  {item.program?.time || ''}
-                </span>
-              </Link>
-            ))}
-          </div>
+          <OnAirNowCarousel channels={nowPlaying} />
         </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
