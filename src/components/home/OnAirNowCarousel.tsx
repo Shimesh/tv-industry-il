@@ -19,6 +19,14 @@ const CHANNEL_LOGOS: Record<string, string> = {
   sport5: 'https://upload.wikimedia.org/wikipedia/he/thumb/8/88/Sport_5_logo.svg/240px-Sport_5_logo.svg.png',
 };
 
+const CHANNEL_FALLBACK: Record<string, { label: string; from: string; to: string }> = {
+  kan11:    { label: '11', from: '#1e3a8a', to: '#1e40af' },
+  keshet12: { label: '12', from: '#db2777', to: '#ea580c' },
+  reshet13: { label: '13', from: '#0891b2', to: '#0e7490' },
+  now14:    { label: '14', from: '#7c3aed', to: '#4f46e5' },
+  sport5:   { label: '5',  from: '#16a34a', to: '#15803d' },
+};
+
 const CARD_WIDTH = 288;
 const CARD_GAP = 12;
 
@@ -96,17 +104,28 @@ export default function OnAirNowCarousel({ channels }: { channels: NowPlayingIte
               style={{ background: `linear-gradient(135deg, ${item.color}cc, ${item.color}44)` }}
             />
 
-            {/* Channel logo centered */}
+            {/* Channel logo centered — avatar always visible beneath, logo overlaid on top */}
             <div className="absolute inset-0 flex items-center justify-center">
-              {CHANNEL_LOGOS[item.id] ? (
+              {/* Branded avatar — always rendered as the base layer */}
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20"
+                style={{
+                  background: `linear-gradient(135deg, ${CHANNEL_FALLBACK[item.id]?.from ?? '#374151'}, ${CHANNEL_FALLBACK[item.id]?.to ?? '#1f2937'})`,
+                }}
+              >
+                <span className="text-white text-3xl font-black drop-shadow">
+                  {CHANNEL_FALLBACK[item.id]?.label ?? item.name.slice(0, 2)}
+                </span>
+              </div>
+
+              {/* Logo image — absolute on top; onError hides it, revealing the avatar */}
+              {CHANNEL_LOGOS[item.id] && (
                 <img
                   src={CHANNEL_LOGOS[item.id]}
                   alt={item.name}
-                  className="w-20 h-20 object-contain drop-shadow-lg opacity-90"
+                  className="absolute w-20 h-20 object-contain drop-shadow-lg opacity-90"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
-              ) : (
-                <span className="text-white text-4xl font-black opacity-30">{item.name}</span>
               )}
             </div>
 
