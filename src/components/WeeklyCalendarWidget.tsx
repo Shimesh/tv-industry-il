@@ -304,6 +304,29 @@ export default function WeeklyCalendarWidget() {
         }
       } catch { /* ignore team errors */ }
 
+      // Phone-matched global_productions — server-side filtered, no name guessing
+      const normalizedPhone = normalizePhone(profile?.phone || '');
+      if (normalizedPhone) {
+        try {
+          const weekStart = days[0];
+          const weekEnd = days[6];
+          const globalRes = await fetch(
+            `/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (globalRes.ok) {
+            const globalData = await globalRes.json() as { productions?: Production[] };
+            const existingIds = new Set(allProds.map((p) => p.id));
+            for (const gp of globalData.productions ?? []) {
+              if (gp.id && !existingIds.has(gp.id)) {
+                allProds.push({ ...gp, isCurrentUserShift: true });
+                existingIds.add(gp.id);
+              }
+            }
+          }
+        } catch { /* best-effort — don't block on global fetch failure */ }
+      }
+
       // Only update state if personal fetch succeeded — prevents wiping cache on network errors
       if (!fetchSucceeded) return;
 

@@ -18,6 +18,7 @@ import {
   getWeekIdsInRange,
 } from '@/lib/productionDiff';
 import { CalendarView } from '@/components/productions/CalendarNavigation';
+import { ClaimShiftsModal } from '@/components/productions/ClaimShiftsModal';
 import { parseScheduleHTML, parseManualText, parseHerzliyaHTML, isHerzliyaHTML } from '@/lib/productionScheduleParser';
 import { normalizeContactName } from '@/lib/contactsUtils';
 import {
@@ -192,6 +193,12 @@ function ProductionsContent() {
   const [crewSuggestions, setCrewSuggestions] = useState<Array<{ name: string; role: string; score: number }>>([]);
   const [crewNameInput, setCrewNameInput] = useState('');
   const crewIdentityCheckedRef = useRef(false);
+  // Shadow profile claiming — for users whose shifts exist by name but no phone
+  const [claimMatches, setClaimMatches] = useState<Production[]>([]);
+  const [claimCrewName, setClaimCrewName] = useState('');
+  const [claimProfession, setClaimProfession] = useState('');
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const claimCheckedRef = useRef(false);
   // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
@@ -375,7 +382,9 @@ function ProductionsContent() {
       const weekEnd = getWeekEndStr(weekId);
       const token = await user.getIdToken().catch(() => '');
 
-      const [prodDocs, globalRes] = await Promise.all([
+      const normalizedPhone = normalizePhone(profile?.phone || '');
+
+      const [prodDocs, globalRes, phoneRes] = await Promise.all([
         restListDocs(path),
         token
           ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
@@ -384,14 +393,24 @@ function ProductionsContent() {
               .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
               .catch(() => ({ productions: [] as Production[] }))
           : Promise.resolve({ productions: [] as Production[] }),
+        // Secondary source: global_productions queried by phone (server-side filtered)
+        token && normalizedPhone
+          ? fetch(`/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
       ]);
 
-      console.warn('[loadExistingWeek] user docs:', prodDocs.length, '/ global docs:', globalRes.productions?.length ?? 0);
+      console.warn('[loadExistingWeek] user docs:', prodDocs.length, '/ global docs:', globalRes.productions?.length ?? 0, '/ phone-matched:', phoneRes.productions?.length ?? 0);
 
       const userProds = prodDocs.length > 0 ? parseProductionDocs(prodDocs, weekId) : [];
       const displayName = profile?.crewName || profile?.displayName || user.displayName || '';
 
-      return mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
+      // Merge legacy global (name-based) first, then phone-matched global (always authoritative)
+      const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
+      return mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
     } catch (error) {
       console.error('[loadExistingWeek] Error:', error);
       return [];
@@ -456,6 +475,53 @@ function ProductionsContent() {
     setCrewSuggestions(suggestions);
     setCrewNameInput(profile.displayName);
     setShowCrewIdentity(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, productions]);
+
+  // Shadow-profile claim: if phone produces 0 matches but a name search finds results, show claim modal
+  useEffect(() => {
+    if (claimCheckedRef.current) return;
+    if (!profile?.phone || !user) return;
+    if (profile.crewName || showClaimModal) return;
+    if (productionsByWeekRef.current.size === 0) return;
+
+    const displayName = profile.displayName || user.displayName || '';
+    if (!displayName) return;
+
+    const normName = normalizeName(displayName);
+    if (!normName || normName.length < 2) return;
+
+    // Search loaded productions for crew by name only (shadow profile candidates)
+    const found: Production[] = [];
+    const firstNorm = normName.split(/\s+/)[0];
+    let matchedCrewName = '';
+    let matchedProfession = '';
+
+    for (const weekProds of productionsByWeekRef.current.values()) {
+      for (const prod of weekProds) {
+        for (const c of prod.crew) {
+          const cn = normalizeName(c.name);
+          if (!cn) continue;
+          const isMatch = cn === normName || (firstNorm.length >= 2 && cn.split(/\s+/)[0] === firstNorm);
+          // Only count as shadow if the crew entry has no phone
+          if (isMatch && !c.phone && !c.normalizedPhone) {
+            if (!matchedCrewName) {
+              matchedCrewName = c.name;
+              matchedProfession = c.role || c.roleDetail || '';
+            }
+            if (!found.find((p) => p.id === prod.id)) found.push(prod);
+          }
+        }
+      }
+    }
+
+    if (found.length > 0 && matchedCrewName) {
+      claimCheckedRef.current = true;
+      setClaimMatches(found);
+      setClaimCrewName(matchedCrewName);
+      setClaimProfession(matchedProfession);
+      setShowClaimModal(true);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, productions]);
 
@@ -576,6 +642,13 @@ function ProductionsContent() {
       ]);
 
       console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
+
+      // Dual-write to global_productions — fire-and-forget, never blocks existing save
+      fetch('/api/productions/global', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productions: prods, sourceWeekPath: metaPath }),
+      }).catch((err) => console.warn('[global_productions] dual-write failed:', err));
 
       await reconcileContactsFromServer(prods, token);
 
@@ -1849,6 +1922,25 @@ function ProductionsContent() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Shadow-profile claim modal — shown when phone exists but matches only by name (no phone in record) */}
+      {showClaimModal && user && (
+        <ClaimShiftsModal
+          matches={claimMatches}
+          crewName={claimCrewName}
+          profession={claimProfession}
+          userPhone={normalizePhone(profile?.phone || '') || ''}
+          getToken={() => user.getIdToken()}
+          onClaimed={async (name) => {
+            setShowClaimModal(false);
+            await handleCrewIdentityConfirm(name);
+          }}
+          onDismiss={() => {
+            setShowClaimModal(false);
+            updateUserProfile({ claimDeclined: true } as Parameters<typeof updateUserProfile>[0]).catch(() => {});
+          }}
+        />
       )}
 
       {/* Crew Identity Modal — shown on first visit when user is not yet identified */}
