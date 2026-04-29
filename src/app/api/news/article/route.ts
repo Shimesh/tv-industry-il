@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
 
+const anthropic = new Anthropic();
+
 // Simple article cache
-const articleCache = new Map<string, { content: string; title: string; date: string; source: string; fetchedAt: number }>();
+const articleCache = new Map<string, { content: string; title: string; date: string; source: string; coverImageUrl?: string; smartSummary?: string; fetchedAt: number }>();
 const ARTICLE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 function decodeHtmlEntities(text: string): string {
@@ -35,11 +38,12 @@ function cleanHtml(html: string): string {
     .replace(/<!--[\s\S]*?-->/g, '');
 }
 
-function extractArticleContent(html: string, url: string): { title: string; content: string; date: string; source: string } {
+function extractArticleContent(html: string, url: string): { title: string; content: string; date: string; source: string; coverImageUrl?: string } {
   let title = '';
   let content = '';
   let date = '';
   let source = '';
+  let coverImageUrl: string | undefined;
 
   // Extract title
   const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*?)["']/i)
@@ -67,6 +71,11 @@ function extractArticleContent(html: string, url: string): { title: string; cont
     || html.match(/<meta[^>]*name=["'](?:date|publish[_-]?date|pubdate)["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<time[^>]*datetime=["']([^"']*?)["']/i);
   date = dateMatch?.[1] || '';
+
+  // Extract og:image for cover
+  const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+  coverImageUrl = ogImageMatch?.[1] || undefined;
 
   // Clean the HTML
   const cleanedHtml = cleanHtml(html);
@@ -151,7 +160,7 @@ function extractArticleContent(html: string, url: string): { title: string; cont
     content = content.slice(0, 5000) + '...';
   }
 
-  return { title, content, date, source };
+  return { title, content, date, source, coverImageUrl };
 }
 
 export async function GET(request: Request) {
@@ -199,8 +208,28 @@ export async function GET(request: Request) {
     const html = await res.text();
     const extracted = extractArticleContent(html, articleUrl);
 
-    // Cache the result
-    const result = { ...extracted, fetchedAt: Date.now() };
+    // Generate AI summary on-demand if content is substantial
+    let smartSummary: string | undefined;
+    if (extracted.content.length >= 100) {
+      try {
+        const msg = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 600,
+          messages: [{
+            role: 'user',
+            content: `סכם את הכתבה הבאה ב-2 עד 3 פסקאות קצרות בעברית תקנית. כתוב רק את הסיכום, ללא כותרות או הקדמה. התמקד בעובדות המרכזיות ודלג על פרסומות, תפריטים, ומידע שאינו קשור לכתבה:\n\n${extracted.content.slice(0, 3000)}`,
+          }],
+        });
+        if (msg.content[0].type === 'text') {
+          smartSummary = msg.content[0].text;
+        }
+      } catch {
+        // Silent degradation — modal will show raw content excerpt as fallback
+      }
+    }
+
+    // Cache the result (including new fields)
+    const result = { ...extracted, smartSummary, fetchedAt: Date.now() };
     articleCache.set(articleUrl, result);
 
     // Limit cache size
@@ -210,7 +239,7 @@ export async function GET(request: Request) {
       if (oldest) articleCache.delete(oldest[0]);
     }
 
-    return NextResponse.json({ success: true, ...extracted });
+    return NextResponse.json({ success: true, ...extracted, smartSummary });
   } catch (error) {
     return NextResponse.json({
       success: false,

@@ -14,6 +14,7 @@ interface RssNewsItem {
   newsType?: string;
   author?: string;
   category?: string;
+  imageUrl?: string;
 }
 
 let cachedNews: RssNewsItem[] = [];
@@ -62,8 +63,8 @@ function decodeHtmlEntities(text: string): string {
     .trim();
 }
 
-function parseRssItems(xml: string): { title: string; link: string; pubDate: string; description: string }[] {
-  const items: { title: string; link: string; pubDate: string; description: string }[] = [];
+function parseRssItems(xml: string): { title: string; link: string; pubDate: string; description: string; imageUrl?: string }[] {
+  const items: { title: string; link: string; pubDate: string; description: string; imageUrl?: string }[] = [];
   const itemBlocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || [];
 
   for (const block of itemBlocks) {
@@ -73,14 +74,18 @@ function parseRssItems(xml: string): { title: string; link: string; pubDate: str
     const dateMatch = block.match(/<pubDate[^>]*>\s*(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?\s*<\/pubDate>/i);
     const descMatch = block.match(/<description[^>]*>\s*(?:<!\[CDATA\[)([\s\S]*?)(?:\]\]>)\s*<\/description>/i)
       || block.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+    const enclosureMatch = block.match(/<enclosure[^>]*url=["']([^"']+)["']/i);
+    const mediaMatch = block.match(/<media:content[^>]*url=["']([^"']+)["']/i)
+      || block.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i);
 
     const title = decodeHtmlEntities(titleMatch?.[1] || '');
     const link = (linkMatch?.[1] || '').trim();
     const pubDate = (dateMatch?.[1] || '').trim();
     const description = decodeHtmlEntities(descMatch?.[1] || '').slice(0, 200);
+    const imageUrl = enclosureMatch?.[1] || mediaMatch?.[1] || undefined;
 
     if (title && title.length > 3) {
-      items.push({ title, link, pubDate, description });
+      items.push({ title, link, pubDate, description, imageUrl });
     }
   }
 
@@ -123,6 +128,7 @@ async function fetchRssFeed(source: RssSource): Promise<RssNewsItem[]> {
       sourceUrl: source.sourceUrl,
       description: item.description,
       newsType: source.newsType,
+      imageUrl: item.imageUrl,
     }));
   } catch (error) {
     console.log(`RSS error for ${source.name}:`, error instanceof Error ? error.message : 'unknown');

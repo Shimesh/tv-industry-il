@@ -27,6 +27,7 @@ import {
 
 import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
 import LiveNewsTicker from '@/components/home/LiveNewsTicker';
+import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import { useAppData } from '@/contexts/AppDataContext';
 import { mockJobs } from '@/data/jobs';
 import { channels, generateSchedule, getCurrentProgram } from '@/data/channels';
@@ -40,6 +41,7 @@ interface RssNewsItem {
   source: string;
   sourceUrl: string;
   description: string;
+  imageUrl?: string;
 }
 
 function LiveClock() {
@@ -293,43 +295,7 @@ export default function HomePage() {
           </div>
 
           {liveNews.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-              <Link href={`/news?article=${encodeURIComponent(liveNews[0].link)}`} className="lg:col-span-2 rounded-xl border p-4 transition-all hover:shadow-sm block" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/20">
-                    {liveNews[0].source}
-                  </span>
-                </div>
-                <h3 className="font-bold text-base mb-2 leading-snug" style={{ color: 'var(--theme-text)' }}>{liveNews[0].title}</h3>
-                {liveNews[0].description && (
-                  <p className="text-xs leading-relaxed mb-3 line-clamp-2" style={{ color: 'var(--theme-text-secondary)' }}>{liveNews[0].description}</p>
-                )}
-                <div className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--theme-accent)' }}>
-                  <Globe className="w-3 h-3" />
-                  <span>קרא עוד</span>
-                </div>
-              </Link>
-
-              <div className="lg:col-span-3 space-y-2">
-                {liveNews.slice(1, 5).map((news, index) => (
-                  <Link key={`${news.link}-${index}`} href={`/news?article=${encodeURIComponent(news.link)}`} className="block rounded-lg border px-3.5 py-2.5 transition-all hover:shadow-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-500/10 text-blue-300">
-                            {news.source}
-                          </span>
-                        </div>
-                        <h3 className="font-semibold text-sm leading-tight line-clamp-1" style={{ color: 'var(--theme-text)' }}>{news.title}</h3>
-                        {news.description && (
-                          <p className="text-[11px] line-clamp-1 mt-0.5" style={{ color: 'var(--theme-text-secondary)' }}>{news.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
+            <LatestNewsCarousel news={liveNews.slice(0, 10)} />
           ) : (
             <div className="rounded-xl border p-4 text-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
               {newsLoaded ? 'אין חדשות זמינות כרגע.' : 'טוען כותרות בזמן אמת...'}
