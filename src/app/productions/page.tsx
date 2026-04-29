@@ -150,6 +150,7 @@ function ProductionsContent() {
   const [useAI, setUseAI] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
+  const [pendingGcalToken, setPendingGcalToken] = useState<string | null>(null);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -197,6 +198,16 @@ function ProductionsContent() {
       unsubRequestRef.current?.();
       // unsubWeekRef removed
     };
+  }, []);
+
+  // Mobile OAuth redirect: pick up token stored by /api/google/callback
+  useEffect(() => {
+    const token = sessionStorage.getItem('gcal_pending_token');
+    if (token) {
+      sessionStorage.removeItem('gcal_pending_token');
+      setPendingGcalToken(token);
+      setStatusMessage('מסנכרן עם Google Calendar...');
+    }
   }, []);
   useEffect(() => {
     setCalendarYear(currentDate.getFullYear());
@@ -1410,6 +1421,24 @@ function ProductionsContent() {
     return productions.filter((prod) => prod.date >= today);
   }, [productions]);
 
+  // Auto-sync after mobile OAuth redirect (once productions are loaded)
+  useEffect(() => {
+    if (!pendingGcalToken || productions.length === 0) return;
+    const token = pendingGcalToken;
+    setPendingGcalToken(null);
+    const today = new Date().toISOString().split('T')[0];
+    const upcoming = productions.filter(p => p.date >= today).slice(0, 20);
+    if (upcoming.length === 0) {
+      setStatusMessage('אין הפקות עתידיות לסנכרון');
+      return;
+    }
+    void (async () => {
+      for (const prod of upcoming) {
+        await syncToGoogleCalendar(prod, token);
+      }
+    })();
+  }, [pendingGcalToken, productions, syncToGoogleCalendar]);
+
   const exportOutlookIcs = useCallback(() => {
     const upcomingProductions = getUpcomingPersonalProductions();
     if (upcomingProductions.length === 0) {
@@ -1687,7 +1716,7 @@ function ProductionsContent() {
 
               {showCalendarMenu && (
                 <div
-                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border p-3 shadow-2xl"
+                  className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-2xl border p-3 shadow-2xl"
                   style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
                 >
                   <div className="mb-2 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>

@@ -5,6 +5,10 @@
 
 const GOOGLE_CALENDAR_SCOPES = 'https://www.googleapis.com/auth/calendar';
 
+function isMobile(): boolean {
+  return typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 interface GoogleCalendarEvent {
   id?: string;
   summary: string;
@@ -48,6 +52,12 @@ export async function getGoogleAuthToken(): Promise<string | null> {
       `&response_type=token` +
       `&scope=${encodeURIComponent(GOOGLE_CALENDAR_SCOPES)}` +
       `&prompt=consent`;
+
+    if (isMobile()) {
+      sessionStorage.setItem('gcal_auth_returnUrl', window.location.pathname);
+      window.location.href = authUrl;
+      return; // page navigates away — Promise is abandoned
+    }
 
     const popup = window.open(
       authUrl,

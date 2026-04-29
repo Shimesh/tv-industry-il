@@ -26,7 +26,13 @@ export async function GET(request: NextRequest) {
       }, window.location.origin);
       window.close();
     } else {
-      document.body.innerHTML = '<p style="font-family: sans-serif; text-align: center; margin-top: 40px;">ניתן לסגור חלון זה</p>';
+      // Mobile redirect flow: store token and return to the app
+      if (accessToken) {
+        sessionStorage.setItem('gcal_pending_token', accessToken);
+      }
+      const returnUrl = sessionStorage.getItem('gcal_auth_returnUrl') || '/productions';
+      sessionStorage.removeItem('gcal_auth_returnUrl');
+      window.location.replace(returnUrl);
     }
   </script>
 </body>
