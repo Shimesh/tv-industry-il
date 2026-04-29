@@ -55,6 +55,11 @@ export async function getGoogleAuthToken(): Promise<string | null> {
       `width=${width},height=${height},left=${left},top=${top}`
     );
 
+    if (!popup) {
+      resolve(null);
+      return;
+    }
+
     // Listen for the callback with the token
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;

@@ -1361,10 +1361,10 @@ function ProductionsContent() {
   }, [addNotification]);
 
   // ===== Google Calendar Sync =====
-  const syncToGoogleCalendar = useCallback(async (prod: Production) => {
+  const syncToGoogleCalendar = useCallback(async (prod: Production, existingToken?: string) => {
     setGcalSyncing(prod.id);
     try {
-      const token = await getGoogleAuthToken();
+      const token = existingToken ?? await getGoogleAuthToken();
       if (!token) {
         setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
         return;
@@ -1472,8 +1472,14 @@ function ProductionsContent() {
       return;
     }
 
+    const token = await getGoogleAuthToken();
+    if (!token) {
+      setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
+      return;
+    }
+
     for (const prod of upcomingProductions.slice(0, 20)) {
-      await syncToGoogleCalendar(prod);
+      await syncToGoogleCalendar(prod, token);
     }
 
     setShowCalendarMenu(false);
