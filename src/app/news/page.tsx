@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Newspaper, Calendar, Clock, MapPin, ExternalLink, TrendingUp,
@@ -337,6 +337,7 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
 
 /* ===== Main Page ===== */
 function NewsPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'news' | 'events'>('news');
   const [eventCatFilter, setEventCatFilter] = useState('');
@@ -350,6 +351,7 @@ function NewsPageContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [highlightedLink, setHighlightedLink] = useState<string | null>(null);
   const articleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const handledArticleRef = useRef<string | null>(null);
 
   // Article modal state
   const [selectedNewsItem, setSelectedNewsItem] = useState<RssNewsItem | null>(null);
@@ -445,7 +447,10 @@ function NewsPageContent() {
 
   // Get unique sources for filter
   const sources = Array.from(new Set(news.map(n => n.source)));
-  const filteredNews = news.filter(n => !sourceFilter || n.source === sourceFilter);
+  const filteredNews = useMemo(
+    () => news.filter(n => !sourceFilter || n.source === sourceFilter),
+    [news, sourceFilter],
+  );
   const requestedArticle = searchParams.get('article');
   const sourceCards = useMemo(
     () => [
@@ -464,6 +469,7 @@ function NewsPageContent() {
 
   useEffect(() => {
     if (!requestedArticle || filteredNews.length === 0) return;
+    if (handledArticleRef.current === requestedArticle) return;
 
     const target = filteredNews.find((item) => item.link === requestedArticle);
     if (!target) return;
@@ -471,15 +477,17 @@ function NewsPageContent() {
     const frame = window.requestAnimationFrame(() => {
       const node = articleRefs.current[target.link];
       if (!node) return;
+      handledArticleRef.current = requestedArticle;
       node.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedLink(target.link);
       window.setTimeout(() => {
         setHighlightedLink((current) => (current === target.link ? null : current));
       }, 1200);
+      router.replace('/news', { scroll: false });
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [filteredNews, requestedArticle]);
+  }, [filteredNews, requestedArticle, router]);
 
   return (
     <div className="min-h-screen">

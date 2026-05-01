@@ -18,13 +18,14 @@ function appendMutedParams(url: string): string {
   try {
     const parsed = new URL(url);
     parsed.searchParams.set('autoplay', '1');
+    parsed.searchParams.set('autoPlay', 'true');
     parsed.searchParams.set('mute', '1');
     parsed.searchParams.set('muted', '1');
     parsed.searchParams.set('playsinline', '1');
     return parsed.toString();
   } catch {
     const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}autoplay=1&mute=1&muted=1&playsinline=1`;
+    return `${url}${separator}autoplay=1&autoPlay=true&mute=1&muted=1&playsinline=1`;
   }
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
@@ -75,11 +75,6 @@ const modalContentVariants = {
   },
 };
 
-const filterPillVariants = {
-  inactive: { scale: 1 },
-  active: { scale: 1.05, transition: { type: 'spring' as const, stiffness: 400, damping: 20 } },
-};
-
 function getPrimaryRoleLabel(contact: Contact) {
   return normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
 }
@@ -123,10 +118,11 @@ function DirectoryContent() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [openToWorkFilter, setOpenToWorkFilter] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const normalizedSearch = search.trim().toLocaleLowerCase('he');
 
   // Check if a contact matches the logged-in user
-  const isCurrentUser = (contact: Contact): boolean => {
+  const isCurrentUser = useCallback((contact: Contact): boolean => {
     if (!profile) return false;
     const fullName = `${contact.firstName} ${contact.lastName}`;
     // Match by display name or phone
@@ -137,7 +133,7 @@ function DirectoryContent() {
       if (cleanProfile === cleanContact) return true;
     }
     return false;
-  };
+  }, [profile]);
 
   const filtered = useMemo(() => {
     return contactsList.filter(c => {
@@ -166,7 +162,7 @@ function DirectoryContent() {
       if (!aIsMe && bIsMe) return 1;
       return 0;
     });
-  }, [filtered, profile]);
+  }, [filtered, isCurrentUser]);
 
   const availableCount = contactsList.filter(c => c.availability === 'available').length;
   const maybeCount = contactsList.filter(c => c.availability === 'maybe').length;
@@ -324,13 +320,28 @@ function DirectoryContent() {
             <div className="relative flex-1 group">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="חיפוש לפי שם, תפקיד..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border text-xs sm:text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border text-xs sm:text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
                 style={{ background: 'color-mix(in srgb, var(--theme-bg-secondary) 70%, transparent)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
               />
+              {search.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-1 transition-colors hover:bg-white/10"
+                  style={{ color: 'var(--theme-text-secondary)' }}
+                  aria-label="נקה חיפוש"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">

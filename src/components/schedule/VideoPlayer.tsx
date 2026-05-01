@@ -23,6 +23,21 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const appendAutoplayParams = (url: string): string => {
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.set('autoplay', '1');
+      parsed.searchParams.set('autoPlay', 'true');
+      parsed.searchParams.set('mute', '1');
+      parsed.searchParams.set('muted', '1');
+      parsed.searchParams.set('playsinline', '1');
+      return parsed.toString();
+    } catch {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}autoplay=1&autoPlay=true&mute=1&muted=1&playsinline=1`;
+    }
+  };
   const [loading, setLoading] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -177,6 +192,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
 
   // Resolve final URLs: HLS takes priority over iframe embed
   const resolvedEmbedUrl = stream?.embedUrl ?? dynamicEmbedUrl;
+  const resolvedAutoplayEmbedUrl = resolvedEmbedUrl ? appendAutoplayParams(resolvedEmbedUrl) : null;
   const resolvedHlsUrl = stream?.streamUrl ?? dynamicStreamUrl;
   const hasDirectStream = !!resolvedHlsUrl;
   const hasEmbed = !!resolvedEmbedUrl;
@@ -199,8 +215,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       {showEmbed ? (
         <iframe
           key={resolvedEmbedUrl}
-          src={resolvedEmbedUrl}
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          src={resolvedAutoplayEmbedUrl || resolvedEmbedUrl}
+          allow="autoplay *; fullscreen; encrypted-media; picture-in-picture"
           allowFullScreen
           className="absolute inset-0 w-full h-full border-0"
           title={channel.name}
