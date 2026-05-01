@@ -6,7 +6,8 @@ import type {
   CountBucket,
 } from '@/lib/adminTypes';
 import { getRecentSystemEvents, getUsageSnapshot } from '@/lib/server/adminTelemetry';
-import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
+import { getFirebaseAdminAuth } from '@/lib/server/firebaseAdmin';
+import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 
 type RawUser = {
   id: string;
@@ -56,12 +57,19 @@ function normalizeSiteRole(value: string | null | undefined): AdminRole {
   return 'user';
 }
 
+function isBrokenOrEmpty(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /[\u05f3\uFFFD]/.test(trimmed);
+}
+
 function normalizeDisplayName(raw: RawUser): string {
   const displayName = String(raw.displayName || '').trim();
-  if (displayName && !/[׳�]/.test(displayName)) return displayName;
+  if (!isBrokenOrEmpty(displayName)) return displayName;
   const email = String(raw.email || '').trim();
   if (email) return email.split('@')[0] || email;
-  return 'משתמש ללא שם';
+  return '\u05de\u05e9\u05ea\u05de\u05e9 \u05dc\u05dc\u05d0 \u05e9\u05dd';
 }
 
 function bucketize(values: Array<string | null | undefined>, fallback: string): CountBucket[] {
@@ -125,6 +133,49 @@ function dedupeRecentEvents<T extends { type: string; message: string; route?: s
   return deduped;
 }
 
+async function repairMissingUserIdentity(rawUsers: RawUser[]): Promise<RawUser[]> {
+  const candidates = rawUsers.filter((user) =>
+    user.id &&
+    (isBrokenOrEmpty(user.displayName) || isBrokenOrEmpty(user.email) || !user.photoURL)
+  );
+  if (candidates.length === 0) return rawUsers;
+
+  const auth = getFirebaseAdminAuth();
+  const repaired = new Map<string, Partial<RawUser>>();
+
+  await Promise.all(
+    candidates.map(async (user) => {
+      try {
+        const authUser = await auth.getUser(user.id);
+        const patch: Record<string, string | null> = {};
+
+        if (isBrokenOrEmpty(user.displayName) && authUser.displayName) {
+          patch.displayName = authUser.displayName;
+        }
+        if (isBrokenOrEmpty(user.email) && authUser.email) {
+          patch.email = authUser.email;
+        }
+        if (!user.photoURL && authUser.photoURL) {
+          patch.photoURL = authUser.photoURL;
+        }
+
+        if (Object.keys(patch).length === 0) return;
+
+        repaired.set(user.id, patch);
+        await patchDocument(`users/${user.id}`, {
+          ...patch,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {
+        // Keep admin overview resilient: deleted Auth users should not break the dashboard.
+      }
+    }),
+  );
+
+  if (repaired.size === 0) return rawUsers;
+  return rawUsers.map((user) => ({ ...user, ...(repaired.get(user.id) || {}) }));
+}
+
 export async function getAdminOverview(): Promise<AdminOverview> {
   const [usersRaw, contactsRaw, postsRaw, chatsRaw, appConfigRaw, recentEvents, usage] = await Promise.all([
     listDocuments<RawUser>('users'),
@@ -136,7 +187,8 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     getUsageSnapshot(),
   ]);
 
-  const users = sortUsers(usersRaw.map(toAdminUserSummary));
+  const repairedUsersRaw = await repairMissingUserIdentity(usersRaw);
+  const users = sortUsers(repairedUsersRaw.map(toAdminUserSummary));
   const now = nowMs();
   const stats = {
     totalUsers: users.length,
@@ -164,8 +216,8 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     presenceWindowMs: PRESENCE_WINDOW_MS,
     stats,
     appConfig,
-    contactsByDepartment: bucketize(contactsRaw.map((contact) => contact.department), 'לא משויך'),
-    contactsByWorkArea: bucketize(contactsRaw.map((contact) => contact.workArea), 'ללא שיוך'),
+    contactsByDepartment: bucketize(contactsRaw.map((contact) => contact.department), '\u05dc\u05d0 \u05de\u05e9\u05d5\u05d9\u05da'),
+    contactsByWorkArea: bucketize(contactsRaw.map((contact) => contact.workArea), '\u05dc\u05dc\u05d0 \u05e9\u05d9\u05d5\u05da'),
     users,
     onlineUsers: users.filter((user) => user.onlineNow),
     staleUsers: users.filter((user) => user.stalePresence),

@@ -1,4 +1,5 @@
 import { getApps, initializeApp, cert, getApp } from 'firebase-admin/app';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const adminAuth = require('firebase-admin/auth') as {
   getAuth: (app?: ReturnType<typeof getApp>) => {
     verifyIdToken: (idToken: string) => Promise<{
@@ -6,6 +7,12 @@ const adminAuth = require('firebase-admin/auth') as {
       email?: string;
       name?: string;
       picture?: string;
+    }>;
+    getUser: (uid: string) => Promise<{
+      uid: string;
+      email?: string;
+      displayName?: string;
+      photoURL?: string;
     }>;
   };
 };
