@@ -49,6 +49,12 @@ export default function ProductionsPage() {
 // Request status type
 type RequestStatus = 'idle' | 'pending' | 'processing' | 'done' | 'error';
 
+type GlobalWeeksResponse = {
+  success: boolean;
+  weeks?: string[];
+  latestWeekId?: string | null;
+};
+
 function normalizeCrewName(name: string) {
   return normalizeName(name) || normalizeContactName(name);
 }
@@ -416,6 +422,26 @@ function ProductionsContent() {
       return [];
     }
   }, [user, selectedTeamId, restListDocs, parseProductionDocs, profile]);
+
+  const fetchGlobalWeekIds = useCallback(async (): Promise<string[]> => {
+    if (!user || selectedTeamId) return [];
+
+    try {
+      const token = await user.getIdToken().catch(() => '');
+      if (!token) return [];
+
+      const response = await fetch('/api/productions/global?scope=weeks', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return [];
+
+      const payload = (await response.json()) as GlobalWeeksResponse;
+      return Array.isArray(payload.weeks) ? payload.weeks.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }, [user, selectedTeamId]);
 
   // Search all loaded productions for crew members matching a display name
   const findCrewMatches = useCallback((displayName: string) => {
@@ -1105,10 +1131,11 @@ function ProductionsContent() {
       sunday.setDate(now.getDate() - dayOfWeek);
       const weekId = getWeekId(toLocalDate(sunday));
 
-      // Load current week + user schedule list in parallel
-      const [prods, scheduleDocsMain] = await Promise.all([
+      // Load current week + user schedule list + global week index in parallel.
+      const [prods, scheduleDocsMain, globalWeekIds] = await Promise.all([
         loadExistingWeek(weekId),
         restListDocs(`${USER_SCHEDULES_ROOT}/${user.uid}/weeks`),
+        fetchGlobalWeekIds(),
       ]);
       let scheduleDocs = scheduleDocsMain;
       if (scheduleDocs.length === 0) {
@@ -1140,33 +1167,40 @@ function ProductionsContent() {
         } catch { /* ignore */ }
         return;
       }
-      if (scheduleDocs.length > 0) {
-        const latest = scheduleDocs[scheduleDocs.length - 1];
-        const latestWeekId = latest.id;
+      const knownWeekIds = Array.from(new Set([
+        ...scheduleDocs.map((doc) => doc.id).filter(Boolean),
+        ...globalWeekIds,
+      ])).sort((a, b) => b.localeCompare(a));
+
+      for (const latestWeekId of knownWeekIds) {
+        if (latestWeekId === weekId) continue;
         const latestProds = await loadExistingWeek(latestWeekId);
-        if (latestProds.length > 0) {
-          productionsByWeekRef.current.set(latestWeekId, latestProds);
-          setProductions(latestProds);
-          setWeekStart((latest.fields.weekStart as string) || '');
-          if (latest.fields.weekStart) {
-            setCurrentDate(fromLocalDate(latest.fields.weekStart as string));
-          }
-          setWeekEnd((latest.fields.weekEnd as string) || '');
-          setWorkerName(profile?.crewName || profile?.displayName || (latest.fields.workerName as string) || '');
-          setCurrentWeekId(latestWeekId);
-          reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
-          // Save to localStorage cache for instant next load
-          try {
-            const raw = localStorage.getItem('productions_cache_v2');
-            const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
-            cache[latestWeekId] = { data: latestProds, savedAt: Date.now() };
-            localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
-          } catch { /* ignore */ }
-        }
+        if (latestProds.length === 0) continue;
+
+        const latest = scheduleDocs.find((doc) => doc.id === latestWeekId);
+        const latestStart = (latest?.fields.weekStart as string) || latestWeekId;
+        const latestEnd = (latest?.fields.weekEnd as string) || getWeekEndStr(latestWeekId);
+
+        productionsByWeekRef.current.set(latestWeekId, latestProds);
+        setProductions(latestProds);
+        setWeekStart(latestStart);
+        setCurrentDate(fromLocalDate(latestStart));
+        setWeekEnd(latestEnd);
+        setWorkerName(profile?.crewName || profile?.displayName || (latest?.fields.workerName as string) || '');
+        setCurrentWeekId(latestWeekId);
+        reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
+        // Save to localStorage cache for instant next load
+        try {
+          const raw = localStorage.getItem('productions_cache_v2');
+          const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
+          cache[latestWeekId] = { data: latestProds, savedAt: Date.now() };
+          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+        } catch { /* ignore */ }
+        return;
       }
     } catch (error) {
     }
-  }, [user, profile, loadExistingWeek, restListDocs]);
+  }, [user, profile, loadExistingWeek, restListDocs, fetchGlobalWeekIds]);
 
   // Load productions for a date range (multiple weeks from Firestore)
   const loadProductionsForPeriod = useCallback(async (

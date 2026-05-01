@@ -56,6 +56,14 @@ function normalizeSiteRole(value: string | null | undefined): AdminRole {
   return 'user';
 }
 
+function normalizeDisplayName(raw: RawUser): string {
+  const displayName = String(raw.displayName || '').trim();
+  if (displayName && !/[׳�]/.test(displayName)) return displayName;
+  const email = String(raw.email || '').trim();
+  if (email) return email.split('@')[0] || email;
+  return 'משתמש ללא שם';
+}
+
 function bucketize(values: Array<string | null | undefined>, fallback: string): CountBucket[] {
   const counts = new Map<string, number>();
   for (const rawValue of values) {
@@ -76,7 +84,7 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
 
   return {
     uid: raw.id,
-    displayName: String(raw.displayName || ''),
+    displayName: normalizeDisplayName(raw),
     email: String(raw.email || ''),
     role: String(raw.role || ''),
     department: String(raw.department || ''),

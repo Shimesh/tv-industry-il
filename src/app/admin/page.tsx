@@ -286,14 +286,6 @@ export default function AdminPage() {
     };
   }, [authLoading, user, isAdmin]);
 
-  useEffect(() => {
-    if (!user || !isAdmin) return;
-    const interval = window.setInterval(() => {
-      void loadOverview(true);
-    }, 30000);
-    return () => window.clearInterval(interval);
-  }, [user, isAdmin]);
-
   async function claimAdmin() {
     setClaimingAdmin(true);
     try {

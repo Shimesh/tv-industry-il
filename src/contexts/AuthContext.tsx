@@ -117,6 +117,13 @@ function defaultProfile(firebaseUser: User): UserProfile {
   };
 }
 
+function isBrokenOrEmptyName(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /[׳�]/.test(trimmed);
+}
+
 function readCachedBootstrap(): SessionBootstrapCache | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -143,8 +150,8 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     ...fallback,
     ...raw,
     uid: firebaseUser.uid,
-    displayName: typeof raw.displayName === 'string' && raw.displayName.trim()
-      ? raw.displayName
+    displayName: !isBrokenOrEmptyName(raw.displayName)
+      ? String(raw.displayName)
       : firebaseUser.displayName || fallback.displayName,
     email: typeof raw.email === 'string' && raw.email.trim()
       ? raw.email

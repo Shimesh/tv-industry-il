@@ -8,7 +8,7 @@ function writeDoc(path: string, data: Record<string, unknown>): Promise<void> {
 }
 import { toGlobalProduction, fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
-import type { Production } from '@/lib/productionDiff';
+import { getWeekId, type Production } from '@/lib/productionDiff';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -57,10 +57,39 @@ export async function GET(request: NextRequest) {
   if (!authUser) return unauthorizedResponse();
 
   const { searchParams } = request.nextUrl;
+  const scope = searchParams.get('scope');
   const phone = searchParams.get('phone');
   const shadowKey = searchParams.get('shadowKey');
   const weekStart = searchParams.get('weekStart');
   const weekEnd = searchParams.get('weekEnd');
+
+  if (scope === 'weeks') {
+    try {
+      const docs = await runQuery<GlobalProductionDoc>({
+        from: [{ collectionId: 'global_productions' }],
+        limit: 1000,
+      });
+
+      const weeks = Array.from(
+        docs.reduce((acc, doc) => {
+          if (typeof doc.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(doc.date)) {
+            acc.add(getWeekId(doc.date));
+          }
+          return acc;
+        }, new Set<string>()),
+      ).sort((a, b) => b.localeCompare(a));
+
+      return NextResponse.json({
+        success: true,
+        count: weeks.length,
+        weeks,
+        latestWeekId: weeks[0] || null,
+      });
+    } catch (error) {
+      console.error('[/api/productions/global GET weeks]', error);
+      return NextResponse.json({ success: false, count: 0, weeks: [], latestWeekId: null });
+    }
+  }
 
   if (!weekStart || !weekEnd) {
     return NextResponse.json({ error: 'weekStart and weekEnd are required' }, { status: 400 });

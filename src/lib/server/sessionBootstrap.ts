@@ -52,6 +52,13 @@ function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function isBrokenOrEmptyName(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /[׳�]/.test(trimmed);
+}
+
 function asStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.map((entry) => String(entry)) : undefined;
 }
@@ -102,7 +109,9 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     ...fallback,
     ...raw,
     uid: authUser.uid,
-    displayName: asString(raw.displayName, authUser.displayName || fallback.displayName),
+    displayName: isBrokenOrEmptyName(raw.displayName)
+      ? authUser.displayName || fallback.displayName
+      : asString(raw.displayName, fallback.displayName),
     email: asString(raw.email, authUser.email || fallback.email),
     photoURL: typeof raw.photoURL === 'string' ? raw.photoURL : authUser.photoURL || null,
     department: asString(raw.department),
@@ -167,7 +176,7 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
     repaired = true;
   }
 
-  if (!profile.displayName && authUser.displayName) {
+  if (isBrokenOrEmptyName(existing?.displayName) && authUser.displayName) {
     patch.displayName = authUser.displayName;
     profile = { ...profile, displayName: authUser.displayName };
     repaired = true;
