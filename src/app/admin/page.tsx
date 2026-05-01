@@ -5,9 +5,12 @@ import Link from 'next/link';
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   BarChart3,
   CheckCircle,
+  ChevronDown,
   Contact2,
   Crown,
   FileText,
@@ -31,6 +34,9 @@ type ToastState = {
   type: 'ok' | 'err';
   msg: string;
 } | null;
+
+type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 'siteRole';
+type SortDirection = 'asc' | 'desc';
 
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
@@ -66,8 +72,8 @@ const EMPTY_OVERVIEW: AdminOverview = {
 
 const ROLE_OPTIONS: Array<{ value: AdminRole; label: string; icon: typeof Crown; classes: string }> = [
   { value: 'admin', label: 'מנהל', icon: Crown, classes: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10' },
-  { value: 'moderator', label: 'מנחה', icon: Shield, classes: 'text-blue-400 border-blue-400/30 bg-blue-400/10' },
-  { value: 'user', label: 'משתמש', icon: UserIcon, classes: 'text-gray-300 border-gray-600/40 bg-gray-600/10' },
+  { value: 'moderator', label: 'עורך', icon: Shield, classes: 'text-blue-400 border-blue-400/30 bg-blue-400/10' },
+  { value: 'user', label: 'צופה', icon: UserIcon, classes: 'text-gray-300 border-gray-600/40 bg-gray-600/10' },
 ];
 
 function formatRelativeTime(value: string | null | undefined): string {
@@ -85,7 +91,26 @@ function rolePresentation(role: AdminRole) {
   return ROLE_OPTIONS.find((option) => option.value === role) || ROLE_OPTIONS[2];
 }
 
+function roleLabel(role: AdminRole): string {
+  if (role === 'admin') return 'מנהל';
+  if (role === 'moderator') return 'עורך';
+  return 'צופה';
+}
+
+function lastSeenMs(user: AdminUserSummary): number {
+  const parsed = user.lastSeen ? Date.parse(user.lastSeen) : 0;
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function statusRank(user: AdminUserSummary): number {
+  if (user.onlineNow) return 2;
+  if (user.stalePresence) return 0;
+  return 1;
+}
+
 function PresenceBadge({ user }: { user: AdminUserSummary }) {
+  return <PresenceBadges user={user} />;
+
   if (user.onlineNow) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">
@@ -118,8 +143,64 @@ function RoleBadge({ role }: { role: AdminRole }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${current.classes}`}>
       <Icon className="h-3 w-3" />
-      {current.label}
+      {roleLabel(role)}
     </span>
+  );
+}
+
+function PresenceBadges({ user }: { user: AdminUserSummary }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {user.onlineNow ? (
+        <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">
+          <Wifi className="h-3 w-3" />
+          מחובר
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+          <WifiOff className="h-3 w-3" />
+          לא מחובר
+        </span>
+      )}
+      {user.stalePresence ? (
+        <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs text-orange-300">
+          <AlertTriangle className="h-3 w-3" />
+          לא פעיל מעל חודש
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  className = '',
+}: {
+  label: string;
+  sortKey: UserSortKey;
+  activeKey: UserSortKey;
+  direction: SortDirection;
+  onSort: (key: UserSortKey) => void;
+  className?: string;
+}) {
+  const active = activeKey === sortKey;
+  const Icon = active && direction === 'asc' ? ArrowUp : ArrowDown;
+
+  return (
+    <th className={`px-4 py-3 text-right font-medium ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1.5 transition-colors hover:text-gray-200 ${active ? 'text-white' : ''}`}
+      >
+        <span>{label}</span>
+        <Icon className={`h-3.5 w-3.5 ${active ? 'text-purple-300' : 'text-gray-600'}`} />
+      </button>
+    </th>
   );
 }
 
@@ -183,6 +264,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [userSort, setUserSort] = useState<{ key: UserSortKey; direction: SortDirection }>({
+    key: 'lastSeen',
+    direction: 'desc',
+  });
   const [announcementDraft, setAnnouncementDraft] = useState('');
   const [toast, setToast] = useState<ToastState>(null);
   const [noAdminExists, setNoAdminExists] = useState(false);
@@ -194,6 +279,13 @@ export default function AdminPage() {
   const draftDirtyRef = useRef(false);
 
   const isAdmin = profile?.siteRole === 'admin';
+
+  function handleUserSort(key: UserSortKey) {
+    setUserSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc',
+    }));
+  }
 
   function showToast(type: 'ok' | 'err', msg: string) {
     setToast({ type, msg });
@@ -362,15 +454,37 @@ export default function AdminPage() {
   }
 
   const filteredUsers = useMemo(() => {
-    if (!search) return overview.users;
     const term = search.trim().toLowerCase();
-    return overview.users.filter((entry) =>
-      [entry.displayName, entry.email, entry.role, entry.department, entry.city || '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [overview.users, search]);
+    const filtered = term
+      ? overview.users.filter((entry) =>
+          [entry.displayName, entry.email, entry.role, entry.department, entry.city || '', roleLabel(entry.siteRole)]
+            .join(' ')
+            .toLowerCase()
+            .includes(term),
+        )
+      : overview.users;
+
+    const directionFactor = userSort.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let result = 0;
+
+      if (userSort.key === 'displayName') {
+        result = a.displayName.localeCompare(b.displayName, 'he');
+      } else if (userSort.key === 'email') {
+        result = a.email.localeCompare(b.email, 'en');
+      } else if (userSort.key === 'role') {
+        result = `${a.role} ${a.department}`.localeCompare(`${b.role} ${b.department}`, 'he');
+      } else if (userSort.key === 'status') {
+        result = statusRank(a) - statusRank(b);
+      } else if (userSort.key === 'lastSeen') {
+        result = lastSeenMs(a) - lastSeenMs(b);
+      } else {
+        result = roleLabel(a.siteRole).localeCompare(roleLabel(b.siteRole), 'he');
+      }
+
+      return result * directionFactor;
+    });
+  }, [overview.users, search, userSort]);
 
   if (authLoading || loading) {
     return (
@@ -531,6 +645,9 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="border-b border-gray-800 px-5 py-3 text-xs text-gray-500">
+              מחובר = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. לא פעיל מעל חודש = החיבור האחרון היה לפני יותר מ־30 יום או שלא קיים `lastSeen`.
+            </div>
+            <div className="hidden">
               מחוברים עכשיו = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. נוכחות ישנה = `isOnline` נשאר פעיל אבל `lastSeen` כבר לא עדכני.
             </div>
 
@@ -538,6 +655,14 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800 text-xs text-gray-500">
+                    <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-5" />
+                    <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
+                    <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden lg:table-cell" />
+                    <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                    <SortHeader label="נראה לאחרונה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden sm:table-cell" />
+                    <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                  </tr>
+                  <tr className="hidden">
                     <th className="px-5 py-3 text-right font-medium">משתמש</th>
                     <th className="hidden px-4 py-3 text-right font-medium md:table-cell">אימייל</th>
                     <th className="hidden px-4 py-3 text-right font-medium lg:table-cell">תפקיד / מחלקה</th>
@@ -587,7 +712,24 @@ export default function AdminPage() {
                         {entry.uid === user.uid ? (
                           <RoleBadge role={entry.siteRole} />
                         ) : (
-                          <div className="flex flex-wrap gap-2">
+                          <>
+                            <div className="relative inline-flex min-w-[110px]">
+                              <select
+                                value={entry.siteRole}
+                                onChange={(event) => void updateUserRole(entry.uid, event.target.value as AdminRole)}
+                                disabled={updatingRole === entry.uid}
+                                className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-xs text-gray-100 outline-none transition-colors hover:bg-gray-700 focus:border-purple-500 disabled:opacity-60"
+                                aria-label={`עדכון הרשאה עבור ${entry.displayName || entry.email}`}
+                              >
+                                {ROLE_OPTIONS.map((option) => (
+                                  <option key={`${entry.uid}-${option.value}`} value={option.value}>
+                                    {roleLabel(option.value)}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                            </div>
+                          <div className="hidden">
                             {ROLE_OPTIONS.map((option) => {
                               const selected = entry.siteRole === option.value;
                               return (
@@ -606,6 +748,7 @@ export default function AdminPage() {
                               );
                             })}
                           </div>
+                          </>
                         )}
                       </td>
                     </tr>

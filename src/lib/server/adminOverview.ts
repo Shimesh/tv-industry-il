@@ -37,6 +37,7 @@ type RawAppConfig = {
 
 const PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const STALE_PRESENCE_MS = 30 * DAY_MS;
 
 function nowMs(): number {
   return Date.now();
@@ -88,7 +89,7 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
   const lastSeen = raw.lastSeen || null;
   const lastSeenMs = toMs(lastSeen);
   const onlineNow = Boolean(raw.isOnline) && lastSeenMs !== null && nowMs() - lastSeenMs <= PRESENCE_WINDOW_MS;
-  const stalePresence = Boolean(raw.isOnline) && !onlineNow;
+  const stalePresence = lastSeenMs === null || nowMs() - lastSeenMs > STALE_PRESENCE_MS;
 
   return {
     uid: raw.id,
