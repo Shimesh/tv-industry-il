@@ -108,6 +108,25 @@ const ISRAMEIDA_MATCHERS_V2: Array<{ channelId: string; test: (label: string, hr
   { channelId: 'charlton4', test: (label, href) => label.includes('ספורט 4') || href.includes('/14951/') },
 ];
 
+const ISRAMEIDA_CHANNEL_ID_MAP: Array<{ channelId: string; ids: string[]; labels: string[] }> = [
+  { channelId: 'kan11', ids: ['1'], labels: ['כאן 11', 'ערוץ 11'] },
+  { channelId: 'keshet12', ids: ['12'], labels: ['ערוץ 12', 'קשת 12'] },
+  { channelId: 'reshet13', ids: ['13'], labels: ['ערוץ 13', 'רשת 13'] },
+  { channelId: 'now14', ids: ['14'], labels: ['ערוץ 14', 'עכשיו 14'] },
+  { channelId: 'i24', ids: ['9568'], labels: ['i24', 'i24news'] },
+  { channelId: 'knesset', ids: ['4'], labels: ['ערוץ הכנסת', 'הכנסת'] },
+  { channelId: 'kan33', ids: ['5628'], labels: ['כאן 33', 'ערוץ 33', 'ישראל 33'] },
+  { channelId: 'sport55', ids: ['55'], labels: ['ספורט 5 שידור חי', 'ערוץ הספורט'] },
+  { channelId: 'sport56', ids: ['56'], labels: ['ספורט 5 פלוס', 'ספורט 5+'] },
+  { channelId: 'live', ids: ['58'], labels: ['ספורט 5+ לייב', '5 לייב'] },
+  { channelId: 'gold', ids: ['57'], labels: ['ספורט 5 גולד', '5 גולד'] },
+  { channelId: 'charlton1', ids: ['56'], labels: ['ספורט 1'] },
+  { channelId: 'charlton2', ids: ['91'], labels: ['ספורט 2'] },
+  { channelId: 'charlton3', ids: ['14950'], labels: ['ספורט 3'] },
+  { channelId: 'charlton4', ids: ['14951'], labels: ['ספורט 4'] },
+  { channelId: 'charlton6', ids: ['14953'], labels: ['ספורט 6'] },
+];
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -327,11 +346,28 @@ function parseIsramediaSchedulePage(html: string, channelId: string, sourceUrl: 
 }
 
 function getChannelIdFromIsramedia(label: string, href: string): string | null {
-  for (const matcher of ISRAMEIDA_MATCHERS_V2) {
-    if (matcher.test(label, href)) {
-      return matcher.channelId;
-    }
+  const normalizedLabel = label.toLowerCase();
+  let normalizedHref = href.toLowerCase();
+
+  try {
+    normalizedHref = decodeURIComponent(href).toLowerCase();
+  } catch {
+    normalizedHref = href.toLowerCase();
   }
+
+  for (const channel of ISRAMEIDA_CHANNEL_ID_MAP) {
+    if (channel.ids.some((id) => normalizedHref.includes(`/${id}/`))) return channel.channelId;
+    if (channel.labels.some((candidate) => normalizedLabel.includes(candidate.toLowerCase()))) return channel.channelId;
+  }
+
+  for (const matcher of ISRAMEIDA_MATCHERS_V2) {
+    if (matcher.test(label, href)) return matcher.channelId;
+  }
+
+  for (const matcher of ISRAMEIDA_MATCHERS) {
+    if (matcher.test(label, href)) return matcher.channelId;
+  }
+
   return null;
 }
 
@@ -381,6 +417,17 @@ function parseIsramediaGuide(html: string): GuideSnapshot {
 
 function mapSportsGuideChannel(channelName: string): string | null {
   const normalized = stripTags(channelName);
+  const normalizedLower = normalized.replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (normalizedLower.includes('ספורט 5+ לייב') || normalizedLower.includes('5+ לייב')) return 'live';
+  if (normalizedLower.includes('ספורט 5 גולד') || normalizedLower.includes('5 גולד')) return 'gold';
+  if (normalizedLower.includes('ספורט 5+') || normalizedLower.includes('ספורט 5 פלוס')) return 'sport56';
+  if (normalizedLower === 'ספורט 5' || normalizedLower.includes('ערוץ הספורט')) return 'sport55';
+  if (normalizedLower.includes('ספורט 1')) return 'charlton1';
+  if (normalizedLower.includes('ספורט 2')) return 'charlton2';
+  if (normalizedLower.includes('ספורט 3')) return 'charlton3';
+  if (normalizedLower.includes('ספורט 4')) return 'charlton4';
+  if (normalizedLower.includes('ספורט 6')) return 'charlton6';
 
   switch (normalized) {
     case 'ספורט 1':

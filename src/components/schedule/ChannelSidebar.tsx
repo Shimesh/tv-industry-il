@@ -1,26 +1,41 @@
 'use client';
 
-import { channels, channelGroups, generateSchedule, getCurrentProgram, getNextProgram } from '@/data/channels';
+import { channels, channelGroups } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import type { Channel } from '@/data/channels';
+import type { BroadcastChannelState } from '@/lib/broadcasts';
 
 interface ChannelSidebarProps {
   selectedChannelId: string;
   onSelectChannel: (id: string) => void;
   isMobile?: boolean;
+  byChannelId?: Record<string, BroadcastChannelState>;
+  loading?: boolean;
 }
 
-function ChannelCard({ channel, isSelected, onSelect }: { channel: Channel; isSelected: boolean; onSelect: () => void }) {
+function ChannelCard({
+  channel,
+  isSelected,
+  onSelect,
+  state,
+  loading,
+}: {
+  channel: Channel;
+  isSelected: boolean;
+  onSelect: () => void;
+  state?: BroadcastChannelState;
+  loading?: boolean;
+}) {
   const stream = streamConfigs[channel.id];
-  const schedule = generateSchedule(channel.id);
-  const current = getCurrentProgram(schedule);
-  const next = getNextProgram(schedule);
-  const hasLive = stream?.hasLiveStream;
+  const current = state?.now.current ?? null;
+  const next = state?.now.next ?? null;
+  const hasLive = Boolean(stream?.hasLiveStream);
+  const statusLabel = current?.title || next?.title || (loading ? 'טוען לוח שידורים...' : 'אין מידע זמין כרגע');
 
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-right transition-all duration-200 rounded-lg p-2.5 group ${isSelected ? 'ring-1' : 'hover:bg-white/[0.04]'}`}
+      className={`group w-full rounded-lg p-2.5 text-right transition-all duration-200 ${isSelected ? 'ring-1' : 'hover:bg-white/[0.04]'}`}
       style={{
         backgroundColor: isSelected ? `${channel.color}15` : 'transparent',
         ...(isSelected
@@ -37,30 +52,29 @@ function ChannelCard({ channel, isSelected, onSelect }: { channel: Channel; isSe
       <div className="flex items-center gap-2.5">
         <div className="relative shrink-0">
           <span className="text-xl">{channel.logo}</span>
-          {hasLive && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-[#13131a]" />}
+          {hasLive && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-[#13131a] bg-green-400" />}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-white/70 group-hover:text-white/90'}`}>
+            <span className={`truncate text-sm font-bold ${isSelected ? 'text-white' : 'text-white/70 group-hover:text-white/90'}`}>
               {channel.name}
             </span>
-            {channel.number > 0 && <span className="text-[10px] text-white/30 shrink-0">{channel.number}</span>}
+            {channel.number > 0 && <span className="shrink-0 text-[10px] text-white/30">{channel.number}</span>}
           </div>
-          {current && <p className={`text-[11px] truncate mt-0.5 ${isSelected ? 'text-white/50' : 'text-white/30'}`}>{current.title}</p>}
-          {!current && next && <p className="text-[11px] truncate mt-0.5 text-white/20">{next.title}</p>}
+          <p className={`mt-0.5 truncate text-[11px] ${isSelected ? 'text-white/50' : 'text-white/30'}`}>{statusLabel}</p>
         </div>
 
-        {hasLive && <span className="shrink-0 text-[9px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">LIVE</span>}
+        {hasLive && <span className="shrink-0 rounded bg-green-400/10 px-1.5 py-0.5 text-[9px] font-bold text-green-400">LIVE</span>}
       </div>
     </button>
   );
 }
 
-export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile }: ChannelSidebarProps) {
+export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile, byChannelId, loading }: ChannelSidebarProps) {
   if (isMobile) {
     return (
-      <div className="flex gap-1.5 overflow-x-auto pb-2 hide-scrollbar px-1">
+      <div className="hide-scrollbar flex gap-1.5 overflow-x-auto px-1 pb-2">
         {channels.map((channel) => {
           const isSelected = channel.id === selectedChannelId;
           const stream = streamConfigs[channel.id];
@@ -68,7 +82,7 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile }:
             <button
               key={channel.id}
               onClick={() => onSelectChannel(channel.id)}
-              className={`shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all ${isSelected ? 'ring-1' : ''}`}
+              className={`flex shrink-0 flex-col items-center gap-1 rounded-lg px-3 py-2 transition-all ${isSelected ? 'ring-1' : ''}`}
               style={{
                 backgroundColor: isSelected ? `${channel.color}20` : 'rgba(255,255,255,0.04)',
                 ...(isSelected ? { border: `1px solid ${channel.color}40` } : { border: '1px solid transparent' }),
@@ -76,9 +90,9 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile }:
             >
               <div className="relative">
                 <span className="text-lg">{channel.logo}</span>
-                {stream?.hasLiveStream && <span className="absolute -top-0.5 -right-1 w-1.5 h-1.5 bg-green-400 rounded-full" />}
+                {stream?.hasLiveStream && <span className="absolute -right-1 -top-0.5 h-1.5 w-1.5 rounded-full bg-green-400" />}
               </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap ${isSelected ? 'text-white' : 'text-white/50'}`}>{channel.name}</span>
+              <span className={`whitespace-nowrap text-[10px] font-medium ${isSelected ? 'text-white' : 'text-white/50'}`}>{channel.name}</span>
             </button>
           );
         })}
@@ -87,14 +101,14 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile }:
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+    <div className="custom-scrollbar h-full space-y-4 overflow-y-auto pr-1">
       {channelGroups.map((group) => {
         const groupChannels = channels.filter((channel) => group.channels.includes(channel.id));
         if (groupChannels.length === 0) return null;
 
         return (
           <div key={group.id}>
-            <h3 className="text-[10px] font-bold text-white/25 uppercase tracking-wider mb-1.5 px-2">{group.label}</h3>
+            <h3 className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-white/25">{group.label}</h3>
             <div className="space-y-0.5">
               {groupChannels.map((channel) => (
                 <ChannelCard
@@ -102,6 +116,8 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile }:
                   channel={channel}
                   isSelected={channel.id === selectedChannelId}
                   onSelect={() => onSelectChannel(channel.id)}
+                  state={byChannelId?.[channel.id]}
+                  loading={loading}
                 />
               ))}
             </div>

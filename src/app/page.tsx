@@ -1,27 +1,20 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   Briefcase,
-  Building2,
   Calendar,
   CircleDot,
   Clock,
   Film,
-  Globe,
   Mail,
-  MapPin,
-  Megaphone,
-  MessageCircle,
-  Newspaper,
   Sparkles,
   TrendingUp,
   Tv,
   Users,
-  Wrench,
   Zap,
 } from 'lucide-react';
 
@@ -29,11 +22,10 @@ import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
 import LiveNewsTicker from '@/components/home/LiveNewsTicker';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
+import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
 import { useAppData } from '@/contexts/AppDataContext';
-import { mockJobs } from '@/data/jobs';
-import { channels, generateSchedule, getCurrentProgram } from '@/data/channels';
-import { industryEvents, categoryLabels } from '@/data/news';
-import { getChannelDisplayName } from '@/lib/channelLabels';
+import { channels } from '@/data/channels';
+import { useBroadcasts } from '@/hooks/useBroadcasts';
 
 interface RssNewsItem {
   title: string;
@@ -43,13 +35,14 @@ interface RssNewsItem {
   sourceUrl: string;
   description: string;
   imageUrl?: string;
+  imageSource?: string;
+  isSourceLogoFallback?: boolean;
 }
 
 function LiveClock() {
-  const [now, setNow] = useState<Date | null>(null);
+  const [now, setNow] = useState<Date | null>(() => new Date());
 
   useEffect(() => {
-    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -79,27 +72,12 @@ function getGreeting(): string {
 }
 
 export default function HomePage() {
-  const { contacts, totalCount, availableCount, openToWorkCount } = useAppData();
-  const [greeting, setGreeting] = useState('');
+  const { totalCount, availableCount, openToWorkCount } = useAppData();
+  const [greeting] = useState(() => getGreeting());
   const [liveNews, setLiveNews] = useState<RssNewsItem[]>([]);
   const [newsLoaded, setNewsLoaded] = useState(false);
-
-  const uniqueDepartments = useMemo(() => new Set(contacts.map((contact) => contact.department)).size, [contacts]);
-  const nowPlaying = useMemo(() => {
-    return channels.slice(0, 4).map((channel) => {
-      const schedule = generateSchedule(channel.id);
-      return {
-        id: channel.id,
-        name: getChannelDisplayName(channel.id, channel.name),
-        color: channel.color,
-        program: getCurrentProgram(schedule),
-      };
-    });
-  }, []);
-
-  useEffect(() => {
-    setGreeting(getGreeting());
-  }, []);
+  const [events, setEvents] = useState<UpcomingEventItem[]>([]);
+  const { channels: broadcastChannels, loading: broadcastsLoading } = useBroadcasts({ scope: 'home', pollMs: 120000 });
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +98,22 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/news/events')
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && data.success && Array.isArray(data.items)) {
+          setEvents(data.items.slice(0, 10));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const stats = [
     { label: 'אנשי מקצוע', value: totalCount, icon: Users, color: 'bg-purple-500' },
     { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: 'bg-green-500' },
@@ -127,25 +121,13 @@ export default function HomePage() {
     { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: 'bg-orange-500' },
   ];
 
-  const quickLinks = [
-    { href: '/schedule', label: 'שידור חי', desc: `לוח שידורים ו־${channels.length} ערוצים`, icon: Calendar },
-    { href: '/directory', label: 'אלפון מקצועי', desc: `${totalCount} אנשי מקצוע • ${availableCount} זמינים`, icon: Users },
-    { href: '/chat', label: 'צ׳אט מקצועי', desc: 'שיחות בזמן אמת עם קולגות', icon: MessageCircle },
-    { href: '/news', label: 'חדשות ואירועים', desc: newsLoaded ? `${liveNews.length || 0} ידיעות חיות` : 'מתעדכן עכשיו', icon: Newspaper },
-    { href: '/board', label: 'לוח מודעות', desc: 'דרושים, ציוד ושיתופי פעולה', icon: Megaphone },
-    { href: '/studios', label: 'אולפני טלוויזיה', desc: 'מידע, ניווט והיסטוריה של אולפנים', icon: Building2 },
-    { href: '/tools', label: 'ארגז כלים', desc: 'טיימר, מזג אוויר ומחשבון', icon: Wrench },
-  ];
-
   const dashboardCards = [
     { id: 'status', icon: CircleDot, label: 'הסטטוס שלי', value: 'פנוי לעבודה', href: '/settings' },
-    { id: 'jobs', icon: Briefcase, label: 'משמרות פתוחות', value: `${mockJobs.length} משרות חדשות`, href: '/board' },
+    { id: 'jobs', icon: Briefcase, label: 'לוח מודעות', value: 'דרושים ושיתופי פעולה', href: '/board' },
     { id: 'directory', icon: Users, label: 'אלפון מקצועי', value: `${totalCount} אנשי מקצוע`, href: '/directory' },
     { id: 'messages', icon: Mail, label: 'הודעות', value: 'מעבר ישיר לצ׳אט', href: '/chat' },
     { id: 'production', icon: Film, label: 'יומן אישי', value: 'מעבר ליומן האישי', href: '/productions' },
   ];
-
-  const upcomingEvents = industryEvents.filter((event) => event.isUpcoming).slice(0, 3);
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
@@ -240,25 +222,7 @@ export default function HomePage() {
               לוח מלא <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
-          <OnAirNowCarousel channels={nowPlaying} />
-        </motion.section>
-
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <h2 className="text-sm font-bold uppercase tracking-wide mb-3" style={{ color: 'var(--theme-text-secondary)' }}>גישה מהירה</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-            {quickLinks.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link key={item.href} href={item.href} className="rounded-xl border p-3.5 transition-all duration-200 hover:shadow-md block" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />
-                    <h3 className="font-bold text-sm leading-tight" style={{ color: 'var(--theme-text)' }}>{item.label}</h3>
-                  </div>
-                  <p className="text-[11px] leading-snug line-clamp-2" style={{ color: 'var(--theme-text-secondary)' }}>{item.desc}</p>
-                </Link>
-              );
-            })}
-          </div>
+          <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
@@ -291,28 +255,7 @@ export default function HomePage() {
               כל האירועים <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            {upcomingEvents.map((event) => (
-              <div key={event.id} className="rounded-xl border p-3.5" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                <div className="flex items-start gap-3">
-                  <div className="bg-blue-500/10 rounded-lg p-2 text-center shrink-0 min-w-[44px]">
-                    <div className="text-lg font-black text-blue-400 leading-none">{new Date(event.date).getDate()}</div>
-                    <div className="text-[10px] text-blue-300 mt-0.5">{new Date(event.date).toLocaleDateString('he-IL', { month: 'short' })}</div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium mb-1 bg-blue-500/15 text-blue-300">
-                      {categoryLabels[event.category]}
-                    </span>
-                    <h3 className="font-bold text-sm leading-tight mb-0.5" style={{ color: 'var(--theme-text)' }}>{event.title}</h3>
-                    <p className="text-[11px] flex items-center gap-1" style={{ color: 'var(--theme-text-secondary)' }}>
-                      <MapPin className="w-3 h-3 shrink-0 opacity-50" />
-                      <span className="truncate">{event.location}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <UpcomingEventsCarousel events={events} />
         </motion.section>
       </div>
     </div>

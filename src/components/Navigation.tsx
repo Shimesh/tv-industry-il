@@ -57,6 +57,10 @@ export default function Navigation() {
     setMobileOpen(false);
     setUserMenuOpen(false);
     setThemeMenuOpen(false);
+    if (href === '/' && pathname === '/' && typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (pathname === '/chat' && typeof window !== 'undefined') {
       window.location.href = href;
       return;

@@ -3,10 +3,9 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { industryEvents, categoryLabels } from '@/data/news';
 import {
   Newspaper, Calendar, Clock, MapPin, ExternalLink, TrendingUp,
-  Filter, RefreshCw, X, ChevronLeft, Loader2, AlertCircle,
+  Filter, RefreshCw, X, Loader2, AlertCircle,
   Globe, Rss, Eye, Play
 } from 'lucide-react';
 
@@ -34,12 +33,22 @@ interface ArticleContent {
   fallbackGradient?: { from: string; to: string; label: string };
 }
 
+interface UpcomingEventItem {
+  id: string;
+  title: string;
+  date: string;
+  time?: string | null;
+  location: string;
+  source: string;
+  sourceUrl: string;
+  category: string;
+  description: string;
+}
+
 const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
 function isRatingsArticle(title: string): boolean {
   return RATINGS_KEYWORDS.some(kw => title.includes(kw));
 }
-
-const eventCategories = ['', 'festival', 'conference', 'premiere', 'workshop', 'award'];
 
 /* ===== ICS Calendar helpers ===== */
 function toICSDate(dateStr: string, timeStr?: string): string {
@@ -54,8 +63,8 @@ function toICSDate(dateStr: string, timeStr?: string): string {
   return `${year}${month}${day}`;
 }
 
-function addToCalendar(event: { title: string; date: string; time?: string; location: string; description: string }) {
-  const dtStart = toICSDate(event.date, event.time);
+function addToCalendar(event: { title: string; date: string; time?: string | null; location: string; description: string }) {
+  const dtStart = toICSDate(event.date, event.time || undefined);
   // Default end time: 2 hours after start if time provided, else all-day
   let dtEnd: string;
   if (event.time) {
@@ -347,6 +356,7 @@ function NewsPageContent() {
   const [articleContent, setArticleContent] = useState<ArticleContent | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
   const [articleError, setArticleError] = useState<string | null>(null);
+  const [events, setEvents] = useState<UpcomingEventItem[]>([]);
 
   // Fetch news
   const fetchNews = useCallback(async (showRefreshing = false) => {
@@ -378,6 +388,22 @@ function NewsPageContent() {
     const interval = setInterval(() => fetchNews(true), 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchNews]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/news/events', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data.success && Array.isArray(data.items)) {
+          setEvents(data.items);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch article content
   const openArticle = async (newsItem: RssNewsItem) => {
@@ -431,7 +457,8 @@ function NewsPageContent() {
     [],
   );
 
-  const filteredEvents = industryEvents
+  const eventCategories = ['', ...Array.from(new Set(events.map((event) => event.category)))];
+  const filteredEvents = events
     .filter(e => !eventCatFilter || e.category === eventCatFilter)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -745,7 +772,7 @@ function NewsPageContent() {
                     eventCatFilter === cat ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'hover:opacity-80'
                   }`}
                   style={eventCatFilter !== cat ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}>
-                  {cat ? categoryLabels[cat] : 'הכל'}
+                  {cat || 'הכל'}
                 </button>
               ))}
             </div>
@@ -768,7 +795,7 @@ function NewsPageContent() {
                       </div>
                       <div className="flex-1">
                         <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${catColors[event.category] || 'bg-gray-700/50 text-gray-300'}`}>
-                          {categoryLabels[event.category]}
+                          {event.category}
                         </span>
                         <h3 className="font-bold text-xl mb-2 transition-colors" style={{ color: 'var(--theme-text)' }}>{event.title}</h3>
                         <p className="text-sm leading-relaxed mb-3 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>{event.description}</p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
@@ -12,12 +12,15 @@ interface RssNewsItem {
   description: string;
   imageUrl?: string;
   videoUrl?: string;
+  isSourceLogoFallback?: boolean;
 }
 
 const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
+const CARD_WIDTH = 288;
+const CARD_GAP = 12;
 
 function isRatingsArticle(title: string): boolean {
-  return RATINGS_KEYWORDS.some(kw => title.includes(kw));
+  return RATINGS_KEYWORDS.some((keyword) => title.includes(keyword));
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -40,9 +43,6 @@ function getSourceBadgeColor(source: string): string {
   if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/70 text-white';
   return 'bg-white/20 text-white';
 }
-
-const CARD_WIDTH = 288; // w-72
-const CARD_GAP = 12; // gap-3
 
 export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -69,7 +69,7 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
 
   const scroll = (direction: 'prev' | 'next') => {
     scrollRef.current?.scrollBy({
-      left: direction === 'next' ? -(CARD_WIDTH + CARD_GAP) : (CARD_WIDTH + CARD_GAP),
+      left: direction === 'next' ? -(CARD_WIDTH + CARD_GAP) : CARD_WIDTH + CARD_GAP,
       behavior: 'smooth',
     });
   };
@@ -78,104 +78,94 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
 
   return (
     <div className="relative">
-      {/* Nav buttons */}
       {canScrollLeft && (
         <button
           onClick={() => scroll('prev')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 -translate-x-0 z-10 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-opacity hover:opacity-100 opacity-80"
+          className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full opacity-80 shadow-lg transition-opacity hover:opacity-100"
           style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}
           aria-label="הקודם"
         >
-          <ChevronRight className="w-5 h-5" style={{ color: 'var(--theme-text)' }} />
-        </button>
-      )}
-      {canScrollRight && (
-        <button
-          onClick={() => scroll('next')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-opacity hover:opacity-100 opacity-80"
-          style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}
-          aria-label="הבא"
-        >
-          <ChevronLeft className="w-5 h-5" style={{ color: 'var(--theme-text)' }} />
+          <ChevronRight className="h-5 w-5" style={{ color: 'var(--theme-text)' }} />
         </button>
       )}
 
-      {/* Scroll container — dir="ltr" keeps scroll direction correct inside RTL page */}
+      {canScrollRight && (
+        <button
+          onClick={() => scroll('next')}
+          className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full opacity-80 shadow-lg transition-opacity hover:opacity-100"
+          style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}
+          aria-label="הבא"
+        >
+          <ChevronLeft className="h-5 w-5" style={{ color: 'var(--theme-text)' }} />
+        </button>
+      )}
+
       <div
         ref={scrollRef}
         dir="ltr"
-        className="flex overflow-x-auto gap-3 pb-2 px-1"
+        className="flex gap-3 overflow-x-auto px-1 pb-2"
         style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory', msOverflowStyle: 'none' }}
       >
-        {news.map((item, i) => (
+        {news.map((item, index) => (
           <Link
-            key={`${item.link}-${i}`}
+            key={`${item.link}-${index}`}
             href={`/news?article=${encodeURIComponent(item.link)}`}
-            className="shrink-0 w-72 h-52 rounded-xl relative overflow-hidden group"
+            className="group relative h-52 w-72 shrink-0 overflow-hidden rounded-xl"
             style={{ scrollSnapAlign: 'start' }}
           >
-            {/* Background: image or brand gradient */}
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
                 alt=""
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                className={`absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-105 ${item.isSourceLogoFallback ? 'bg-slate-950 object-contain p-8' : 'object-cover'}`}
                 loading="lazy"
               />
             ) : (
-              <div
-                className="absolute inset-0 transition-transform duration-500 group-hover:scale-105"
-                style={{ background: 'linear-gradient(135deg, var(--brand-grad-start), var(--brand-grad-end))' }}
-              />
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-6 text-center text-lg font-black text-white/80">
+                {item.source}
+              </div>
             )}
 
-            {/* Dark gradient overlay for text readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
 
-            {/* Play overlay for video articles */}
             {item.videoUrl && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-10 h-10 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center border border-white/40 shadow">
-                  <Play className="w-4 h-4 text-white fill-white translate-x-0.5" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-white/25 shadow backdrop-blur-sm">
+                  <Play className="h-4 w-4 translate-x-0.5 fill-white text-white" />
                 </div>
               </div>
             )}
 
-            {/* Ratings badge */}
             {isRatingsArticle(item.title) && (
-              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-bold shadow">
+              <div className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-black shadow">
                 ⭐ רייטינג
               </div>
             )}
 
-            {/* Text — anchored to bottom, RTL */}
-            <div className="absolute bottom-0 right-0 left-0 p-4 text-right">
-              <div className="flex items-center gap-1.5 mb-1.5 flex-row-reverse justify-end">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${getSourceBadgeColor(item.source)}`}>
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-right">
+              <div className="mb-1.5 flex flex-row-reverse items-center justify-end gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${getSourceBadgeColor(item.source)}`}>
                   {item.source}
                 </span>
-                <span className="text-white/55 text-[10px]">{formatTimeAgo(item.pubDate)}</span>
+                <span className="text-[10px] text-white/55">{formatTimeAgo(item.pubDate)}</span>
               </div>
-              <h3 className="text-white font-bold text-sm leading-snug line-clamp-3 drop-shadow">
-                {item.title}
-              </h3>
+              <h3 className="line-clamp-3 text-sm font-bold leading-snug text-white drop-shadow">{item.title}</h3>
             </div>
           </Link>
         ))}
       </div>
 
-      {/* Dot indicators */}
       {news.length > 1 && (
-        <div className="flex justify-center gap-1.5 mt-2.5">
-          {news.map((_, i) => (
+        <div className="mt-2.5 flex justify-center gap-1.5">
+          {news.map((_, index) => (
             <div
-              key={i}
+              key={index}
               className="rounded-full transition-all duration-300"
               style={{
-                width: i === activeIndex ? '16px' : '6px',
+                width: index === activeIndex ? '16px' : '6px',
                 height: '6px',
-                background: i === activeIndex ? 'var(--theme-accent)' : 'var(--theme-border)',
-                opacity: i === activeIndex ? 1 : 0.5,
+                background: index === activeIndex ? 'var(--theme-accent)' : 'var(--theme-border)',
+                opacity: index === activeIndex ? 1 : 0.5,
               }}
             />
           ))}

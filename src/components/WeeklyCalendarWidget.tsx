@@ -1,21 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { X, Clapperboard, ArrowLeft, Clock, MapPin, User, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Clock, MapPin, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
+import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
 
-/* ─── constants ─────────────────────────────── */
-const CACHE_KEY = 'productions_cache_v2';
+const CACHE_KEY = 'productions_global_widget_cache_v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const DAY_NAMES = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
-/* ─── helpers ───────────────────────────────── */
-function toDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function toDateStr(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function getWeekSunday(offset: number): Date {
@@ -25,24 +23,24 @@ function getWeekSunday(offset: number): Date {
 
 function getWeekDays(offset: number): string[] {
   const sunday = getWeekSunday(offset);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
-    return toDateStr(d);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + index);
+    return toDateStr(date);
   });
 }
 
 function getWeekId(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const sunday = new Date(y, m - 1, d - date.getDay());
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const sunday = new Date(year, month - 1, day - date.getDay());
   return toDateStr(sunday);
 }
 
 function getWeekLabel(days: string[]): string {
-  const [fy, fm, fd] = days[0].split('-').map(Number);
-  const [, lm, ld] = days[6].split('-').map(Number);
-  if (fm === lm) return `${fd}–${ld} ${MONTHS[fm - 1]}`;
-  return `${fd} ${MONTHS[fm - 1]} – ${ld} ${MONTHS[lm - 1]}`;
+  const [, firstMonth, firstDay] = days[0].split('-').map(Number);
+  const [, lastMonth, lastDay] = days[6].split('-').map(Number);
+  if (firstMonth === lastMonth) return `${firstDay}-${lastDay} ${MONTHS[firstMonth - 1]}`;
+  return `${firstDay} ${MONTHS[firstMonth - 1]} - ${lastDay} ${MONTHS[lastMonth - 1]}`;
 }
 
 function loadFromCache(weekId: string): Production[] | null {
@@ -54,37 +52,51 @@ function loadFromCache(weekId: string): Production[] | null {
     const entry = cache[weekId];
     if (!entry || Date.now() - entry.savedAt > CACHE_TTL) return null;
     return entry.data;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-function isMyProduction(p: Production, displayName: string, phone: string): boolean {
-  if (p.isCurrentUserShift) return true;
+function saveToCache(weekId: string, productions: Production[]) {
+  try {
+    if (typeof window === 'undefined') return;
+    const raw = localStorage.getItem(CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
+    cache[weekId] = { data: productions, savedAt: Date.now() };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Cache is an optimization only.
+  }
+}
+
+function isMyProduction(production: Production, displayName: string, phone: string): boolean {
+  if (production.isCurrentUserShift) return true;
   const myName = normalizeName(displayName);
   const myPhone = normalizePhone(phone);
-  return p.crew.some(c => {
-    if (myName && (normalizeName(c.name) === myName || normalizeName(c.normalizedName ?? '') === myName)) return true;
-    if (myPhone && myPhone.length >= 9 && (normalizePhone(c.phone ?? '') === myPhone || normalizePhone(c.normalizedPhone ?? '') === myPhone)) return true;
+
+  return (production.crew ?? []).some((member) => {
+    if (myName && (normalizeName(member.name) === myName || normalizeName(member.normalizedName ?? '') === myName)) return true;
+    if (myPhone && myPhone.length >= 9 && (normalizePhone(member.phone ?? '') === myPhone || normalizePhone(member.normalizedPhone ?? '') === myPhone)) return true;
     return false;
   });
 }
 
-function getMyRole(p: Production, displayName: string, phone: string): string {
+function getMyRole(production: Production, displayName: string, phone: string): string {
   const myName = normalizeName(displayName);
   const myPhone = normalizePhone(phone);
-  const member = p.crew.find(c => {
-    if (myName && (normalizeName(c.name) === myName || normalizeName(c.normalizedName ?? '') === myName)) return true;
-    if (myPhone && myPhone.length >= 9 && (normalizePhone(c.phone ?? '') === myPhone || normalizePhone(c.normalizedPhone ?? '') === myPhone)) return true;
+  const member = (production.crew ?? []).find((candidate) => {
+    if (myName && (normalizeName(candidate.name) === myName || normalizeName(candidate.normalizedName ?? '') === myName)) return true;
+    if (myPhone && myPhone.length >= 9 && (normalizePhone(candidate.phone ?? '') === myPhone || normalizePhone(candidate.normalizedPhone ?? '') === myPhone)) return true;
     return false;
   });
   return member?.role || member?.roleDetail || '';
 }
 
 function formatHebrewDate(dateStr: string, dayIndex: number): string {
-  const [, m, d] = dateStr.split('-').map(Number);
-  return `יום ${DAY_NAMES[dayIndex]} · ${d} ב${MONTHS[m - 1]}`;
+  const [, month, day] = dateStr.split('-').map(Number);
+  return `יום ${DAY_NAMES[dayIndex]} · ${day} ב${MONTHS[month - 1]}`;
 }
 
-/* ─── Day Popup ─────────────────────────────── */
 interface DayPopupProps {
   dateStr: string;
   dayIndex: number;
@@ -96,67 +108,60 @@ interface DayPopupProps {
 
 function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose }: DayPopupProps) {
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border"
+        className="w-full max-w-sm overflow-hidden rounded-2xl border shadow-2xl"
         style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
-        onClick={e => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
+        <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-2">
-            <Clapperboard className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />
+            <Clapperboard className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
             <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
               {formatHebrewDate(dateStr, dayIndex)}
             </span>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
-            <X className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
+          <button onClick={onClose} className="rounded-lg p-1 transition-colors hover:bg-white/10" aria-label="סגור">
+            <X className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
           </button>
         </div>
 
-        {/* Productions list */}
         <div className="max-h-[50vh] overflow-y-auto divide-y" style={{ borderColor: 'var(--theme-border)' }}>
-          {productions.map((p) => {
-            const mine = isMyProduction(p, displayName, phone);
-            const myRole = mine ? getMyRole(p, displayName, phone) : '';
+          {productions.map((production) => {
+            const mine = isMyProduction(production, displayName, phone);
+            const myRole = mine ? getMyRole(production, displayName, phone) : '';
             return (
-              <div
-                key={p.id}
-                className="px-4 py-3"
-                style={mine ? { background: 'rgba(251, 146, 60, 0.08)' } : undefined}
-              >
+              <div key={production.id} className="px-4 py-3" style={mine ? { background: 'rgba(251, 146, 60, 0.08)' } : undefined}>
                 <div className="flex items-start gap-2">
-                  {mine && <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 shrink-0" />}
-                  <div className={`flex-1 ${!mine ? 'pr-3.5' : ''}`}>
+                  {mine && <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />}
+                  <div className={`flex-1 ${mine ? '' : 'pr-3.5'}`}>
                     <p className="text-sm font-bold leading-tight" style={{ color: mine ? 'rgb(251,146,60)' : 'var(--theme-text)' }}>
-                      {p.name}
+                      {production.name}
                     </p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                      {(p.startTime || p.endTime) && (
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {(production.startTime || production.endTime) && (
                         <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>
-                          <Clock className="w-3 h-3" />
-                          {p.startTime}{p.endTime ? `–${p.endTime}` : ''}
+                          <Clock className="h-3 w-3" />
+                          <span dir="ltr">{production.startTime}{production.endTime ? `-${production.endTime}` : ''}</span>
                         </span>
                       )}
-                      {p.studio && (
+                      {production.studio && (
                         <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>
-                          <MapPin className="w-3 h-3" />
-                          {p.studio}
+                          <MapPin className="h-3 w-3" />
+                          {production.studio}
                         </span>
                       )}
                       {myRole && (
                         <span className="flex items-center gap-1 text-[11px] text-orange-400">
-                          <User className="w-3 h-3" />
+                          <User className="h-3 w-3" />
                           {myRole}
                         </span>
                       )}
@@ -168,16 +173,15 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
           })}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--theme-border)' }}>
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <Link
             href="/productions"
             onClick={onClose}
-            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-colors hover:opacity-90"
             style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
           >
             לצפייה בלוח המלא
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
@@ -185,7 +189,6 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
   );
 }
 
-/* ─── Main Widget ───────────────────────────── */
 export default function WeeklyCalendarWidget() {
   const { user, profile } = useAuth();
   const [weekOffset, setWeekOffset] = useState(0);
@@ -194,189 +197,99 @@ export default function WeeklyCalendarWidget() {
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
 
-  const displayName = profile?.displayName ?? '';
+  const displayName = profile?.crewName || profile?.displayName || user?.displayName || '';
   const phone = profile?.phone ?? '';
 
-  // Recompute days when offset changes
-  useEffect(() => {
-    const newDays = getWeekDays(weekOffset);
-    setDays(newDays);
-    setProductions(null);
-    // Phase 1: try cache
-    const weekId = getWeekId(newDays[0]);
-    const cached = loadFromCache(weekId);
-    if (cached) setProductions(cached);
-  }, [weekOffset]);
-
-  /* Phase 1 on mount */
   useEffect(() => {
     setMounted(true);
-    const weekId = getWeekId(days[0]);
-    const cached = loadFromCache(weekId);
-    if (cached) setProductions(cached);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Phase 2: Firestore REST refresh (personal + all teams) */
+  useEffect(() => {
+    const nextDays = getWeekDays(weekOffset);
+    setDays(nextDays);
+    const weekId = getWeekId(nextDays[0]);
+    setProductions(loadFromCache(weekId));
+  }, [weekOffset]);
+
   useEffect(() => {
     if (!user) return;
+
+    let cancelled = false;
     const weekId = getWeekId(days[0]);
-    const PROJECT = 'tv-industry-il';
-    const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+    const weekStart = days[0];
+    const weekEnd = days[6];
 
-    const restList = async (token: string, path: string): Promise<Production[]> => {
-      const res = await fetch(`${BASE}/${path}`, {
+    const fetchGlobalWeek = async () => {
+      const token = await user.getIdToken().catch(() => '');
+      if (!token) return;
+
+      const response = await fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
       });
-      if (!res.ok) return [];
-      const data = await res.json() as { documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }> };
-      if (!data.documents) return [];
-      return data.documents.map(doc => {
-        const f = doc.fields ?? {};
-        const str = (k: string) => (f[k]?.stringValue as string) ?? '';
-        const arr = (k: string): Production['crew'] => {
-          const av = f[k]?.arrayValue as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string }> } }> } | undefined;
-          return (av?.values ?? []).map(v => {
-            const mf = v.mapValue?.fields ?? {};
-            const s = (mk: string) => mf[mk]?.stringValue ?? '';
-            return { name: s('name'), role: s('role'), roleDetail: s('roleDetail'), phone: s('phone'), normalizedName: s('normalizedName'), normalizedPhone: s('normalizedPhone'), identityKey: s('identityKey'), startTime: s('startTime'), endTime: s('endTime'), addedBy: s('addedBy'), addedAt: s('addedAt') };
-          });
-        };
-        return {
-          id: doc.name.split('/').pop() ?? '',
-          name: str('name'), studio: str('studio'), date: str('date'), day: str('day'),
-          startTime: str('startTime'), endTime: str('endTime'),
-          status: (str('status') || 'scheduled') as Production['status'],
-          crew: arr('crew'),
-          isCurrentUserShift: f['isCurrentUserShift']?.booleanValue === true,
-          lastUpdatedBy: str('lastUpdatedBy'), lastUpdatedAt: str('lastUpdatedAt'),
-        };
-      });
+      if (!response.ok) return;
+
+      const payload = (await response.json()) as { productions?: Production[] };
+      if (cancelled) return;
+
+      const nextProductions = payload.productions ?? [];
+      setProductions(nextProductions);
+      saveToCache(weekId, nextProductions);
     };
 
-    const fetchAll = async () => {
-      const token = await user.getIdToken();
-      const allProds: Production[] = [];
-      let fetchSucceeded = false;
+    fetchGlobalWeek().catch(() => {
+      // Keep cached data if the network fails.
+    });
 
-      // Personal productions — track if REST call returned 200
-      const personalRes = await fetch(`${BASE}/productions/${user.uid}/weeks/${weekId}/productions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (personalRes.ok) {
-        fetchSucceeded = true;
-        const data = await personalRes.json() as { documents?: Array<{ name: string; fields: Record<string, Record<string, unknown>> }> };
-        allProds.push(...(data.documents ?? []).map(doc => {
-          const f = doc.fields ?? {};
-          const str = (k: string) => (f[k]?.stringValue as string) ?? '';
-          const arr = (k: string): Production['crew'] => {
-            const av = f[k]?.arrayValue as { values?: Array<{ mapValue?: { fields?: Record<string, { stringValue?: string }> } }> } | undefined;
-            return (av?.values ?? []).map(v => {
-              const mf = v.mapValue?.fields ?? {};
-              const s = (mk: string) => mf[mk]?.stringValue ?? '';
-              return { name: s('name'), role: s('role'), roleDetail: s('roleDetail'), phone: s('phone'), normalizedName: s('normalizedName'), normalizedPhone: s('normalizedPhone'), identityKey: s('identityKey'), startTime: s('startTime'), endTime: s('endTime'), addedBy: s('addedBy'), addedAt: s('addedAt') };
-            });
-          };
-          return {
-            id: doc.name.split('/').pop() ?? '',
-            name: str('name'), studio: str('studio'), date: str('date'), day: str('day'),
-            startTime: str('startTime'), endTime: str('endTime'),
-            status: (str('status') || 'scheduled') as Production['status'],
-            crew: arr('crew'),
-            isCurrentUserShift: f['isCurrentUserShift']?.booleanValue === true,
-            lastUpdatedBy: str('lastUpdatedBy'), lastUpdatedAt: str('lastUpdatedAt'),
-          };
-        }));
-      }
-
-      // Team productions (best-effort, don't block on failure)
-      try {
-        const teamsRes = await fetch(`${BASE}/teams?pageSize=20`, { headers: { Authorization: `Bearer ${token}` } });
-        if (teamsRes.ok) {
-          const teamsData = await teamsRes.json() as { documents?: Array<{ name: string; fields: Record<string, unknown> }> };
-          const memberDocs = (teamsData.documents ?? []).filter(d => {
-            const av = d.fields?.memberUids as { arrayValue?: { values?: Array<{ stringValue?: string }> } } | undefined;
-            return av?.arrayValue?.values?.some(v => v.stringValue === user.uid);
-          });
-          await Promise.all(memberDocs.map(async d => {
-            allProds.push(...await restList(token, `teams/${d.name.split('/').pop() ?? ''}/weeks/${weekId}/productions`));
-          }));
-        }
-      } catch { /* ignore team errors */ }
-
-      // Phone-matched global_productions — server-side filtered, no name guessing
-      const normalizedPhone = normalizePhone(profile?.phone || '');
-      if (normalizedPhone) {
-        try {
-          const weekStart = days[0];
-          const weekEnd = days[6];
-          const globalRes = await fetch(
-            `/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (globalRes.ok) {
-            const globalData = await globalRes.json() as { productions?: Production[] };
-            const existingIds = new Set(allProds.map((p) => p.id));
-            for (const gp of globalData.productions ?? []) {
-              if (gp.id && !existingIds.has(gp.id)) {
-                allProds.push({ ...gp, isCurrentUserShift: true });
-                existingIds.add(gp.id);
-              }
-            }
-          }
-        } catch { /* best-effort — don't block on global fetch failure */ }
-      }
-
-      // Only update state if personal fetch succeeded — prevents wiping cache on network errors
-      if (!fetchSucceeded) return;
-
-      setProductions(allProds);
-
-      // Update cache
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
-        cache[weekId] = { data: allProds, savedAt: Date.now() };
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-      } catch { /* ignore */ }
+    return () => {
+      cancelled = true;
     };
-
-    fetchAll().catch(() => { /* keep existing state on total failure */ });
-  }, [user, days]);
+  }, [days, user]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';
+  const byDate = useMemo(() => {
+    return (productions ?? []).reduce<Record<string, Production[]>>((acc, production) => {
+      if (!production.date) return acc;
+      if (!acc[production.date]) acc[production.date] = [];
+      acc[production.date].push(production);
+      return acc;
+    }, {});
+  }, [productions]);
 
-  const byDate = (productions ?? []).reduce<Record<string, Production[]>>((acc, p) => {
-    if (p.date) {
-      if (!acc[p.date]) acc[p.date] = [];
-      acc[p.date].push(p);
-    }
-    return acc;
-  }, {});
-
-  const myShiftDays = new Set(
+  const myShiftDays = useMemo(() => new Set(
     (productions ?? [])
-      .filter(p => isMyProduction(p, displayName, phone))
-      .map(p => p.date)
-  );
+      .filter((production) => isMyProduction(production, displayName, phone))
+      .map((production) => production.date),
+  ), [displayName, phone, productions]);
 
-  const myShiftCount = myShiftDays.size;
   const popupProductions = popupDate ? (byDate[popupDate] ?? []) : [];
   const popupDayIndex = popupDate ? days.indexOf(popupDate) : 0;
+  const myShiftCount = myShiftDays.size;
   const weekLabel = getWeekLabel(days);
   const isCurrentWeek = weekOffset === 0;
 
+  const renderProductionChip = useCallback((production: Production, mine: boolean, isPast: boolean) => (
+    <div
+      key={production.id}
+      className="rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
+      style={{
+        background: mine ? 'rgba(251, 146, 60, 0.22)' : 'rgba(255,255,255,0.05)',
+        color: mine ? 'rgb(251,146,60)' : 'var(--theme-text-secondary)',
+        opacity: isPast ? 0.65 : 1,
+      }}
+    >
+      <div className="truncate">{production.name.length > 9 ? `${production.name.slice(0, 8)}...` : production.name}</div>
+      {mine && production.startTime && <div className="mt-0.5 text-[9px] font-medium opacity-70">{production.startTime}</div>}
+    </div>
+  ), []);
+
   return (
     <>
-      <div
-        className="rounded-2xl border overflow-hidden"
-        style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
+      <div className="overflow-hidden rounded-2xl border" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+        <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center shrink-0">
-              <Clapperboard className="w-3.5 h-3.5 text-white" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500">
+              <Clapperboard className="h-3.5 w-3.5 text-white" />
             </div>
             <div>
               <h2 className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>
@@ -387,87 +300,61 @@ export default function WeeklyCalendarWidget() {
                 <p className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
                   {weekLabel}
                   {productions !== null && myShiftCount > 0 && (
-                    <span className="mr-1.5 text-orange-400 font-semibold">· {myShiftCount} ימי עבודה שלך</span>
+                    <span className="mr-1.5 font-semibold text-orange-400">· {myShiftCount} ימי עבודה שלך</span>
                   )}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Right side: nav arrows + link */}
           <div className="flex items-center gap-1">
-            {/* Week navigation */}
-            <button
-              onClick={() => setWeekOffset(o => o + 1)}
-              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
-              title="שבוע הבא"
-            >
-              <ChevronRight className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע הבא">
+              <ChevronRight className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
             {!isCurrentWeek && (
               <button
                 onClick={() => setWeekOffset(0)}
-                className="px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors hover:opacity-80"
+                className="rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors hover:opacity-80"
                 style={{ background: 'rgba(139,92,246,0.15)', color: 'var(--theme-accent)' }}
               >
                 היום
               </button>
             )}
-            <button
-              onClick={() => setWeekOffset(o => o - 1)}
-              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
-              title="שבוע קודם"
-            >
-              <ChevronLeft className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע קודם">
+              <ChevronLeft className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
-            <div className="w-px h-4 mx-1 opacity-20" style={{ background: 'var(--theme-border)' }} />
-            <Link
-              href="/productions"
-              className="flex items-center gap-0.5 text-xs font-medium opacity-50 hover:opacity-100 transition-opacity"
-              style={{ color: 'var(--theme-accent)' }}
-            >
+            <div className="mx-1 h-4 w-px opacity-20" style={{ background: 'var(--theme-border)' }} />
+            <Link href="/productions" className="flex items-center gap-0.5 text-xs font-medium opacity-50 transition-opacity hover:opacity-100" style={{ color: 'var(--theme-accent)' }}>
               לכל האירועים
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
 
-        {/* Days grid */}
         <div className="grid grid-cols-7">
-          {days.map((dateStr, i) => {
+          {days.map((dateStr, index) => {
             const [, , dayNum] = dateStr.split('-');
             const isToday = dateStr === todayStr;
             const dayProds = byDate[dateStr] ?? [];
             const isMyDay = myShiftDays.has(dateStr);
             const isPast = mounted && dateStr < todayStr;
-            const isClickable = dayProds.length > 0;
-            const myProdsToday = dayProds.filter(p => isMyProduction(p, displayName, phone));
+            const myProdsToday = dayProds.filter((production) => isMyProduction(production, displayName, phone));
+            const otherProdsToday = dayProds.filter((production) => !isMyProduction(production, displayName, phone));
 
             return (
               <button
                 key={dateStr}
-                disabled={!isClickable}
-                onClick={() => isClickable ? setPopupDate(dateStr) : undefined}
-                className="flex flex-col items-center py-3 px-1 gap-1.5 relative transition-colors"
+                disabled={dayProds.length === 0}
+                onClick={() => dayProds.length > 0 && setPopupDate(dateStr)}
+                className="relative flex flex-col items-center gap-1.5 px-1 py-3 transition-colors"
                 style={{
-                  background: isMyDay
-                    ? 'rgba(251, 146, 60, 0.10)'
-                    : isToday
-                      ? 'rgba(139, 92, 246, 0.06)'
-                      : 'transparent',
-                  borderLeft: i < 6 ? '1px solid var(--theme-border)' : undefined,
-                  cursor: isClickable ? 'pointer' : 'default',
+                  background: isMyDay ? 'rgba(251, 146, 60, 0.10)' : isToday ? 'rgba(139, 92, 246, 0.06)' : 'transparent',
+                  borderLeft: index < 6 ? '1px solid var(--theme-border)' : undefined,
+                  cursor: dayProds.length > 0 ? 'pointer' : 'default',
                 }}
               >
-                {/* Top accent bar */}
-                {isMyDay && (
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-400 to-amber-400" />
-                )}
-                {!isMyDay && isToday && (
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500" />
-                )}
-
-                {/* Day name */}
+                {isMyDay && <div className="absolute left-0 right-0 top-0 h-0.5 bg-gradient-to-r from-orange-400 to-amber-400" />}
+                {!isMyDay && isToday && <div className="absolute left-0 right-0 top-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500" />}
                 <span
                   className="text-[10px] font-bold"
                   style={{
@@ -475,85 +362,29 @@ export default function WeeklyCalendarWidget() {
                     opacity: isPast && !isToday && !isMyDay ? 0.4 : 1,
                   }}
                 >
-                  {DAY_NAMES[i]}
+                  {DAY_NAMES[index]}
                 </span>
-
-                {/* Day number */}
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${
-                    isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-sm' : ''
-                  }`}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black transition-all ${isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-sm' : ''}`}
                   style={!isToday ? {
                     color: isMyDay ? 'rgb(251,146,60)' : isPast ? 'var(--theme-text-secondary)' : 'var(--theme-text)',
                     opacity: isPast && !isMyDay ? 0.4 : 1,
                   } : undefined}
                 >
-                  {parseInt(dayNum)}
+                  {parseInt(dayNum, 10)}
                 </div>
-
-                {/* Productions area */}
-                <div className="flex flex-col items-stretch gap-1 w-full min-h-[48px] px-0.5">
+                <div className="flex min-h-[48px] w-full flex-col items-stretch gap-1 px-0.5">
                   {!mounted ? null : dayProds.length === 0 ? (
-                    <div className="flex justify-center mt-2">
-                      <div className="w-1.5 h-1.5 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
+                    <div className="mt-2 flex justify-center">
+                      <div className="h-1.5 w-1.5 rounded-full opacity-15" style={{ background: 'var(--theme-text-secondary)' }} />
                     </div>
-                  ) : isMyDay ? (
-                    /* My working day — show my productions as rows */
-                    <>
-                      {myProdsToday.slice(0, 3).map((p, pi) => (
-                        <div
-                          key={pi}
-                          className="rounded-md text-[10px] font-bold text-center leading-snug px-1 py-1"
-                          style={{
-                            background: 'rgba(251, 146, 60, 0.22)',
-                            color: 'rgb(251,146,60)',
-                            opacity: isPast ? 0.7 : 1,
-                          }}
-                        >
-                          <div className="truncate">{p.name.length > 9 ? p.name.slice(0, 8) + '…' : p.name}</div>
-                          {p.startTime && (
-                            <div className="opacity-70 text-[9px] font-medium mt-0.5">{p.startTime}</div>
-                          )}
-                        </div>
-                      ))}
-                      {/* Other productions (not mine) */}
-                      {dayProds.filter(p => !isMyProduction(p, displayName, phone)).slice(0, 1).map((p, pi) => (
-                        <div
-                          key={`other-${pi}`}
-                          className="rounded-md text-[9px] font-medium text-center truncate px-1 py-0.5 leading-tight opacity-50"
-                          style={{
-                            background: 'rgba(255,255,255,0.05)',
-                            color: 'var(--theme-text-secondary)',
-                          }}
-                        >
-                          {p.name.length > 9 ? p.name.slice(0, 8) + '…' : p.name}
-                        </div>
-                      ))}
-                      {(myProdsToday.length > 3 || dayProds.length > myProdsToday.length + 1) && (
-                        <span className="text-[9px] font-semibold text-center" style={{ color: 'rgb(251,146,60)', opacity: 0.7 }}>
-                          +{dayProds.length - Math.min(myProdsToday.length, 3) - Math.min(dayProds.filter(p => !isMyProduction(p, displayName, phone)).length, 1)}
-                        </span>
-                      )}
-                    </>
                   ) : (
-                    /* Non-working day — show regular chips */
                     <>
-                      {dayProds.slice(0, 2).map((p, pi) => (
-                        <div
-                          key={pi}
-                          className="rounded-md text-[10px] font-semibold text-center truncate px-1 py-1 leading-tight"
-                          style={{
-                            background: isToday ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.05)',
-                            color: isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
-                            opacity: isPast ? 0.5 : 1,
-                          }}
-                        >
-                          {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
-                        </div>
-                      ))}
-                      {dayProds.length > 2 && (
-                        <span className="text-[9px] font-semibold text-center" style={{ color: 'var(--theme-accent)', opacity: 0.7 }}>
-                          +{dayProds.length - 2}
+                      {myProdsToday.slice(0, 3).map((production) => renderProductionChip(production, true, isPast))}
+                      {otherProdsToday.slice(0, isMyDay ? 1 : 2).map((production) => renderProductionChip(production, false, isPast))}
+                      {dayProds.length > myProdsToday.slice(0, 3).length + otherProdsToday.slice(0, isMyDay ? 1 : 2).length && (
+                        <span className="text-center text-[9px] font-semibold" style={{ color: isMyDay ? 'rgb(251,146,60)' : 'var(--theme-accent)', opacity: 0.7 }}>
+                          +{dayProds.length - myProdsToday.slice(0, 3).length - otherProdsToday.slice(0, isMyDay ? 1 : 2).length}
                         </span>
                       )}
                     </>
@@ -564,17 +395,15 @@ export default function WeeklyCalendarWidget() {
           })}
         </div>
 
-        {/* Footer — only when no data */}
         {mounted && productions === null && (
-          <div className="px-4 py-3 border-t text-center" style={{ borderColor: 'var(--theme-border)' }}>
+          <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)' }}>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              פתח את היומן האישי כדי לטעון את השבוע
+              טוען את לוח ההפקות הגלובלי...
             </p>
           </div>
         )}
       </div>
 
-      {/* Day popup */}
       {popupDate && popupProductions.length > 0 && (
         <DayPopup
           dateStr={popupDate}
