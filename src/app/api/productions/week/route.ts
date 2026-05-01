@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
-import { runQuery } from '@/lib/server/firestoreAdminRest';
+import { fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
-import type { Production } from '@/lib/productionDiff';
+import { runQuery } from '@/lib/server/firestoreAdminRest';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-type RawProductionDoc = Record<string, unknown> & { id?: string };
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest) {
   const authUser = await verifyAuthToken(request);
@@ -21,13 +21,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart and weekEnd are required' }, { status: 400 });
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnd)) {
-    return NextResponse.json({ error: 'Invalid date format — expected YYYY-MM-DD' }, { status: 400 });
+  if (!datePattern.test(weekStart) || !datePattern.test(weekEnd)) {
+    return NextResponse.json({ error: 'Invalid date format - expected YYYY-MM-DD' }, { status: 400 });
   }
 
   try {
-    const docs = await runQuery<RawProductionDoc>({
-      from: [{ collectionId: 'productions', allDescendants: true }],
+    const docs = await runQuery<GlobalProductionDoc>({
+      from: [{ collectionId: 'global_productions' }],
       where: {
         compositeFilter: {
           op: 'AND',
@@ -52,18 +52,17 @@ export async function GET(request: NextRequest) {
       limit: 500,
     });
 
-    // Dedup by production id — prefer the most recently updated version
-    const byId = new Map<string, RawProductionDoc>();
+    // Compatibility endpoint: read the canonical global calendar source.
+    const byId = new Map<string, GlobalProductionDoc>();
     for (const doc of docs) {
-      const id = doc.id as string | undefined;
-      if (!id || !doc.date || !doc.name) continue; // skip week-metadata docs without production fields
-      const existing = byId.get(id);
+      if (!doc.id || !doc.date || !doc.name) continue;
+      const existing = byId.get(doc.id);
       if (!existing || String(doc.lastUpdatedAt ?? '') > String(existing.lastUpdatedAt ?? '')) {
-        byId.set(id, doc);
+        byId.set(doc.id, doc);
       }
     }
 
-    const productions = Array.from(byId.values()) as unknown as Production[];
+    const productions = Array.from(byId.values()).map(fromGlobalProduction);
 
     recordRouteMetric({ route: '/api/productions/week', ok: true, statusCode: 200 }).catch(() => {});
 

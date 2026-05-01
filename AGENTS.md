@@ -37,6 +37,7 @@ Israeli TV industry platform built with Next.js 16 (App Router), React 19, TypeS
 - Auth state persists via browserLocalPersistence (IndexedDB)
 - `.npmrc` has `legacy-peer-deps=true` for Vercel build compatibility
 - `.nvmrc` sets Node 20 for Vercel
+- Version updates: whenever the user asks to update the app/version, increment the patch version numerically (for example `1.2.1` -> `1.2.2`) and update frontend (`package.json`, `package-lock.json`, `src/components/Footer.tsx`) and backend (`realtime-server/package.json`). Mention the new version in the commit message.
 
 ## User
 - Hebrew-speaking user (all UI is in Hebrew, RTL)
