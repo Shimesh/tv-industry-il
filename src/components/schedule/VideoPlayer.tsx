@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Channel } from '@/data/channels';
 import type { StreamConfig } from '@/data/streams';
 
@@ -396,10 +397,14 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           )}
 
           {/* Main controls row */}
-          <div className="flex items-center gap-2 sm:gap-3 text-white">
-            {/* Prev channel */}
-            <button onClick={onPrev} className="hover:text-blue-400 transition-colors text-lg p-1">
-              ⏮
+          <div className="flex items-center gap-2 sm:gap-3 text-white" dir="ltr">
+            {/* Next channel: visually left in the player controls */}
+            <button
+              onClick={onNext}
+              className="hover:text-blue-400 transition-colors p-1"
+              aria-label="הערוץ הבא"
+            >
+              <ChevronLeft className="h-5 w-5" />
             </button>
 
             {/* Play/Pause (HLS only) */}
@@ -412,9 +417,13 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
               </button>
             )}
 
-            {/* Next channel */}
-            <button onClick={onNext} className="hover:text-blue-400 transition-colors text-lg p-1">
-              ⏭
+            {/* Previous channel: visually right of the play button */}
+            <button
+              onClick={onPrev}
+              className="hover:text-blue-400 transition-colors p-1"
+              aria-label="הערוץ הקודם"
+            >
+              <ChevronRight className="h-5 w-5" />
             </button>
 
             {/* Volume (HLS only — iframe controls its own audio) */}

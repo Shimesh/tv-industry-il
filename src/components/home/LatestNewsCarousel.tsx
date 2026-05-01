@@ -69,7 +69,7 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
 
   const scroll = (direction: 'prev' | 'next') => {
     scrollRef.current?.scrollBy({
-      left: direction === 'next' ? -(CARD_WIDTH + CARD_GAP) : CARD_WIDTH + CARD_GAP,
+      left: direction === 'next' ? CARD_WIDTH + CARD_GAP : -(CARD_WIDTH + CARD_GAP),
       behavior: 'smooth',
     });
   };
@@ -78,23 +78,23 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
 
   return (
     <div className="relative">
-      {canScrollLeft && (
+      {canScrollRight && (
         <button
-          onClick={() => scroll('prev')}
+          onClick={() => scroll('next')}
           className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full opacity-80 shadow-lg transition-opacity hover:opacity-100"
           style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}
-          aria-label="הקודם"
+          aria-label="הבא"
         >
           <ChevronRight className="h-5 w-5" style={{ color: 'var(--theme-text)' }} />
         </button>
       )}
 
-      {canScrollRight && (
+      {canScrollLeft && (
         <button
-          onClick={() => scroll('next')}
+          onClick={() => scroll('prev')}
           className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full opacity-80 shadow-lg transition-opacity hover:opacity-100"
           style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}
-          aria-label="הבא"
+          aria-label="הקודם"
         >
           <ChevronLeft className="h-5 w-5" style={{ color: 'var(--theme-text)' }} />
         </button>
