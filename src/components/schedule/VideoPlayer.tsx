@@ -219,8 +219,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
         <iframe
           key={resolvedEmbedUrl}
           src={resolvedAutoplayEmbedUrl || resolvedEmbedUrl}
-          allow="autoplay *; fullscreen; encrypted-media; picture-in-picture"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           allowFullScreen
+          loading="eager"
           className="absolute inset-0 w-full h-full border-0"
           title={channel.name}
         />

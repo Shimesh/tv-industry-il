@@ -308,7 +308,7 @@ export default function WeeklyCalendarWidget() {
           </div>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע הבא">
+            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע קודם">
               <ChevronRight className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
             {!isCurrentWeek && (
@@ -320,7 +320,7 @@ export default function WeeklyCalendarWidget() {
                 היום
               </button>
             )}
-            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע קודם">
+            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע הבא">
               <ChevronLeft className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
             <div className="mx-1 h-4 w-px opacity-20" style={{ background: 'var(--theme-border)' }} />
@@ -398,7 +398,7 @@ export default function WeeklyCalendarWidget() {
         {mounted && productions === null && (
           <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)' }}>
             <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              טוען את לוח ההפקות הגלובלי...
+              {user ? 'טוען את לוח ההפקות הגלובלי...' : 'יש להתחבר כדי לצפות בלוח ההפקות'}
             </p>
           </div>
         )}

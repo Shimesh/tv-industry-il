@@ -674,6 +674,8 @@ function ProductionsContent() {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ productions: prods, sourceWeekPath: metaPath }),
+      }).then((res) => {
+        if (!res.ok) console.warn('[global_productions] dual-write HTTP error:', res.status);
       }).catch((err) => console.warn('[global_productions] dual-write failed:', err));
 
       await reconcileContactsFromServer(prods, token);
