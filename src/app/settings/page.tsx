@@ -8,7 +8,7 @@ import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
-  ChevronLeft, User, Moon, Volume2, Eye, Smartphone
+  ChevronLeft, User, Volume2, Eye, Smartphone
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -20,13 +20,14 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, profile, logout, updateUserProfile } = useAuth();
+  const { profile, logout, updateUserProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
   const [soundEnabled, setSoundEnabled] = useState(profile?.soundEnabled !== false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [statusSaved, setStatusSaved] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const handleLogout = async () => {
     await logout();
@@ -34,26 +35,58 @@ function SettingsContent() {
   };
 
   const handleStatusChange = async (status: 'available' | 'busy' | 'offline') => {
-    await updateUserProfile({ status });
-    setStatusSaved(true);
-    setTimeout(() => setStatusSaved(false), 2000);
+    setSettingsError(null);
+    try {
+      await updateUserProfile({ status });
+      setStatusSaved(true);
+      setTimeout(() => setStatusSaved(false), 2000);
+    } catch {
+      setSettingsError('לא הצלחנו לשמור את הסטטוס. נסה שוב בעוד רגע.');
+    }
   };
 
   const handleToggleNotifications = async () => {
     const next = !notificationsEnabled;
     setNotificationsEnabled(next);
-    await updateUserProfile({ notificationsEnabled: next });
+    setSettingsError(null);
+    try {
+      await updateUserProfile({ notificationsEnabled: next });
+    } catch {
+      setNotificationsEnabled(!next);
+      setSettingsError('לא הצלחנו לשמור את הגדרת ההתראות.');
+    }
   };
 
   const handleToggleSound = async () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
-    await updateUserProfile({ soundEnabled: next });
+    setSettingsError(null);
+    try {
+      await updateUserProfile({ soundEnabled: next });
+    } catch {
+      setSoundEnabled(!next);
+      setSettingsError('לא הצלחנו לשמור את הגדרת הצלילים.');
+    }
   };
 
   const handleToggleShowPhone = async () => {
     const next = !(profile?.showPhone ?? true);
-    await updateUserProfile({ showPhone: next });
+    setSettingsError(null);
+    try {
+      await updateUserProfile({ showPhone: next });
+    } catch {
+      setSettingsError('לא הצלחנו לשמור את הגדרת הפרטיות.');
+    }
+  };
+
+  const handleToggleOpenToWork = async () => {
+    if (!profile) return;
+    setSettingsError(null);
+    try {
+      await updateUserProfile({ openToWork: !profile.openToWork });
+    } catch {
+      setSettingsError('לא הצלחנו לשמור את זמינות העבודה.');
+    }
   };
 
   if (!profile) return null;
@@ -72,6 +105,12 @@ function SettingsContent() {
       </div>
 
       <div className="space-y-6">
+        {settingsError ? (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {settingsError}
+          </div>
+        ) : null}
+
         {/* Profile Card */}
         <div className="rounded-xl border p-4" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
           <button
@@ -129,10 +168,10 @@ function SettingsContent() {
           <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: 'var(--theme-border)' }}>
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--theme-text)' }}>פתוח להצעות עבודה</p>
-              <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>יוצג כ"מחפש עבודה" באלפון</p>
+              <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>יוצג כמחפש עבודה באלפון</p>
             </div>
             <button
-              onClick={() => updateUserProfile({ openToWork: !profile.openToWork })}
+              onClick={handleToggleOpenToWork}
               className={`relative w-11 h-6 rounded-full transition-colors ${profile.openToWork ? 'bg-[var(--theme-accent)]' : 'bg-gray-600'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${profile.openToWork ? 'right-0.5' : 'right-[22px]'}`} />

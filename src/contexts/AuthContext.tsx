@@ -354,23 +354,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    const token = await user.getIdToken();
-    const response = await fetch('/api/me/profile', {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+    let previousProfile: UserProfile | null = null;
+    setProfile((prev) => {
+      previousProfile = prev;
+      return prev ? { ...prev, ...data } : prev;
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update profile');
-    }
-
-    setProfile((prev) => (prev ? { ...prev, ...data } : prev));
     setProfileReady(true);
     setProfileSource((prev) => (prev === 'server' ? prev : 'cache'));
+
+    const token = await user.getIdToken();
+    try {
+      const response = await fetch('/api/me/profile', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+    } catch (error) {
+      setProfile(previousProfile);
+      setProfileReady(Boolean(previousProfile));
+      throw error;
+    }
   };
 
   const repairUserProfile = async () => {

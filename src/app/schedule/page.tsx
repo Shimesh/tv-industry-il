@@ -143,7 +143,9 @@ function SchedulePageInner() {
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-6 sm:py-6">
-            <VideoPlayer channel={channel} stream={stream} onNext={goToNextChannel} onPrev={goToPrevChannel} currentProgram={currentProgram?.title} />
+            <section id="live" className="scroll-mt-[calc(var(--app-header-offset)+1rem)]">
+              <VideoPlayer channel={channel} stream={stream} onNext={goToNextChannel} onPrev={goToPrevChannel} currentProgram={currentProgram?.title} />
+            </section>
 
             {broadcastsError && (
               <div className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">

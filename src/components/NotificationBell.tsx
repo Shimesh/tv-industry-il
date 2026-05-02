@@ -1,9 +1,24 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useNotifications } from '@/contexts/NotificationContext';
-import { Bell, BellRing, CheckCheck, Trash2, Calendar, Users, Upload, RefreshCw, Info, Bug } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Bell,
+  BellRing,
+  Bug,
+  Calendar,
+  Check,
+  CheckCheck,
+  ExternalLink,
+  Info,
+  RefreshCw,
+  Trash2,
+  Upload,
+  Users,
+} from 'lucide-react';
+
+import { useNotifications } from '@/contexts/NotificationContext';
 
 const typeIcons: Record<string, typeof Bell> = {
   production_reminder: Calendar,
@@ -24,136 +39,170 @@ const typeColors: Record<string, string> = {
 };
 
 export default function NotificationBell() {
+  const router = useRouter();
   const {
-    notifications, unreadCount,
-    markAsRead, markAllAsRead, clearAll,
-    browserPermission, requestBrowserPermission,
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearAll,
+    browserPermission,
+    requestBrowserPermission,
   } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+    const handleClick = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
+
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  const openNotification = async (id: string, read: boolean, linkUrl?: string) => {
+    if (!read) {
+      await markAsRead(id);
+    }
+    if (linkUrl) {
+      setOpen(false);
+      router.push(linkUrl);
+    }
+  };
+
   return (
     <div className="relative" ref={ref}>
-      {/* Bell button */}
       <button
-        onClick={() => setOpen(!open)}
-        className="relative p-2 rounded-lg transition-all hover:bg-[var(--theme-accent-glow)]"
+        onClick={() => setOpen((current) => !current)}
+        className="relative rounded-lg p-2 transition-all hover:bg-[var(--theme-accent-glow)]"
         style={{ color: 'var(--theme-text-secondary)' }}
+        aria-label="התראות"
       >
         {unreadCount > 0 ? (
-          <BellRing className="w-5 h-5 text-[var(--theme-accent)]" />
+          <BellRing className="h-5 w-5 text-[var(--theme-accent)]" />
         ) : (
-          <Bell className="w-5 h-5" />
+          <Bell className="h-5 w-5" />
         )}
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+          <span className="absolute -left-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown */}
       <AnimatePresence>
         {open && (
           <motion.div
             initial={{ opacity: 0, y: -10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            className="absolute left-0 top-full mt-2 w-80 max-h-[70vh] rounded-xl border shadow-2xl z-50 overflow-hidden flex flex-col"
+            className="absolute left-0 top-full z-50 mt-2 flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border shadow-2xl"
             style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+            dir="rtl"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
-              <h3 className="font-bold text-sm" style={{ color: 'var(--theme-text)' }}>
-                התראות {unreadCount > 0 && `(${unreadCount})`}
+            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                התראות {unreadCount > 0 ? `(${unreadCount})` : ''}
               </h3>
               <div className="flex items-center gap-1">
                 {unreadCount > 0 && (
                   <button
-                    onClick={() => markAllAsRead()}
-                    className="p-1.5 rounded-lg text-xs hover:bg-[var(--theme-accent-glow)] transition-all"
+                    onClick={() => void markAllAsRead()}
+                    className="rounded-lg p-1.5 text-xs transition-all hover:bg-[var(--theme-accent-glow)]"
                     style={{ color: 'var(--theme-text-secondary)' }}
                     title="סמן הכל כנקרא"
+                    aria-label="סמן הכל כנקרא"
                   >
-                    <CheckCheck className="w-4 h-4" />
+                    <CheckCheck className="h-4 w-4" />
                   </button>
                 )}
                 {notifications.length > 0 && (
                   <button
-                    onClick={() => clearAll()}
-                    className="p-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-all"
+                    onClick={() => void clearAll()}
+                    className="rounded-lg p-1.5 text-xs text-red-400 transition-all hover:bg-red-500/10"
                     title="מחק הכל"
+                    aria-label="מחק הכל"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Browser permission banner */}
             {browserPermission !== 'granted' && (
               <button
                 onClick={requestBrowserPermission}
-                className="mx-3 mt-2 p-2.5 rounded-lg text-xs text-right flex items-center gap-2 transition-all hover:opacity-80"
+                className="mx-3 mt-2 flex items-center gap-2 rounded-lg p-2.5 text-right text-xs transition-all hover:opacity-80"
                 style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
               >
-                <BellRing className="w-4 h-4 shrink-0" />
+                <BellRing className="h-4 w-4 shrink-0" />
                 <span>הפעל התראות דפדפן כדי לקבל עדכונים בזמן אמת</span>
               </button>
             )}
 
-            {/* Notifications list */}
             <div className="flex-1 overflow-y-auto">
               {notifications.length === 0 ? (
-                <div className="text-center py-10 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-                  <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <div className="py-10 text-center text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
+                  <Bell className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   <p>אין התראות</p>
                 </div>
               ) : (
-                notifications.slice(0, 50).map(notif => {
-                  const Icon = typeIcons[notif.type] || Info;
-                  const color = typeColors[notif.type] || '#6b7280';
+                notifications.slice(0, 50).map((notification) => {
+                  const Icon = typeIcons[notification.type] || Info;
+                  const color = typeColors[notification.type] || '#6b7280';
 
                   return (
                     <div
-                      key={notif.id}
-                      onClick={() => !notif.read && markAsRead(notif.id)}
-                      className={`flex items-start gap-3 px-4 py-3 border-b cursor-pointer transition-all hover:bg-[var(--theme-accent-glow)] ${
-                        !notif.read ? 'bg-[var(--theme-accent-glow)]' : ''
+                      key={notification.id}
+                      className={`flex items-start gap-3 border-b px-4 py-3 transition-all hover:bg-[var(--theme-accent-glow)] ${
+                        !notification.read ? 'bg-[var(--theme-accent-glow)]' : ''
                       }`}
                       style={{ borderColor: 'var(--theme-border)' }}
                     >
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-                        style={{ background: color + '20' }}
+                      <button
+                        type="button"
+                        onClick={() => void openNotification(notification.id, notification.read, notification.linkUrl)}
+                        className="flex flex-1 items-start gap-3 text-right"
                       >
-                        <Icon className="w-4 h-4" style={{ color }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: 'var(--theme-text)' }}>
-                          {notif.title}
-                        </p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--theme-text-secondary)' }}>
-                          {notif.message}
-                        </p>
-                        <p className="text-[10px] mt-1" style={{ color: 'var(--theme-text-secondary)' }}>
-                          {new Date(notif.createdAt).toLocaleString('he-IL', {
-                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
-                      {!notif.read && (
-                        <div className="w-2 h-2 rounded-full shrink-0 mt-2" style={{ background: 'var(--theme-accent)' }} />
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: `${color}20` }}>
+                          <Icon className="h-4 w-4" style={{ color }} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>
+                              {notification.title}
+                            </p>
+                            {notification.linkUrl ? <ExternalLink className="h-3 w-3 shrink-0 opacity-50" /> : null}
+                          </div>
+                          <p className="mt-0.5 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                            {notification.message}
+                          </p>
+                          <p className="mt-1 text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
+                            {new Date(notification.createdAt).toLocaleString('he-IL', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </button>
+
+                      {!notification.read ? (
+                        <button
+                          type="button"
+                          onClick={() => void markAsRead(notification.id)}
+                          className="mt-1 rounded-full p-1 text-[var(--theme-accent)] hover:bg-white/10"
+                          title="סמן כנקרא"
+                          aria-label="סמן כנקרא"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <div className="mt-2 h-2 w-2 shrink-0 rounded-full opacity-0" />
                       )}
                     </div>
                   );

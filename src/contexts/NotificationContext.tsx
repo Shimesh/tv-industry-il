@@ -5,9 +5,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, getDocs
+  query, where, orderBy
 } from 'firebase/firestore';
 import { getWeekId } from '@/lib/productionDiff';
+
+type ProductionReminderData = {
+  name?: string;
+  date?: string;
+  status?: string;
+  startTime?: string;
+};
 
 export interface AppNotification {
   id: string;
@@ -16,6 +23,9 @@ export interface AppNotification {
   message: string;
   productionId?: string;
   productionName?: string;
+  linkUrl?: string;
+  source?: 'admin' | 'system';
+  createdBy?: string;
   read: boolean;
   createdAt: number;
 }
@@ -45,20 +55,23 @@ const NotificationContext = createContext<NotificationContextType>({
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>('default');
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>(() => (
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  ));
 
   // Check browser permission on mount
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
-      setBrowserPermission(Notification.permission);
+      const timer = window.setTimeout(() => setBrowserPermission(Notification.permission), 0);
+      return () => window.clearTimeout(timer);
     }
   }, []);
 
   // Listen to user's notifications from Firestore
   useEffect(() => {
     if (!user) {
-      setNotifications([]);
-      return;
+      const timer = window.setTimeout(() => setNotifications([]), 0);
+      return () => window.clearTimeout(timer);
     }
 
     const q = query(
@@ -135,7 +148,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const weekId = getWeekId(todayStr);
 
     // Cache of today's productions, kept fresh by onSnapshot
-    let todayProductions: Array<{ id: string; data: Record<string, any> }> = [];
+    let todayProductions: Array<{ id: string; data: ProductionReminderData }> = [];
     const sentReminders = new Set<string>();
 
     const checkAndSendReminders = async () => {
@@ -145,11 +158,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const reminderTime = `${String(in30min.getHours()).padStart(2, '0')}:${String(in30min.getMinutes()).padStart(2, '0')}`;
 
       for (const { id, data: prod } of todayProductions) {
+        const startTime = typeof prod.startTime === 'string' ? prod.startTime : '';
         if (
           prod.date === todayStr &&
           prod.status === 'scheduled' &&
-          prod.startTime >= currentTime &&
-          prod.startTime <= reminderTime &&
+          startTime >= currentTime &&
+          startTime <= reminderTime &&
           !sentReminders.has(id)
         ) {
           sentReminders.add(id);

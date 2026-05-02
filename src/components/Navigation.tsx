@@ -38,7 +38,7 @@ function emitNavigationStart() {
 export default function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, loading } = useAuth();
   const { theme, setTheme } = useTheme();
   const totalUnread = useGlobalUnread();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -70,31 +70,37 @@ export default function Navigation() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    let nextProfile: typeof profile = null;
     try {
       const raw = window.sessionStorage.getItem('tv-auth-profile-cache');
       if (!raw) {
-        setCachedProfile(null);
-        return;
-      }
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && 'profile' in parsed) {
-        const payload = parsed as { profile?: typeof profile };
-        setCachedProfile(payload.profile ?? null);
+        nextProfile = null;
       } else {
-        setCachedProfile((parsed as typeof profile) ?? null);
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && 'profile' in parsed) {
+          const payload = parsed as { profile?: typeof profile };
+          nextProfile = payload.profile ?? null;
+        } else {
+          nextProfile = (parsed as typeof profile) ?? null;
+        }
       }
     } catch {
-      setCachedProfile(null);
+      nextProfile = null;
     }
+    const timer = window.setTimeout(() => setCachedProfile(nextProfile), 0);
+    return () => window.clearTimeout(timer);
   }, [pathname, profile]);
 
   // Show loading bar on route change
   useEffect(() => {
     if (prevPathnameRef.current !== pathname) {
       prevPathnameRef.current = pathname;
-      setLoadingBar(true);
-      const t = setTimeout(() => setLoadingBar(false), 600);
-      return () => clearTimeout(t);
+      const startTimer = window.setTimeout(() => setLoadingBar(true), 0);
+      const t = window.setTimeout(() => setLoadingBar(false), 600);
+      return () => {
+        window.clearTimeout(startTimer);
+        window.clearTimeout(t);
+      };
     }
   }, [pathname]);
 
@@ -119,11 +125,11 @@ export default function Navigation() {
   });
 
   return (
-    <nav className="fixed right-0 left-0 z-[9999] backdrop-blur-xl border-b transition-colors app-safe-x" style={{
-      top: 'var(--safe-area-top)',
+    <nav className="fixed right-0 left-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell" style={{
       background: 'var(--theme-nav-bg)',
       borderColor: 'var(--theme-border)',
-      minHeight: 'var(--app-header-height)',
+      minHeight: 'var(--app-header-offset)',
+      paddingTop: 'var(--safe-area-top)',
     }}>
       {/* Navigation loading bar */}
       {loadingBar && (

@@ -37,6 +37,7 @@ type ToastState = {
 
 type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 'siteRole';
 type SortDirection = 'asc' | 'desc';
+type NotificationTarget = 'test' | 'user' | 'all';
 
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
@@ -275,6 +276,12 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
+  const [sendingNotification, setSendingNotification] = useState(false);
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationLink, setNotificationLink] = useState('/schedule#live');
+  const [notificationTarget, setNotificationTarget] = useState<NotificationTarget>('test');
+  const [notificationTargetUserId, setNotificationTargetUserId] = useState('');
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const draftDirtyRef = useRef(false);
 
@@ -450,6 +457,43 @@ export default function AdminPage() {
       showToast('err', syncError instanceof Error ? syncError.message : 'שגיאה בסנכרון אנשי קשר');
     } finally {
       setRunningSync(false);
+    }
+  }
+
+  async function sendAdminNotification() {
+    if (!notificationTitle.trim() || !notificationMessage.trim()) {
+      showToast('err', 'יש למלא כותרת ותוכן להתראה');
+      return;
+    }
+
+    if (notificationTarget === 'user' && !notificationTargetUserId) {
+      showToast('err', 'יש לבחור משתמש יעד');
+      return;
+    }
+
+    setSendingNotification(true);
+    try {
+      const result = await fetchWithAuth<{ sent: number }>('/api/admin/notifications', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: notificationTitle,
+          message: notificationMessage,
+          linkUrl: notificationLink,
+          target: notificationTarget,
+          targetUserId: notificationTarget === 'user' ? notificationTargetUserId : undefined,
+        }),
+      });
+
+      showToast('ok', `ההתראה נשלחה ל-${result.sent} משתמשים`);
+      setNotificationTitle('');
+      setNotificationMessage('');
+      if (notificationTarget !== 'user') {
+        setNotificationTargetUserId('');
+      }
+    } catch (notificationError) {
+      showToast('err', notificationError instanceof Error ? notificationError.message : 'שגיאה בשליחת ההתראה');
+    } finally {
+      setSendingNotification(false);
     }
   }
 
@@ -884,6 +928,73 @@ export default function AdminPage() {
                 >
                   {savingConfig ? 'שומר...' : 'שמור הודעה'}
                 </button>
+              </div>
+
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-950/20 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-blue-300" />
+                  <span className="text-sm font-medium">שליחת התראה לפעמון</span>
+                </div>
+                <div className="space-y-3">
+                  <input
+                    value={notificationTitle}
+                    onChange={(event) => setNotificationTitle(event.target.value)}
+                    maxLength={90}
+                    placeholder="כותרת ההתראה"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  />
+                  <textarea
+                    value={notificationMessage}
+                    onChange={(event) => setNotificationMessage(event.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="תוכן ההתראה"
+                    className="w-full resize-none rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  />
+                  <input
+                    value={notificationLink}
+                    onChange={(event) => setNotificationLink(event.target.value)}
+                    placeholder="/schedule#live"
+                    dir="ltr"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-left text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select
+                      value={notificationTarget}
+                      onChange={(event) => setNotificationTarget(event.target.value as NotificationTarget)}
+                      className="rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="test">בדיקה לעצמי</option>
+                      <option value="user">משתמש ספציפי</option>
+                      <option value="all">כל המשתמשים</option>
+                    </select>
+                    {notificationTarget === 'user' ? (
+                      <select
+                        value={notificationTargetUserId}
+                        onChange={(event) => setNotificationTargetUserId(event.target.value)}
+                        className="rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">בחר משתמש</option>
+                        {overview.users.map((entry) => (
+                          <option key={entry.uid} value={entry.uid}>
+                            {entry.displayName || entry.email}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="rounded-xl border border-gray-800 bg-gray-900 px-3 py-2 text-xs text-gray-400">
+                        {notificationTarget === 'all' ? 'יישלח לכל המשתמשים הקיימים' : 'יישלח רק למנהל המחובר'}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => void sendAdminNotification()}
+                    disabled={sendingNotification}
+                    className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {sendingNotification ? 'שולח התראה...' : 'שלח התראה'}
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
