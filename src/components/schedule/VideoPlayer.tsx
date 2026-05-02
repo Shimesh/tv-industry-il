@@ -18,12 +18,16 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(80);
+  // isMuted starts true so autoplay works on mobile (browsers require muted for autoplay)
+  const [isMuted, setIsMuted] = useState(true);
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // needsUserGesture: autoplay was blocked — show tap-to-play overlay
+  const [needsUserGesture, setNeedsUserGesture] = useState(false);
 
   const appendAutoplayParams = (url: string): string => {
     try {
@@ -54,6 +58,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     setDynamicStreamUrl(null);
     setDynamicEmbedUrl(null);
     setError(null);
+    setNeedsUserGesture(false);
+    setIsMuted(true); // Reset to muted on channel change for autoplay
   }, [channel.id]);
 
   // Fetch stream URL at runtime for channels with dynamicStream flag
@@ -85,6 +91,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     let hlsInstance: import('hls.js').default | null = null;
     setLoading(true);
     setError(null);
+    setNeedsUserGesture(false);
 
     const loadStream = async () => {
       if (hlsUrl.includes('.m3u8')) {
@@ -99,11 +106,19 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           hlsInstance.loadSource(hlsUrl);
           hlsInstance.attachMedia(videoRef.current!);
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.current?.play().then(() => {
+            const vid = videoRef.current;
+            if (!vid) return;
+            // CRITICAL: must be muted before play() for mobile autoplay to work
+            vid.muted = true;
+            vid.play().then(() => {
               setIsPlaying(true);
+              setIsMuted(true);
               setLoading(false);
+              setNeedsUserGesture(false);
             }).catch(() => {
+              // Autoplay blocked (e.g. user hasn't interacted yet on some browsers)
               setLoading(false);
+              setNeedsUserGesture(true);
             });
           });
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
@@ -113,12 +128,21 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             }
           });
         } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari native HLS
-          videoRef.current.src = hlsUrl;
-          videoRef.current.play().then(() => {
+          // Safari / iOS native HLS support
+          const vid = videoRef.current;
+          vid.src = hlsUrl;
+          // CRITICAL: muted required for iOS Safari autoplay
+          vid.muted = true;
+          vid.load();
+          vid.play().then(() => {
             setIsPlaying(true);
+            setIsMuted(true);
             setLoading(false);
-          }).catch(() => setLoading(false));
+            setNeedsUserGesture(false);
+          }).catch(() => {
+            setLoading(false);
+            setNeedsUserGesture(true);
+          });
         } else {
           setError('הדפדפן לא תומך בפורמט השידור');
           setLoading(false);
@@ -133,12 +157,14 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     };
   }, [stream?.streamUrl, dynamicStreamUrl]);
 
-  // Set volume on video element
+  // Sync volume and muted state to the video element
+  // Note: React's `muted` JSX prop is broken (known React bug) — must use ref imperatively
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.volume = volume / 100;
+      videoRef.current.volume = isMuted ? 0 : volume / 100;
+      videoRef.current.muted = isMuted;
     }
-  }, [volume]);
+  }, [volume, isMuted]);
 
   // Auto-hide controls
   const resetHideTimer = useCallback(() => {
@@ -157,11 +183,29 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
+      setIsPlaying(false);
     } else {
-      videoRef.current.play();
+      // Ensure muted so play() is allowed on mobile
+      videoRef.current.muted = true;
+      setIsMuted(true);
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+        setNeedsUserGesture(false);
+      }).catch(() => {});
     }
-    setIsPlaying(!isPlaying);
   }, [isPlaying]);
+
+  // Tap-to-play: called when user taps the overlay after autoplay was blocked
+  const handleUserGesturePlay = useCallback(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.muted = true;
+    setIsMuted(true);
+    vid.play().then(() => {
+      setIsPlaying(true);
+      setNeedsUserGesture(false);
+    }).catch(() => {});
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
@@ -180,7 +224,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'f' || e.key === 'F') toggleFullscreen();
-      if (e.key === 'm' || e.key === 'M') setVolume(v => v === 0 ? 80 : 0);
+      if (e.key === 'm' || e.key === 'M') setIsMuted(v => !v);
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -227,6 +271,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
         />
       ) : showHls ? (
         <>
+          {/* playsInline is required for iOS to play inline (not fullscreen).
+              muted is NOT set as a JSX prop because React doesn't sync it reliably —
+              we control it imperatively via ref in the useEffect above. */}
           <video
             ref={videoRef}
             style={videoStyle}
@@ -245,6 +292,33 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
                 <span className="text-white/70 text-sm">טוען שידור...</span>
               </div>
             </div>
+          )}
+
+          {/* Tap-to-play overlay: shown when autoplay was blocked by the browser */}
+          {needsUserGesture && !loading && (
+            <div
+              className="absolute inset-0 flex items-center justify-center bg-black/60 z-10 cursor-pointer"
+              onClick={handleUserGesturePlay}
+            >
+              <div className="flex flex-col items-center gap-3 text-white select-none">
+                <div className="w-16 h-16 bg-white/20 hover:bg-white/30 transition-colors rounded-full flex items-center justify-center text-3xl">
+                  ▶
+                </div>
+                <span className="text-sm text-white/80">הקש להפעלה</span>
+              </div>
+            </div>
+          )}
+
+          {/* Muted indicator: shown when playing muted so user knows they can unmute */}
+          {isPlaying && isMuted && !needsUserGesture && !loading && (
+            <button
+              className="absolute top-12 left-3 sm:left-4 z-10 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs px-2.5 py-1.5 rounded-full transition-colors backdrop-blur-sm"
+              onClick={() => setIsMuted(false)}
+              aria-label="בטל השתקה"
+            >
+              <span>🔇</span>
+              <span>הקש לביטול השתקה</span>
+            </button>
           )}
         </>
       ) : showDynamicLoading ? (
@@ -433,14 +507,32 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             {showHls && (
               <div className="flex items-center gap-1.5 max-w-28">
                 <button
-                  onClick={() => setVolume(v => v === 0 ? 80 : 0)}
+                  onClick={() => {
+                    if (isMuted) {
+                      // Unmute: restore volume (ensure at least some volume)
+                      setIsMuted(false);
+                      if (volume === 0) setVolume(80);
+                    } else {
+                      setIsMuted(true);
+                    }
+                  }}
                   className="text-sm shrink-0 hover:text-blue-400 transition-colors"
+                  aria-label={isMuted ? 'בטל השתקה' : 'השתק'}
                 >
-                  {volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}
+                  {isMuted ? '🔇' : volume < 50 ? '🔉' : '🔊'}
                 </button>
                 <input
-                  type="range" min="0" max="100" value={volume}
-                  onChange={e => setVolume(Number(e.target.value))}
+                  type="range" min="0" max="100" value={isMuted ? 0 : volume}
+                  onChange={e => {
+                    const newVol = Number(e.target.value);
+                    setVolume(newVol);
+                    // Automatically unmute when user raises the slider
+                    if (newVol > 0) {
+                      setIsMuted(false);
+                    } else {
+                      setIsMuted(true);
+                    }
+                  }}
                   className="w-full accent-white h-0.5 cursor-pointer"
                 />
               </div>
