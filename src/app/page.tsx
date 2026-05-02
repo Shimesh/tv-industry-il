@@ -40,7 +40,7 @@ interface RssNewsItem {
 }
 
 function LiveClock() {
-  const [now, setNow] = useState<Date | null>(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);

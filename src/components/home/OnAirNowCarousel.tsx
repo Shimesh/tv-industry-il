@@ -34,16 +34,28 @@ function appendMutedParams(url: string): string {
 function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stream = streamConfigs[channelId];
+  const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
+
+  // For channels with dynamicStream + no static streamUrl, try to fetch HLS at runtime
+  useEffect(() => {
+    if (!stream?.dynamicStream || stream.streamUrl) return;
+    fetch(`/api/stream-token/${channelId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.url) setDynamicHlsUrl(data.url); })
+      .catch(() => {});
+  }, [channelId, stream?.dynamicStream, stream?.streamUrl]);
+
+  const hlsUrl = stream?.streamUrl ?? dynamicHlsUrl;
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !stream?.streamUrl || stream.type !== 'hls') return;
+    if (!video || !hlsUrl) return;
 
     video.muted = true;
     video.volume = 0;
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = stream.streamUrl;
+      video.src = hlsUrl;
       void video.play().catch(() => {});
       return;
     }
@@ -56,14 +68,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       capLevelToPlayerSize: true,
     });
 
-    hls.loadSource(stream.streamUrl);
+    hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       void video.play().catch(() => {});
     });
 
     return () => hls.destroy();
-  }, [channelId, stream?.streamUrl, stream?.type]);
+  }, [hlsUrl]);
 
   if (!stream?.hasLiveStream) {
     return (
@@ -77,20 +89,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
-    return (
-      <iframe
-        src={appendMutedParams(stream.embedUrl)}
-        title="תצוגה מקדימה לשידור חי"
-        className="absolute inset-0 h-full w-full border-0"
-        allow="autoplay *; encrypted-media; picture-in-picture"
-        allowFullScreen
-        loading="lazy"
-      />
-    );
-  }
-
-  if (stream.type === 'hls' && stream.streamUrl) {
+  // HLS available (static or dynamically resolved) — native <video> works on mobile
+  if (hlsUrl) {
     return (
       <video
         ref={videoRef}
@@ -99,6 +99,19 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         playsInline
         autoPlay
         preload="metadata"
+      />
+    );
+  }
+
+  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
+    return (
+      <iframe
+        src={appendMutedParams(stream.embedUrl)}
+        title="תצוגה מקדימה לשידור חי"
+        className="absolute inset-0 h-full w-full border-0"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+        loading="eager"
       />
     );
   }

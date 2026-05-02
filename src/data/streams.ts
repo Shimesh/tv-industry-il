@@ -65,7 +65,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
 
   // === CHANNELS WITH YOUTUBE LIVE EMBEDS ===
 
-  // קשת 12 — Mako embed player (AjaxPage embed, used by third-party sites as iframe)
+  // קשת 12 — tries to resolve direct HLS at runtime; falls back to Mako iframe embed
   keshet12: {
     type: 'iframe',
     streamUrl: null,
@@ -73,6 +73,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
     websiteUrl: 'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
     requiresAuth: false,
     hasLiveStream: true,
+    dynamicStream: true,
     note: 'קשת 12 - שידור חי',
   },
 
