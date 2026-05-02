@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
@@ -27,6 +27,7 @@ export interface AppNotification {
   source?: 'admin' | 'system';
   createdBy?: string;
   read: boolean;
+  readAt?: number;
   createdAt: number;
 }
 
@@ -56,6 +57,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [realtimeFailed, setRealtimeFailed] = useState(false);
+  const browserNotifiedRef = useRef(new Set<string>());
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>(() => (
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   ));
@@ -81,7 +83,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const payload = (await response.json()) as { notifications?: AppNotification[] };
     const notifs = Array.isArray(payload.notifications) ? payload.notifications : [];
     setNotifications(notifs);
-  }, [user]);
+
+    const latestUnread = notifs.find((notification) => !notification.read);
+    if (
+      latestUnread &&
+      browserPermission === 'granted' &&
+      !browserNotifiedRef.current.has(latestUnread.id)
+    ) {
+      browserNotifiedRef.current.add(latestUnread.id);
+      showBrowserNotification(latestUnread.title, latestUnread.message);
+    }
+  }, [user, browserPermission]);
 
   const mutateNotifications = useCallback(async (method: 'PATCH' | 'DELETE', body: Record<string, unknown>) => {
     if (!user) return;
@@ -129,22 +141,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         where('userId', '==', user.uid)
       );
 
-      unsubscribe = onSnapshot(q, (snapshot) => {
+      unsubscribe = onSnapshot(q, () => {
         setRealtimeFailed(false);
-        const notifs = snapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-          }) as AppNotification)
-          .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-        setNotifications(notifs);
-
-        // Show browser notification for new unread ones
-        const newUnread = notifs.filter(n => !n.read);
-        if (newUnread.length > 0 && browserPermission === 'granted') {
-          const latest = newUnread[0];
-          showBrowserNotification(latest.title, latest.message);
-        }
+        void refreshNotifications().catch((error) => {
+          console.error('[notifications] realtime refresh failed:', error);
+        });
       }, (error) => {
         setRealtimeFailed(true);
         console.error('[notifications] realtime listener failed:', error);
@@ -324,8 +325,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const markAsRead = useCallback(async (id: string) => {
     const previous = notifications;
+    const readAt = Date.now();
     setNotifications((current) => current.map((notification) => (
-      notification.id === id ? { ...notification, read: true } : notification
+      notification.id === id ? { ...notification, read: true, readAt } : notification
     )));
     try {
       await mutateNotifications('PATCH', { id });
@@ -337,7 +339,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const markAllAsRead = useCallback(async () => {
     const previous = notifications;
-    setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
+    const readAt = Date.now();
+    setNotifications((current) => current.map((notification) => ({ ...notification, read: true, readAt })));
     try {
       await mutateNotifications('PATCH', { all: true });
     } catch (error) {

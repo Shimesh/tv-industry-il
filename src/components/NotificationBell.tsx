@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bell,
   BellRing,
@@ -37,6 +37,16 @@ const typeColors: Record<string, string> = {
   general: '#6b7280',
   bug_report: '#f59e0b',
 };
+
+function formatNotificationDate(value: number) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('he-IL', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function NotificationBell() {
   const router = useRouter();
@@ -104,9 +114,16 @@ export default function NotificationBell() {
             dir="rtl"
           >
             <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
-              <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-                התראות {unreadCount > 0 ? `(${unreadCount})` : ''}
-              </h3>
+              <div>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                  התראות {unreadCount > 0 ? `(${unreadCount})` : ''}
+                </h3>
+                {notifications.length > 0 ? (
+                  <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>
+                    נשמרות כאן עד מחיקה ידנית
+                  </p>
+                ) : null}
+              </div>
               <div className="flex items-center gap-1">
                 {unreadCount > 0 && (
                   <button
@@ -158,7 +175,7 @@ export default function NotificationBell() {
                     <div
                       key={notification.id}
                       className={`flex items-start gap-3 border-b px-4 py-3 transition-all hover:bg-[var(--theme-accent-glow)] ${
-                        !notification.read ? 'bg-[var(--theme-accent-glow)]' : ''
+                        !notification.read ? 'bg-[var(--theme-accent-glow)]' : 'opacity-75'
                       }`}
                       style={{ borderColor: 'var(--theme-border)' }}
                     >
@@ -177,17 +194,21 @@ export default function NotificationBell() {
                             </p>
                             {notification.linkUrl ? <ExternalLink className="h-3 w-3 shrink-0 opacity-50" /> : null}
                           </div>
-                          <p className="mt-0.5 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                          <p className="mt-0.5 text-xs leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
                             {notification.message}
                           </p>
-                          <p className="mt-1 text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
-                            {new Date(notification.createdAt).toLocaleString('he-IL', {
-                              day: 'numeric',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
+                            <span>{formatNotificationDate(notification.createdAt)}</span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 ${
+                                notification.read
+                                  ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                                  : 'border-red-500/30 bg-red-500/10 text-red-200'
+                              }`}
+                            >
+                              {notification.read ? 'נקרא' : 'חדש'}
+                            </span>
+                          </div>
                         </div>
                       </button>
 
@@ -202,7 +223,7 @@ export default function NotificationBell() {
                           <Check className="h-3.5 w-3.5" />
                         </button>
                       ) : (
-                        <div className="mt-2 h-2 w-2 shrink-0 rounded-full opacity-0" />
+                        <CheckCheck className="mt-2 h-3.5 w-3.5 shrink-0 text-green-400" aria-label="נקרא" />
                       )}
                     </div>
                   );

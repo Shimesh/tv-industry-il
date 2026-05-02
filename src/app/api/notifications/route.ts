@@ -17,6 +17,7 @@ type NotificationDocument = {
   source?: 'admin' | 'system';
   createdBy?: string;
   read?: boolean;
+  readAt?: number | string;
   createdAt?: number | string;
 };
 
@@ -31,6 +32,12 @@ function normalizeNotification(notification: NotificationDocument) {
       : typeof notification.createdAt === 'string'
         ? Date.parse(notification.createdAt) || 0
         : 0;
+  const readAt =
+    typeof notification.readAt === 'number'
+      ? notification.readAt
+      : typeof notification.readAt === 'string'
+        ? Date.parse(notification.readAt) || undefined
+        : undefined;
 
   return {
     id: notification.id,
@@ -43,6 +50,7 @@ function normalizeNotification(notification: NotificationDocument) {
     source: notification.source,
     createdBy: notification.createdBy,
     read: Boolean(notification.read),
+    readAt,
     createdAt,
   };
 }
@@ -100,10 +108,11 @@ export async function PATCH(request: NextRequest) {
 
   if (body.all === true) {
     const notifications = await listUserNotifications(authUser.uid);
+    const readAt = Date.now();
     await Promise.all(
       notifications
         .filter((notification) => !notification.read)
-        .map((notification) => patchDocument(`notifications/${notification.id}`, { read: true })),
+        .map((notification) => patchDocument(`notifications/${notification.id}`, { read: true, readAt })),
     );
     return NextResponse.json({ success: true, updated: notifications.filter((notification) => !notification.read).length });
   }
@@ -118,7 +127,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Notification was not found' }, { status: 404 });
   }
 
-  await patchDocument(`notifications/${id}`, { read: true });
+  await patchDocument(`notifications/${id}`, { read: true, readAt: Date.now() });
   return NextResponse.json({ success: true, updated: 1 });
 }
 

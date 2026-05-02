@@ -39,6 +39,19 @@ type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 's
 type SortDirection = 'asc' | 'desc';
 type NotificationTarget = 'test' | 'user' | 'all';
 
+const NOTIFICATION_LINK_OPTIONS = [
+  { label: 'שידור חי', value: '/schedule#live' },
+  { label: 'לוח שידורים', value: '/schedule' },
+  { label: 'יומן הפקות', value: '/productions' },
+  { label: 'חדשות', value: '/news' },
+  { label: 'אירועים קרובים', value: '/news?tab=events' },
+  { label: 'אלפון', value: '/directory' },
+  { label: 'לוח מודעות', value: '/board' },
+  { label: 'צ׳אט', value: '/chat' },
+  { label: 'הגדרות', value: '/settings' },
+  { label: 'ללא קישור', value: '' },
+];
+
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
   presenceWindowMs: 120000,
@@ -962,13 +975,34 @@ export default function AdminPage() {
                     placeholder="תוכן ההתראה"
                     className="w-full resize-none rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                   />
-                  <input
-                    value={notificationLink}
-                    onChange={(event) => setNotificationLink(event.target.value)}
-                    placeholder="/schedule#live"
-                    dir="ltr"
-                    className="w-full rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-left text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                  />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select
+                      value={NOTIFICATION_LINK_OPTIONS.some((option) => option.value === notificationLink) ? notificationLink : 'custom'}
+                      onChange={(event) => {
+                        if (event.target.value !== 'custom') {
+                          setNotificationLink(event.target.value);
+                        }
+                      }}
+                      className="rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      {NOTIFICATION_LINK_OPTIONS.map((option) => (
+                        <option key={option.label} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                      <option value="custom">קישור מותאם אישית</option>
+                    </select>
+                    <input
+                      value={notificationLink}
+                      onChange={(event) => setNotificationLink(event.target.value)}
+                      placeholder="/schedule#live"
+                      dir="ltr"
+                      className="w-full rounded-xl border border-gray-700 bg-gray-800 px-3 py-2 text-left text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    בחר אזור באפליקציה או כתוב נתיב פנימי שמתחיל ב־`/`. לחיצה על ההתראה תוביל לשם ותסמן אותה כנקראה.
+                  </p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <select
                       value={notificationTarget}
