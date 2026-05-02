@@ -11,8 +11,8 @@ interface NewChatModalProps {
   contacts: Contact[];
   onlineUsers: UserProfile[];
   currentUserId: string;
-  onCreatePrivate: (userId: string) => void;
-  onCreateGroup: (name: string, memberIds: string[]) => void;
+  onCreatePrivate: (userId: string) => Promise<void> | void;
+  onCreateGroup: (name: string, memberIds: string[]) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -42,6 +42,7 @@ export default function NewChatModal({
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const people = useMemo<DisplayPerson[]>(() => {
     const nextPeople: DisplayPerson[] = [];
@@ -125,14 +126,20 @@ export default function NewChatModal({
     });
   };
 
-  const handlePersonClick = (person: DisplayPerson) => {
+  const handlePersonClick = async (person: DisplayPerson) => {
+    if (creating) return;
     if (mode === 'group') {
       if (person.userId) toggleUser(person.userId);
       return;
     }
 
     if (person.userId) {
-      onCreatePrivate(person.userId);
+      setCreating(true);
+      try {
+        await onCreatePrivate(person.userId);
+      } finally {
+        setCreating(false);
+      }
       return;
     }
 
@@ -275,7 +282,8 @@ export default function NewChatModal({
                 return (
                   <div key={person.key}>
                     <button
-                      onClick={() => handlePersonClick(person)}
+                      onClick={() => void handlePersonClick(person)}
+                      disabled={creating}
                       className={`w-full px-4 py-3 transition-colors hover:bg-[#2A3942] ${
                         isSelected ? 'bg-[#2A394280]' : ''
                       } ${isExpanded ? 'bg-[#2A3942]' : ''}`}
@@ -347,13 +355,14 @@ export default function NewChatModal({
             <button
               onClick={() => {
                 if (groupName.trim() && selectedUsers.length > 0) {
-                  onCreateGroup(groupName.trim(), selectedUsers);
+                  setCreating(true);
+                  Promise.resolve(onCreateGroup(groupName.trim(), selectedUsers)).finally(() => setCreating(false));
                 }
               }}
-              disabled={!groupName.trim() || selectedUsers.length === 0}
+              disabled={creating || !groupName.trim() || selectedUsers.length === 0}
               className="w-full rounded-xl bg-[#00A884] py-3 text-sm font-bold text-white transition-colors hover:bg-[#06CF9C] disabled:cursor-not-allowed disabled:opacity-30"
             >
-              צור קבוצה ({selectedUsers.length} חברים)
+              {creating ? 'יוצר...' : `צור קבוצה (${selectedUsers.length} חברים)`}
             </button>
           </div>
         )}

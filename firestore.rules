@@ -18,6 +18,10 @@ service cloud.firestore {
     function isModeratorOrAbove() {
       return isAuth() && (userRole() in ['admin', 'moderator']);
     }
+    function isChatMember(chatId) {
+      return isAuth() &&
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+    }
 
     // ── User profiles ─────────────────────────────────────────────
     match /users/{userId} {
@@ -51,7 +55,7 @@ service cloud.firestore {
     match /chats/{chatId} {
       // Admins can read all chats (for dashboard count)
       allow read: if isAuth() && (request.auth.uid in resource.data.members || isAdmin());
-      allow create: if isAuth();
+      allow create: if isAuth() && request.auth.uid in request.resource.data.members;
       allow update: if isAuth() && (
         request.auth.uid in resource.data.members ||
         // Allow adding self to team chat on invite acceptance
@@ -63,17 +67,18 @@ service cloud.firestore {
 
       // Messages inside a chat
       match /messages/{messageId} {
-        allow read: if isAuth();
-        allow create: if isAuth();
+        allow read: if isChatMember(chatId) || isAdmin();
+        allow create: if isChatMember(chatId) && request.resource.data.senderId == request.auth.uid;
         // Only sender or moderator+ can delete
         allow delete: if isAuth() &&
           (resource.data.senderId == request.auth.uid || isModeratorOrAbove());
-        allow update: if isAuth() && resource.data.senderId == request.auth.uid;
+        allow update: if isChatMember(chatId) || isModeratorOrAbove();
       }
 
       // Typing indicators
       match /typing/{typingId} {
-        allow read, write: if isAuth();
+        allow read: if isChatMember(chatId) || isAdmin();
+        allow write: if isChatMember(chatId) && typingId == request.auth.uid;
       }
     }
 

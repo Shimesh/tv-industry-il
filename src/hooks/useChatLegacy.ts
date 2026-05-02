@@ -70,6 +70,25 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const displayName = profile?.displayName || user?.displayName || 'משתמש';
   const displayPhoto = profile?.photoURL || user?.photoURL || null;
 
+  const fetchChatApi = useCallback(async <T,>(body: Record<string, unknown>): Promise<T> => {
+    if (!user) throw new Error('יש להתחבר כדי להשתמש בצ׳אט');
+    const token = await user.getIdToken();
+    const response = await fetch('/api/chat/conversations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof payload?.error === 'string' ? payload.error : 'פעולת הצ׳אט נכשלה');
+    }
+    return payload as T;
+  }, [user]);
+
   // Helper: get decrypted chat key (from cache or decrypt from Firestore data)
   const getChatKey = useCallback(async (chatId: string, encryptedKeys?: Record<string, string>): Promise<string | null> => {
     if (!user) return null;
@@ -291,6 +310,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     let fileURL = null;
     let fileSize = null;
+    const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
+    const chatData = chatDoc?.data();
+    const chatMembers = Array.isArray(chatData?.members) ? chatData.members as string[] : [];
+    if (!chatDoc?.exists() || !chatMembers.includes(user.uid)) {
+      throw new Error('אין לך הרשאה לשלוח הודעה בשיחה הזו');
+    }
 
     if (file && type !== 'text') {
       try {
@@ -330,8 +355,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     let messageText = type === 'text' ? text : (type === 'voice' || type === 'video' ? '' : file?.name || text);
     {
-      const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
-      const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
+      const encryptedKeys = chatData?.encryptedKeys as Record<string, string> | undefined;
       if (encryptedKeys) {
         const chatKey = await getChatKey(activeChat, encryptedKeys);
         if (chatKey && messageText) {
@@ -361,15 +385,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     try {
       await addDoc(collection(db, 'chats', activeChat, 'messages'), messageData);
 
-      const chat = chats.find(c => c.id === activeChat);
       const unreadUpdates: Record<string, unknown> = {};
-      if (chat) {
-        chat.members.forEach(uid => {
-          if (uid !== user.uid) {
-            unreadUpdates[`unreadCount.${uid}`] = increment(1);
-          }
-        });
-      }
+      chatMembers.forEach(uid => {
+        if (uid !== user.uid) {
+          unreadUpdates[`unreadCount.${uid}`] = increment(1);
+        }
+      });
 
       await updateDoc(doc(db, 'chats', activeChat), {
         lastMessage: {
@@ -390,7 +411,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       console.error('Send message error:', err);
       throw err;
     }
-  }, [user, activeChat, displayName, displayPhoto, chats, getChatKey]);
+  }, [user, activeChat, displayName, displayPhoto, getChatKey]);
 
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!activeChat || !user) return;
@@ -487,51 +508,24 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     );
     if (existing) return existing.id;
 
-    const otherUser = allUsers.find(u => u.uid === otherUserId);
-    if (!otherUser) return null;
-
     try {
-      const chatKey = await generateSymmetricKey();
-      const myKeyPair = getKeyPair(user.uid);
-      const encryptedKeys: Record<string, string> = {};
-
-      if (chatKey && myKeyPair) {
-        const myPub = profile?.encryptionPublicKey;
-        if (myPub) {
-          const enc = await encryptChatKeyForMember(chatKey, myPub, myKeyPair.privateKey);
-          if (enc) encryptedKeys[user.uid] = enc;
-        }
-        if (otherUser.encryptionPublicKey) {
-          const enc = await encryptChatKeyForMember(chatKey, otherUser.encryptionPublicKey, myKeyPair.privateKey);
-          if (enc) encryptedKeys[otherUserId] = enc;
-        }
-      }
-
-      const chatRef = await addDoc(collection(db, 'chats'), {
-        type: 'private',
-        name: '',
-        members: [user.uid, otherUserId],
-        membersInfo: [
-          { uid: user.uid, displayName, photoURL: displayPhoto },
-          { uid: otherUserId, displayName: otherUser.displayName, photoURL: otherUser.photoURL },
-        ],
-        unreadCount: {},
-        lastRead: {},
-        encryptedKeys,
-        createdAt: serverTimestamp(),
-      });
-
-      if (chatKey) chatKeyCache.current.set(chatRef.id, chatKey);
-
-      return chatRef.id;
+      const result = await fetchChatApi<{ chatId?: string }>({ type: 'private', otherUserId });
+      return result.chatId || null;
     } catch (err) {
       console.error('Create chat error:', err);
       return null;
     }
-  }, [user, profile, chats, allUsers, displayName, displayPhoto]);
+  }, [user, chats, fetchChatApi]);
 
   const createGroup = useCallback(async (name: string, memberIds: string[]): Promise<string | null> => {
     if (!user) return null;
+
+    try {
+      const result = await fetchChatApi<{ chatId?: string }>({ type: 'group', name, memberIds });
+      if (result.chatId) return result.chatId;
+    } catch (apiError) {
+      console.warn('Create group API fallback:', apiError);
+    }
 
     const allMembers = [user.uid, ...memberIds];
     const membersInfo = allMembers.map(uid => {
@@ -582,7 +576,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       console.error('Create group error:', err);
       return null;
     }
-  }, [user, profile, allUsers, displayName]);
+  }, [user, profile, allUsers, displayName, fetchChatApi]);
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!activeChat || !user) return;
