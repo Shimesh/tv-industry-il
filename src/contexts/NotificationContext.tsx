@@ -76,15 +76,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notifs: AppNotification[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as AppNotification[];
+      const notifs = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }) as AppNotification)
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
       setNotifications(notifs);
 
       // Show browser notification for new unread ones
@@ -93,6 +94,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         const latest = newUnread[0];
         showBrowserNotification(latest.title, latest.message);
       }
+    }, (error) => {
+      console.error('[notifications] realtime listener failed:', error);
     });
 
     return () => unsubscribe();
