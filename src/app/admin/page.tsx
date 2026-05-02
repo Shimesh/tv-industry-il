@@ -484,6 +484,17 @@ export default function AdminPage() {
         }),
       });
 
+      window.dispatchEvent(new Event('app:notifications-refresh'));
+      if ('BroadcastChannel' in window) {
+        try {
+          const channel = new BroadcastChannel('tv-industry-notifications');
+          channel.postMessage({ type: 'refresh' });
+          channel.close();
+        } catch {
+          // The direct window event above still refreshes the current tab.
+        }
+      }
+
       showToast('ok', `ההתראה נשלחה ל-${result.sent} משתמשים`);
       setNotificationTitle('');
       setNotificationMessage('');

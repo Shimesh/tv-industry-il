@@ -31,6 +31,7 @@ async function createUserNotification(params: {
 }) {
   await createDocument('notifications', {
     userId: params.userId,
+    recipientUid: params.userId,
     type: 'general',
     title: params.title,
     message: params.message,

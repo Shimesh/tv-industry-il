@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc,
+  collection, onSnapshot, addDoc,
   query, where, orderBy
 } from 'firebase/firestore';
 import { getWeekId } from '@/lib/productionDiff';
@@ -55,9 +55,51 @@ const NotificationContext = createContext<NotificationContextType>({
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [realtimeFailed, setRealtimeFailed] = useState(false);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>(() => (
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   ));
+
+  const refreshNotifications = useCallback(async () => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+
+    const token = await user.getIdToken();
+    const response = await fetch('/api/notifications', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to load notifications: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { notifications?: AppNotification[] };
+    const notifs = Array.isArray(payload.notifications) ? payload.notifications : [];
+    setNotifications(notifs);
+  }, [user]);
+
+  const mutateNotifications = useCallback(async (method: 'PATCH' | 'DELETE', body: Record<string, unknown>) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const response = await fetch('/api/notifications', {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update notifications: ${response.status}`);
+    }
+  }, [user]);
 
   // Check browser permission on mount
   useEffect(() => {
@@ -74,32 +116,91 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return () => window.clearTimeout(timer);
     }
 
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', user.uid)
-    );
+    const initialRefreshTimer = window.setTimeout(() => {
+      void refreshNotifications().catch((error) => {
+        console.error('[notifications] initial API load failed:', error);
+      });
+    }, 0);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }) as AppNotification)
-        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-      setNotifications(notifs);
+    let unsubscribe: (() => void) | null = null;
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('userId', '==', user.uid)
+      );
 
-      // Show browser notification for new unread ones
-      const newUnread = notifs.filter(n => !n.read);
-      if (newUnread.length > 0 && browserPermission === 'granted') {
-        const latest = newUnread[0];
-        showBrowserNotification(latest.title, latest.message);
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        setRealtimeFailed(false);
+        const notifs = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }) as AppNotification)
+          .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+        setNotifications(notifs);
+
+        // Show browser notification for new unread ones
+        const newUnread = notifs.filter(n => !n.read);
+        if (newUnread.length > 0 && browserPermission === 'granted') {
+          const latest = newUnread[0];
+          showBrowserNotification(latest.title, latest.message);
+        }
+      }, (error) => {
+        setRealtimeFailed(true);
+        console.error('[notifications] realtime listener failed:', error);
+        void refreshNotifications().catch((refreshError) => {
+          console.error('[notifications] API fallback failed:', refreshError);
+        });
+      });
+    } catch (error) {
+      window.setTimeout(() => setRealtimeFailed(true), 0);
+      console.error('[notifications] realtime listener setup failed:', error);
+    }
+
+    return () => {
+      window.clearTimeout(initialRefreshTimer);
+      unsubscribe?.();
+    };
+  }, [user, browserPermission, refreshNotifications]);
+
+  // Explicit refresh channel for admin sends and a cautious fallback when realtime is unavailable.
+  useEffect(() => {
+    if (!user) return;
+
+    const refresh = () => {
+      void refreshNotifications().catch((error) => {
+        console.error('[notifications] manual refresh failed:', error);
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    let channel: BroadcastChannel | null = null;
+    window.addEventListener('app:notifications-refresh', refresh);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    if ('BroadcastChannel' in window) {
+      try {
+        channel = new BroadcastChannel('tv-industry-notifications');
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'refresh') refresh();
+        };
+      } catch (error) {
+        console.warn('[notifications] BroadcastChannel unavailable:', error);
       }
-    }, (error) => {
-      console.error('[notifications] realtime listener failed:', error);
-    });
+    }
 
-    return () => unsubscribe();
-  }, [user, browserPermission]);
+    const fallbackInterval = realtimeFailed ? window.setInterval(refresh, 30_000) : null;
+
+    return () => {
+      window.removeEventListener('app:notifications-refresh', refresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (fallbackInterval) window.clearInterval(fallbackInterval);
+      channel?.close();
+    };
+  }, [user, realtimeFailed, refreshNotifications]);
 
   // Production change listener - auto-generate notifications (per-user path)
   useEffect(() => {
@@ -127,6 +228,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         if (change.type === 'modified') {
           await addDoc(collection(db, 'notifications'), {
             userId: user.uid,
+            recipientUid: user.uid,
             type: 'status_change',
             title: 'הפקה עודכנה',
             message: `ההפקה "${data.name}" עודכנה`,
@@ -172,6 +274,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           sentReminders.add(id);
           await addDoc(collection(db, 'notifications'), {
             userId: user.uid,
+            recipientUid: user.uid,
             type: 'production_reminder',
             title: 'תזכורת הפקה',
             message: `ההפקה "${prod.name}" מתחילה בעוד 30 דקות (${prod.startTime})`,
@@ -213,23 +316,46 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     await addDoc(collection(db, 'notifications'), {
       ...notif,
       userId: user.uid,
+      recipientUid: user.uid,
       read: false,
       createdAt: Date.now(),
     });
   }, [user]);
 
   const markAsRead = useCallback(async (id: string) => {
-    await updateDoc(doc(db, 'notifications', id), { read: true });
-  }, []);
+    const previous = notifications;
+    setNotifications((current) => current.map((notification) => (
+      notification.id === id ? { ...notification, read: true } : notification
+    )));
+    try {
+      await mutateNotifications('PATCH', { id });
+    } catch (error) {
+      setNotifications(previous);
+      throw error;
+    }
+  }, [mutateNotifications, notifications]);
 
   const markAllAsRead = useCallback(async () => {
-    const unread = notifications.filter(n => !n.read);
-    await Promise.all(unread.map(n => updateDoc(doc(db, 'notifications', n.id), { read: true })));
-  }, [notifications]);
+    const previous = notifications;
+    setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
+    try {
+      await mutateNotifications('PATCH', { all: true });
+    } catch (error) {
+      setNotifications(previous);
+      throw error;
+    }
+  }, [mutateNotifications, notifications]);
 
   const clearAll = useCallback(async () => {
-    await Promise.all(notifications.map(n => deleteDoc(doc(db, 'notifications', n.id))));
-  }, [notifications]);
+    const previous = notifications;
+    setNotifications([]);
+    try {
+      await mutateNotifications('DELETE', { all: true });
+    } catch (error) {
+      setNotifications(previous);
+      throw error;
+    }
+  }, [mutateNotifications, notifications]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
