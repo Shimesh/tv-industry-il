@@ -81,7 +81,7 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         src={appendMutedParams(stream.embedUrl)}
         title="תצוגה מקדימה לשידור חי"
         className="absolute inset-0 h-full w-full border-0"
-        allow="autoplay; encrypted-media; picture-in-picture"
+        allow="autoplay *; encrypted-media; picture-in-picture"
         loading="lazy"
       />
     );

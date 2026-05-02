@@ -42,11 +42,11 @@ export const streamConfigs: Record<string, StreamConfig> = {
     note: 'רשת 13 - שידור חי',
   },
 
-  // i24NEWS — YouTube live embed (channel UCvHDpsWKADrDia0c99X37vg, confirmed 24/7)
+  // i24NEWS Hebrew direct Brightcove embed. The i24 app shell opens a language picker, so use the Hebrew live video directly.
   i24: {
     type: 'iframe',
     streamUrl: null,
-    embedUrl: 'https://video.i24news.tv/live/brightcove/he',
+    embedUrl: 'https://players.brightcove.net/5377161796001/NwpCHKlKW_default/index.html?videoId=6352464366112&autoplay=muted&muted=true&playsinline=true',
     websiteUrl: 'https://www.isramedia.net/9568/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%97%D7%93%D7%A9%D7%95%D7%AA/i24news-%D7%91%D7%A2%D7%91%D7%A8%D7%99%D7%AA-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: false,
     hasLiveStream: true,

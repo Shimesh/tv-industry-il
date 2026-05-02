@@ -11,7 +11,7 @@ import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
 const CACHE_TTL_MS = 3 * 60 * 1000;
 const STALE_TTL_MS = 12 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
-const HOME_CHANNEL_IDS = ['kan11', 'keshet12', 'reshet13', 'now14'];
+const HOME_CHANNEL_IDS = ['kan11', 'keshet12', 'reshet13', 'now14', 'i24', 'knesset'];
 const ISRAMEIDA_GUIDE_URL = 'https://www.isramedia.net/tv';
 const ISRAMEIDA_SPORTS_GUIDE_URL = 'https://www.isramedia.net/sports-broadcasts';
 
