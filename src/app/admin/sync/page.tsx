@@ -82,6 +82,10 @@ export default function SyncPage() {
   const [pdfResult, setPdfResult] = useState<PdfMigrationResult | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
+  const [globalMigrateStatus, setGlobalMigrateStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [globalMigrateResult, setGlobalMigrateResult] = useState<{ written: number; unique: number; errors: string[] } | null>(null);
+  const [globalMigrateError, setGlobalMigrateError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user || profile?.siteRole !== 'admin') {
       setPreviewLoading(false);
@@ -176,6 +180,26 @@ export default function SyncPage() {
     } catch (error) {
       setDeptError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
       setDeptStatus('error');
+    }
+  }
+
+  async function handleGlobalMigrate() {
+    setGlobalMigrateStatus('running');
+    setGlobalMigrateError(null);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch('/api/admin/migrate-global-productions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const data = await res.json() as { success?: boolean; written?: number; unique?: number; errors?: string[]; error?: string };
+      if (!res.ok || !data.success) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setGlobalMigrateResult({ written: data.written ?? 0, unique: data.unique ?? 0, errors: data.errors ?? [] });
+      setGlobalMigrateStatus('done');
+    } catch (error) {
+      setGlobalMigrateError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
+      setGlobalMigrateStatus('error');
     }
   }
 
@@ -330,6 +354,49 @@ export default function SyncPage() {
             <p className="font-bold">שגיאה בייבוא</p>
             <p className="mt-1 text-sm">{pdfError}</p>
             <button onClick={() => setPdfStatus('idle')} className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
+              נסה שוב
+            </button>
+          </div>
+        )}
+      </section>
+
+      <hr className="w-full max-w-2xl border-gray-700" />
+
+      <section className="w-full max-w-2xl flex flex-col gap-4">
+        <h2 className="text-xl font-bold">סנכרון לוח הפקות גלובלי</h2>
+        <p className="text-sm text-gray-400">
+          מעתיק את כל ההפקות מהיומנים האישיים של המשתמשים לאוסף הגלובלי. הפעולה אידמפוטנטית — ניתן להריץ מספר פעמים בבטחה.
+        </p>
+
+        {globalMigrateStatus === 'idle' && (
+          <button onClick={handleGlobalMigrate} className="self-start px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-colors">
+            העבר הפקות לגלובלי
+          </button>
+        )}
+        {globalMigrateStatus === 'running' && (
+          <div className="flex items-center gap-3 text-indigo-400"><Spinner />סורק ומעביר הפקות...</div>
+        )}
+        {globalMigrateStatus === 'done' && globalMigrateResult && (
+          <div className="bg-green-900/30 border border-green-500/40 rounded-2xl p-6 space-y-2">
+            <p className="text-green-400 text-lg font-bold">ההעברה הושלמה בהצלחה</p>
+            <p className="text-gray-300">נמצאו ייחודיות: <strong>{globalMigrateResult.unique}</strong></p>
+            <p className="text-gray-300">נכתבו לגלובלי: <strong>{globalMigrateResult.written}</strong></p>
+            {globalMigrateResult.errors.length > 0 && (
+              <div className="mt-2 text-red-400 text-sm">
+                <p className="font-semibold">שגיאות ({globalMigrateResult.errors.length}):</p>
+                {globalMigrateResult.errors.map((e, i) => <p key={i}>{e}</p>)}
+              </div>
+            )}
+            <button onClick={() => setGlobalMigrateStatus('idle')} className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm">
+              הרץ שוב
+            </button>
+          </div>
+        )}
+        {globalMigrateStatus === 'error' && (
+          <div className="bg-red-900/30 border border-red-500/40 rounded-2xl p-6 text-red-400">
+            <p className="font-bold">שגיאה בהעברה</p>
+            <p className="mt-1 text-sm">{globalMigrateError}</p>
+            <button onClick={() => setGlobalMigrateStatus('idle')} className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
               נסה שוב
             </button>
           </div>
