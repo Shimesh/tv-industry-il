@@ -77,6 +77,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
     requiresAuth: false,
     hasLiveStream: true,
     dynamicStream: true,
+    embedRespectsMute: false,
     note: 'קשת 12 - שידור חי',
   },
 

@@ -331,10 +331,11 @@ export default function Navigation() {
                   event.preventDefault();
                   navigateFromNav('/login');
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all bg-gradient-to-l from-purple-500 to-blue-600 text-white hover:shadow-lg hover:shadow-purple-500/20"
+                aria-label="הרשמה או כניסה לאפליקציה"
+                className="flex min-h-10 items-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 px-3 py-2 text-sm font-bold text-white shadow-md shadow-purple-500/15 transition-all hover:shadow-lg hover:shadow-purple-500/20 sm:px-4"
               >
                 <LogIn className="w-4 h-4" />
-                <span className="hidden sm:inline">כניסה</span>
+                <span className="whitespace-nowrap">הרשמה / כניסה</span>
               </Link>
             )}
 

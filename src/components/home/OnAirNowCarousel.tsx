@@ -32,15 +32,29 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stream = streamConfigs[channelId];
   const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
+  const [dynamicStreamResolved, setDynamicStreamResolved] = useState(false);
+  const needsDynamicResolution = Boolean(stream?.dynamicStream && !stream.streamUrl);
 
   // For channels with dynamicStream + no static streamUrl, try to fetch HLS at runtime
   useEffect(() => {
-    if (!stream?.dynamicStream || stream.streamUrl) return;
+    if (!needsDynamicResolution) return;
+
+    let cancelled = false;
     fetch(`/api/stream-token/${channelId}`)
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.url) setDynamicHlsUrl(data.url); })
-      .catch(() => {});
-  }, [channelId, stream?.dynamicStream, stream?.streamUrl]);
+      .then(data => {
+        if (cancelled) return;
+        if (data?.url) setDynamicHlsUrl(data.url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setDynamicStreamResolved(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [channelId, needsDynamicResolution]);
 
   const hlsUrl = stream?.streamUrl ?? dynamicHlsUrl;
 
@@ -97,6 +111,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         autoPlay
         preload="metadata"
       />
+    );
+  }
+
+  if (needsDynamicResolution && !dynamicStreamResolved) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-xs font-bold text-white/50">
+        טוען תצוגה שקטה...
+      </div>
     );
   }
 
