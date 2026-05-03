@@ -20,8 +20,9 @@ function appendMutedParams(url: string): string {
     parsed.searchParams.set('autoplay', '1');
     parsed.searchParams.set('autoPlay', 'true');
     parsed.searchParams.set('mute', '1');
-    parsed.searchParams.set('muted', '1');
-    parsed.searchParams.set('muted', 'true');
+    parsed.searchParams.delete('muted');
+    parsed.searchParams.append('muted', '1');
+    parsed.searchParams.append('muted', 'true');
     parsed.searchParams.set('isMuted', 'true');
     parsed.searchParams.set('isMute', 'true');
     parsed.searchParams.set('volume', '0');
@@ -31,8 +32,15 @@ function appendMutedParams(url: string): string {
     return parsed.toString();
   } catch {
     const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}autoplay=1&autoPlay=true&mute=1&muted=true&isMuted=true&isMute=true&volume=0&playsinline=1&playsInline=1&webkit-playsinline=1`;
+    return `${url}${sep}autoplay=1&autoPlay=true&mute=1&muted=1&muted=true&isMuted=true&isMute=true&volume=0&playsinline=1&playsInline=1&webkit-playsinline=1`;
   }
+}
+
+function enforceMutedVideo(video: HTMLVideoElement | null) {
+  if (!video) return;
+  video.defaultMuted = true;
+  video.muted = true;
+  video.volume = 0;
 }
 
 function MutedLivePreview({ channelId }: { channelId: string }) {
@@ -69,11 +77,11 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     const video = videoRef.current;
     if (!video || !hlsUrl) return;
 
-    video.muted = true;
-    video.volume = 0;
+    enforceMutedVideo(video);
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = hlsUrl;
+      enforceMutedVideo(video);
       void video.play().catch(() => {});
       return;
     }
@@ -89,11 +97,16 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      enforceMutedVideo(video);
       void video.play().catch(() => {});
     });
 
     return () => hls.destroy();
   }, [hlsUrl]);
+
+  const keepMuted = useCallback(() => {
+    enforceMutedVideo(videoRef.current);
+  }, []);
 
   if (!stream?.hasLiveStream) {
     return (
@@ -117,6 +130,9 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         playsInline
         autoPlay
         preload="metadata"
+        onLoadedMetadata={keepMuted}
+        onPlay={keepMuted}
+        onVolumeChange={keepMuted}
       />
     );
   }
