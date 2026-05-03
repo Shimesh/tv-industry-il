@@ -285,12 +285,8 @@ async function fetchAllNews(): Promise<RssNewsItem[]> {
     return true;
   });
 
-  deduped.sort((a, b) => {
-    const priority = (item: typeof a) => (item.newsType === 'תקשורת' ? 0 : item.newsType === 'ספורט' || item.newsType === 'כלכלה' ? 1 : 2);
-    const priorityDelta = priority(a) - priority(b);
-    if (priorityDelta !== 0) return priorityDelta;
-    return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
-  });
+  // Sort purely by publication date — newest first, so the player always starts from the freshest item
+  deduped.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
 
   const enriched = await Promise.all(deduped.slice(0, 40).map(enrichImage));
 
