@@ -44,10 +44,12 @@ export const streamConfigs: Record<string, StreamConfig> = {
   },
 
   // i24NEWS Hebrew direct Brightcove embed. The i24 app shell opens a language picker, so use the Hebrew live video directly.
+  // embedUrl has NO muted params — appendMutedParams adds them for the carousel,
+  // and appendAutoplayParams (without muted) lets the schedule page play with sound.
   i24: {
     type: 'iframe',
     streamUrl: null,
-    embedUrl: 'https://players.brightcove.net/5377161796001/NwpCHKlKW_default/index.html?videoId=6352464366112&autoplay=muted&muted=true&playsinline=true',
+    embedUrl: 'https://players.brightcove.net/5377161796001/NwpCHKlKW_default/index.html?videoId=6352464366112&autoplay=1&playsinline=true',
     websiteUrl: 'https://www.isramedia.net/9568/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%97%D7%93%D7%A9%D7%95%D7%AA/i24news-%D7%91%D7%A2%D7%91%D7%A8%D7%99%D7%AA-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: false,
     hasLiveStream: true,
@@ -67,8 +69,6 @@ export const streamConfigs: Record<string, StreamConfig> = {
   // === CHANNELS WITH YOUTUBE LIVE EMBEDS ===
 
   // קשת 12 — tries to resolve direct HLS at runtime; falls back to Mako iframe embed
-  // embedRespectsMute: false — Mako uses Video.js and ignores muted URL params,
-  // so the carousel skips the iframe and shows a silent fallback instead.
   keshet12: {
     type: 'iframe',
     streamUrl: null,
@@ -77,7 +77,6 @@ export const streamConfigs: Record<string, StreamConfig> = {
     requiresAuth: false,
     hasLiveStream: true,
     dynamicStream: true,
-    embedRespectsMute: false,
     note: 'קשת 12 - שידור חי',
   },
 
