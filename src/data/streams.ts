@@ -14,7 +14,6 @@ export interface StreamConfig {
   requiresAuth: boolean;
   hasLiveStream: boolean; // Whether we can play it directly
   dynamicStream?: boolean; // Fetch stream URL at runtime from /api/stream-token/[channel]
-  embedRespectsMute?: boolean; // false = embed ignores muted URL params (e.g. Mako/Video.js) → skip in carousel
   provider?: string;
   note?: string;
 }
@@ -77,7 +76,6 @@ export const streamConfigs: Record<string, StreamConfig> = {
     requiresAuth: false,
     hasLiveStream: true,
     dynamicStream: true,
-    embedRespectsMute: false,
     note: 'קשת 12 - שידור חי',
   },
 
