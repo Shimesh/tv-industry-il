@@ -14,6 +14,7 @@ export interface StreamConfig {
   requiresAuth: boolean;
   hasLiveStream: boolean; // Whether we can play it directly
   dynamicStream?: boolean; // Fetch stream URL at runtime from /api/stream-token/[channel]
+  embedRespectsMute?: boolean; // false = embed ignores muted URL params (e.g. Mako/Video.js) → skip in carousel
   provider?: string;
   note?: string;
 }
@@ -66,6 +67,8 @@ export const streamConfigs: Record<string, StreamConfig> = {
   // === CHANNELS WITH YOUTUBE LIVE EMBEDS ===
 
   // קשת 12 — tries to resolve direct HLS at runtime; falls back to Mako iframe embed
+  // embedRespectsMute: false — Mako uses Video.js and ignores muted URL params,
+  // so the carousel skips the iframe and shows a silent fallback instead.
   keshet12: {
     type: 'iframe',
     streamUrl: null,
@@ -74,6 +77,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
     requiresAuth: false,
     hasLiveStream: true,
     dynamicStream: true,
+    embedRespectsMute: false,
     note: 'קשת 12 - שידור חי',
   },
 

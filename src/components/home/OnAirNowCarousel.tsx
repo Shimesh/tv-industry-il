@@ -100,7 +100,10 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
+  // Only show iframe preview when the embed player actually respects muted params.
+  // Channels with embedRespectsMute: false (e.g. Mako/Video.js) are skipped here
+  // to avoid playing audio in the silent carousel.
+  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl && stream.embedRespectsMute !== false) {
     return (
       <iframe
         src={appendMutedParams(stream.embedUrl)}
