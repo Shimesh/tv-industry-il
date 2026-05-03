@@ -41,6 +41,8 @@ function getSourceBadgeColor(source: string): string {
   if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/70 text-white';
   if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-500/70 text-white';
   if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/70 text-white';
+  if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/70 text-white';
+  if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/70 text-white';
   return 'bg-white/20 text-white';
 }
 

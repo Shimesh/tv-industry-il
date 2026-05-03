@@ -28,7 +28,7 @@ type RssSource = {
   name: string;
   url: string;
   sourceUrl: string;
-  newsType: 'אקטואליה' | 'ספורט' | 'תרבות' | 'כלכלה' | 'טכנולוגיה' | 'תקשורת' | 'כללי';
+  newsType: string;
   highValueOnly?: boolean;
   filterLink?: (link: string) => boolean;
 };
@@ -43,6 +43,7 @@ const RSS_SOURCES: RssSource[] = [
   { name: 'Walla תרבות', url: 'https://rss.walla.co.il/feed/4', sourceUrl: 'https://www.walla.co.il', newsType: 'תרבות' },
   { name: 'Walla ספורט', url: 'https://rss.walla.co.il/feed/3', sourceUrl: 'https://sports.walla.co.il', newsType: 'ספורט', highValueOnly: true },
   { name: 'Walla כלכלה', url: 'https://rss.walla.co.il/feed/2', sourceUrl: 'https://finance.walla.co.il', newsType: 'כלכלה', highValueOnly: true },
+  { name: 'Walla טכנולוגיה', url: 'https://rss.walla.co.il/feed/6', sourceUrl: 'https://tech.walla.co.il', newsType: 'טכנולוגיה', highValueOnly: true },
   {
     name: 'ICE',
     url: 'https://www.ice.co.il/rss/media',
@@ -56,6 +57,15 @@ const RSS_SOURCES: RssSource[] = [
     sourceUrl: 'https://scopt.co.il',
     newsType: 'תקשורת',
   },
+  { name: 'Mako טלוויזיה', url: 'https://rcs.mako.co.il/rss/57bce76404864110VgnVCM1000004801000aRCRD.xml', sourceUrl: 'https://www.mako.co.il/tv', newsType: 'טלוויזיה' },
+  { name: 'Mako תרבות', url: 'https://rcs.mako.co.il/rss/c7a987610879a310VgnVCM2000002a0c10acRCRD.xml', sourceUrl: 'https://www.mako.co.il/culture', newsType: 'תרבות' },
+  { name: 'Mako TVBEE', url: 'https://rcs.mako.co.il/rss/makoTVNewest.xml', sourceUrl: 'https://www.mako.co.il/tvbee', newsType: 'טלוויזיה' },
+  { name: 'Mako מוזיקה', url: 'https://rcs.mako.co.il/rss/dea47c3250daf110VgnVCM100000290c10acRCRD.xml', sourceUrl: 'https://www.mako.co.il/music', newsType: 'מוזיקה', highValueOnly: true },
+  { name: 'Mako מדיה', url: 'https://storage.googleapis.com/mako-sitemaps/rssWebSub.xml', sourceUrl: 'https://www.mako.co.il', newsType: 'תקשורת', highValueOnly: true },
+  { name: 'Globes', url: 'https://www.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iID=2', sourceUrl: 'https://www.globes.co.il', newsType: 'כלכלה', highValueOnly: true },
+  { name: 'Globes טכנולוגיה', url: 'https://www.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iID=585', sourceUrl: 'https://www.globes.co.il', newsType: 'טכנולוגיה', highValueOnly: true },
+  { name: 'Globes שיווק ופרסום', url: 'https://www.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iID=821', sourceUrl: 'https://www.globes.co.il', newsType: 'תקשורת', highValueOnly: true },
+  { name: 'Globes תרבות', url: 'https://www.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iid=3266', sourceUrl: 'https://www.globes.co.il', newsType: 'תרבות', highValueOnly: true },
 ];
 
 const HIGH_VALUE_KEYWORDS = [
@@ -87,6 +97,19 @@ const HIGH_VALUE_KEYWORDS = [
   'סלקום',
   'yes',
   'hot',
+  'טלוויזיה',
+  'רדיו',
+  'פודקאסט',
+  'סדרה',
+  'קולנוע',
+  'דוקו',
+  'מוזיקה',
+  'פסטיבל',
+  'כנס',
+  'ועידה',
+  'פרסים',
+  'פרסום',
+  'שיווק',
 ];
 
 const SOURCE_COLORS: Record<string, { bg: string; fg: string }> = {
@@ -94,6 +117,8 @@ const SOURCE_COLORS: Record<string, { bg: string; fg: string }> = {
   walla: { bg: '#6d28d9', fg: '#ffffff' },
   ice: { bg: '#0891b2', fg: '#ffffff' },
   scopt: { bg: '#059669', fg: '#ffffff' },
+  mako: { bg: '#ea580c', fg: '#ffffff' },
+  globes: { bg: '#2563eb', fg: '#ffffff' },
 };
 
 function decodeHtmlEntities(text: string): string {
@@ -170,6 +195,8 @@ function sourceKey(source: string): string {
   if (lower.includes('walla')) return 'walla';
   if (lower.includes('ice')) return 'ice';
   if (lower.includes('scopt')) return 'scopt';
+  if (lower.includes('mako')) return 'mako';
+  if (lower.includes('globes')) return 'globes';
   return 'default';
 }
 

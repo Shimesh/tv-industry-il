@@ -17,7 +17,7 @@ interface RssNewsItem {
   source: string;
   sourceUrl: string;
   description: string;
-  newsType: 'אקטואליה' | 'ספורט' | 'תרבות' | 'כלכלה' | 'טכנולוגיה' | 'תקשורת' | 'כללי';
+  newsType: 'אקטואליה' | 'ספורט' | 'תרבות' | 'כלכלה' | 'טכנולוגיה' | 'תקשורת' | 'טלוויזיה' | 'מוזיקה' | 'כללי';
   imageUrl?: string;
   videoUrl?: string;
 }
@@ -107,6 +107,14 @@ const catColors: Record<string, string> = {
   premiere: 'bg-purple-500/15 text-purple-300 border border-purple-500/20',
   workshop: 'bg-teal-500/15 text-teal-300 border border-teal-500/20',
   award: 'bg-orange-500/15 text-orange-300 border border-orange-500/20',
+  'פסטיבל': 'bg-yellow-400/15 text-yellow-300 border border-yellow-400/20',
+  'כנס': 'bg-blue-500/15 text-blue-300 border border-blue-500/20',
+  'הקרנה': 'bg-purple-500/15 text-purple-300 border border-purple-500/20',
+  'סדנה': 'bg-teal-500/15 text-teal-500 border border-teal-500/20',
+  'פרסים': 'bg-orange-500/15 text-orange-300 border border-orange-500/20',
+  'מוזיקה': 'bg-pink-500/15 text-pink-300 border border-pink-500/20',
+  'תרבות': 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20',
+  'טלוויזיה': 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/20',
 };
 
 /* Source badge colors */
@@ -117,6 +125,8 @@ function getSourceColor(source: string): string {
   if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
   if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20';
   if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20';
+  if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/15 text-orange-400 border-orange-500/20';
+  if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/15 text-blue-400 border-blue-500/20';
   return 'bg-purple-500/15 text-purple-400 border-purple-500/20';
 }
 
@@ -458,6 +468,8 @@ function NewsPageContent() {
       { name: 'Walla', desc: 'חדשות ותרבות', url: 'https://www.walla.co.il', color: 'from-purple-500 to-fuchsia-600' },
       { name: 'ICE', desc: 'מדיה, טלוויזיה ותקשורת', url: 'https://www.ice.co.il/media', color: 'from-cyan-500 to-teal-600' },
       { name: 'Scopt', desc: 'ידיעות תקשורת ומדיה', url: 'https://scopt.co.il', color: 'from-emerald-500 to-green-600' },
+      { name: 'Mako', desc: 'טלוויזיה, תרבות ומוזיקה', url: 'https://www.mako.co.il/rss', color: 'from-orange-500 to-red-600' },
+      { name: 'Globes', desc: 'שיווק, פרסום, טכנולוגיה ותרבות', url: 'https://www.globes.co.il/rss/', color: 'from-blue-500 to-indigo-600' },
     ],
     [],
   );
@@ -856,7 +868,7 @@ function NewsPageContent() {
         </div>
         <p className="text-xs mt-4 text-center flex items-center justify-center gap-1.5" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
           <Rss className="w-3 h-3" />
-          החדשות מתעדכנות אוטומטית כל 15 דקות ממקורות RSS
+          החדשות והאירועים מתעדכנים אוטומטית ממקורות RSS ציבוריים ומאתרי החדשות
         </p>
       </section>
 
