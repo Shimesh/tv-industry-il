@@ -60,7 +60,7 @@ export default function Footer() {
             <BugReportButton />
           </div>
           <div className="text-[11px] sm:text-left" style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
-            Version 1.3.4 · By Yaron Orbach
+            Version 1.3.5 · By Yaron Orbach
           </div>
         </div>
       </div>

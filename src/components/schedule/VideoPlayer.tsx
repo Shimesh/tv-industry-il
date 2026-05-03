@@ -33,15 +33,12 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       const parsed = new URL(url);
       parsed.searchParams.set('autoplay', '1');
       parsed.searchParams.set('autoPlay', 'true');
-      parsed.searchParams.set('mute', '1');
-      parsed.searchParams.set('muted', '1');
       parsed.searchParams.set('playsinline', '1');
       parsed.searchParams.set('playsInline', '1');
-      parsed.searchParams.set('webkit-playsinline', '1');
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}autoplay=1&autoPlay=true&mute=1&muted=1&playsinline=1&playsInline=1&webkit-playsinline=1`;
+      return `${url}${separator}autoplay=1&autoPlay=true&playsinline=1`;
     }
   };
   const [loading, setLoading] = useState(false);

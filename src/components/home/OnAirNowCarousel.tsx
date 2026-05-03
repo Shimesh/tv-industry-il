@@ -14,6 +14,19 @@ import { getChannelDisplayName } from '@/lib/channelLabels';
 const CARD_WIDTH = 320;
 const CARD_GAP = 12;
 
+function appendMutedParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('autoplay', '1');
+    parsed.searchParams.set('mute', '1');
+    parsed.searchParams.set('muted', '1');
+    parsed.searchParams.set('playsinline', '1');
+    return parsed.toString();
+  } catch {
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}autoplay=1&mute=1&muted=1&playsinline=1`;
+  }
+}
 
 function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -87,12 +100,22 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  // Iframe channels are not previewed in the carousel — cross-origin iframes
-  // cannot be reliably muted from the parent page, so we skip them entirely
-  // to guarantee silence. Clicking the card opens the full player.
+  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
+    return (
+      <iframe
+        src={appendMutedParams(stream.embedUrl)}
+        title="תצוגה מקדימה לשידור חי"
+        className="absolute inset-0 h-full w-full border-0"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+        loading="eager"
+      />
+    );
+  }
+
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-xs font-bold text-white/50">
-      לחץ לצפייה בשידור החי
+      השידור זמין באתר הערוץ
     </div>
   );
 }
