@@ -14,22 +14,6 @@ import { getChannelDisplayName } from '@/lib/channelLabels';
 const CARD_WIDTH = 320;
 const CARD_GAP = 12;
 
-function appendMutedParams(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.searchParams.set('autoplay', '1');
-    parsed.searchParams.set('autoPlay', 'true');
-    parsed.searchParams.set('mute', '1');
-    parsed.searchParams.set('muted', '1');
-    parsed.searchParams.set('playsinline', '1');
-    parsed.searchParams.set('playsInline', '1');
-    parsed.searchParams.set('webkit-playsinline', '1');
-    return parsed.toString();
-  } catch {
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}autoplay=1&autoPlay=true&mute=1&muted=1&playsinline=1&playsInline=1&webkit-playsinline=1`;
-  }
-}
 
 function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -103,22 +87,12 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
-    return (
-      <iframe
-        src={appendMutedParams(stream.embedUrl)}
-        title="תצוגה מקדימה לשידור חי"
-        className="absolute inset-0 h-full w-full border-0"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        allowFullScreen
-        loading="eager"
-      />
-    );
-  }
-
+  // Iframe channels are not previewed in the carousel — cross-origin iframes
+  // cannot be reliably muted from the parent page, so we skip them entirely
+  // to guarantee silence. Clicking the card opens the full player.
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-xs font-bold text-white/50">
-      השידור זמין באתר הערוץ
+      לחץ לצפייה בשידור החי
     </div>
   );
 }

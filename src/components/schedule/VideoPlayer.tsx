@@ -18,8 +18,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(80);
-  // isMuted starts true so autoplay works on mobile (browsers require muted for autoplay)
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -59,7 +58,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     setDynamicEmbedUrl(null);
     setError(null);
     setNeedsUserGesture(false);
-    setIsMuted(true); // Reset to muted on channel change for autoplay
+    setIsMuted(false);
   }, [channel.id]);
 
   // Fetch stream URL at runtime for channels with dynamicStream flag
@@ -108,15 +107,11 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             const vid = videoRef.current;
             if (!vid) return;
-            // CRITICAL: must be muted before play() for mobile autoplay to work
-            vid.muted = true;
             vid.play().then(() => {
               setIsPlaying(true);
-              setIsMuted(true);
               setLoading(false);
               setNeedsUserGesture(false);
             }).catch(() => {
-              // Autoplay blocked (e.g. user hasn't interacted yet on some browsers)
               setLoading(false);
               setNeedsUserGesture(true);
             });
@@ -131,12 +126,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           // Safari / iOS native HLS support
           const vid = videoRef.current;
           vid.src = hlsUrl;
-          // CRITICAL: muted required for iOS Safari autoplay
-          vid.muted = true;
           vid.load();
           vid.play().then(() => {
             setIsPlaying(true);
-            setIsMuted(true);
             setLoading(false);
             setNeedsUserGesture(false);
           }).catch(() => {
@@ -185,9 +177,6 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       videoRef.current.pause();
       setIsPlaying(false);
     } else {
-      // Ensure muted so play() is allowed on mobile
-      videoRef.current.muted = true;
-      setIsMuted(true);
       videoRef.current.play().then(() => {
         setIsPlaying(true);
         setNeedsUserGesture(false);
@@ -199,8 +188,6 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const handleUserGesturePlay = useCallback(() => {
     const vid = videoRef.current;
     if (!vid) return;
-    vid.muted = true;
-    setIsMuted(true);
     vid.play().then(() => {
       setIsPlaying(true);
       setNeedsUserGesture(false);
@@ -309,17 +296,6 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             </div>
           )}
 
-          {/* Muted indicator: shown when playing muted so user knows they can unmute */}
-          {isPlaying && isMuted && !needsUserGesture && !loading && (
-            <button
-              className="absolute top-12 left-3 sm:left-4 z-10 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs px-2.5 py-1.5 rounded-full transition-colors backdrop-blur-sm"
-              onClick={() => setIsMuted(false)}
-              aria-label="בטל השתקה"
-            >
-              <span>🔇</span>
-              <span>הקש לביטול השתקה</span>
-            </button>
-          )}
         </>
       ) : showDynamicLoading ? (
         /* Fetching dynamic stream URL */
