@@ -89,11 +89,11 @@ export const streamConfigs: Record<string, StreamConfig> = {
 
   // === CHANNELS WITH IFRAME EMBEDS ===
 
-  // עכשיו 14 — uses Univtec player (served from snippet.univtec.com, cross-origin embeddable)
+  // עכשיו 14 — ok.ru mirror embed (Univtec endpoint stopped working)
   now14: {
     type: 'iframe',
     streamUrl: null,
-    embedUrl: 'https://snippet.univtec.com/player.html?data-insight=eyJndWlkIjoiOWZiMTRjZTctZmNjMi00Njk1LTgzOWItZTY0MTM5MGQ3YTAwIiwidHlwZSI6ImNoYW5uZWxzIiwiYWNjb3VudElkIjoiNjM5Nzc1M2ZmZjg3MTk3MWFlNmEzYzAzIiwiY2xpZW50IjoiY2hhbm5lbDE0IiwiYXBpIjoiaHR0cHM6Ly9pbnNpZ2h0LWFwaS1jaGFubmVsMTQudW5pdnRlYy5jb20vIn0=',
+    embedUrl: 'https://ok.ru/videoembed/10460920618703?autoplay=1',
     websiteUrl: 'https://www.c14.co.il/live/',
     requiresAuth: false,
     hasLiveStream: true,
