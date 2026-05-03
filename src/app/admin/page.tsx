@@ -16,11 +16,13 @@ import {
   FileText,
   Megaphone,
   MessageCircle,
+  MousePointerClick,
   RefreshCw,
   Search,
   Settings,
   Shield,
   ShieldCheck,
+  X,
   UserIcon,
   Users,
   Wifi,
@@ -28,7 +30,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { AdminOverview, AdminRole, AdminUserSummary, SystemEventRecord } from '@/lib/adminTypes';
+import type { AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -38,6 +40,12 @@ type ToastState = {
 type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 'siteRole';
 type SortDirection = 'asc' | 'desc';
 type NotificationTarget = 'test' | 'user' | 'all';
+type PageViewPanelState = {
+  page: { key: string; label: string } | null;
+  events: PageViewEvent[];
+  loading: boolean;
+  error: string | null;
+};
 
 const NOTIFICATION_LINK_OPTIONS = [
   { label: 'שידור חי', value: '/schedule#live' },
@@ -99,6 +107,21 @@ function formatRelativeTime(value: string | null | undefined): string {
   if (diff < 3_600_000) return `לפני ${Math.floor(diff / 60_000)} דק׳`;
   if (diff < 86_400_000) return `לפני ${Math.floor(diff / 3_600_000)} ש׳`;
   return new Date(parsed).toLocaleString('he-IL');
+}
+
+function formatPageViewActor(event: PageViewEvent): string {
+  if (event.displayName) return event.displayName;
+  if (event.email) return event.email;
+  if (event.uid) return event.uid;
+  return event.visitorId ? `אורח ${event.visitorId.slice(0, 8)}` : 'אורח לא מזוהה';
+}
+
+function formatPageViewLocation(event: PageViewEvent): string {
+  return [event.city, event.region, event.country].filter(Boolean).join(', ') || 'לא זמין';
+}
+
+function formatPageViewDevice(event: PageViewEvent): string {
+  return [event.deviceType, event.browser, event.os].filter(Boolean).join(' · ') || 'לא זמין';
 }
 
 function rolePresentation(role: AdminRole) {
@@ -296,6 +319,12 @@ export default function AdminPage() {
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget>('test');
   const [notificationTargetUserId, setNotificationTargetUserId] = useState('');
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
+    page: null,
+    events: [],
+    loading: false,
+    error: null,
+  });
   const draftDirtyRef = useRef(false);
 
   const isAdmin = profile?.siteRole === 'admin';
@@ -357,6 +386,23 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }
+
+  async function loadPageViewEvents(page: { key: string; label: string }) {
+    setPageViewPanel({ page, events: [], loading: true, error: null });
+    try {
+      const data = await fetchWithAuth<{ events: PageViewEvent[] }>(
+        `/api/admin/usage/page-views?pathname=${encodeURIComponent(page.key)}`,
+      );
+      setPageViewPanel({ page, events: data.events || [], loading: false, error: null });
+    } catch (pageViewError) {
+      setPageViewPanel({
+        page,
+        events: [],
+        loading: false,
+        error: pageViewError instanceof Error ? pageViewError.message : 'שגיאה בטעינת צפיות הדף',
+      });
     }
   }
 
@@ -1153,18 +1199,96 @@ export default function AdminPage() {
               <h3 className="mb-3 text-sm font-semibold text-gray-300">דפים מובילים</h3>
               <div className="space-y-2">
                 {overview.usage.topPages.map((page) => (
-                  <div key={page.key} className="flex items-center justify-between rounded-xl bg-gray-950/70 px-3 py-2">
+                  <button
+                    key={page.key}
+                    type="button"
+                    onClick={() => void loadPageViewEvents({ key: page.key, label: page.label })}
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right transition-colors ${
+                      pageViewPanel.page?.key === page.key
+                        ? 'border-blue-500/40 bg-blue-500/10'
+                        : 'border-transparent bg-gray-950/70 hover:border-gray-700 hover:bg-gray-900'
+                    }`}
+                  >
                     <div>
                       <p className="text-sm text-white">{page.label}</p>
                       <p className="text-xs text-gray-500">{formatRelativeTime(page.lastSeenAt)}</p>
                     </div>
-                    <span className="text-sm font-semibold text-blue-300">{page.count}</span>
-                  </div>
+                    <span className="flex items-center gap-2 text-sm font-semibold text-blue-300">
+                      <MousePointerClick className="h-4 w-4" />
+                      {page.count}
+                    </span>
+                  </button>
                 ))}
                 {overview.usage.topPages.length === 0 ? (
                   <p className="text-sm text-gray-500">עדיין אין נתוני צפייה לדפים.</p>
                 ) : null}
               </div>
+              {pageViewPanel.page ? (
+                <div className="mt-4 rounded-2xl border border-gray-800 bg-gray-950/80 p-3" dir="rtl">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">צפיות בדף {pageViewPanel.page.label}</h4>
+                      <p className="text-xs text-gray-500">משתמשים רשומים ואורחים, לפי הפעולות האחרונות שנקלטו</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPageViewPanel({ page: null, events: [], loading: false, error: null })}
+                      className="rounded-lg p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-white"
+                      aria-label="סגירת פרטי צפיות"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {pageViewPanel.loading ? (
+                    <p className="py-3 text-sm text-gray-400">טוען צפיות אחרונות…</p>
+                  ) : pageViewPanel.error ? (
+                    <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                      {pageViewPanel.error}
+                    </p>
+                  ) : pageViewPanel.events.length === 0 ? (
+                    <p className="py-3 text-sm text-gray-500">עדיין אין פירוט צפיות לדף הזה.</p>
+                  ) : (
+                    <div className="max-h-[420px] overflow-auto">
+                      <table className="w-full min-w-[720px] text-right text-xs">
+                        <thead className="sticky top-0 bg-gray-950 text-gray-400">
+                          <tr>
+                            <th className="px-2 py-2 font-medium">מי לחץ</th>
+                            <th className="px-2 py-2 font-medium">מתי</th>
+                            <th className="px-2 py-2 font-medium">IP</th>
+                            <th className="px-2 py-2 font-medium">מיקום</th>
+                            <th className="px-2 py-2 font-medium">מכשיר</th>
+                            <th className="px-2 py-2 font-medium">מקור</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {pageViewPanel.events.map((event) => (
+                            <tr key={event.id} className="align-top text-gray-300">
+                              <td className="px-2 py-2">
+                                <div className="font-medium text-white">{formatPageViewActor(event)}</div>
+                                <div className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] ${
+                                  event.authenticated
+                                    ? 'bg-green-500/10 text-green-300'
+                                    : 'bg-orange-500/10 text-orange-300'
+                                }`}>
+                                  {event.authenticated ? 'רשום' : 'אורח'}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">{formatRelativeTime(event.viewedAt)}</td>
+                              <td className="px-2 py-2" dir="ltr">{event.ip || '—'}</td>
+                              <td className="px-2 py-2">{formatPageViewLocation(event)}</td>
+                              <td className="px-2 py-2">{formatPageViewDevice(event)}</td>
+                              <td className="max-w-[180px] truncate px-2 py-2" dir="ltr" title={event.referrer || ''}>
+                                {event.referrer || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div>

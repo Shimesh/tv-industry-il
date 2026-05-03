@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import type {
   JobStatusMetric,
+  PageViewEvent,
   RouteHealthMetric,
   SystemEventLevel,
   SystemEventRecord,
@@ -43,6 +44,27 @@ type EventWriteInput = {
   route?: string | null;
   job?: string | null;
   statusCode?: number | null;
+};
+
+type PageViewWriteInput = {
+  pathname: string;
+  visitorId?: string | null;
+  authUser?: {
+    uid: string;
+    email?: string | null;
+    displayName?: string | null;
+  } | null;
+  ip?: string | null;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  deviceType?: PageViewEvent['deviceType'];
+  browser?: string | null;
+  os?: string | null;
+  userAgent?: string | null;
+  referrer?: string | null;
 };
 
 // Per-instance debounce: skip metric writes if the same key was written recently.
@@ -122,6 +144,85 @@ export async function incrementPageView(pathname: string): Promise<void> {
   } catch {
     // telemetry must never break callers
   }
+}
+
+export async function recordPageView(input: PageViewWriteInput): Promise<void> {
+  try {
+    const key = input.pathname || '/';
+    const timestamp = nowIso();
+    const docPath = `adminMetrics/${metricDocId('page', key)}`;
+    const existing = await getDocument<MetricRecord>(docPath);
+    const count = Number(existing?.count || 0) + 1;
+
+    await patchDocument(docPath, {
+      metricType: 'page',
+      key,
+      label: toDisplayLabel(key),
+      count,
+      lastSeenAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    const authUser = input.authUser || null;
+    const eventId = `view-${Date.now()}-${hashKey(`${key}-${input.visitorId || authUser?.uid || 'guest'}-${Math.random()}`)}`;
+
+    await createDocument('pageViewEvents', {
+      pathname: key,
+      label: toDisplayLabel(key),
+      action: 'page_view',
+      viewedAt: timestamp,
+      visitorId: input.visitorId || null,
+      authenticated: Boolean(authUser?.uid),
+      uid: authUser?.uid || null,
+      displayName: authUser?.displayName || null,
+      email: authUser?.email || null,
+      ip: input.ip || null,
+      country: input.country || null,
+      region: input.region || null,
+      city: input.city || null,
+      latitude: input.latitude || null,
+      longitude: input.longitude || null,
+      deviceType: input.deviceType || 'unknown',
+      browser: input.browser || null,
+      os: input.os || null,
+      userAgent: input.userAgent || null,
+      referrer: input.referrer || null,
+    }, eventId);
+  } catch {
+    // telemetry must never break callers
+  }
+}
+
+export async function getPageViewEvents(pathname: string, limit = 50): Promise<PageViewEvent[]> {
+  const key = pathname || '/';
+  const events = await listDocuments<PageViewEvent>('pageViewEvents');
+  return events
+    .filter((event) => event.pathname === key)
+    .sort((a, b) => String(b.viewedAt || '').localeCompare(String(a.viewedAt || '')))
+    .slice(0, limit)
+    .map((event) => ({
+      id: event.id,
+      pathname: event.pathname || key,
+      label: event.label || toDisplayLabel(key),
+      action: 'page_view',
+      viewedAt: event.viewedAt,
+      visitorId: event.visitorId || null,
+      authenticated: Boolean(event.authenticated),
+      uid: event.uid || null,
+      displayName: event.displayName || null,
+      email: event.email || null,
+      ip: event.ip || null,
+      country: event.country || null,
+      region: event.region || null,
+      city: event.city || null,
+      latitude: event.latitude || null,
+      longitude: event.longitude || null,
+      deviceType: event.deviceType || 'unknown',
+      browser: event.browser || null,
+      os: event.os || null,
+      userAgent: event.userAgent || null,
+      referrer: event.referrer || null,
+    }));
 }
 
 export async function recordRouteMetric(input: {

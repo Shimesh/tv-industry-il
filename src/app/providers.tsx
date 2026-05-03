@@ -23,19 +23,43 @@ function PresenceManager() {
 
 function UsageTracker() {
   const pathname = usePathname();
+  const { user, loading } = useAuth();
   const lastTrackedPath = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!pathname || lastTrackedPath.current === pathname) return;
+    if (loading || !pathname || lastTrackedPath.current === pathname) return;
     lastTrackedPath.current = pathname;
 
-    void fetch('/api/metrics/page-view', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pathname }),
-      keepalive: true,
-    }).catch(() => {});
-  }, [pathname]);
+    const getVisitorId = () => {
+      try {
+        const key = 'tv_visitor_id';
+        const existing = localStorage.getItem(key);
+        if (existing) return existing;
+        const generated = crypto.randomUUID();
+        localStorage.setItem(key, generated);
+        return generated;
+      } catch {
+        return null;
+      }
+    };
+
+    void (async () => {
+      const token = await user?.getIdToken().catch(() => null);
+      await fetch('/api/metrics/page-view', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          pathname,
+          visitorId: getVisitorId(),
+          referrer: document.referrer || null,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    })();
+  }, [loading, pathname, user]);
 
   return null;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Production, formatDateShort, getHebrewDay, getHebrewMonth } from '@/lib/productionDiff';
 import ProductionBlock from './ProductionBlock';
 import CrewModal from './CrewModal';
@@ -65,7 +65,7 @@ export default function WeeklyCalendar({
   const weekDays = getWeekDays(weekStart);
 
   // Fuzzy name matching helper
-  const isUserCrew = (crewName: string): boolean => {
+  const isUserCrew = useCallback((crewName: string): boolean => {
     if (!crewName) return false;
     const names = [currentUserName, workerName].filter(Boolean) as string[];
     for (const name of names) {
@@ -78,7 +78,7 @@ export default function WeeklyCalendar({
           crewParts[0] === nameParts[0] && crewParts[0].length >= 2) return true;
     }
     return false;
-  };
+  }, [currentUserName, workerName]);
 
   // Filter productions based on view mode
   const filteredProductions = useMemo(() => {
@@ -100,7 +100,7 @@ export default function WeeklyCalendar({
     }
 
     return prods;
-  }, [productions, viewMode, debouncedSearch]);
+  }, [productions, viewMode, debouncedSearch, isUserCrew]);
 
   // Group productions by date
   const productionsByDate = useMemo(() => {

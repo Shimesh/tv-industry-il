@@ -44,6 +44,30 @@ export type UsageMetric = {
   lastSeenAt: string | null;
 };
 
+export type PageViewEvent = {
+  id: string;
+  pathname: string;
+  label: string;
+  action: 'page_view';
+  viewedAt: string;
+  visitorId: string | null;
+  authenticated: boolean;
+  uid: string | null;
+  displayName: string | null;
+  email: string | null;
+  ip: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  deviceType: 'desktop' | 'mobile' | 'tablet' | 'bot' | 'unknown';
+  browser: string | null;
+  os: string | null;
+  userAgent: string | null;
+  referrer: string | null;
+};
+
 export type RouteHealthMetric = {
   key: string;
   label: string;

@@ -102,6 +102,23 @@ function isCrewMatch(crew: Array<{ name?: string; normalizedName?: string }>, di
   );
 }
 
+function isProductionAssignedToUser(production: Production, names: string[]): boolean {
+  if (production.isCurrentUserShift) return true;
+  const candidates = names.map((name) => name.trim()).filter(Boolean);
+  return production.crew.some((crewMember) =>
+    candidates.some((name) => {
+      if (crewMember.name === name) return true;
+      const crewParts = crewMember.name.trim().split(/\s+/);
+      const nameParts = name.trim().split(/\s+/);
+      return (
+        (crewParts.length === 1 || nameParts.length === 1) &&
+        crewParts[0] === nameParts[0] &&
+        crewParts[0].length >= 2
+      );
+    }),
+  );
+}
+
 // Merge global productions into the user's own set; extras get isCurrentUserShift re-evaluated
 function mergeGlobalProductions(
   userProds: Production[],
@@ -160,6 +177,7 @@ function ProductionsContent() {
   const [pendingGcalToken, setPendingGcalToken] = useState<string | null>(null);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
+  const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
   const [workerName, setWorkerName] = useState('');
@@ -1373,6 +1391,67 @@ function ProductionsContent() {
       controller.abort();
     };
   }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadSummaryRange = async () => {
+      const start = getWeekStartDate(currentDate);
+      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const rangeStart = start < monthStart ? start : monthStart;
+      const rangeEnd = getWeekEndDate(currentDate) > monthEnd ? getWeekEndDate(currentDate) : monthEnd;
+
+      try {
+        const prods = await loadProductionsForPeriod(
+          toLocalDate(rangeStart),
+          toLocalDate(rangeEnd),
+          controller.signal,
+        );
+        if (!cancelled) setSummaryProductions(prods);
+      } catch {
+        if (!cancelled) setSummaryProductions([]);
+      }
+    };
+
+    void loadSummaryRange();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [user?.uid, currentDate, loadProductionsForPeriod]);
+
+  const calendarSummary = useMemo(() => {
+    const userNames = [profile?.displayName, user?.displayName, workerName].filter(Boolean) as string[];
+    const weekStartDate = toLocalDate(getWeekStartDate(currentDate));
+    const weekEndDate = toLocalDate(getWeekEndDate(currentDate));
+    const monthStartDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+    const monthEndDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0));
+
+    const countRange = (start: string, end: string) => {
+      const unique = new Map<string, Production>();
+      for (const production of summaryProductions) {
+        if (production.status === 'cancelled') continue;
+        if (production.date < start || production.date > end) continue;
+        const key = production.id || `${production.name}-${production.date}-${production.studio}`;
+        unique.set(key, production);
+      }
+      const items = Array.from(unique.values());
+      return {
+        total: items.length,
+        mine: items.filter((production) => isProductionAssignedToUser(production, userNames)).length,
+      };
+    };
+
+    return {
+      week: countRange(weekStartDate, weekEndDate),
+      month: countRange(monthStartDate, monthEndDate),
+    };
+  }, [currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
+
   useEffect(() => {
     if (!productions.length) return;
     const allCrew = productions.flatMap((production) => production.crew || []);
@@ -2136,23 +2215,50 @@ function ProductionsContent() {
 
       {/* Calendar - always show once we have a valid range */}
       {renderedRange.start && renderedRange.end && (
-        <WeeklyCalendar
-          productions={visibleProductions}
-          weekStart={renderedRange.start}
-          weekEnd={renderedRange.end}
-          workerName={workerName}
-          currentUserName={profile?.displayName || user?.displayName || ''}
-          onNavigate={handleCalendarNavigate}
-          onJumpToDate={handleJumpToDate}
-          onViewChange={handleViewChange}
-          calendarView={calendarView}
-          calendarYear={calendarYear}
-          calendarMonth={calendarMonth}
-          navLoading={navLoading}
-          onLoadMore={handleLoadMoreList}
-          hasMore={hasMoreList}
-          loadingMore={loadingMoreList}
-        />
+        <>
+          <WeeklyCalendar
+            productions={visibleProductions}
+            weekStart={renderedRange.start}
+            weekEnd={renderedRange.end}
+            workerName={workerName}
+            currentUserName={profile?.displayName || user?.displayName || ''}
+            onNavigate={handleCalendarNavigate}
+            onJumpToDate={handleJumpToDate}
+            onViewChange={handleViewChange}
+            calendarView={calendarView}
+            calendarYear={calendarYear}
+            calendarMonth={calendarMonth}
+            navLoading={navLoading}
+            onLoadMore={handleLoadMoreList}
+            hasMore={hasMoreList}
+            loadingMore={loadingMoreList}
+          />
+          <div
+            className="mt-4 grid gap-3 rounded-2xl border p-4 sm:grid-cols-2"
+            style={{
+              background: 'var(--theme-bg-secondary)',
+              borderColor: 'var(--theme-border)',
+            }}
+            dir="rtl"
+          >
+            <div>
+              <p className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>
+                סיכום השבוע
+              </p>
+              <p className="mt-1 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                {calendarSummary.week.total} הפקות · {calendarSummary.week.mine} שלי
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>
+                סיכום החודש
+              </p>
+              <p className="mt-1 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                {calendarSummary.month.total} הפקות · {calendarSummary.month.mine} שלי
+              </p>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Empty state */}
