@@ -4,12 +4,23 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const I24_ACCOUNT_ID = '5377161796001';
 const I24_VIDEO_ID = '6352464366112';
 const I24_POLICY_KEY = 'BCpkADawqM1UIU4favtR1Jj4rqM0ZAkYwMEbgN9bsEpJ2150CdxJmRIG8jK-Up_9w4w37x3tP1AsoO_MZhD_XoAGkdKWxymaaw4OHuhPn_lEJczODTm3AO7S08gLFPnLnb-FcKJwXhbxCQ10';
+const NOW14_GUID = '9fb14ce7-fcc2-4695-839b-e641390d7a00';
+const NOW14_API_BASE = 'https://insight-api-channel14.univtec.com/';
+const NOW14_TENANT_ID = 'channel14';
+const NOW14_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/ch14/live/ch14/live.livx/playlist.m3u8';
 
 type BrightcovePlaybackResponse = {
   sources?: Array<{
     src?: string;
     type?: string;
   }>;
+};
+
+type UnivtecPlayResponse = {
+  vod?: {
+    hlsMaster?: string;
+    hlsStream?: string;
+  };
 };
 
 async function fetchPage(url: string): Promise<string | null> {
@@ -93,21 +104,25 @@ async function resolveI24Stream(): Promise<string | null> {
 }
 
 async function resolveNow14Stream(): Promise<string | null> {
-  const html = await fetchPage('https://ok.ru/videoembed/10460920618703?autoplay=1');
-  if (!html) return null;
+  try {
+    const url = `${NOW14_API_BASE}cms/interface/channels/play?relations=true&filter=guid||$eq||${NOW14_GUID}`;
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+        'x-tenant-id': NOW14_TENANT_ID,
+      },
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
 
-  const normalized = html
-    .replace(/\\&quot;/g, '"')
-    .replace(/&quot;/g, '"')
-    .replace(/\\u0026/g, '&')
-    .replace(/&amp;/g, '&')
-    .replace(/\\\//g, '/');
+    if (!response.ok) return NOW14_STABLE_HLS;
 
-  const okHlsMatch = normalized.match(/"hlsMasterPlaylistUrl":"([^"]+\.m3u8[^"]*)"/);
-  const extracted = okHlsMatch?.[1] ?? extractM3u8(normalized);
-  if (!extracted) return null;
-
-  return extracted.replace(/".*/, '');
+    const data = (await response.json()) as UnivtecPlayResponse;
+    return data.vod?.hlsMaster ?? data.vod?.hlsStream ?? NOW14_STABLE_HLS;
+  } catch {
+    return NOW14_STABLE_HLS;
+  }
 }
 
 export async function GET(
