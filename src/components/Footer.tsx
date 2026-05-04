@@ -13,6 +13,12 @@ const footerLinks = [
   { href: '/tools', label: 'כלים' },
 ];
 
+const legalLinks = [
+  { href: '/terms', label: 'תקנון ותנאי שימוש' },
+  { href: '/privacy', label: 'מדיניות פרטיות' },
+  { href: '/accessibility', label: 'הצהרת נגישות' },
+];
+
 export default function Footer() {
   return (
     <footer
@@ -59,8 +65,20 @@ export default function Footer() {
             </p>
             <BugReportButton />
           </div>
-          <div className="text-[11px] sm:text-left" style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
-            Version 1.3.12 · By Yaron Orbach
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] sm:justify-end">
+            {legalLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="font-medium transition-colors hover:text-[var(--theme-accent)]"
+                style={{ color: 'var(--theme-text-secondary)' }}
+              >
+                {link.label}
+              </Link>
+            ))}
+            <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
+              Version 1.4.0 · By Yaron Orbach
+            </span>
           </div>
         </div>
       </div>

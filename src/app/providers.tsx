@@ -11,6 +11,7 @@ import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import IncomingCall from '@/components/call/IncomingCall';
 import CallScreen from '@/components/call/CallScreen';
+import ConsentGate, { useConsentGateState } from '@/components/ConsentGate';
 import OnboardingWrapper from '@/components/onboarding/OnboardingWrapper';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuth } from '@/contexts/AuthContext';
@@ -64,6 +65,26 @@ function UsageTracker() {
   return null;
 }
 
+function ConsentBoundary({ children }: { children: React.ReactNode }) {
+  const { isCheckingConsent, requiresConsent } = useConsentGateState();
+
+  if (isCheckingConsent) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center px-4" dir="rtl">
+        <div className="rounded-xl border px-5 py-4 text-sm font-semibold" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
+          טוען את פרטי המשתמש...
+        </div>
+      </div>
+    );
+  }
+
+  if (requiresConsent) {
+    return <ConsentGate />;
+  }
+
+  return <>{children}</>;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
@@ -76,11 +97,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ToastProvider>
               <CallProvider>
                 <OnboardingWrapper>
-                  <PresenceManager />
-                  <UsageTracker />
-                  {children}
-                  <IncomingCall />
-                  <CallScreen />
+                  <ConsentBoundary>
+                    <PresenceManager />
+                    <UsageTracker />
+                    <ConsentGate />
+                    {children}
+                    <IncomingCall />
+                    <CallScreen />
+                  </ConsentBoundary>
                 </OnboardingWrapper>
               </CallProvider>
             </ToastProvider>

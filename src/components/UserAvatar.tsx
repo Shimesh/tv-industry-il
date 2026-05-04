@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 interface UserAvatarProps {
   name: string;
   photoURL?: string | null;
@@ -23,6 +25,8 @@ const dotSizeMap = {
 };
 
 export default function UserAvatar({ name, photoURL, size = 'md', isOnline, className = '' }: UserAvatarProps) {
+  const [failedPhotoURL, setFailedPhotoURL] = useState<string | null>(null);
+  const imageSrc = photoURL && failedPhotoURL !== photoURL ? photoURL : undefined;
   const initials = name
     .split(' ')
     .map(n => n[0])
@@ -45,11 +49,13 @@ export default function UserAvatar({ name, photoURL, size = 'md', isOnline, clas
 
   return (
     <div className={`relative shrink-0 ${className}`}>
-      {photoURL ? (
+      {imageSrc ? (
         <img
-          src={photoURL}
+          src={imageSrc}
           alt={name}
           className={`${sizeMap[size]} rounded-full object-cover ring-2 ring-[var(--theme-border)]`}
+          referrerPolicy="no-referrer"
+          onError={() => setFailedPhotoURL(imageSrc)}
         />
       ) : (
         <div className={`${sizeMap[size]} rounded-full bg-gradient-to-br ${colors[colorIdx]} flex items-center justify-center font-bold text-white`}>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Tv, Mail, Lock, User, Briefcase, Eye, EyeOff, ArrowLeft, Sparkles } from 'lucide-react';
+import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const departments = [
@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -50,6 +51,11 @@ export default function LoginPage() {
       if (mode === 'login') {
         await signIn(email, password);
       } else {
+        if (!acceptedTerms) {
+          setError('יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להירשם');
+          setIsLoading(false);
+          return;
+        }
         if (!name || !department || !role) {
           setError('יש למלא את כל השדות');
           setIsLoading(false);
@@ -75,8 +81,13 @@ export default function LoginPage() {
 
   // Check if Firebase is configured with real credentials
   const isFirebaseConfigured = process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'demo-api-key';
+  const isRegisterSubmitDisabled = isLoading || (mode === 'register' && !acceptedTerms);
 
   const handleGoogleSignIn = async () => {
+    if (mode === 'register' && !acceptedTerms) {
+      setError('יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להירשם');
+      return;
+    }
     if (!isFirebaseConfigured) {
       setError('Firebase לא מוגדר. יש להגדיר קובץ .env.local עם פרטי Firebase אמיתיים. ראה .env.local.example');
       return;
@@ -266,10 +277,45 @@ export default function LoginPage() {
               </button>
             </div>
 
+            {mode === 'register' && (
+              <label className="flex items-start gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => {
+                    setAcceptedTerms(e.target.checked);
+                    if (e.target.checked) setError('');
+                  }}
+                  required
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--theme-border)] accent-[var(--theme-accent)]"
+                />
+                <span>
+                  קראתי והסכמתי ל
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--theme-accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    תנאי השימוש
+                  </a>
+                  {' '}ול
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--theme-accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    מדיניות הפרטיות
+                  </a>
+                </span>
+              </label>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isRegisterSubmitDisabled}
               className="w-full py-3.5 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (

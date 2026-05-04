@@ -5,6 +5,11 @@ export interface Contact {
   firstName?: string;
   lastName?: string;
   email?: string;
+  is_consented?: boolean;
+  hiddenFromDirectory?: boolean;
+  removedAt?: string;
+  removalRequestedByUid?: string;
+  removalReason?: string;
   department?: ContactDepartment | string;
   workArea?: ContactWorkArea | string | null;
   specialty?: ContactSpecialty | string;
@@ -20,7 +25,7 @@ export interface Contact {
   city?: string | null;
   yearsOfExperience?: number | null;
   gear?: string[] | null;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const contacts: Contact[] = [];

@@ -174,6 +174,18 @@ function DirectoryContent() {
     return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
   };
 
+  const canShowContactInfo = (contact: Contact) => contact.is_consented === true;
+
+  const getContactReference = (contact: Contact) => {
+    const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+    return fullName || String(contact.id);
+  };
+
+  const getRemovalRequestMailto = (contact: Contact) => {
+    const subject = `בקשת הסרה מאינדקס: ${getContactReference(contact)}`;
+    return `mailto:yaron.orb@gmail.com?subject=${encodeURIComponent(subject)}`;
+  };
+
   const deptCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contactsList.forEach(c => {
@@ -563,6 +575,7 @@ function DirectoryContent() {
               <AnimatePresence>
                 {sortedFiltered.map((contact, i) => {
                   const isMeCard = isCurrentUser(contact);
+                  const showContactInfo = canShowContactInfo(contact);
                   const primaryRoleLabel = getPrimaryRoleLabel(contact);
                   const secondaryRoleLabel = getSecondaryRoleLabel(contact);
                   return (
@@ -658,14 +671,25 @@ function DirectoryContent() {
                             {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : contact.availability === 'maybe' ? 'אולי פנוי' : 'לא צוין'}
                           </span>
                         </div>
-                        {contact.phone && (
+                        {showContactInfo && contact.phone ? (
                           <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
                             className="flex items-center gap-1 text-xs hover:text-green-400 transition-colors group/phone" style={{ color: 'var(--theme-text-secondary)' }}>
                             <PhoneCall className="w-3 h-3 group-hover/phone:animate-pulse" />
                             <span dir="ltr">{contact.phone}</span>
                           </a>
+                        ) : (
+                          <span className="text-xs font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חסוי</span>
                         )}
                       </div>
+                      {!showContactInfo && (
+                        <a
+                          href={getRemovalRequestMailto(contact)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-3 block text-center text-[11px] font-medium text-[var(--theme-text-secondary)] opacity-70 transition-opacity hover:opacity-100 hover:underline"
+                        >
+                          דיווח או בקשת הסרה לפרופיל זה
+                        </a>
+                      )}
                     </motion.div>
                   );
                 })}
@@ -684,6 +708,7 @@ function DirectoryContent() {
               <AnimatePresence>
                 {sortedFiltered.map((contact, i) => {
                   const isMeRow = isCurrentUser(contact);
+                  const showContactInfo = canShowContactInfo(contact);
                   return (
                     <motion.div
                       key={contact.id}
@@ -723,9 +748,20 @@ function DirectoryContent() {
                         </span>
                       )}
                       <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'}`} />
-                      {contact.phone && (
+                      {showContactInfo && contact.phone ? (
                         <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
                           className="text-xs hover:text-green-400 hidden sm:block transition-colors" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">{contact.phone}</a>
+                      ) : (
+                        <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>חסוי</span>
+                      )}
+                      {!showContactInfo && (
+                        <a
+                          href={getRemovalRequestMailto(contact)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hidden text-[11px] font-medium text-[var(--theme-text-secondary)] opacity-70 transition-opacity hover:opacity-100 hover:underline lg:block"
+                        >
+                          דיווח או בקשת הסרה לפרופיל זה
+                        </a>
                       )}
                     </motion.div>
                   );
@@ -979,7 +1015,27 @@ function DirectoryContent() {
                 )}
 
                 {/* Contact actions */}
-                {selectedContact.phone && (
+                {!canShowContactInfo(selectedContact) && (
+                  <div className="space-y-2">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4, duration: 0.3 }}
+                      className="rounded-xl border px-4 py-3 text-center text-sm font-medium"
+                      style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)', background: 'var(--theme-bg-secondary)' }}
+                    >
+                      חסוי
+                    </motion.div>
+                    <a
+                      href={getRemovalRequestMailto(selectedContact)}
+                      className="block text-center text-xs font-medium text-[var(--theme-text-secondary)] opacity-75 transition-opacity hover:opacity-100 hover:underline"
+                    >
+                      דיווח או בקשת הסרה לפרופיל זה
+                    </a>
+                  </div>
+                )}
+
+                {canShowContactInfo(selectedContact) && selectedContact.phone && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1010,7 +1066,7 @@ function DirectoryContent() {
                   </motion.div>
                 )}
 
-                {selectedContact.email && (
+                {canShowContactInfo(selectedContact) && selectedContact.email && (
                   <motion.a
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

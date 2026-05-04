@@ -12,7 +12,8 @@ export type SessionProfile = {
   department: string;
   role: string;
   phone: string;
-  linkedContactId?: number;
+  linkedContactId?: number | string;
+  is_consented?: boolean;
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
@@ -79,6 +80,7 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     department: '',
     role: '',
     phone: '',
+    is_consented: false,
     skills: [],
     bio: '',
     status: 'available',
@@ -102,7 +104,7 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     typeof linkedContactIdRaw === 'number'
       ? linkedContactIdRaw
       : typeof linkedContactIdRaw === 'string' && linkedContactIdRaw.trim()
-        ? Number(linkedContactIdRaw)
+        ? linkedContactIdRaw.trim()
         : undefined;
 
   return {
@@ -117,6 +119,7 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     department: asString(raw.department),
     role: asString(raw.role),
     phone: asString(raw.phone),
+    is_consented: raw.is_consented === true,
     skills: asStringArray(raw.skills) || [],
     bio: asString(raw.bio),
     status: raw.status === 'busy' || raw.status === 'offline' ? raw.status : 'available',
@@ -124,7 +127,7 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     onboardingComplete: raw.onboardingComplete === true,
     theme: asString(raw.theme, 'dark'),
     siteRole: normalizeSiteRole(raw.siteRole),
-    linkedContactId: Number.isFinite(linkedContactId) ? linkedContactId : undefined,
+    linkedContactId,
     openToWork: raw.openToWork === true,
     city: asOptionalString(raw.city),
     yearsOfExperience: typeof raw.yearsOfExperience === 'number' ? raw.yearsOfExperience : undefined,
@@ -157,6 +160,10 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
     Object.assign(patch, buildDefaultSessionProfile(authUser), {
       createdAt: new Date().toISOString(),
     });
+    repaired = true;
+  } else if (typeof existing.is_consented !== 'boolean') {
+    patch.is_consented = false;
+    profile = { ...profile, is_consented: false };
     repaired = true;
   }
 

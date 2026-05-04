@@ -16,6 +16,7 @@ type ContactRecord = {
   openToWork?: boolean;
   status?: string;
   isOnline?: boolean;
+  is_consented?: boolean;
 };
 
 function mapStatusToAvailability(status: unknown): 'available' | 'unavailable' {
@@ -86,6 +87,12 @@ async function syncLinkedContactFields(userUid: string, patch: Record<string, un
     contactPatch.isOnline = patch.isOnline === true;
   }
 
+  if (patch.is_consented === true) {
+    contactPatch.is_consented = true;
+    contactPatch.consentedAt = new Date().toISOString();
+    contactPatch.consentedByUid = userUid;
+  }
+
   if (Object.keys(contactPatch).length > 1) {
     await patchDocument(`contacts/${contact.id}`, contactPatch);
   }
@@ -137,6 +144,7 @@ export async function PATCH(request: NextRequest) {
       'openToWork',
       'status',
       'isOnline',
+      'is_consented',
       'notificationsEnabled',
       'soundEnabled',
       'showPhone',
@@ -162,5 +170,47 @@ export async function PATCH(request: NextRequest) {
     console.error('[api/me/profile] patch failed:', error);
     await recordRouteMetric({ route: '/api/me/profile', ok: false, statusCode: 500, error });
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const authUser = await verifyAuthToken(request);
+  if (!authUser) {
+    return unauthorizedResponse();
+  }
+
+  try {
+    const now = new Date().toISOString();
+    const linkedContact = await resolveLinkedContact(authUser.uid);
+
+    if (linkedContact?.id) {
+      await patchDocument(`contacts/${linkedContact.id}`, {
+        hiddenFromDirectory: true,
+        is_consented: false,
+        phone: null,
+        email: null,
+        normalizedPhone: null,
+        updatedAt: now,
+        removedAt: now,
+        removalRequestedByUid: authUser.uid,
+        removalReason: 'user_requested_directory_delete',
+      });
+    }
+
+    await patchDocument(`users/${authUser.uid}`, {
+      linkedContactId: null,
+      is_consented: false,
+      onboardingComplete: false,
+      showPhone: false,
+      directoryDeletedAt: now,
+      updatedAt: now,
+    });
+
+    await recordRouteMetric({ route: '/api/me/profile', ok: true, statusCode: 200 });
+    return NextResponse.json({ success: true, removedContactId: linkedContact?.id ?? null });
+  } catch (error) {
+    console.error('[api/me/profile] delete failed:', error);
+    await recordRouteMetric({ route: '/api/me/profile', ok: false, statusCode: 500, error });
+    return NextResponse.json({ error: 'Failed to delete directory profile' }, { status: 500 });
   }
 }

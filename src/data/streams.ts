@@ -71,7 +71,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   keshet12: {
     type: 'iframe',
     streamUrl: null,
-    embedUrl: 'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=7c5076a9b8757810VgnVCM100000700a10acRCRD&videoChannelId=d1d6f5dfc8517810VgnVCM100000700a10acRCRD&vcmid=1e2258089b67f510VgnVCM2000002a0c10acRCRD&autoPlay=true&autoplay=1&muted=1&mute=1&playsinline=1&playsInline=1&webkit-playsinline=1',
+    embedUrl: 'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=7c5076a9b8757810VgnVCM100000700a10acRCRD&videoChannelId=d1d6f5dfc8517810VgnVCM100000700a10acRCRD&vcmid=1e2258089b67f510VgnVCM2000002a0c10acRCRD&autoPlay=true&autoplay=1&playsinline=1&playsInline=1&webkit-playsinline=1',
     websiteUrl: 'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
     requiresAuth: false,
     hasLiveStream: true,

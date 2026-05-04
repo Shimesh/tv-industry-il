@@ -48,9 +48,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
   const stream = streamConfigs[channelId];
   const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
   const [dynamicStreamResolved, setDynamicStreamResolved] = useState(false);
-  const needsDynamicResolution = Boolean(stream?.dynamicStream && !stream.streamUrl);
+  const needsDynamicResolution = Boolean((stream?.dynamicStream && !stream.streamUrl) || channelId === 'now14');
 
-  // For channels with dynamicStream + no static streamUrl, try to fetch HLS at runtime
   useEffect(() => {
     if (!needsDynamicResolution) return;
 
@@ -96,8 +95,18 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
+    if (videoRef.current) {
+      videoRef.current.muted = true;
+      videoRef.current.defaultMuted = true;
+      videoRef.current.volume = 0;
+    }
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       enforceMutedVideo(video);
+      if (videoRef.current) {
+        videoRef.current.muted = true;
+        videoRef.current.defaultMuted = true;
+        videoRef.current.volume = 0;
+      }
       void video.play().catch(() => {});
     });
 
@@ -120,15 +129,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  // HLS available (static or dynamically resolved) — native <video> works on mobile
   if (hlsUrl) {
     return (
       <video
         ref={videoRef}
         className="absolute inset-0 h-full w-full object-cover"
-        muted
-        playsInline
-        autoPlay
+        autoPlay={true}
+        muted={true}
+        playsInline={true}
         preload="metadata"
         onLoadedMetadata={keepMuted}
         onPlay={keepMuted}

@@ -35,10 +35,20 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       parsed.searchParams.set('autoPlay', 'true');
       parsed.searchParams.set('playsinline', '1');
       parsed.searchParams.set('playsInline', '1');
+      parsed.searchParams.delete('mute');
+      parsed.searchParams.delete('muted');
+      parsed.searchParams.delete('isMuted');
+      parsed.searchParams.delete('isMute');
+      parsed.searchParams.delete('volume');
+      parsed.searchParams.set('mute', '0');
+      parsed.searchParams.set('muted', '0');
+      parsed.searchParams.set('isMuted', 'false');
+      parsed.searchParams.set('isMute', 'false');
+      parsed.searchParams.set('volume', '1');
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}autoplay=1&autoPlay=true&playsinline=1`;
+      return `${url}${separator}autoplay=1&autoPlay=true&playsinline=1&mute=0&muted=0&isMuted=false&isMute=false&volume=1`;
     }
   };
   const [loading, setLoading] = useState(false);
@@ -101,6 +111,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           });
           hlsInstance.loadSource(hlsUrl);
           hlsInstance.attachMedia(videoRef.current!);
+          if (videoRef.current) { videoRef.current.muted = false; videoRef.current.volume = 1; }
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             const vid = videoRef.current;
             if (!vid) return;
@@ -262,6 +273,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             ref={videoRef}
             style={videoStyle}
             playsInline
+            muted={false}
+            controls={true}
             onError={() => {
               setError('השידור אינו זמין כרגע');
               setLoading(false);

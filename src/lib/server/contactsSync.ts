@@ -23,6 +23,12 @@ type ContactRecord = {
   specialty?: string;
   role?: string;
   phone?: string | null;
+  email?: string | null;
+  is_consented?: boolean;
+  hiddenFromDirectory?: boolean;
+  removedAt?: string | null;
+  removalRequestedByUid?: string | null;
+  removalReason?: string | null;
   source?: string;
   sources?: string[];
   normalizedName?: string;
@@ -281,7 +287,8 @@ function collectCandidates(productions: ProductionInput[]): SyncCandidate[] {
 function mergeContactData(existing: ContactRecord | null, candidate: SyncCandidate) {
   const sources = buildSourceList(existing, candidate);
   const source = existing?.source || sources[0] || 'schedule';
-  const mergedPhone = existing?.phone || candidate.normalizedPhone;
+  const isHiddenFromDirectory = existing?.hiddenFromDirectory === true;
+  const mergedPhone = isHiddenFromDirectory ? null : existing?.phone || candidate.normalizedPhone;
   const mergedRole = existing?.role || candidate.role;
   const mergedDepartment = pickDepartment(existing, candidate);
   const mergedWorkArea = pickWorkArea(existing, candidate);
@@ -292,6 +299,11 @@ function mergeContactData(existing: ContactRecord | null, candidate: SyncCandida
     firstName: existing?.firstName || candidate.firstName,
     lastName: existing?.lastName || candidate.lastName,
     phone: mergedPhone,
+    is_consented: existing?.is_consented === true,
+    hiddenFromDirectory: isHiddenFromDirectory,
+    removedAt: existing?.removedAt || null,
+    removalRequestedByUid: existing?.removalRequestedByUid || null,
+    removalReason: existing?.removalReason || null,
     role: mergedRole,
     department: mergedDepartment,
     workArea: mergedWorkArea,

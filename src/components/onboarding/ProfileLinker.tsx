@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
+import type { Contact } from '@/data/contacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, X, Search, Link2, UserCheck } from 'lucide-react';
 
@@ -19,7 +20,8 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
     department: string;
     role: string;
     phone: string;
-    linkedContactId?: number;
+    linkedContactId?: number | string;
+    is_consented?: boolean;
   }) => {
     await updateUserProfile({
       ...data,
@@ -53,13 +55,13 @@ function OnboardingModal({
   onDismiss,
 }: {
   profile: { displayName: string; email: string; phone: string; department: string; role: string };
-  onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number }) => void;
+  onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number | string; is_consented?: boolean }) => void;
   onDismiss: () => void;
 }) {
   const [step, setStep] = useState(1);
   const { contacts: contactsList } = useAppData();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedContact, setSelectedContact] = useState<any | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [form, setForm] = useState({
     displayName: profile.displayName,
     department: profile.department || '',
@@ -74,21 +76,26 @@ function OnboardingModal({
       })
     : [];
 
-  const handleLinkContact = (contact: any) => {
+  const handleLinkContact = (contact: Contact) => {
     setSelectedContact(contact);
     setForm({
-      displayName: `${contact.firstName} ${contact.lastName}`,
-      department: contact.department,
-      role: contact.role,
+      displayName: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+      department: String(contact.department || ''),
+      role: contact.role || '',
       phone: contact.phone || form.phone,
     });
     setStep(2);
   };
 
   const handleFinish = () => {
+    setStep(3);
+  };
+
+  const handleConsent = () => {
     onComplete({
       ...form,
       linkedContactId: selectedContact?.id,
+      is_consented: true,
     });
   };
 
@@ -116,7 +123,7 @@ function OnboardingModal({
               <UserCheck className="w-4 h-4 text-white" />
             </div>
             <h2 className="font-bold" style={{ color: 'var(--theme-text)' }}>
-              {step === 1 ? 'קשר לאלפון' : 'השלם פרטים'}
+              {step === 1 ? 'קשר לאלפון' : step === 2 ? 'השלם פרטים' : 'אישור הצגת פרטים'}
             </h2>
           </div>
           <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-[var(--theme-accent-glow)]">
@@ -184,7 +191,7 @@ function OnboardingModal({
                 דלג - אמלא ידנית
               </button>
             </>
-          ) : (
+          ) : step === 2 ? (
             <>
               {selectedContact && (
                 <div className="flex items-center gap-3 p-3 rounded-xl mb-4 bg-green-500/10 border border-green-500/20">
@@ -249,6 +256,20 @@ function OnboardingModal({
                 </button>
               </div>
             </>
+          ) : (
+            <div className="space-y-4 text-center">
+              <CheckCircle className="mx-auto h-10 w-10 text-green-400" />
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
+                כדי להציג את פרטי הקשר שלך באינדקס, נדרש אישור מפורש שלך.
+              </p>
+              <button
+                onClick={handleConsent}
+                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all"
+              >
+                <CheckCircle className="w-4 h-4" />
+                אני מאשר להציג את פרטיי באינדקס
+              </button>
+            </div>
           )}
         </div>
       </motion.div>

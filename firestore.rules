@@ -127,9 +127,9 @@ service cloud.firestore {
 
     // ── Contacts ──────────────────────────────────────────────────
     match /contacts/{contactId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth();
+      allow read: if isModeratorOrAbove();
+      allow create: if isAuth() && request.resource.data.is_consented != true;
+      allow update: if isModeratorOrAbove();
       allow delete: if isModeratorOrAbove();
     }
 

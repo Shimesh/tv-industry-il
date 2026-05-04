@@ -23,7 +23,8 @@ export interface UserProfile {
   department: string;
   role: string;
   phone: string;
-  linkedContactId?: number;
+  linkedContactId?: number | string;
+  is_consented?: boolean;
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
@@ -73,6 +74,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  deleteDirectoryProfile: () => Promise<void>;
   repairUserProfile: () => Promise<void>;
   can: (permission: Permission) => boolean;
   hasRole: (role: UserRole) => boolean;
@@ -91,6 +93,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   logout: async () => {},
   updateUserProfile: async () => {},
+  deleteDirectoryProfile: async () => {},
   repairUserProfile: async () => {},
   can: () => false,
   hasRole: () => false,
@@ -108,6 +111,7 @@ function defaultProfile(firebaseUser: User): UserProfile {
     department: '',
     role: '',
     phone: '',
+    is_consented: false,
     skills: [],
     bio: '',
     status: 'available',
@@ -143,7 +147,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     typeof linkedContactIdRaw === 'number'
       ? linkedContactIdRaw
       : typeof linkedContactIdRaw === 'string' && linkedContactIdRaw.trim()
-        ? Number(linkedContactIdRaw)
+        ? linkedContactIdRaw.trim()
         : undefined;
 
   return {
@@ -162,6 +166,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     department: typeof raw.department === 'string' ? raw.department : '',
     role: typeof raw.role === 'string' ? raw.role : '',
     phone: typeof raw.phone === 'string' ? raw.phone : '',
+    is_consented: raw.is_consented === true,
     skills: Array.isArray(raw.skills) ? raw.skills.map((item) => String(item)) : [],
     bio: typeof raw.bio === 'string' ? raw.bio : '',
     status: raw.status === 'busy' || raw.status === 'offline' ? raw.status : 'available',
@@ -174,7 +179,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
         : raw.siteRole === 'user'
           ? 'viewer'
           : undefined,
-    linkedContactId: Number.isFinite(linkedContactId) ? linkedContactId : undefined,
+    linkedContactId,
     openToWork: raw.openToWork === true,
     city: typeof raw.city === 'string' ? raw.city : undefined,
     yearsOfExperience: typeof raw.yearsOfExperience === 'number' ? raw.yearsOfExperience : undefined,
@@ -383,6 +388,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteDirectoryProfile = async () => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const response = await fetch('/api/me/profile', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete directory profile');
+    }
+
+    setProfile((prev) => prev ? {
+      ...prev,
+      linkedContactId: undefined,
+      is_consented: false,
+      onboardingComplete: false,
+      showPhone: false,
+    } : prev);
+    setProfileReady(false);
+    setProfileSource('fallback');
+  };
+
   const repairUserProfile = async () => {
     if (!user) return;
     const token = await user.getIdToken();
@@ -418,6 +448,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         logout,
         updateUserProfile,
+        deleteDirectoryProfile,
         repairUserProfile,
         can: canDo,
         hasRole: hasRoleLevel,

@@ -8,7 +8,7 @@ import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
-  ChevronLeft, User, Volume2, Eye, Smartphone
+  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -20,18 +20,34 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { profile, logout, updateUserProfile } = useAuth();
+  const { profile, logout, updateUserProfile, deleteDirectoryProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
   const [soundEnabled, setSoundEnabled] = useState(profile?.soundEnabled !== false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteProfileConfirm, setShowDeleteProfileConfirm] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState(false);
   const [statusSaved, setStatusSaved] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const handleLogout = async () => {
     await logout();
     router.push('/login');
+  };
+
+  const handleDeleteDirectoryProfile = async () => {
+    setDeletingProfile(true);
+    setSettingsError(null);
+    try {
+      await deleteDirectoryProfile();
+      await logout();
+      router.push('/');
+    } catch {
+      setDeletingProfile(false);
+      setShowDeleteProfileConfirm(false);
+      setSettingsError('לא הצלחנו למחוק את הפרופיל מהאינדקס. נסה שוב בעוד רגע.');
+    }
   };
 
   const handleStatusChange = async (status: 'available' | 'busy' | 'offline') => {
@@ -238,8 +254,62 @@ function SettingsContent() {
               enabled={profile.showPhone !== false}
               onToggle={handleToggleShowPhone}
             />
+            {profile.linkedContactId && (
+              <div className="border-t pt-3" style={{ borderColor: 'var(--theme-border)' }}>
+                <button
+                  onClick={() => setShowDeleteProfileConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition-colors hover:bg-red-500/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  מחק את הפרופיל שלי מהאינדקס
+                </button>
+              </div>
+            )}
           </div>
         </SettingsSection>
+
+        {showDeleteProfileConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div
+              className="w-full max-w-md rounded-2xl border p-5 shadow-2xl"
+              style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-directory-profile-title"
+            >
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-300">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 id="delete-directory-profile-title" className="text-base font-black" style={{ color: 'var(--theme-text)' }}>
+                    מחיקת פרופיל מהאינדקס
+                  </h2>
+                  <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
+                    האם אתה בטוח? פעולה זו תסיר את פרטיך מהמאגר ולא ניתנת לביטול.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDeleteProfileConfirm(false)}
+                  disabled={deletingProfile}
+                  className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  style={{ background: 'var(--theme-bg)', color: 'var(--theme-text-secondary)' }}
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={handleDeleteDirectoryProfile}
+                  disabled={deletingProfile}
+                  className="flex-1 rounded-lg bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
+                >
+                  {deletingProfile ? 'מוחק...' : 'כן, מחק את הפרופיל שלי'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sign Out */}
         <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import AuthGuard from '@/components/AuthGuard';
+import Link from 'next/link';
 import MessageInput from '@/components/productions/MessageInput';
 import WeeklyCalendar from '@/components/productions/WeeklyCalendar';
 import UpdateSummary from '@/components/productions/UpdateSummary';
@@ -29,7 +29,7 @@ import {
 } from '@/lib/crewNormalization';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
@@ -39,10 +39,45 @@ const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 
 export default function ProductionsPage() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <ProductionsLoadingState />;
+  if (!user) return <ProductionsLoginRequired />;
+
+  return <ProductionsContent />;
+}
+
+function ProductionsLoadingState() {
   return (
-    <AuthGuard>
-      <ProductionsContent />
-    </AuthGuard>
+    <div className="min-h-[60vh] flex items-center justify-center" dir="rtl">
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
+        </div>
+        <p className="text-[var(--theme-text-secondary)]">טוען...</p>
+      </div>
+    </div>
+  );
+}
+
+function ProductionsLoginRequired() {
+  return (
+    <main className="min-h-[70vh] flex items-center justify-center px-4 py-12" dir="rtl">
+      <section className="w-full max-w-md text-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-8 shadow-sm">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]">
+          <LockKeyhole className="h-7 w-7" aria-hidden="true" />
+        </div>
+        <h1 className="mb-3 text-2xl font-bold text-[var(--theme-text)]">
+          עליך להיות משתמש רשום כדי לצפות בלוחות העבודה
+        </h1>
+        <Link
+          href="/login"
+          className="mt-5 inline-flex items-center justify-center rounded-lg bg-[var(--theme-accent)] px-5 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] focus:ring-offset-2 focus:ring-offset-[var(--theme-bg)]"
+        >
+          התחברות / הרשמה
+        </Link>
+      </section>
+    </main>
   );
 }
 

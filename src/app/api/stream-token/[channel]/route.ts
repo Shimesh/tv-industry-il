@@ -58,6 +58,24 @@ async function resolveKeshet12Stream(): Promise<string | null> {
   return null;
 }
 
+async function resolveNow14Stream(): Promise<string | null> {
+  const html = await fetchPage('https://ok.ru/videoembed/10460920618703?autoplay=1');
+  if (!html) return null;
+
+  const normalized = html
+    .replace(/\\&quot;/g, '"')
+    .replace(/&quot;/g, '"')
+    .replace(/\\u0026/g, '&')
+    .replace(/&amp;/g, '&')
+    .replace(/\\\//g, '/');
+
+  const okHlsMatch = normalized.match(/"hlsMasterPlaylistUrl":"([^"]+\.m3u8[^"]*)"/);
+  const extracted = okHlsMatch?.[1] ?? extractM3u8(normalized);
+  if (!extracted) return null;
+
+  return extracted.replace(/".*/, '');
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ channel: string }> }
@@ -110,6 +128,15 @@ export async function GET(
     // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
     if (channel === 'keshet12') {
       const url = await resolveKeshet12Stream();
+      return NextResponse.json({
+        url,
+        expires: Date.now() + (url ? 1800000 : 300000),
+      });
+    }
+
+    // === ׳¢׳›׳©׳™׳• 14 ג€” resolve the OK live HLS for muted homepage previews ===
+    if (channel === 'now14') {
+      const url = await resolveNow14Stream();
       return NextResponse.json({
         url,
         expires: Date.now() + (url ? 1800000 : 300000),

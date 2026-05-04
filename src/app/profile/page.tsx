@@ -56,6 +56,7 @@ function ProfileContent() {
   // Sync form when profile loads
   useEffect(() => {
     if (profile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         displayName: profile.displayName || '',
         department: profile.department || '',
@@ -74,6 +75,7 @@ function ProfileContent() {
 
   useEffect(() => {
     if (profile && !profile.onboardingComplete && (!profile.department || !profile.role)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowOnboarding(true);
     }
   }, [profile]);
@@ -109,7 +111,7 @@ function ProfileContent() {
   };
 
   const handleOnboardingComplete = async (data: {
-    displayName: string; department: string; role: string; phone: string; linkedContactId?: number;
+    displayName: string; department: string; role: string; phone: string; linkedContactId?: number | string; is_consented?: boolean;
   }) => {
     await updateUserProfile({ ...data, onboardingComplete: true });
     setForm(prev => ({ ...prev, ...data }));
@@ -399,7 +401,7 @@ function OnboardingModal({
 }: {
   profile: { displayName: string; email: string; phone: string; department: string; role: string };
   contacts: { id: number | string; firstName: string; lastName: string; role: string; department: string; phone?: string }[];
-  onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number }) => void;
+  onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number | string; is_consented?: boolean }) => void;
   onDismiss: () => void;
 }) {
   const [step, setStep] = useState(1);
@@ -425,6 +427,14 @@ function OnboardingModal({
     setStep(2);
   };
 
+  const handleConsent = () => {
+    onComplete({
+      ...form,
+      linkedContactId: selectedContact?.id,
+      is_consented: true,
+    });
+  };
+
   const inputCls = 'w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]';
   const inputStyle = { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' };
 
@@ -441,7 +451,7 @@ function OnboardingModal({
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
               <UserCheck className="w-4 h-4 text-white" />
             </div>
-            <h2 className="font-bold" style={{ color: 'var(--theme-text)' }}>{step === 1 ? 'קשר לאלפון' : 'השלם פרטים'}</h2>
+            <h2 className="font-bold" style={{ color: 'var(--theme-text)' }}>{step === 1 ? 'קשר לאלפון' : step === 2 ? 'השלם פרטים' : 'אישור הצגת פרטים'}</h2>
           </div>
           <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-[var(--theme-accent-glow)]">
             <X className="w-4 h-4 text-[var(--theme-text-secondary)]" />
@@ -486,7 +496,7 @@ function OnboardingModal({
                 דלג - מלא ידנית
               </button>
             </>
-          ) : (
+          ) : step === 2 ? (
             <>
               {selectedContact && (
                 <div className="flex items-center gap-3 p-3 rounded-xl mb-4 bg-green-500/10 border border-green-500/20">
@@ -516,13 +526,27 @@ function OnboardingModal({
                   <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>טלפון</label>
                   <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} style={inputStyle} dir="ltr" />
                 </div>
-                <button onClick={() => onComplete({ ...form, linkedContactId: selectedContact?.id as number | undefined })}
+                <button onClick={() => setStep(3)}
                   disabled={!form.displayName || !form.department}
                   className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50">
                   <CheckCircle className="w-4 h-4" />סיום
                 </button>
               </div>
             </>
+          ) : (
+            <div className="space-y-4 text-center">
+              <CheckCircle className="mx-auto h-10 w-10 text-green-400" />
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
+                כדי להציג את פרטי הקשר שלך באינדקס, נדרש אישור מפורש שלך.
+              </p>
+              <button
+                onClick={handleConsent}
+                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all"
+              >
+                <CheckCircle className="w-4 h-4" />
+                אני מאשר להציג את פרטיי באינדקס
+              </button>
+            </div>
           )}
         </div>
       </motion.div>
