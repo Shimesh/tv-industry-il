@@ -238,12 +238,13 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const resolvedHlsUrl = stream?.streamUrl ?? dynamicStreamUrl;
   const hasDirectStream = !!resolvedHlsUrl;
   const hasEmbed = !!resolvedEmbedUrl;
+  const isResolvingDynamicStream = !!(stream?.dynamicStream && dynamicLoading && !hasDirectStream);
 
   // Rendering priority: HLS stream > iframe embed > loading spinner > fallback placeholder
   const showHls = hasDirectStream && !error;
-  const showEmbed = !showHls && hasEmbed && !error;
+  const showEmbed = !showHls && hasEmbed && !error && !isResolvingDynamicStream;
   const showLiveBadge = showHls || showEmbed;
-  const showDynamicLoading = !!(stream?.dynamicStream && dynamicLoading && !hasDirectStream && !hasEmbed);
+  const showDynamicLoading = isResolvingDynamicStream;
   const showFallback = !showEmbed && !showHls && !showDynamicLoading;
 
   return (

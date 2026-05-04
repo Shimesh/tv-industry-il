@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const I24_ACCOUNT_ID = '5377161796001';
+const I24_VIDEO_ID = '6352464366112';
+const I24_POLICY_KEY = 'BCpkADawqM1UIU4favtR1Jj4rqM0ZAkYwMEbgN9bsEpJ2150CdxJmRIG8jK-Up_9w4w37x3tP1AsoO_MZhD_XoAGkdKWxymaaw4OHuhPn_lEJczODTm3AO7S08gLFPnLnb-FcKJwXhbxCQ10';
+
+type BrightcovePlaybackResponse = {
+  sources?: Array<{
+    src?: string;
+    type?: string;
+  }>;
+};
 
 async function fetchPage(url: string): Promise<string | null> {
   try {
@@ -38,6 +48,7 @@ function extractM3u8(html: string): string | null {
 async function resolveKeshet12Stream(): Promise<string | null> {
   const candidateUrls = [
     'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
+    'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&videoChannelId=5d28d21b4580e310VgnVCM2000002a0c10acRCRD&vcmid=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&autoPlay=true',
     'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=7c5076a9b8757810VgnVCM100000700a10acRCRD&videoChannelId=d1d6f5dfc8517810VgnVCM100000700a10acRCRD&vcmid=1e2258089b67f510VgnVCM2000002a0c10acRCRD&autoPlay=true',
     'https://www.mako.co.il/live-news?partner=NavBar',
   ];
@@ -56,6 +67,29 @@ async function resolveKeshet12Stream(): Promise<string | null> {
   }
 
   return null;
+}
+
+async function resolveI24Stream(): Promise<string | null> {
+  try {
+    const response = await fetch(`https://edge.api.brightcove.com/playback/v1/accounts/${I24_ACCOUNT_ID}/videos/${I24_VIDEO_ID}`, {
+      headers: {
+        Accept: 'application/json',
+        'BCOV-Policy': I24_POLICY_KEY,
+      },
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as BrightcovePlaybackResponse;
+    const hlsSource = data.sources?.find(source => source.src?.includes('.m3u8'))
+      ?? data.sources?.find(source => source.type === 'application/vnd.apple.mpegurl');
+
+    return hlsSource?.src ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveNow14Stream(): Promise<string | null> {
@@ -122,6 +156,14 @@ export async function GET(
       return NextResponse.json({
         url: 'https://d2xg1g9o5vns8m.cloudfront.net/out/v1/66d4ac8748ce4a9298b4e40e48d1ae2f/index.m3u8',
         expires: Date.now() + 3600000,
+      });
+    }
+
+    if (channel === 'i24') {
+      const url = await resolveI24Stream();
+      return NextResponse.json({
+        url,
+        expires: Date.now() + (url ? 1800000 : 300000),
       });
     }
 

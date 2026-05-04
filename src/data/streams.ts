@@ -52,6 +52,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
     websiteUrl: 'https://www.isramedia.net/9568/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%97%D7%93%D7%A9%D7%95%D7%AA/i24news-%D7%91%D7%A2%D7%91%D7%A8%D7%99%D7%AA-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
     requiresAuth: false,
     hasLiveStream: true,
+    dynamicStream: true,
     note: 'שידור חי חינמי',
   },
 
