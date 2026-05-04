@@ -149,7 +149,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
           onPaste={handlePaste}
-          placeholder="הדבק כאן הודעת WhatsApp עם לינק ללוח העבודה, או Ctrl+A Ctrl+C מדף הרצליה..."
+          placeholder="הדבק כאן הודעת WhatsApp עם לינק ללוח העבודה"
           className="w-full min-h-[100px] p-4 text-sm resize-none bg-transparent outline-none"
           style={{ color: 'var(--theme-text)' }}
           dir="rtl"
