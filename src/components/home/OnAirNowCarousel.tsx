@@ -13,6 +13,7 @@ import { getChannelDisplayName } from '@/lib/channelLabels';
 
 const CARD_WIDTH = 320;
 const CARD_GAP = 12;
+const NOW14_PREVIEW_HLS_URL = 'https://n-121-11.il.cdn-redge.media/livehls/oil/ch14/live/ch14/live.livx/playlist.m3u8?bitrate=928000&audioId=1&videoId=12';
 
 function appendMutedParams(url: string): string {
   try {
@@ -70,7 +71,7 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     };
   }, [channelId, needsDynamicResolution]);
 
-  const hlsUrl = stream?.streamUrl ?? dynamicHlsUrl;
+  const hlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -88,9 +89,11 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     if (!Hls.isSupported()) return;
 
     const hls = new Hls({
-      lowLatencyMode: true,
-      maxBufferLength: 12,
+      lowLatencyMode: false,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
       capLevelToPlayerSize: true,
+      startLevel: 0,
     });
 
     hls.loadSource(hlsUrl);
