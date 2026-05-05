@@ -47,6 +47,7 @@ export default function RootLayout({
       <body
         className="antialiased min-h-screen flex flex-col app-safe-x app-safe-bottom"
         style={{ background: "var(--theme-bg, #030712)", color: "var(--theme-text, #f3f4f6)" }}
+        suppressHydrationWarning
       >
         <Providers>
           <ScrollToTop />

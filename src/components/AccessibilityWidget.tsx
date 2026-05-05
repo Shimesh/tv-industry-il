@@ -38,34 +38,8 @@ const defaultSettings: AccessibilitySettings = {
 export default function AccessibilityWidget() {
   const [open, setOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [settings, setSettings] = useState<AccessibilitySettings>(() => {
-    if (typeof window === 'undefined') return defaultSettings;
-
-    try {
-      const savedSettings = window.localStorage.getItem(STORAGE_KEY);
-      return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
-  });
-  const [position, setPosition] = useState<WidgetPosition>(() => {
-    if (typeof window === 'undefined') return { x: EDGE_MARGIN, y: EDGE_MARGIN };
-
-    try {
-      const savedPosition = window.localStorage.getItem(POSITION_STORAGE_KEY);
-      if (savedPosition) {
-        const parsed = JSON.parse(savedPosition) as WidgetPosition;
-        return clampPosition(parsed.x, parsed.y);
-      }
-    } catch {
-      // Fall back to the default corner.
-    }
-
-    return {
-      x: EDGE_MARGIN,
-      y: window.innerHeight - FAB_SIZE - EDGE_MARGIN,
-    };
-  });
+  const [settings, setSettings] = useState<AccessibilitySettings>(defaultSettings);
+  const [position, setPosition] = useState<WidgetPosition>({ x: EDGE_MARGIN, y: EDGE_MARGIN });
   const [menuSize, setMenuSize] = useState<MenuSize>({
     width: MENU_WIDTH,
     height: MENU_FALLBACK_HEIGHT,
@@ -74,6 +48,8 @@ export default function AccessibilityWidget() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const justDraggedRef = useRef(false);
+  const settingsStorageReadyRef = useRef(false);
+  const positionStorageReadyRef = useRef(false);
   const dragRef = useRef({
     active: false,
     moved: false,
@@ -84,12 +60,44 @@ export default function AccessibilityWidget() {
   });
 
   useEffect(() => {
+    try {
+      const savedSettings = window.localStorage.getItem(STORAGE_KEY);
+      if (savedSettings) {
+        setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) });
+      }
+    } catch {
+      // Ignore malformed or unavailable stored settings.
+    }
+
+    try {
+      const savedPosition = window.localStorage.getItem(POSITION_STORAGE_KEY);
+      if (savedPosition) {
+        const parsed = JSON.parse(savedPosition) as WidgetPosition;
+        setPosition(clampPosition(parsed.x, parsed.y));
+        return;
+      }
+    } catch {
+      // Fall back to the default corner.
+    }
+
+    setPosition({
+      x: EDGE_MARGIN,
+      y: window.innerHeight - FAB_SIZE - EDGE_MARGIN,
+    });
+  }, []);
+
+  useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
 
     body.classList.toggle('accessibility-high-contrast', settings.highContrast);
     html.classList.toggle('accessibility-large-text', settings.largeText);
     body.classList.toggle('accessibility-stop-animations', settings.stopAnimations);
+
+    if (!settingsStorageReadyRef.current) {
+      settingsStorageReadyRef.current = true;
+      return;
+    }
 
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
@@ -134,6 +142,11 @@ export default function AccessibilityWidget() {
   }, []);
 
   useEffect(() => {
+    if (!positionStorageReadyRef.current) {
+      positionStorageReadyRef.current = true;
+      return;
+    }
+
     try {
       window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
     } catch {
