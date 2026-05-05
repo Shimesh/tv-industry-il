@@ -11,6 +11,7 @@ Israeli TV industry platform built with Next.js 16 (App Router), React 19, TypeS
 - `npx next build` - Production build
 - `npx vercel --prod --yes` - Deploy to Vercel production
 - `git push origin master` - Push to GitHub
+- `npx firebase-tools deploy --only firestore` - Deploy Firestore rules + indexes (MUST run separately after any change to `firestore.rules` or `firestore.indexes.json` — Vercel deploy does NOT deploy Firebase rules)
 
 ## Deployment
 - **Live URL**: https://tv-industry-il.vercel.app
