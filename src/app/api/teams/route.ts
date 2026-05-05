@@ -4,6 +4,7 @@ import {
   createDocument,
   deleteDocument,
   getDocument,
+  runQuery,
 } from '@/lib/server/firestoreAdminRest';
 import { recordRouteMetric, recordSystemEvent } from '@/lib/server/adminTelemetry';
 
@@ -15,6 +16,58 @@ type UserRecord = {
 
 function sanitizeText(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+export async function GET(request: NextRequest) {
+  const authUser = await verifyAuthToken(request);
+  if (!authUser) return unauthorizedResponse();
+
+  try {
+    const teams = await runQuery({
+      from: [{ collectionId: 'teams' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'memberUids' },
+          op: 'ARRAY_CONTAINS',
+          value: { stringValue: authUser.uid },
+        },
+      },
+      orderBy: [{ field: { fieldPath: 'updatedAt' }, direction: 'DESCENDING' }],
+    });
+
+    // Also fetch pending invites for this user
+    const invites = await runQuery({
+      from: [{ collectionId: 'teamInvites' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            {
+              fieldFilter: {
+                field: { fieldPath: 'inviteeUid' },
+                op: 'EQUAL',
+                value: { stringValue: authUser.uid },
+              },
+            },
+            {
+              fieldFilter: {
+                field: { fieldPath: 'status' },
+                op: 'EQUAL',
+                value: { stringValue: 'pending' },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    return NextResponse.json({ success: true, teams, invites });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'שגיאה בטעינת הצוותים' },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {

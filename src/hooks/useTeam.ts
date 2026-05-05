@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc,
-  query, where, serverTimestamp, getDoc, getDocs, arrayUnion, arrayRemove, writeBatch,
+  collection, doc, addDoc, updateDoc, deleteDoc,
+  serverTimestamp, getDoc, getDocs, query, where, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import type { Team, TeamMember, TeamInvite, TeamRole } from '@/types/team';
 
@@ -14,66 +14,42 @@ export function useTeam() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
 
   const displayName = profile?.displayName || user?.displayName || '';
   const displayPhoto = profile?.photoURL || user?.photoURL || null;
 
-  // Subscribe to user's teams
+  const fetchTeamsAndInvites = useCallback(async () => {
+    if (!user || fetchingRef.current) return;
+    fetchingRef.current = true;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/teams', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const data = await response.json() as { teams: Team[]; invites: TeamInvite[] };
+      setTeams(data.teams ?? []);
+      setInvites(data.invites ?? []);
+    } catch {
+      // silent — keep previous state
+    } finally {
+      fetchingRef.current = false;
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) {
       setTeams([]);
-      setLoading(false);
-      return;
-    }
-
-    const q = query(
-      collection(db, 'teams'),
-      where('memberUids', 'array-contains', user.uid),
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const teamList: Team[] = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      })) as Team[];
-      teamList.sort((a, b) => {
-        const aTime = typeof a.updatedAt === 'number' ? a.updatedAt : (a.updatedAt?.toMillis?.() || 0);
-        const bTime = typeof b.updatedAt === 'number' ? b.updatedAt : (b.updatedAt?.toMillis?.() || 0);
-        return bTime - aTime;
-      });
-      setTeams(teamList);
-      setLoading(false);
-    }, (err) => {
-      console.error('[useTeam] teams snapshot error:', err.code, err.message);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Subscribe to pending invites for user
-  useEffect(() => {
-    if (!user) {
       setInvites([]);
+      setLoading(false);
       return;
     }
-
-    const q = query(
-      collection(db, 'teamInvites'),
-      where('inviteeUid', '==', user.uid),
-      where('status', '==', 'pending'),
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const inviteList: TeamInvite[] = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      })) as TeamInvite[];
-      setInvites(inviteList);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    setLoading(true);
+    fetchTeamsAndInvites();
+  }, [user, fetchTeamsAndInvites]);
 
   const createTeamViaApi = useCallback(async (name: string, description?: string): Promise<string | null> => {
     if (!user || !displayName) return null;
@@ -94,10 +70,7 @@ export function useTeam() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name,
-          description: description || '',
-        }),
+        body: JSON.stringify({ name, description: description || '' }),
         signal: controller.signal,
       });
     } catch (error) {
@@ -114,8 +87,11 @@ export function useTeam() {
       throw new Error(typeof payload?.error === 'string' ? payload.error : 'יצירת הצוות נכשלה');
     }
 
-    return typeof payload?.teamId === 'string' ? payload.teamId : null;
-  }, [user, displayName, teams.length]);
+    const teamId = typeof payload?.teamId === 'string' ? payload.teamId : null;
+    // Refresh list so new team appears immediately
+    await fetchTeamsAndInvites();
+    return teamId;
+  }, [user, displayName, teams.length, fetchTeamsAndInvites]);
 
   // Update team settings
   const updateTeam = useCallback(async (teamId: string, data: { name?: string; description?: string; photoURL?: string | null }) => {
@@ -260,12 +236,15 @@ export function useTeam() {
         createdAt: Date.now(),
       });
     }
-  }, [user, displayName, displayPhoto]);
+
+    await fetchTeamsAndInvites();
+  }, [user, displayName, displayPhoto, fetchTeamsAndInvites]);
 
   // Decline an invite
   const declineInvite = useCallback(async (inviteId: string) => {
     await updateDoc(doc(db, 'teamInvites', inviteId), { status: 'declined' });
-  }, []);
+    await fetchTeamsAndInvites();
+  }, [fetchTeamsAndInvites]);
 
   // Remove a member from a team
   const removeMember = useCallback(async (teamId: string, memberUid: string) => {
@@ -303,7 +282,9 @@ export function useTeam() {
         });
       }
     }
-  }, [user, teams]);
+
+    await fetchTeamsAndInvites();
+  }, [user, teams, fetchTeamsAndInvites]);
 
   // Leave a team (for non-owners)
   const leaveTeam = useCallback(async (teamId: string) => {
@@ -354,7 +335,9 @@ export function useTeam() {
       read: false,
       createdAt: Date.now(),
     });
-  }, [user, teams]);
+
+    await fetchTeamsAndInvites();
+  }, [user, teams, fetchTeamsAndInvites]);
 
   // Transfer ownership
   const transferOwnership = useCallback(async (teamId: string, newOwnerUid: string) => {
@@ -388,7 +371,9 @@ export function useTeam() {
       editorUids,
       updatedAt: serverTimestamp(),
     });
-  }, [user, teams]);
+
+    await fetchTeamsAndInvites();
+  }, [user, teams, fetchTeamsAndInvites]);
 
   // Delete a team
   const deleteTeam = useCallback(async (teamId: string) => {
@@ -408,7 +393,9 @@ export function useTeam() {
     if (team.chatId) {
       await deleteDoc(doc(db, 'chats', team.chatId));
     }
-  }, [user, teams]);
+
+    await fetchTeamsAndInvites();
+  }, [user, teams, fetchTeamsAndInvites]);
 
   // Get user's role in a specific team
   const getUserRole = useCallback((teamId: string): TeamRole | null => {
@@ -423,6 +410,7 @@ export function useTeam() {
     teams,
     invites,
     loading,
+    refresh: fetchTeamsAndInvites,
     createTeam: createTeamViaApi,
     updateTeam,
     inviteToTeam,
