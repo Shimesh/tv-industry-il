@@ -69,6 +69,79 @@ body {
   overflow-x: hidden;
 }
 
+.app-ambient {
+  position: relative;
+  background:
+    radial-gradient(circle at 12% 2%, color-mix(in srgb, var(--theme-accent) 18%, transparent), transparent 28rem),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--theme-accent-secondary) 16%, transparent), transparent 26rem),
+    linear-gradient(180deg, var(--theme-bg) 0%, color-mix(in srgb, var(--theme-bg) 88%, #000 12%) 100%);
+}
+
+.app-panel {
+  border: 1px solid var(--theme-border);
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--theme-bg-card) 92%, white 8%), var(--theme-bg-card)),
+    var(--theme-bg-card);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+}
+
+.app-card {
+  border: 1px solid var(--theme-border);
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--theme-bg-card) 90%, white 10%), var(--theme-bg-card)),
+    var(--theme-bg-card);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background 220ms ease;
+}
+
+.app-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border));
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.24),
+    0 0 0 1px color-mix(in srgb, var(--theme-accent) 14%, transparent),
+    0 0 42px var(--theme-accent-glow);
+}
+
+.app-hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--theme-border);
+  background:
+    radial-gradient(circle at 18% 16%, color-mix(in srgb, var(--theme-accent) 26%, transparent), transparent 26rem),
+    radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--theme-accent-secondary) 22%, transparent), transparent 24rem),
+    linear-gradient(135deg, color-mix(in srgb, var(--theme-bg-card) 74%, transparent), transparent);
+}
+
+.app-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  background-image:
+    linear-gradient(var(--theme-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-border) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
+}
+
+.app-section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--theme-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
 body,
 #__next {
   width: 100%;
@@ -203,13 +276,16 @@ body.accessibility-high-contrast .gradient-text-warm {
 
 /* Card Glow Effect */
 .card-glow {
+  border-radius: 1rem;
   transition: all 0.3s ease;
 }
 
 .card-glow:hover {
-  box-shadow: 0 0 20px var(--theme-accent-glow, rgba(139, 92, 246, 0.15)), 0 0 40px rgba(59, 130, 246, 0.1);
-  border-color: var(--theme-accent, rgba(139, 92, 246, 0.3));
-  transform: translateY(-2px);
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.22),
+    0 0 36px var(--theme-accent-glow, rgba(139, 92, 246, 0.15));
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border));
+  transform: translateY(-3px);
 }
 
 /* Breaking News Marquee */

@@ -10,9 +10,26 @@ import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
 import {
-  Tv, Calendar, Users, Newspaper, Building2, Menu, X,
-  MessageCircle, Megaphone, Wrench, LogIn, LogOut, UserIcon,
-  Palette, ChevronDown, Settings, CheckCircle, Clapperboard, Shield, UsersRound
+  Tv,
+  Calendar,
+  Users,
+  Newspaper,
+  Building2,
+  Menu,
+  X,
+  MessageCircle,
+  Megaphone,
+  Wrench,
+  LogIn,
+  LogOut,
+  UserIcon,
+  Palette,
+  ChevronDown,
+  Settings,
+  CheckCircle,
+  Clapperboard,
+  Shield,
+  UsersRound,
 } from 'lucide-react';
 import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
@@ -22,7 +39,7 @@ const navLinks = [
   { href: '/productions', label: 'יומן אישי', icon: Clapperboard, auth: true },
   { href: '/teams', label: 'צוותים', icon: UsersRound, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
-  { href: '/chat', label: 'צ\'אט', icon: MessageCircle, auth: true },
+  { href: '/chat', label: 'צ׳אט', icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
   { href: '/news', label: 'חדשות', icon: Newspaper },
   { href: '/studios', label: 'אולפנים', icon: Building2 },
@@ -91,76 +108,76 @@ export default function Navigation() {
     return () => window.clearTimeout(timer);
   }, [pathname, profile]);
 
-  // Show loading bar on route change
   useEffect(() => {
     if (prevPathnameRef.current !== pathname) {
       prevPathnameRef.current = pathname;
       const startTimer = window.setTimeout(() => setLoadingBar(true), 0);
-      const t = window.setTimeout(() => setLoadingBar(false), 600);
+      const timer = window.setTimeout(() => setLoadingBar(false), 600);
       return () => {
         window.clearTimeout(startTimer);
-        window.clearTimeout(t);
+        window.clearTimeout(timer);
       };
     }
   }, [pathname]);
 
-  // Close menus on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
       }
-      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
         setThemeMenuOpen(false);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredLinks = navLinks.filter(link => {
+  const filteredLinks = navLinks.filter((link) => {
     if (link.auth && !hasAuthUi) return false;
     if ('adminOnly' in link && link.adminOnly && effectiveProfile?.siteRole !== 'admin') return false;
     return true;
   });
 
   return (
-    <nav className="fixed right-0 left-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell" style={{
-      background: 'var(--theme-nav-bg)',
-      borderColor: 'var(--theme-border)',
-      minHeight: 'var(--app-header-offset)',
-      paddingTop: 'var(--safe-area-top)',
-    }}>
-      {/* Navigation loading bar */}
+    <nav
+      className="fixed right-0 left-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell"
+      style={{
+        background: 'var(--theme-nav-bg)',
+        borderColor: 'var(--theme-border)',
+        minHeight: 'var(--app-header-offset)',
+        paddingTop: 'var(--safe-area-top)',
+      }}
+    >
       {loadingBar && (
-        <div className="absolute top-0 right-0 left-0 h-0.5 overflow-hidden z-50">
+        <div className="absolute top-0 right-0 left-0 z-50 h-0.5 overflow-hidden">
           <div
-            className="h-full bg-gradient-to-l from-purple-500 to-blue-500"
+            className="h-full bg-gradient-to-l from-purple-500 via-pink-500 to-teal-400"
             style={{ animation: 'navLoadBar 0.6s ease-out forwards' }}
           />
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="flex h-16 items-center justify-between">
           <Link
             href="/"
             onClick={(event) => {
               event.preventDefault();
               navigateFromNav('/');
             }}
-            className="flex items-center gap-2 group min-w-0 shrink-0"
+            className="group flex min-w-0 shrink-0 items-center gap-2"
           >
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0 group-hover:shadow-lg group-hover:shadow-purple-500/20 transition-all">
-              <Tv className="w-5 h-5 text-white" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-teal-400 shadow-lg shadow-purple-500/20 transition-all group-hover:shadow-purple-500/35">
+              <Tv className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg font-bold leading-none whitespace-nowrap gradient-text hidden sm:block">
+            <span className="hidden text-lg font-black leading-none whitespace-nowrap gradient-text sm:block">
               TV Industry IL
             </span>
           </Link>
 
-          {/* Desktop Nav */}
-          <div className="hidden lg:flex items-center gap-0.5">
+          <div className="hidden items-center gap-0.5 lg:flex">
             {filteredLinks.map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
@@ -169,81 +186,85 @@ export default function Navigation() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  prefetch={true}
+                  prefetch
                   onClick={(event) => {
                     event.preventDefault();
                     navigateFromNav(link.href);
                   }}
-                  className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg text-sm font-medium leading-none transition-all ${
+                  className={`inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-bold leading-none transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
                       : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
                   }`}
                   style={isActive ? {
-                    background: 'var(--theme-accent-glow)',
-                    boxShadow: `inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 20%, transparent)`,
+                    background: 'linear-gradient(135deg, var(--theme-accent-glow), rgba(255,255,255,0.04))',
+                    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 28%, transparent)',
                   } : undefined}
                 >
-                  <div className="relative">
-                    <Icon className="w-4 h-4" />
+                  <span className="relative">
+                    <Icon className="h-4 w-4" />
                     {isChat && totalUnread > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      <span className="absolute -top-1.5 -right-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
                         {totalUnread > 99 ? '99+' : totalUnread}
                       </span>
                     )}
-                  </div>
+                  </span>
                   {link.label}
                 </Link>
               );
             })}
           </div>
 
-          {/* Right side actions */}
           <div className="flex items-center gap-2">
-            {/* Notifications */}
             {user && <NotificationBell />}
 
-            {/* Theme Toggle (desktop) */}
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button
-                onClick={() => { setThemeMenuOpen(!themeMenuOpen); setUserMenuOpen(false); }}
-                className="p-2 rounded-lg transition-all text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]"
+                onClick={() => {
+                  setThemeMenuOpen(!themeMenuOpen);
+                  setUserMenuOpen(false);
+                }}
+                className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
                 title="ערכת נושא"
               >
-                <Palette className="w-5 h-5" />
+                <Palette className="h-5 w-5" />
               </button>
 
               {themeMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border p-2 shadow-xl z-[100]" style={{
-                  background: 'var(--theme-bg-secondary)',
-                  borderColor: 'var(--theme-border)',
-                }}>
-                  {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, t]) => (
+                <div
+                  className="app-panel absolute left-0 top-full z-[100] mt-2 w-52 p-2 shadow-2xl"
+                >
+                  {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, themeOption]) => (
                     <button
                       key={key}
-                      onClick={() => { setTheme(key); setThemeMenuOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                      onClick={() => {
+                        setTheme(key);
+                        setThemeMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all ${
                         theme === key
                           ? 'text-[var(--theme-accent)]'
-                          : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
+                          : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
                       }`}
                       style={theme === key ? { background: 'var(--theme-accent-glow)' } : undefined}
                     >
-                      <span className="text-lg">{t.emoji}</span>
-                      <span className="font-medium">{t.label}</span>
-                      {theme === key && <CheckCircle className="w-4 h-4 mr-auto" />}
+                      <span className="text-lg">{themeOption.emoji}</span>
+                      <span className="font-bold">{themeOption.label}</span>
+                      {theme === key && <CheckCircle className="mr-auto h-4 w-4" />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* User Menu / Login */}
             {hasAuthUi ? (
               <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={() => { setUserMenuOpen(!userMenuOpen); setThemeMenuOpen(false); }}
-                  className="flex items-center gap-2 p-1.5 rounded-xl transition-all hover:bg-[var(--theme-accent-glow)]"
+                  onClick={() => {
+                    setUserMenuOpen(!userMenuOpen);
+                    setThemeMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 rounded-xl p-1.5 transition-all hover:bg-[var(--theme-accent-glow)]"
                 >
                   <UserAvatar
                     name={effectiveProfile?.displayName || user?.displayName || user?.email || 'משתמש'}
@@ -251,27 +272,23 @@ export default function Navigation() {
                     size="sm"
                     isOnline={effectiveProfile?.isOnline !== false}
                   />
-                  <span className="hidden sm:block text-sm font-medium text-[var(--theme-text)] max-w-[100px] truncate">
+                  <span className="hidden max-w-[100px] truncate text-sm font-bold text-[var(--theme-text)] sm:block">
                     {effectiveProfile?.displayName || user?.displayName || 'משתמש'}
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-[var(--theme-text-secondary)] hidden sm:block transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`hidden h-4 w-4 text-[var(--theme-text-secondary)] transition-transform sm:block ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {userMenuOpen && user && (
-                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-[100]" style={{
-                    background: 'var(--theme-bg-secondary)',
-                    borderColor: 'var(--theme-border)',
-                  }}>
-                    {/* User info header */}
-                    <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
-                      <p className="text-sm font-bold text-[var(--theme-text)]">
+                  <div className="app-panel absolute left-0 top-full z-[100] mt-2 w-60 overflow-hidden shadow-2xl">
+                    <div className="border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
+                      <p className="text-sm font-black text-[var(--theme-text)]">
                         {effectiveProfile?.displayName || user.displayName || 'משתמש'}
                       </p>
-                      <p className="text-xs text-[var(--theme-text-secondary)] truncate">
+                      <p className="truncate text-xs text-[var(--theme-text-secondary)]" dir="ltr">
                         {effectiveProfile?.email || user.email}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
                         <span className="text-xs text-[var(--theme-text-secondary)]">
                           {effectiveProfile?.status === 'busy'
                             ? 'תפוס'
@@ -285,17 +302,17 @@ export default function Navigation() {
                     <div className="p-2">
                       <button
                         onClick={() => navigateFromNav('/profile')}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
                       >
-                        <UserIcon className="w-4 h-4" />
-                        <span className="font-medium">הפרופיל שלי</span>
+                        <UserIcon className="h-4 w-4" />
+                        <span className="font-bold">הפרופיל שלי</span>
                       </button>
                       <button
                         onClick={() => navigateFromNav('/settings')}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-all"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
                       >
-                        <Settings className="w-4 h-4" />
-                        <span className="font-medium">הגדרות</span>
+                        <Settings className="h-4 w-4" />
+                        <span className="font-bold">הגדרות</span>
                       </button>
 
                       <div className="my-1 border-t" style={{ borderColor: 'var(--theme-border)' }} />
@@ -315,10 +332,10 @@ export default function Navigation() {
                             window.location.href = '/login';
                           }
                         }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-400 transition-all hover:bg-red-500/10"
                       >
-                        <LogOut className="w-4 h-4" />
-                        <span className="font-medium">התנתקות</span>
+                        <LogOut className="h-4 w-4" />
+                        <span className="font-bold">התנתקות</span>
                       </button>
                     </div>
                   </div>
@@ -332,31 +349,33 @@ export default function Navigation() {
                   navigateFromNav('/login');
                 }}
                 aria-label="הרשמה או כניסה לאפליקציה"
-                className="flex min-h-10 items-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 px-3 py-2 text-sm font-bold text-white shadow-md shadow-purple-500/15 transition-all hover:shadow-lg hover:shadow-purple-500/20 sm:px-4"
+                className="flex min-h-10 items-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 via-fuchsia-500 to-blue-600 px-3 py-2 text-sm font-black text-white shadow-lg shadow-purple-500/20 transition-all hover:shadow-purple-500/35 sm:px-4"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="h-4 w-4" />
                 <span className="whitespace-nowrap">הרשמה / כניסה</span>
               </Link>
             )}
 
-            {/* Mobile Toggle */}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="lg:hidden p-2 rounded-lg text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)] transition-colors"
+              className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] lg:hidden"
+              aria-label="פתיחת תפריט"
             >
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="lg:hidden border-t backdrop-blur-xl" style={{
-          borderColor: 'var(--theme-border)',
-          background: 'var(--theme-nav-bg)',
-        }}>
-          <div className="px-4 py-3 space-y-1">
+        <div
+          className="border-t backdrop-blur-xl lg:hidden"
+          style={{
+            borderColor: 'var(--theme-border)',
+            background: 'var(--theme-nav-bg)',
+          }}
+        >
+          <div className="space-y-1 px-4 py-3">
             {filteredLinks.map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
@@ -369,49 +388,47 @@ export default function Navigation() {
                     event.preventDefault();
                     navigateFromNav(link.href);
                   }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
                     isActive
                       ? 'text-[var(--theme-accent)]'
-                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
                   }`}
                   style={isActive ? { background: 'var(--theme-accent-glow)' } : undefined}
                 >
-                  <div className="relative">
-                    <Icon className="w-5 h-5" />
+                  <span className="relative">
+                    <Icon className="h-5 w-5" />
                     {isChat && totalUnread > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      <span className="absolute -top-1.5 -right-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
                         {totalUnread > 99 ? '99+' : totalUnread}
                       </span>
                     )}
-                  </div>
+                  </span>
                   {link.label}
                 </Link>
               );
             })}
 
-            {/* Mobile Theme Selector */}
-            <div className="pt-2 mt-2 border-t" style={{ borderColor: 'var(--theme-border)' }}>
-              <p className="px-4 py-1.5 text-xs font-bold text-[var(--theme-text-secondary)] flex items-center gap-2">
-                <Palette className="w-3.5 h-3.5" />
+            <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
+              <p className="flex items-center gap-2 px-4 py-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
+                <Palette className="h-3.5 w-3.5" />
                 ערכת נושא
               </p>
               <div className="flex flex-wrap gap-2 px-4 py-2">
-                {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, t]) => (
+                {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, themeOption]) => (
                   <button
                     key={key}
                     onClick={() => setTheme(key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                       theme === key
-                        ? 'text-[var(--theme-accent)] ring-1'
+                        ? 'text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
                         : 'text-[var(--theme-text-secondary)]'
                     }`}
                     style={{
                       background: theme === key ? 'var(--theme-accent-glow)' : 'var(--theme-bg)',
-                      ...(theme === key ? { ringColor: 'var(--theme-accent)' } : {}),
                     }}
                   >
-                    <span>{t.emoji}</span>
-                    {t.label}
+                    <span>{themeOption.emoji}</span>
+                    {themeOption.label}
                   </button>
                 ))}
               </div>

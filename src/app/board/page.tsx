@@ -427,7 +427,7 @@ export default function BoardPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative overflow-hidden border-b border-[var(--theme-border)]">
+      <section className="app-hero">
         <div className="absolute inset-0 bg-gradient-to-bl from-orange-900/10 via-transparent to-purple-900/10" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">

@@ -108,21 +108,21 @@ function SchedulePageInner() {
   }, [selectedChannelId, selectChannel]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#0a0a0f' }}>
-      <div className="sticky z-30 border-b border-white/[0.06] px-2 py-2 lg:hidden" style={{ backgroundColor: '#0d0d14', top: 'var(--app-header-offset)' }}>
+    <div className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
+      <div className="sticky z-30 border-b px-2 py-2 lg:hidden" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
         <ChannelSidebar selectedChannelId={selectedChannelId} onSelectChannel={selectChannel} isMobile byChannelId={byChannelId} loading={broadcastsLoading} />
       </div>
 
       <div className="flex" style={{ minHeight: 'calc(100dvh - var(--app-header-offset))' }}>
         <aside
-          className={`hidden shrink-0 overflow-hidden border-l border-white/[0.06] transition-all duration-300 lg:block ${sidebarCollapsed ? 'w-0 p-0' : 'w-64 p-3'}`}
-          style={{ backgroundColor: '#0d0d14' }}
+          className={`hidden shrink-0 overflow-hidden border-l transition-all duration-300 lg:block ${sidebarCollapsed ? 'w-0 p-0' : 'w-64 p-3'}`}
+          style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
         >
           {!sidebarCollapsed && (
             <>
               <div className="mb-4 flex items-center justify-between px-1">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-white/40">ערוצים</h2>
-                <button onClick={() => setSidebarCollapsed(true)} className="text-xs text-white/20 transition-colors hover:text-white/50" title="הסתר סרגל (S)">
+                <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--theme-text-secondary)', opacity: 0.6 }}>ערוצים</h2>
+                <button onClick={() => setSidebarCollapsed(true)} className="text-xs transition-colors" style={{ color: 'var(--theme-text-secondary)', opacity: 0.4 }} title="הסתר סרגל (S)">
                   ×
                 </button>
               </div>
@@ -134,10 +134,11 @@ function SchedulePageInner() {
         {sidebarCollapsed && (
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="fixed right-0 top-1/2 z-40 hidden h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-lg border-l border-white/10 bg-white/5 transition-colors hover:bg-white/10 lg:flex"
+            className="fixed right-0 top-1/2 z-40 hidden h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-lg border-l transition-colors lg:flex"
+            style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
             title="הצג ערוצים (S)"
           >
-            <span className="text-xs text-white/40">‹</span>
+            <span className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.6 }}>‹</span>
           </button>
         )}
 
@@ -177,13 +178,13 @@ function SchedulePageInner() {
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-sm text-white/45">
+                <div className="flex-1 rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)', color: 'var(--theme-text-secondary)' }}>
                   {broadcastsLoading ? 'טוען את התוכנית הנוכחית...' : 'אין כרגע תוכנית נוכחית זמינה לערוץ הזה.'}
                 </div>
               )}
 
               {nextProgram && (
-                <div className="rounded-lg border border-white/[0.06] p-3 sm:w-64" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                <div className="rounded-lg border p-3 sm:w-64" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-white/25">הבא בתור</span>
                   </div>
@@ -198,7 +199,7 @@ function SchedulePageInner() {
             </div>
 
             {stream && (
-              <div className="flex items-center justify-between rounded-lg border border-white/[0.04] px-3 py-2" style={{ backgroundColor: 'rgba(255,255,255,0.015)' }}>
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px]" style={{ color: stream.requiresAuth ? '#fbbf24' : '#4ade80' }}>
                     {stream.requiresAuth ? '🔒' : '🔓'}

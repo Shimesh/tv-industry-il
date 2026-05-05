@@ -250,7 +250,7 @@ function DirectoryContent() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <section className="relative overflow-hidden border-b" style={{ borderColor: 'var(--theme-border)' }}>
+      <section className="app-hero">
         <div className="absolute inset-0 bg-gradient-to-bl from-purple-900/20 via-transparent to-blue-900/10" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.08),transparent_60%)]" />
         <motion.div

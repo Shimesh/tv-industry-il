@@ -77,7 +77,7 @@ export default function Footer() {
               </Link>
             ))}
             <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
-              Version 1.5.1 · By Yaron Orbach
+              Version 1.5.2 · By Yaron Orbach
             </span>
           </div>
         </div>

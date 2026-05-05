@@ -63,7 +63,7 @@ function ProductionsLoadingState() {
 function ProductionsLoginRequired() {
   return (
     <main className="min-h-[70vh] flex items-center justify-center px-4 py-12" dir="rtl">
-      <section className="w-full max-w-md text-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-8 shadow-sm">
+      <section className="w-full max-w-md text-center rounded-2xl border p-8 app-panel" style={{ borderColor: 'var(--theme-border)' }}>
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]">
           <LockKeyhole className="h-7 w-7" aria-hidden="true" />
         </div>

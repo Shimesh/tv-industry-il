@@ -115,10 +115,10 @@ export default function HomePage() {
   }, []);
 
   const stats = [
-    { label: 'אנשי מקצוע', value: totalCount, icon: Users, color: 'bg-purple-500' },
-    { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: 'bg-green-500' },
-    { label: 'ערוצי טלוויזיה', value: channels.length, icon: Tv, color: 'bg-blue-500' },
-    { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: 'bg-orange-500' },
+    { label: 'אנשי מקצוע', value: totalCount, icon: Users, color: '#a855f7' },
+    { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: '#22c55e' },
+    { label: 'ערוצי טלוויזיה', value: channels.length, icon: Tv, color: '#3b82f6' },
+    { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: '#f97316' },
   ];
 
   const dashboardCards = [
@@ -130,43 +130,67 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
-      <header className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="min-h-screen">
+      <header className="app-hero">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
+          <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--theme-text)' }}>
+              <div className="app-section-kicker mb-4">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                מרכז העבודה של תעשיית הטלוויזיה
+              </div>
+              <h1 className="max-w-3xl text-4xl font-black leading-tight sm:text-5xl" style={{ color: 'var(--theme-text)' }}>
                 <span className="gradient-text">{greeting}</span>
-                <span className="text-base sm:text-lg font-bold opacity-60 mr-2" style={{ color: 'var(--theme-text-secondary)' }}>
-                  👋
-                </span>
+                <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--theme-text-secondary)' }}>
-                מה חדש בתעשייה היום?
+              <p className="mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  href="/studios"
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 via-fuchsia-500 to-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-purple-500/20 transition hover:shadow-purple-500/35"
+                >
+                  אולפנים
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/schedule"
+                  className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition hover:bg-[var(--theme-accent-glow)]"
+                  style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+                >
+                  שידור חי
+                  <CircleDot className="h-4 w-4 text-red-400" />
+                </Link>
+              </div>
             </div>
-            <LiveClock />
-          </div>
 
-          <div className="flex items-center gap-4 sm:gap-6 mt-3 pt-3 border-t flex-wrap" style={{ borderColor: 'var(--theme-border)' }}>
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <div key={stat.label} className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${stat.color}`} />
-                  <Icon className="w-3.5 h-3.5 opacity-70" style={{ color: 'var(--theme-text-secondary)' }} />
-                  <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{stat.value}</span>
-                  <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>{stat.label}</span>
-                </div>
-              );
-            })}
+            <div className="app-panel p-4">
+              <LiveClock />
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {stats.map((stat) => {
+                  const Icon = stat.icon;
+                  return (
+                    <div
+                      key={stat.label}
+                      className="rounded-xl border p-3"
+                      style={{ borderColor: 'var(--theme-border)', background: `${stat.color}12` }}
+                    >
+                      <Icon className="mb-2 h-5 w-5" style={{ color: stat.color }} />
+                      <div className="text-2xl font-black" style={{ color: 'var(--theme-text)' }}>{stat.value}</div>
+                      <div className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>{stat.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="border-b" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
-        <div className="max-w-7xl mx-auto flex items-center">
-          <div className="bg-gradient-to-l from-purple-600 to-blue-600 px-3 py-2 flex items-center gap-1.5 shrink-0">
+      <div className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
+        <div className="mx-auto flex max-w-7xl items-center overflow-hidden rounded-none sm:mt-4 sm:rounded-2xl sm:border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
+          <div className="flex shrink-0 items-center gap-1.5 bg-gradient-to-l from-purple-600 via-fuchsia-600 to-blue-600 px-3 py-2">
             <span className="w-1.5 h-1.5 rounded-full bg-white pulse-live" />
             <span className="text-white font-bold text-xs whitespace-nowrap">חדשות</span>
           </div>
@@ -180,15 +204,15 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+      <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6">
         <WeeklyCalendarWidget />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--theme-text-secondary)' }}>האזור שלי</h2>
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-amber-400" />
+            <h2 className="app-section-kicker">האזור שלי</h2>
           </div>
           <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-5 md:overflow-visible">
             {dashboardCards.map((card) => {
@@ -197,8 +221,7 @@ export default function HomePage() {
                 <Link
                   key={card.id}
                   href={card.href}
-                  className="min-w-[160px] md:min-w-0 rounded-xl border p-3.5 transition-all duration-200 hover:shadow-md block"
-                  style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+                  className="app-card block min-w-[160px] p-3.5 md:min-w-0"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <Icon className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />

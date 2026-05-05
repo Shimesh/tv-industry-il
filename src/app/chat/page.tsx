@@ -112,25 +112,25 @@ function ChatEmptyState({
   connectionDetail: string;
 }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-6 bg-[#222E35]" dir="rtl">
-      <div className="w-[200px] h-[200px] rounded-full bg-[#00A88410] flex items-center justify-center">
-        <MessageCircle className="w-24 h-24 text-[#00A884] opacity-50" />
+    <div className="flex-1 flex flex-col items-center justify-center gap-6" style={{ background: 'var(--theme-bg)' }} dir="rtl">
+      <div className="w-[200px] h-[200px] rounded-full flex items-center justify-center" style={{ background: 'var(--theme-accent)1a' }}>
+        <MessageCircle className="w-24 h-24 opacity-50" style={{ color: 'var(--theme-accent)' }} />
       </div>
 
       <div className="max-w-sm text-center px-6">
-        <h2 className="mb-2 text-[22px] font-light text-[#E9EDEF]">
+        <h2 className="mb-2 text-[22px] font-light" style={{ color: 'var(--theme-text)' }}>
           {v2Enabled ? 'צ׳אט מיידי מוכן' : 'TV Industry IL צ׳אט'}
         </h2>
-        <p className="text-[14px] leading-relaxed text-[#8696a0]">
+        <p className="text-[14px] leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
           {v2Enabled
             ? 'בחרו שיחה כדי לראות הודעות בזמן אמת, עם מצב חיבור, אופטימיות וסטטוסים משופרים.'
             : 'שלחו וקבלו הודעות בזמן אמת. בחרו שיחה מהרשימה או התחילו שיחה חדשה.'}
         </p>
       </div>
 
-      <div className="max-w-md rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right shadow-sm">
-        <p className="text-[13px] font-semibold text-[#E9EDEF]">{connectionLabel}</p>
-        <p className="mt-1 text-[12px] leading-5 text-[#8696a0]">{connectionDetail}</p>
+      <div className="max-w-md rounded-2xl border px-4 py-3 text-right app-panel" style={{ borderColor: 'var(--theme-border)' }}>
+        <p className="text-[13px] font-semibold" style={{ color: 'var(--theme-text)' }}>{connectionLabel}</p>
+        <p className="mt-1 text-[12px] leading-5" style={{ color: 'var(--theme-text-secondary)' }}>{connectionDetail}</p>
       </div>
     </div>
   );
