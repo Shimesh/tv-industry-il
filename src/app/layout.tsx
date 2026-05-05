@@ -7,6 +7,7 @@ import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistratio
 import { InstallPrompt } from "@/components/InstallPrompt";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import ScrollToTop from "@/components/ScrollToTop";
+import AccessibilityWidget from "@/components/AccessibilityWidget";
 
 export const metadata: Metadata = {
   title: "TV Industry IL - פלטפורמת תעשיית הטלוויזיה הישראלית",
@@ -56,6 +57,7 @@ export default function RootLayout({
           <Footer />
           <ServiceWorkerRegistration />
           <InstallPrompt />
+          <AccessibilityWidget />
         </Providers>
       </body>
     </html>

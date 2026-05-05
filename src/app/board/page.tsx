@@ -390,7 +390,7 @@ export default function BoardPage() {
         setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: Math.max(0, p.likes - 1) } : p));
       } else {
         // New like
-        await setDoc(likeRef, { likedAt: Date.now() });
+        await setDoc(likeRef, { likedAt: serverTimestamp() });
         await updateDoc(doc(db, 'posts', postId), { likes: increment(1) });
         setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
       }

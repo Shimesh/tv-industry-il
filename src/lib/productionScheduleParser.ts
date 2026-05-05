@@ -412,7 +412,7 @@ export function parseManualText(text: string): ParsedSchedule {
     // 4. Single-time fallback
     if (times.length === 1 && currentDate && !currentProduction) {
       const time = times[0];
-      let rest = line.replace(time, '').replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      const rest = line.replace(time, '').replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
       const { studio, remaining } = extractStudio(rest);
       const name = remaining.replace(/^[\s\-–|,.:]+|[\s\-–|,.:]+$/g, '').trim();
       if (name && name.length >= 2) {

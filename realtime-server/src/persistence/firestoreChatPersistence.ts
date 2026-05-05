@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import type { Transaction } from 'firebase-admin/firestore';
 import { getFirestore } from '../firebaseAdmin.js';
 import type {
   ChatV2Attachment,
@@ -127,9 +128,9 @@ function buildUploadState(payload: ChatV2AttachmentCompletePayload, uploadId: st
 export class FirestoreChatPersistence implements ChatPersistence {
   constructor(private readonly db = getFirestore()) {}
 
-  private runTransaction<T>(handler: (transaction: any) => Promise<T>): Promise<T> {
+  private runTransaction<T>(handler: (transaction: Transaction) => Promise<T>): Promise<T> {
     return (this.db as unknown as {
-      runTransaction<R>(updateFunction: (transaction: any) => Promise<R>): Promise<R>;
+      runTransaction<R>(updateFunction: (transaction: Transaction) => Promise<R>): Promise<R>;
     }).runTransaction(handler);
   }
 

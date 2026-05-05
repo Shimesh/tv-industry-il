@@ -194,8 +194,14 @@ function createRealBridge(url: string): ChatSocketBridge {
     },
     emitWithAck<Event extends keyof ChatV2ClientToServerEvents>(event: Event, ...args: Parameters<ChatV2ClientToServerEvents[Event]>) {
       const activeSocket = ensureSocket();
+      const socketWithTimeout = activeSocket as typeof activeSocket & {
+        timeout(ms: number): {
+          emit(...args: unknown[]): void;
+        };
+      };
+
       return new Promise((resolve, reject) => {
-        ((activeSocket as any).timeout(10000) as any).emit(
+        socketWithTimeout.timeout(10000).emit(
           event as string,
           ...(args as unknown[]),
           (error: unknown, response: unknown) => {

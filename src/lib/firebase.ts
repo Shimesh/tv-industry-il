@@ -1,8 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import type { FirebaseApp } from 'firebase/app';
 // הוספנו כאן את הכלים לאתחול חכם וזיכרון מקומי
 import { getFirestore, initializeFirestore, persistentLocalCache } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import type { Auth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
+import type { FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
@@ -23,7 +27,7 @@ const hasFirebaseConfig = Boolean(
   firebaseConfig.appId
 );
 
-let app: ReturnType<typeof getApp> | null = null;
+let app: FirebaseApp | null = null;
 if (isBrowser) {
   if (hasFirebaseConfig && getApps().length === 0) {
     app = initializeApp(firebaseConfig);
@@ -32,10 +36,10 @@ if (isBrowser) {
   }
 }
 
-let firestoreDb: any = null;
-let authInstance: any = null;
-let storageInstance: any = null;
-let googleProviderInstance: any = null;
+let firestoreDb = null as unknown as Firestore;
+let authInstance = null as unknown as Auth;
+let storageInstance = null as unknown as FirebaseStorage;
+let googleProviderInstance = null as unknown as GoogleAuthProvider;
 
 if (app) {
   googleProviderInstance = new GoogleAuthProvider();

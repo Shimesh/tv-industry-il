@@ -344,7 +344,7 @@ export default function SyncPage() {
         {pdfStatus === 'done' && pdfResult && (
           <div className="bg-green-900/30 border border-green-500/40 rounded-2xl p-6 text-center space-y-2 w-full">
             <p className="text-green-400 text-lg font-bold">ייבוא האלפון הושלם</p>
-            <p className="text-gray-300">סה"כ בקובץ: <strong>{pdfResult.total}</strong></p>
+            <p className="text-gray-300">סה&quot;כ בקובץ: <strong>{pdfResult.total}</strong></p>
             <p className="text-green-300">נוספו: <strong>{pdfResult.added}</strong></p>
             <p className="text-gray-400">כפילויות שדולגו: <strong>{pdfResult.skipped}</strong></p>
           </div>

@@ -48,6 +48,7 @@ export default function PostCard({ post, onLike, onContact, onComments }: PostCa
   const config = typeConfig[post.type] || typeConfig.job_offer;
   const TypeIcon = config.icon;
   const [copied, setCopied] = useState(false);
+  const [renderedAt] = useState(() => Date.now());
 
   const handleShare = async () => {
     const text = `${post.title}\n${post.description}`;
@@ -63,7 +64,7 @@ export default function PostCard({ post, onLike, onContact, onComments }: PostCa
   };
 
   const formatTime = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
+    const diff = renderedAt - timestamp;
     const minutes = Math.floor(diff / 60000);
     if (minutes < 60) return `לפני ${minutes} דקות`;
     const hours = Math.floor(minutes / 60);

@@ -70,9 +70,17 @@ declare module 'firebase-admin/firestore' {
     commit(): Promise<void>;
   }
 
+  export interface Transaction {
+    get<T = DocumentData>(ref: DocumentReference<T>): Promise<{ exists: boolean; id: string; data(): T | undefined }>;
+    get<T = DocumentData>(query: Query<T>): Promise<QuerySnapshot<T>>;
+    set<T = DocumentData>(ref: DocumentReference<T>, data: Partial<T> | Record<string, unknown>, options?: { merge?: boolean }): Transaction;
+    update<T = DocumentData>(ref: DocumentReference<T>, data: Record<string, unknown>): Transaction;
+  }
+
   export interface Firestore {
     collection(name: string): CollectionReference;
     batch(): WriteBatch;
+    runTransaction<T>(updateFunction: (transaction: Transaction) => Promise<T>): Promise<T>;
   }
 
   export namespace FirebaseFirestore {
@@ -121,8 +129,12 @@ declare module 'firebase-admin' {
 }
 
 declare module 'socket.io' {
+  type EventNames<Events> = keyof Events & string;
+  type EventParams<Events, Event extends EventNames<Events>> = Events[Event] extends (...args: infer Args) => void ? Args : unknown[];
+  type EventListener<Events, Event extends EventNames<Events>> = Events[Event] extends (...args: infer Args) => void ? (...args: Args) => void : (...args: unknown[]) => void;
+
   export interface DefaultEventsMap {
-    [event: string]: (...args: any[]) => void;
+    [event: string]: (...args: unknown[]) => void;
   }
 
   export interface SocketData {
@@ -136,15 +148,16 @@ declare module 'socket.io' {
       headers: Record<string, unknown>;
     };
     data: SocketDataType;
-    emit(event: string, ...args: any[]): void;
-    on(event: string, listener: (...args: any[]) => void): void;
+    emit<Event extends EventNames<SendEvents>>(event: Event, ...args: EventParams<SendEvents, Event>): void;
+    on<Event extends EventNames<ReceiveEvents>>(event: Event, listener: EventListener<ReceiveEvents, Event>): void;
+    on(event: 'disconnect', listener: (reason?: string) => void): void;
     join(room: string): void;
     leave(room: string): void;
     disconnect(close?: boolean): void;
   }
 
   export interface Namespace<ReceiveEvents = DefaultEventsMap, SendEvents = DefaultEventsMap, InterServerEvents = DefaultEventsMap, SocketDataType = SocketData> {
-    emit(event: string, ...args: any[]): void;
+    emit<Event extends EventNames<SendEvents>>(event: Event, ...args: EventParams<SendEvents, Event>): void;
     to(room: string): Namespace<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>;
     sockets: { sockets: Map<string, Socket<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>> };
   }
@@ -162,7 +175,7 @@ declare module 'socket.io' {
     use(middleware: (socket: Socket<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>, next: (err?: Error) => void) => void): void;
     on(event: 'connection', listener: (socket: Socket<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>) => void): void;
     to(room: string): Namespace<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>;
-    emit(event: string, ...args: any[]): void;
+    emit<Event extends EventNames<SendEvents>>(event: Event, ...args: EventParams<SendEvents, Event>): void;
     sockets: { sockets: Map<string, Socket<ReceiveEvents, SendEvents, InterServerEvents, SocketDataType>> };
   }
 }

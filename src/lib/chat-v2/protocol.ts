@@ -314,7 +314,7 @@ export interface ChatV2ServerToClientEvents {
   'error:event': (payload: ChatV2ErrorPayload) => void;
 }
 
-export interface ChatV2InterServerEvents {}
+export type ChatV2InterServerEvents = Record<string, never>;
 
 export interface ChatV2SocketData {
   authed: boolean;

@@ -74,6 +74,68 @@ body,
   width: 100%;
 }
 
+html.accessibility-large-text {
+  font-size: 112.5%;
+}
+
+body.accessibility-stop-animations,
+body.accessibility-stop-animations *,
+body.accessibility-stop-animations *::before,
+body.accessibility-stop-animations *::after {
+  animation: none !important;
+  scroll-behavior: auto !important;
+  transition: none !important;
+}
+
+body.accessibility-high-contrast {
+  --background: #000000;
+  --foreground: #ffffff;
+  --theme-bg: #000000;
+  --theme-bg-secondary: #000000;
+  --theme-bg-card: #000000;
+  --theme-text: #ffffff;
+  --theme-text-secondary: #ffffff;
+  --theme-border: #ffffff;
+  --theme-accent: #ffff00;
+  --theme-accent-secondary: #ffff00;
+  --theme-accent-glow: rgba(255, 255, 0, 0.35);
+  --theme-nav-bg: #000000;
+  background: #000000 !important;
+  color: #ffffff !important;
+  color-scheme: dark;
+}
+
+body.accessibility-high-contrast :where(header, nav, main, footer, section, article, aside, div, form, ul, ol, li, dialog) {
+  background-color: #000000 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+body.accessibility-high-contrast :where(a, button, input, select, textarea, summary, [role="button"]) {
+  border-color: #ffff00 !important;
+  color: #ffff00 !important;
+}
+
+body.accessibility-high-contrast :where(button, input, select, textarea, summary, [role="button"]) {
+  background-color: #000000 !important;
+}
+
+body.accessibility-high-contrast :where(input, select, textarea) {
+  caret-color: #ffff00 !important;
+}
+
+body.accessibility-high-contrast :where(*):not(svg):not(path) {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+body.accessibility-high-contrast .gradient-text,
+body.accessibility-high-contrast .gradient-text-warm {
+  background: none !important;
+  -webkit-text-fill-color: #ffff00 !important;
+  color: #ffff00 !important;
+}
+
 .app-safe-top {
   padding-top: var(--safe-area-top);
 }

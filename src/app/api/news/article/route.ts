@@ -64,7 +64,6 @@ function extractArticleContent(html: string, url: string): {
   let date = '';
   let source = '';
   let coverImageUrl: string | undefined;
-  let videoUrl: string | undefined;
 
   const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*?)["']/i)
     || html.match(/<meta[^>]*content=["']([^"']*?)["'][^>]*property=["']og:title["']/i);
@@ -97,7 +96,7 @@ function extractArticleContent(html: string, url: string): {
   const vimeoMatch = html.match(/<iframe[^>]*src=["']([^"']*player\.vimeo\.com\/video\/\d+[^"']*)["']/i);
   const israeliPlayerMatch = html.match(/<iframe[^>]*src=["']([^"']*(?:mako\.co\.il|kan\.org\.il\/media|13tv\.co\.il)[^"']*)["']/i);
 
-  videoUrl = ogVideoMatch?.[1]
+  const videoUrl = ogVideoMatch?.[1]
     || (youtubeMatch ? `https://www.youtube.com/watch?v=${youtubeMatch[1]}` : undefined)
     || vimeoMatch?.[1]
     || israeliPlayerMatch?.[1]
