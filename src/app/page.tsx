@@ -24,6 +24,7 @@ import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
 import { useAppData } from '@/contexts/AppDataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { channels } from '@/data/channels';
 import { useBroadcasts } from '@/hooks/useBroadcasts';
 
@@ -73,7 +74,9 @@ function getGreeting(): string {
 
 export default function HomePage() {
   const { totalCount, availableCount, openToWorkCount } = useAppData();
+  const { user } = useAuth();
   const [greeting] = useState(() => getGreeting());
+  const firstName = user?.displayName?.split(' ')[0] ?? '';
   const [liveNews, setLiveNews] = useState<RssNewsItem[]>([]);
   const [newsLoaded, setNewsLoaded] = useState(false);
   const [events, setEvents] = useState<UpcomingEventItem[]>([]);
@@ -140,7 +143,7 @@ export default function HomePage() {
                 מרכז העבודה של תעשיית הטלוויזיה
               </div>
               <h1 className="max-w-3xl text-4xl font-black leading-tight sm:text-5xl" style={{ color: 'var(--theme-text)' }}>
-                <span className="gradient-text">{greeting}</span>
+                <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
               <p className="mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
