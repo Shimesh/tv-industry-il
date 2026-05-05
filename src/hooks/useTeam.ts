@@ -43,7 +43,8 @@ export function useTeam() {
       });
       setTeams(teamList);
       setLoading(false);
-    }, () => {
+    }, (err) => {
+      console.error('[useTeam] teams snapshot error:', err.code, err.message);
       setLoading(false);
     });
 

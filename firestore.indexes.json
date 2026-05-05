@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "global_productions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "crew_phones", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "global_productions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "crew_shadow_keys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teamInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inviteeUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teamInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "inviteeUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teamInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "invitedBy", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
