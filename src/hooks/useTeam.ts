@@ -28,7 +28,10 @@ export function useTeam() {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error('[useTeam] GET /api/teams failed:', response.status, await response.text().catch(() => ''));
+        return;
+      }
       const data = await response.json() as { teams: Team[]; invites: TeamInvite[] };
       setTeams(data.teams ?? []);
       setInvites(data.invites ?? []);

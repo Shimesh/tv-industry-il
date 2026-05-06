@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import {
@@ -23,7 +25,7 @@ export async function GET(request: NextRequest) {
   if (!authUser) return unauthorizedResponse();
 
   try {
-    const teams = await runQuery({
+    const rawTeams = await runQuery({
       from: [{ collectionId: 'teams' }],
       where: {
         fieldFilter: {
@@ -32,7 +34,13 @@ export async function GET(request: NextRequest) {
           value: { stringValue: authUser.uid },
         },
       },
-      orderBy: [{ field: { fieldPath: 'updatedAt' }, direction: 'DESCENDING' }],
+    });
+
+    // Sort by updatedAt in JS — avoids requiring a composite index in Firestore
+    const teams = rawTeams.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+      const aTime = typeof a.updatedAt === 'string' ? a.updatedAt : '';
+      const bTime = typeof b.updatedAt === 'string' ? b.updatedAt : '';
+      return bTime.localeCompare(aTime);
     });
 
     // Also fetch pending invites for this user

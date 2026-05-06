@@ -46,6 +46,7 @@ function TeamsContent() {
       setShowCreate(false);
       setNewName('');
       setNewDesc('');
+      router.refresh();
       router.push(`/teams/${teamId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'שגיאה ביצירת הצוות');
