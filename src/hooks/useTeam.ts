@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
-  collection, doc, addDoc, updateDoc, deleteDoc,
+  collection, doc, addDoc, updateDoc,
   serverTimestamp, getDoc, getDocs, query, where, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import type { Team, TeamMember, TeamInvite, TeamRole } from '@/types/team';
@@ -380,21 +380,24 @@ export function useTeam() {
 
   // Delete a team
   const deleteTeam = useCallback(async (teamId: string) => {
-    if (!user) return;
+    if (!user) throw new Error('לא מחובר');
 
     const team = teams.find(t => t.id === teamId);
-    if (!team) return;
+    if (!team) throw new Error('הצוות לא נמצא');
 
     if (team.ownerId !== user.uid) {
       throw new Error('רק בעל הצוות יכול למחוק את הצוות');
     }
 
-    // Delete team doc (sub-collections are orphaned, harmless)
-    await deleteDoc(doc(db, 'teams', teamId));
+    const token = await user.getIdToken();
+    const response = await fetch(`/api/teams/${teamId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-    // Delete team chat
-    if (team.chatId) {
-      await deleteDoc(doc(db, 'chats', team.chatId));
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(typeof payload?.error === 'string' ? payload.error : 'מחיקת הצוות נכשלה');
     }
 
     await fetchTeamsAndInvites();
