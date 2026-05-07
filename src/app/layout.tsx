@@ -4,7 +4,6 @@ import { Providers } from './providers';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
-import { FCMTokenRegistration } from '@/components/FCMTokenRegistration';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ScrollToTop from '@/components/ScrollToTop';
@@ -62,8 +61,7 @@ export default function RootLayout({
           </main>
           <Footer />
           <ServiceWorkerRegistration />
-          <FCMTokenRegistration />
-          <InstallPrompt />
+<InstallPrompt />
           <AccessibilityWidget />
         </Providers>
       </body>
