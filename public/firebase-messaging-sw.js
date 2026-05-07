@@ -22,10 +22,5 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification?.title || 'התראה חדשה';
-  const notificationOptions = {
-    body: payload.notification?.body,
-    icon: '/icon-192x192.png',
-  };
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  // FCM automatically displays the notification from the payload — no manual showNotification needed.
 });
