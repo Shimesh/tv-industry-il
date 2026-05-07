@@ -11,13 +11,11 @@ export async function registerFcmToken(uid: string): Promise<{ ok: boolean; reas
     if (typeof window === 'undefined') return { ok: false, reason: 'server' };
     if (!('Notification' in window)) return { ok: false, reason: 'no-notification-api' };
 
-    // DEBUG — remove after confirming env vars reach the client on Vercel
     alert(
-      'DEBUG ENV:\n' +
-      'API_KEY: ' + (process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? process.env.NEXT_PUBLIC_FIREBASE_API_KEY.slice(0, 8) + '...' : 'MISSING') + '\n' +
-      'APP_ID: ' + (process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? process.env.NEXT_PUBLIC_FIREBASE_APP_ID.slice(0, 12) + '...' : 'MISSING') + '\n' +
-      'SENDER_ID: ' + (process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 'MISSING') + '\n' +
-      'PROJECT_ID: ' + (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'MISSING')
+      "DEBUG ENV:\n" +
+      "API_KEY: " + !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY + "\n" +
+      "APP_ID: " + !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID + "\n" +
+      "PROJECT_ID: " + !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
     );
 
     console.log('[FCM] Requesting notification permission...');
