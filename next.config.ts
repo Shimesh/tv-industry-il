@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
       'firebase/firestore',
       'firebase/auth',
       'firebase/storage',
+      'firebase/messaging',
       'lucide-react',
       'framer-motion',
     ],

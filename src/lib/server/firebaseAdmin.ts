@@ -1,4 +1,5 @@
 import { getApps, initializeApp, cert, getApp } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const adminAuth = require('firebase-admin/auth') as {
   getAuth: (app?: ReturnType<typeof getApp>) => {
@@ -41,4 +42,8 @@ function getFirebaseAdminApp() {
 
 export function getFirebaseAdminAuth() {
   return adminAuth.getAuth(getFirebaseAdminApp());
+}
+
+export function getFirebaseAdminMessaging() {
+  return getMessaging(getFirebaseAdminApp());
 }

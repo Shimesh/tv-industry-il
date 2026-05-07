@@ -39,7 +39,7 @@ type ToastState = {
 
 type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 'siteRole';
 type SortDirection = 'asc' | 'desc';
-type NotificationTarget = 'test' | 'user' | 'all';
+type NotificationTarget = 'test' | 'user' | 'all' | 'incomplete_profile';
 type PageViewPanelState = {
   page: { key: string; label: string } | null;
   events: PageViewEvent[];
@@ -318,6 +318,7 @@ export default function AdminPage() {
   const [notificationLink, setNotificationLink] = useState('/schedule#live');
   const [notificationTarget, setNotificationTarget] = useState<NotificationTarget>('test');
   const [notificationTargetUserId, setNotificationTargetUserId] = useState('');
+  const [sendPush, setSendPush] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
@@ -532,7 +533,7 @@ export default function AdminPage() {
 
     setSendingNotification(true);
     try {
-      const result = await fetchWithAuth<{ sent: number }>('/api/admin/notifications', {
+      const result = await fetchWithAuth<{ sent: number; pushTokens: number }>('/api/admin/notifications', {
         method: 'POST',
         body: JSON.stringify({
           title: notificationTitle,
@@ -540,6 +541,7 @@ export default function AdminPage() {
           linkUrl: notificationLink,
           target: notificationTarget,
           targetUserId: notificationTarget === 'user' ? notificationTargetUserId : undefined,
+          sendPush,
         }),
       });
 
@@ -554,7 +556,8 @@ export default function AdminPage() {
         }
       }
 
-      showToast('ok', `ההתראה נשלחה ל-${result.sent} משתמשים`);
+      const pushNote = sendPush && result.pushTokens > 0 ? ` + ${result.pushTokens} Push` : '';
+      showToast('ok', `ההתראה נשלחה ל-${result.sent} משתמשים${pushNote}`);
       setNotificationTitle('');
       setNotificationMessage('');
       if (notificationTarget !== 'user') {
@@ -805,6 +808,17 @@ export default function AdminPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                            {entry.crewName ? (
+                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
+                                <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                                פרופיל מלא
+                              </span>
+                            ) : (
+                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
+                                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                פרופיל חסר
+                              </span>
+                            )}
                             <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
                           </div>
                         </div>
@@ -1058,6 +1072,7 @@ export default function AdminPage() {
                       <option value="test">בדיקה לעצמי</option>
                       <option value="user">משתמש ספציפי</option>
                       <option value="all">כל המשתמשים</option>
+                      <option value="incomplete_profile">משתמשים עם פרופיל חסר</option>
                     </select>
                     {notificationTarget === 'user' ? (
                       <select
@@ -1074,10 +1089,23 @@ export default function AdminPage() {
                       </select>
                     ) : (
                       <div className="rounded-xl border border-gray-800 bg-gray-900 px-3 py-2 text-xs text-gray-400">
-                        {notificationTarget === 'all' ? 'יישלח לכל המשתמשים הקיימים' : 'יישלח רק למנהל המחובר'}
+                        {notificationTarget === 'all'
+                          ? 'יישלח לכל המשתמשים הקיימים'
+                          : notificationTarget === 'incomplete_profile'
+                          ? 'יישלח למשתמשים ללא שם צוות'
+                          : 'יישלח רק למנהל המחובר'}
                       </div>
                     )}
                   </div>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-700 bg-gray-800/50 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={sendPush}
+                      onChange={(e) => setSendPush(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-600 bg-gray-700 accent-blue-500"
+                    />
+                    <span className="text-sm text-gray-300">שלח גם כהודעת Push למובייל</span>
+                  </label>
                   <button
                     onClick={() => void sendAdminNotification()}
                     disabled={sendingNotification}

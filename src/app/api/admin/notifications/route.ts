@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { createDocument, getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
+import { getFirebaseAdminMessaging } from '@/lib/server/firebaseAdmin';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
@@ -8,6 +9,8 @@ export const runtime = 'nodejs';
 type RawUser = {
   id: string;
   email?: string;
+  crewName?: string;
+  fcmTokens?: string[];
 };
 
 function cleanText(value: unknown, maxLength: number): string {
@@ -43,6 +46,38 @@ async function createUserNotification(params: {
   });
 }
 
+async function sendFcmPush(params: {
+  tokens: string[];
+  title: string;
+  body: string;
+  linkUrl?: string;
+}) {
+  const { tokens, title, body, linkUrl } = params;
+  if (tokens.length === 0) return;
+
+  const messaging = getFirebaseAdminMessaging();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+  const link = `${appUrl}${linkUrl ?? '/'}`;
+
+  // FCM sendEachForMulticast limit is 500 tokens per call
+  const chunkSize = 500;
+  for (let i = 0; i < tokens.length; i += chunkSize) {
+    await messaging.sendEachForMulticast({
+      tokens: tokens.slice(i, i + chunkSize),
+      notification: { title, body },
+      webpush: {
+        fcmOptions: { link },
+        notification: {
+          title,
+          body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-192x192.png',
+        },
+      },
+    });
+  }
+}
+
 export async function POST(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
   if (authUser instanceof NextResponse) {
@@ -53,9 +88,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const title = cleanText(body.title, 90);
     const message = cleanText(body.message, 500);
-    const target = body.target === 'user' || body.target === 'all' ? body.target : 'test';
+    const target =
+      body.target === 'user' || body.target === 'all' || body.target === 'incomplete_profile'
+        ? body.target
+        : 'test';
     const targetUserId = cleanText(body.targetUserId, 160);
     const linkUrl = cleanInternalLink(body.linkUrl);
+    const sendPush = body.sendPush === true;
 
     if (!title || !message) {
       return NextResponse.json({ error: 'Missing notification title or message' }, { status: 400 });
@@ -66,8 +105,14 @@ export async function POST(request: NextRequest) {
     }
 
     let recipients: string[] = [];
+    let fcmTokens: string[] = [];
+
     if (target === 'test') {
       recipients = [authUser.uid];
+      if (sendPush) {
+        const adminDoc = await getDocument<RawUser>(`users/${authUser.uid}`);
+        fcmTokens = Array.isArray(adminDoc?.fcmTokens) ? adminDoc.fcmTokens : [];
+      }
     } else if (target === 'user') {
       if (!targetUserId) {
         return NextResponse.json({ error: 'Missing target user' }, { status: 400 });
@@ -77,9 +122,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Target user was not found' }, { status: 404 });
       }
       recipients = [targetUserId];
-    } else {
+      if (sendPush) {
+        fcmTokens = Array.isArray(userDoc.fcmTokens) ? userDoc.fcmTokens : [];
+      }
+    } else if (target === 'incomplete_profile') {
       const users = await listDocuments<RawUser>('users');
-      recipients = users.map((user) => user.id).filter(Boolean);
+      const filtered = users.filter((u) => !u.crewName || String(u.crewName).trim() === '');
+      recipients = filtered.map((u) => u.id).filter(Boolean);
+      if (sendPush) {
+        fcmTokens = filtered.flatMap((u) => (Array.isArray(u.fcmTokens) ? u.fcmTokens : [])).filter(Boolean);
+      }
+    } else {
+      // 'all'
+      const users = await listDocuments<RawUser>('users');
+      recipients = users.map((u) => u.id).filter(Boolean);
+      if (sendPush) {
+        fcmTokens = users.flatMap((u) => (Array.isArray(u.fcmTokens) ? u.fcmTokens : [])).filter(Boolean);
+      }
     }
 
     await Promise.all(
@@ -94,8 +153,12 @@ export async function POST(request: NextRequest) {
       ),
     );
 
+    if (sendPush && fcmTokens.length > 0) {
+      await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl });
+    }
+
     await recordRouteMetric({ route: '/api/admin/notifications', ok: true, statusCode: 200 });
-    return NextResponse.json({ success: true, sent: recipients.length });
+    return NextResponse.json({ success: true, sent: recipients.length, pushTokens: sendPush ? fcmTokens.length : 0 });
   } catch (error) {
     await recordRouteMetric({
       route: '/api/admin/notifications',

@@ -21,6 +21,7 @@ type RawUser = {
   onboardingComplete?: boolean;
   photoURL?: string | null;
   city?: string | null;
+  crewName?: string | null;
 };
 
 type RawContact = {
@@ -105,6 +106,7 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     photoURL: raw.photoURL || null,
     city: raw.city || null,
     lastSeen,
+    crewName: raw.crewName || null,
   };
 }
 

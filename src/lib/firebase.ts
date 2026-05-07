@@ -1,12 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
-// הוספנו כאן את הכלים לאתחול חכם וזיכרון מקומי
 import { getFirestore, initializeFirestore, persistentLocalCache } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import type { FirebaseStorage } from 'firebase/storage';
+import type { Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
@@ -17,53 +17,42 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
 };
 
-const isBrowser = typeof window !== 'undefined';
-const hasFirebaseConfig = Boolean(
-  firebaseConfig.apiKey &&
-  firebaseConfig.authDomain &&
-  firebaseConfig.projectId &&
-  firebaseConfig.storageBucket &&
-  firebaseConfig.messagingSenderId &&
-  firebaseConfig.appId
-);
+// Always initialize — Firebase SDK is safe to import on both server and client.
+// getApps().length guard prevents duplicate initialization on hot reloads.
+const isNewApp = getApps().length === 0;
+const app: FirebaseApp = isNewApp ? initializeApp(firebaseConfig) : getApp();
 
-let app: FirebaseApp | null = null;
-if (isBrowser) {
-  if (hasFirebaseConfig && getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-  } else if (getApps().length > 0) {
-    app = getApp();
-  }
+// persistentLocalCache uses IndexedDB which is browser-only.
+// On the server or subsequent inits, fall back to getFirestore (returns existing instance).
+const db: Firestore =
+  typeof window !== 'undefined' && isNewApp
+    ? initializeFirestore(app, { localCache: persistentLocalCache() })
+    : getFirestore(app);
+
+const auth: Auth = getAuth(app);
+const storage: FirebaseStorage = getStorage(app);
+const googleProvider = new GoogleAuthProvider();
+
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
 }
 
-let firestoreDb = null as unknown as Firestore;
-let authInstance = null as unknown as Auth;
-let storageInstance = null as unknown as FirebaseStorage;
-let googleProviderInstance = null as unknown as GoogleAuthProvider;
-
-if (app) {
-  googleProviderInstance = new GoogleAuthProvider();
-
-  if (isBrowser) {
-    firestoreDb = initializeFirestore(app, {
-      localCache: persistentLocalCache(),
-    });
-    authInstance = getAuth(app);
-    storageInstance = getStorage(app);
-    setPersistence(authInstance, browserLocalPersistence).catch(() => {});
-  } else {
-    firestoreDb = getFirestore(app);
-    authInstance = getAuth(app);
-    storageInstance = getStorage(app);
-  }
+// firebase/messaging must NEVER be imported at the module level — it accesses
+// browser-only APIs (Notification, ServiceWorkerRegistration) during initialization
+// and will crash SSR. Dynamic import keeps it fully isolated to the browser.
+let _messagingCache: Messaging | null = null;
+export async function getFirebaseMessaging(): Promise<Messaging | null> {
+  if (typeof window === 'undefined') return null;
+  if (_messagingCache) return _messagingCache;
+  const { getMessaging, isSupported } = await import('firebase/messaging');
+  const supported = await isSupported();
+  if (!supported) return null;
+  _messagingCache = getMessaging(app);
+  return _messagingCache;
 }
 
-export const db = firestoreDb;
-export const auth = authInstance;
-export const storage = storageInstance;
-export const googleProvider = googleProviderInstance;
-
-// No-op kept for backward compat with imports
+// No-op kept for backward compat with existing imports
 export async function ensureOnline() {}
 
+export { app, db, auth, storage, googleProvider };
 export default app;

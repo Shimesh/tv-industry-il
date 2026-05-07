@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppConfigProvider } from '@/contexts/AppConfigContext';
@@ -15,6 +16,13 @@ import ConsentGate, { useConsentGateState } from '@/components/ConsentGate';
 import OnboardingWrapper from '@/components/onboarding/OnboardingWrapper';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuth } from '@/contexts/AuthContext';
+
+// ssr:false ensures this component never runs during SSR or hydration,
+// preventing the ToastProvider mismatch that causes the hydration error.
+const FCMForegroundListener = dynamic(
+  () => import('@/components/FCMTokenRegistration').then((mod) => mod.FCMForegroundListener),
+  { ssr: false },
+);
 
 function PresenceManager() {
   const { user } = useAuth();
@@ -86,30 +94,52 @@ function ConsentBoundary({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // Before hydration completes, render children without any client-only UI providers
+  // (ToastProvider renders a fixed <div> that causes server/client HTML mismatch).
+  // ThemeProvider and AuthProvider are pure context — no DOM output — so they are safe.
+  if (!mounted) {
+    return (
+      <ThemeProvider>
+        <AuthProvider>
+          <AppConfigProvider>
+            <AppDataProvider>
+              <NotificationProvider>
+                {children}
+              </NotificationProvider>
+            </AppDataProvider>
+          </AppConfigProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <AuthProvider>
         <AppConfigProvider>
-        {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally.
-            All children share exactly ONE useContacts() instance via Context. */}
-        <AppDataProvider>
-          <NotificationProvider>
-            <ToastProvider>
-              <CallProvider>
-                <OnboardingWrapper>
-                  <ConsentBoundary>
-                    <PresenceManager />
-                    <UsageTracker />
-                    <ConsentGate />
-                    {children}
-                    <IncomingCall />
-                    <CallScreen />
-                  </ConsentBoundary>
-                </OnboardingWrapper>
-              </CallProvider>
-            </ToastProvider>
-          </NotificationProvider>
-        </AppDataProvider>
+          {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally */}
+          <AppDataProvider>
+            <NotificationProvider>
+              <ToastProvider>
+                <FCMForegroundListener />
+                <CallProvider>
+                  <OnboardingWrapper>
+                    <ConsentBoundary>
+                      <PresenceManager />
+                      <UsageTracker />
+                      <ConsentGate />
+                      {children}
+                      <IncomingCall />
+                      <CallScreen />
+                    </ConsentBoundary>
+                  </OnboardingWrapper>
+                </CallProvider>
+              </ToastProvider>
+            </NotificationProvider>
+          </AppDataProvider>
         </AppConfigProvider>
       </AuthProvider>
     </ThemeProvider>

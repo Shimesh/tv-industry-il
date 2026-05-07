@@ -14,6 +14,7 @@ export type AdminUserSummary = {
   photoURL: string | null;
   city: string | null;
   lastSeen: string | null;
+  crewName: string | null;
 };
 
 export type CountBucket = {

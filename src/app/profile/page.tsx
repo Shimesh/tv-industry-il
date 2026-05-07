@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { registerFcmToken } from '@/components/FCMTokenRegistration';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import { useAppData } from '@/contexts/AppDataContext';
@@ -32,11 +34,13 @@ export default function ProfilePage() {
 function ProfileContent() {
   const { profile, updateUserProfile, logout } = useAuth();
   const { contacts: contactsList } = useAppData();
+  const { showToast } = useToast();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -118,6 +122,36 @@ function ProfileContent() {
     setShowOnboarding(false);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2500);
+    if (profile?.uid) {
+      void registerFcmToken(profile.uid);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    if (!profile?.uid) return;
+    setPushLoading(true);
+    try {
+      const result = await registerFcmToken(profile.uid);
+      if (result.ok) {
+        showToast('התראות Push הופעלו בהצלחה!', 'success');
+      } else {
+        const msgs: Record<string, string> = {
+          'permission-denied': 'ההרשאה נדחתה. אפשר התראות בהגדרות הדפדפן.',
+          'permission-default': 'לא ניתנה הרשאה. אנא נסה שנית.',
+          'messaging-unsupported': 'הדפדפן שלך אינו תומך בהתראות Push.',
+          'no-vapid-key': 'שגיאת הגדרה פנימית.',
+          'not-authenticated': 'נדרשת התחברות מחדש.',
+          'empty-token': 'לא ניתן לקבל טוקן. ודא שהשירות פעיל.',
+        };
+        const reason = result.reason ?? '';
+        const msg = msgs[reason] ?? `שגיאה בהפעלת התראות: ${reason}`;
+        showToast(msg, 'error');
+      }
+    } catch {
+      showToast('שגיאה בלתי צפויה בהפעלת התראות.', 'error');
+    } finally {
+      setPushLoading(false);
+    }
   };
 
   if (!profile) return null;
@@ -356,9 +390,12 @@ function ProfileContent() {
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all">
                   <Settings className="w-4 h-4" /><span className="font-medium">הגדרות אפליקציה</span>
                 </button>
-                <button onClick={() => router.push('/settings')}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all">
-                  <Bell className="w-4 h-4" /><span className="font-medium">התראות</span>
+                <button onClick={handleEnablePush} disabled={pushLoading}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all disabled:opacity-50">
+                  {pushLoading
+                    ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                    : <Bell className="w-4 h-4" />}
+                  <span className="font-medium">הפעל התראות Push</span>
                 </button>
                 <button onClick={() => router.push('/settings')}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all">
