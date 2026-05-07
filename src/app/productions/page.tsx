@@ -34,6 +34,7 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { registerFcmToken } from '@/components/FCMTokenRegistration';
 
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
@@ -534,10 +535,11 @@ function ProductionsContent() {
     setShowCrewIdentity(false);
     try {
       await updateUserProfile({ crewName: trimmed, onboardingComplete: true });
+      if (profile?.uid) void registerFcmToken(profile.uid);
     } catch {
       // non-critical — identity still applied locally
     }
-  }, [updateUserProfile]);
+  }, [updateUserProfile, profile?.uid]);
 
   // After productions load, auto-detect crew identity if not yet confirmed
   useEffect(() => {

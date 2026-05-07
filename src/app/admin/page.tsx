@@ -808,7 +808,7 @@ export default function AdminPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
-                            {entry.crewName ? (
+                            {entry.is_consented && entry.linkedContactId ? (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                                 פרופיל מלא
@@ -816,7 +816,7 @@ export default function AdminPage() {
                             ) : (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
                                 <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                                פרופיל חסר
+                                {!entry.linkedContactId ? 'לא מקושר' : 'לא הסכים'}
                               </span>
                             )}
                             <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>

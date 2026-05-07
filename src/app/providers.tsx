@@ -24,6 +24,8 @@ const FCMForegroundListener = dynamic(
   { ssr: false },
 );
 
+const PushBanner = dynamic(() => import('@/components/PushBanner'), { ssr: false });
+
 function PresenceManager() {
   const { user } = useAuth();
   useOnlineStatus(user?.uid);
@@ -125,6 +127,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <NotificationProvider>
               <ToastProvider>
                 <FCMForegroundListener />
+                <PushBanner />
                 <CallProvider>
                   <OnboardingWrapper>
                     <ConsentBoundary>

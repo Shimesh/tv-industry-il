@@ -22,6 +22,8 @@ type RawUser = {
   photoURL?: string | null;
   city?: string | null;
   crewName?: string | null;
+  is_consented?: boolean;
+  linkedContactId?: number | string | null;
 };
 
 type RawContact = {
@@ -66,9 +68,13 @@ function isBrokenOrEmpty(value: unknown): boolean {
   return /[\u05f3\uFFFD]/.test(trimmed);
 }
 
+function capitalizeName(name: string): string {
+  return name.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function normalizeDisplayName(raw: RawUser): string {
   const displayName = String(raw.displayName || '').trim();
-  if (!isBrokenOrEmpty(displayName)) return displayName;
+  if (!isBrokenOrEmpty(displayName)) return capitalizeName(displayName);
   const email = String(raw.email || '').trim();
   if (email) return email.split('@')[0] || email;
   return '\u05de\u05e9\u05ea\u05de\u05e9 \u05dc\u05dc\u05d0 \u05e9\u05dd';
@@ -107,6 +113,8 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     city: raw.city || null,
     lastSeen,
     crewName: raw.crewName || null,
+    is_consented: raw.is_consented === true,
+    linkedContactId: raw.linkedContactId ?? null,
   };
 }
 

@@ -15,6 +15,8 @@ export type AdminUserSummary = {
   city: string | null;
   lastSeen: string | null;
   crewName: string | null;
+  is_consented: boolean;
+  linkedContactId: number | string | null;
 };
 
 export type CountBucket = {
