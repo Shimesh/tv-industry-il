@@ -28,7 +28,8 @@ export async function registerFcmToken(uid: string): Promise<{ ok: boolean; reas
       return { ok: false, reason: 'no-vapid-key' };
     }
 
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const swUrl = `/firebase-messaging-sw.js?apiKey=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim()}&projectId=${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim()}&messagingSenderId=${process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim()}&appId=${process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim()}`;
+    const swReg = await navigator.serviceWorker.register(swUrl);
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
     if (!token) {
       console.log('[FCM] getToken returned empty — check VAPID key or SW registration.');
