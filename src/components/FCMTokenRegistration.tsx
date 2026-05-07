@@ -11,13 +11,6 @@ export async function registerFcmToken(uid: string): Promise<{ ok: boolean; reas
     if (typeof window === 'undefined') return { ok: false, reason: 'server' };
     if (!('Notification' in window)) return { ok: false, reason: 'no-notification-api' };
 
-    alert(
-      "DEBUG ENV:\n" +
-      "API_KEY: " + !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY + "\n" +
-      "APP_ID: " + !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID + "\n" +
-      "PROJECT_ID: " + !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    );
-
     console.log('[FCM] Requesting notification permission...');
     const permission = await Notification.requestPermission();
     console.log('[FCM] Permission result:', permission);
@@ -29,7 +22,7 @@ export async function registerFcmToken(uid: string): Promise<{ ok: boolean; reas
       return { ok: false, reason: 'messaging-unsupported' };
     }
 
-    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY?.trim();
     if (!vapidKey) {
       console.log('[FCM] NEXT_PUBLIC_FIREBASE_VAPID_KEY is not set.');
       return { ok: false, reason: 'no-vapid-key' };
