@@ -144,7 +144,10 @@ function ProfileContent() {
           'empty-token': 'לא ניתן לקבל טוקן. ודא שהשירות פעיל.',
         };
         const reason = result.reason ?? '';
-        const msg = msgs[reason] ?? `שגיאה בהפעלת התראות: ${reason}`;
+        const isInstallationsErr = reason.includes('installations') || reason.includes('INVALID_ARGUMENT');
+        const msg = isInstallationsErr
+          ? 'הדפדפן לא הצליח להתחבר ל-Firebase. ייתכן שהתראות Push לא נתמכות בדפדפן זה.'
+          : msgs[reason] ?? `שגיאה בהפעלת התראות: ${reason}`;
         showToast(msg, 'error');
       }
     } catch {
