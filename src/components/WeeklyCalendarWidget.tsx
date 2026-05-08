@@ -194,6 +194,7 @@ export default function WeeklyCalendarWidget() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [days, setDays] = useState<string[]>(() => getWeekDays(0));
   const [productions, setProductions] = useState<Production[] | null>(null);
+  const [myProductionDates, setMyProductionDates] = useState<Set<string> | null>(null);
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
 
@@ -209,6 +210,7 @@ export default function WeeklyCalendarWidget() {
     setDays(nextDays);
     const weekId = getWeekId(nextDays[0]);
     setProductions(loadFromCache(weekId));
+    setMyProductionDates(null);
   }, [weekOffset]);
 
   useEffect(() => {
@@ -235,6 +237,18 @@ export default function WeeklyCalendarWidget() {
       const nextProductions = payload.productions ?? [];
       setProductions(nextProductions);
       saveToCache(weekId, nextProductions);
+
+      const normalizedPhone = normalizePhone(phone);
+      if (normalizedPhone && normalizedPhone.length >= 9) {
+        const myRes = await fetch(
+          `/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
+          { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+        );
+        if (myRes.ok && !cancelled) {
+          const myPayload = (await myRes.json()) as { productions?: Production[] };
+          setMyProductionDates(new Set((myPayload.productions ?? []).map((p) => p.date).filter(Boolean)));
+        }
+      }
     };
 
     fetchGlobalWeek().catch(() => {
@@ -256,11 +270,14 @@ export default function WeeklyCalendarWidget() {
     }, {});
   }, [productions]);
 
-  const myShiftDays = useMemo(() => new Set(
-    (productions ?? [])
-      .filter((production) => isMyProduction(production, displayName, phone))
-      .map((production) => production.date),
-  ), [displayName, phone, productions]);
+  const myShiftDays = useMemo(() => {
+    if (myProductionDates !== null) return myProductionDates;
+    return new Set(
+      (productions ?? [])
+        .filter((production) => isMyProduction(production, displayName, phone))
+        .map((production) => production.date),
+    );
+  }, [myProductionDates, displayName, phone, productions]);
 
   const popupProductions = popupDate ? (byDate[popupDate] ?? []) : [];
   const popupDayIndex = popupDate ? days.indexOf(popupDate) : 0;

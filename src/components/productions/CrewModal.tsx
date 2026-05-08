@@ -1,16 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { classifyContactRole, normalizeContactName, type ContactDepartment, type ContactWorkArea } from '@/lib/contactsUtils';
-import { deduplicateCrewEntries, normalizePhone } from '@/lib/crewNormalization';
+import { deduplicateCrewEntries, normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { type CrewMember, type Production, formatDateShort } from '@/lib/productionDiff';
 
 interface CrewModalProps {
   production: Production;
   currentUserName?: string;
+  currentUserPhone?: string;
   onClose: () => void;
 }
 
@@ -188,10 +190,12 @@ const shareMenuVariants = {
   exit: { opacity: 0, scale: 0.9, y: 8, transition: { duration: 0.15 } },
 };
 
-export default function CrewModal({ production, currentUserName, onClose }: CrewModalProps) {
+export default function CrewModal({ production, currentUserName, currentUserPhone, onClose }: CrewModalProps) {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeDepartment, setActiveDepartment] = useState<ActiveDepartment>('הכל');
+  const [resolvedPhones, setResolvedPhones] = useState<Record<string, string>>({});
   const { contacts } = useAppData();
+  const { user } = useAuth();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
   const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string } =>
@@ -199,15 +203,41 @@ export default function CrewModal({ production, currentUserName, onClose }: Crew
   );
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, normalizedContacts);
 
+  // Fetch phones from the users collection for crew members still missing a phone
+  useEffect(() => {
+    const missingNames = uniqueCrew
+      .filter((m) => !normalizePhone(m.phone ?? ''))
+      .map((m) => m.name)
+      .filter(Boolean);
+
+    if (!missingNames.length || !user) return;
+
+    let cancelled = false;
+    void user.getIdToken().then(async (token) => {
+      const res = await fetch('/api/crew/resolve-phones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ names: missingNames }),
+      }).catch(() => null);
+      if (!res?.ok || cancelled) return;
+      const payload = (await res.json()) as { phones?: Record<string, string> };
+      if (!cancelled) setResolvedPhones(payload.phones ?? {});
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [production.id, user]);
+
+  const normalizedCurrentName = currentUserName ? normalizeName(currentUserName) : '';
+  const normalizedCurrentPhone = normalizePhone(currentUserPhone ?? '') ?? '';
+
   const taggedCrew = uniqueCrew.map((member) => {
-    const isCurrent = currentUserName
-      ? member.name === currentUserName ||
-        member.name.includes(currentUserName) ||
-        currentUserName.includes(member.name) ||
-        (member.name.split(/\s+/)[0] === currentUserName.split(/\s+/)[0] && member.name.split(/\s+/)[0].length >= 2)
-      : false;
+    const isCurrent =
+      (normalizedCurrentName.length >= 2 && normalizeName(member.name) === normalizedCurrentName) ||
+      (normalizedCurrentPhone.length >= 9 && normalizePhone(member.phone ?? '') === normalizedCurrentPhone);
+    const phone = member.phone || resolvedPhones[normalizeName(member.name)] || null;
     const department = inferCrewBucket(member.role, member.roleDetail);
-    return { ...member, isCurrentUser: isCurrent, department };
+    return { ...member, phone, isCurrentUser: isCurrent, department };
   });
 
   const sortedCrew = useMemo(() => {
