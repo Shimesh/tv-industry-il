@@ -2259,6 +2259,7 @@ function ProductionsContent() {
             weekEnd={renderedRange.end}
             workerName={workerName}
             currentUserName={profile?.displayName || user?.displayName || ''}
+            currentUserPhone={profile?.phone || ''}
             onNavigate={handleCalendarNavigate}
             onJumpToDate={handleJumpToDate}
             onViewChange={handleViewChange}

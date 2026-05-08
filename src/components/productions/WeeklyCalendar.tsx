@@ -16,6 +16,7 @@ interface WeeklyCalendarProps {
   weekEnd: string;
   workerName: string;
   currentUserName?: string;
+  currentUserPhone?: string;
   // Calendar navigation
   onNavigate?: (direction: 'prev' | 'next' | 'today') => void;
   onJumpToDate?: (dateStr: string) => void;
@@ -38,6 +39,7 @@ export default function WeeklyCalendar({
   weekEnd,
   workerName,
   currentUserName,
+  currentUserPhone,
   onNavigate,
   onJumpToDate,
   onViewChange,
@@ -340,6 +342,7 @@ export default function WeeklyCalendar({
         <CrewModal
           production={selectedProduction}
           currentUserName={currentUserName || workerName}
+          currentUserPhone={currentUserPhone}
           onClose={() => setSelectedProduction(null)}
         />
       )}
