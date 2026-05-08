@@ -109,7 +109,7 @@ export default function NotificationBell() {
             initial={{ opacity: 0, y: -10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            className="absolute left-0 top-full z-50 mt-2 flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border shadow-2xl"
+            className="absolute right-0 top-full z-50 mt-2 flex max-h-[70vh] w-80 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border shadow-2xl"
             style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
             dir="rtl"
           >

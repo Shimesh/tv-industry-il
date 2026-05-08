@@ -4,16 +4,18 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, Re
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import {
-  collection, onSnapshot, addDoc,
+  collection, onSnapshot, addDoc, doc, setDoc,
   query, where, orderBy
 } from 'firebase/firestore';
 import { getWeekId } from '@/lib/productionDiff';
+import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 
 type ProductionReminderData = {
   name?: string;
   date?: string;
   status?: string;
   startTime?: string;
+  crew?: Array<{ name?: string; phone?: string; normalizedPhone?: string }>;
 };
 
 export interface AppNotification {
@@ -54,10 +56,11 @@ const NotificationContext = createContext<NotificationContextType>({
 });
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [realtimeFailed, setRealtimeFailed] = useState(false);
   const browserNotifiedRef = useRef(new Set<string>());
+  const sentRemindersRef = useRef(new Set<string>());
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>(() => (
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   ));
@@ -255,7 +258,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // Cache of today's productions, kept fresh by onSnapshot
     let todayProductions: Array<{ id: string; data: ProductionReminderData }> = [];
-    const sentReminders = new Set<string>();
 
     const checkAndSendReminders = async () => {
       const now = new Date();
@@ -263,48 +265,67 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const reminderTime = `${String(in30min.getHours()).padStart(2, '0')}:${String(in30min.getMinutes()).padStart(2, '0')}`;
 
+      const userDisplayName = normalizeName(profile?.crewName || profile?.displayName || user.displayName || '');
+      const userPhone = normalizePhone(profile?.phone || '') ?? '';
+
       for (const { id, data: prod } of todayProductions) {
         const startTime = typeof prod.startTime === 'string' ? prod.startTime : '';
         if (
-          prod.date === todayStr &&
-          prod.status === 'scheduled' &&
-          startTime >= currentTime &&
-          startTime <= reminderTime &&
-          !sentReminders.has(id)
-        ) {
-          sentReminders.add(id);
-          await addDoc(collection(db, 'notifications'), {
-            userId: user.uid,
-            recipientUid: user.uid,
-            type: 'production_reminder',
-            title: 'תזכורת הפקה',
-            message: `ההפקה "${prod.name}" מתחילה בעוד 30 דקות (${prod.startTime})`,
-            productionId: id,
-            productionName: prod.name,
-            read: false,
-            createdAt: Date.now(),
+          prod.date !== todayStr ||
+          prod.status !== 'scheduled' ||
+          startTime < currentTime ||
+          startTime > reminderTime ||
+          sentRemindersRef.current.has(id)
+        ) continue;
+
+        // Only remind for productions the user is actually in
+        const crew = prod.crew ?? [];
+        const isInCrew =
+          crew.length === 0 || // no crew data → assume it's the user's own shift
+          crew.some((m) => {
+            if (userDisplayName && normalizeName(m.name ?? '') === userDisplayName) return true;
+            if (userPhone.length >= 9 && normalizePhone(m.phone ?? '') === userPhone) return true;
+            if (userPhone.length >= 9 && normalizePhone(m.normalizedPhone ?? '') === userPhone) return true;
+            return false;
           });
-        }
+        if (!isInCrew) continue;
+
+        // Deterministic doc ID prevents Firestore duplicates even across remounts
+        const reminderId = `reminder-${user.uid}-${id}-${todayStr}`;
+        sentRemindersRef.current.add(id);
+        await setDoc(doc(db, 'notifications', reminderId), {
+          userId: user.uid,
+          recipientUid: user.uid,
+          type: 'production_reminder',
+          title: 'תזכורת הפקה',
+          message: `ההפקה "${prod.name}" מתחילה בעוד 30 דקות (${prod.startTime})`,
+          productionId: id,
+          productionName: prod.name,
+          read: false,
+          createdAt: Date.now(),
+        });
+        // Immediate browser push — doesn't wait for Firestore listener roundtrip
+        showBrowserNotification('תזכורת הפקה', `ההפקה "${prod.name}" מתחילה בעוד 30 דקות (${prod.startTime})`);
       }
     };
 
-    // Single listener on user's current week productions
+    // Single listener — only refreshes the productions cache, does NOT call checkAndSendReminders
+    // (avoids duplicates when productions change mid-session; interval handles time-based checks)
     const unsubscribe = onSnapshot(
       collection(db, 'productions', user.uid, 'weeks', weekId, 'productions'),
       (snapshot) => {
-        todayProductions = snapshot.docs.map(d => ({ id: d.id, data: d.data() }));
-        checkAndSendReminders();
+        todayProductions = snapshot.docs.map(d => ({ id: d.id, data: d.data() as ProductionReminderData }));
       }
     );
 
-    // Re-check time window every minute (no new Firestore listeners)
-    const interval = setInterval(checkAndSendReminders, 60 * 1000);
+    // Re-check time window every minute
+    const interval = setInterval(() => { void checkAndSendReminders(); }, 60 * 1000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, [user]);
+  }, [user, profile]);
 
   const requestBrowserPermission = useCallback(async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
