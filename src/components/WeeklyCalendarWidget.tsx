@@ -81,6 +81,19 @@ function isMyProduction(production: Production, displayName: string, phone: stri
   });
 }
 
+function mergeProductions(
+  personal: Production[],
+  global: Production[],
+  displayName: string,
+  phone: string,
+): Production[] {
+  const personalIds = new Set(personal.map((p) => p.id));
+  const extras = global
+    .filter((p) => p.id && !personalIds.has(p.id))
+    .map((p) => ({ ...p, isCurrentUserShift: isMyProduction(p, displayName, phone) }));
+  return [...personal, ...extras];
+}
+
 function getMyRole(production: Production, displayName: string, phone: string): string {
   const myName = normalizeName(displayName);
   const myPhone = normalizePhone(phone);
@@ -225,30 +238,48 @@ export default function WeeklyCalendarWidget() {
       const token = await user.getIdToken().catch(() => '');
       if (!token) return;
 
-      const response = await fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      });
-      if (!response.ok) return;
+      const normalizedPhone = normalizePhone(phone) ?? '';
 
-      const payload = (await response.json()) as { productions?: Production[] };
+      const [globalPayload, personalPayload, myPayload] = await Promise.all([
+        fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+          .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
+          .catch(() => ({ productions: [] as Production[] })),
+
+        fetch(`/api/productions/personal?weekId=${weekId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+          .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
+          .catch(() => ({ productions: [] as Production[] })),
+
+        normalizedPhone.length >= 9
+          ? fetch(
+              `/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
+              { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+            )
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
+      ]);
+
       if (cancelled) return;
 
-      const nextProductions = payload.productions ?? [];
-      setProductions(nextProductions);
-      saveToCache(weekId, nextProductions);
+      const personalProds = personalPayload.productions ?? [];
+      const globalProds = globalPayload.productions ?? [];
+      const myPhoneProds = myPayload.productions ?? [];
 
-      const normalizedPhone = normalizePhone(phone);
-      if (normalizedPhone && normalizedPhone.length >= 9) {
-        const myRes = await fetch(
-          `/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
-          { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
-        );
-        if (myRes.ok && !cancelled) {
-          const myPayload = (await myRes.json()) as { productions?: Production[] };
-          setMyProductionDates(new Set((myPayload.productions ?? []).map((p) => p.date).filter(Boolean)));
-        }
-      }
+      const afterGlobal = mergeProductions(personalProds, globalProds, displayName, phone);
+      const merged = mergeProductions(afterGlobal, myPhoneProds, displayName, phone);
+
+      setProductions(merged);
+      saveToCache(weekId, merged);
+
+      setMyProductionDates(
+        new Set([...personalProds.map((p) => p.date), ...myPhoneProds.map((p) => p.date)].filter(Boolean)),
+      );
     };
 
     fetchGlobalWeek().catch(() => {

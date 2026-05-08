@@ -13,6 +13,12 @@ interface UserDoc {
   normalizedPhone?: string;
 }
 
+interface ContactDoc {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
 function buildInFilter(fieldPath: string, values: string[]) {
   return {
     fieldFilter: {
@@ -43,37 +49,91 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ phones: {} });
   }
 
-  // Firestore IN queries support max 30 values per request
-  const chunks: string[][] = [];
-  for (let i = 0; i < names.length; i += 30) {
-    chunks.push(names.slice(i, i + 30));
-  }
-
   const phones: Record<string, string> = {};
 
-  const processDocs = (docs: UserDoc[]) => {
+  // Include both raw names AND normalized forms so minor whitespace differences don't prevent a match
+  const queryValues = [...new Set([...names, ...names.map(normalizeName)].filter(Boolean))];
+
+  const addPhone = (nameKey: string | undefined, phone: string | null | undefined) => {
+    const normalized = nameKey ? normalizeName(nameKey) : '';
+    if (normalized && phone) phones[normalized] = phone;
+  };
+
+  const processUserDocs = (docs: UserDoc[]) => {
     for (const doc of docs) {
       const phone = normalizePhone(doc.normalizedPhone || doc.phone || '');
       if (!phone) continue;
-      if (doc.displayName) phones[normalizeName(doc.displayName)] = phone;
-      if (doc.crewName) phones[normalizeName(doc.crewName)] = phone;
+      addPhone(doc.displayName, phone);
+      addPhone(doc.crewName, phone);
     }
   };
 
-  await Promise.all(
-    chunks.flatMap((chunk) => [
+  const chunks: string[][] = [];
+  for (let i = 0; i < queryValues.length; i += 30) {
+    chunks.push(queryValues.slice(i, i + 30));
+  }
+
+  const normalizedTargetNames = new Set(names.map(normalizeName).filter(Boolean));
+
+  await Promise.all([
+    // Source 1: users collection (displayName and crewName fields)
+    ...chunks.flatMap((chunk) => [
       runQuery<UserDoc>({
         from: [{ collectionId: 'users' }],
         where: buildInFilter('displayName', chunk),
         limit: 200,
-      }).then(processDocs).catch(() => {}),
+      }).then(processUserDocs).catch(() => {}),
       runQuery<UserDoc>({
         from: [{ collectionId: 'users' }],
         where: buildInFilter('crewName', chunk),
         limit: 200,
-      }).then(processDocs).catch(() => {}),
+      }).then(processUserDocs).catch(() => {}),
     ]),
-  );
+
+    // Source 2: contacts collection — query by firstName, then full-name-match in code
+    // Admin SDK bypasses client-side consent redaction, so phones are accessible here
+    (async () => {
+      const firstNames = [
+        ...new Set(
+          names
+            .map((n) => {
+              const parts = normalizeName(n).split(/\s+/);
+              return parts[0] || '';
+            })
+            .filter((f) => f.length >= 2),
+        ),
+      ];
+
+      if (!firstNames.length) return;
+
+      const fnChunks: string[][] = [];
+      for (let i = 0; i < firstNames.length; i += 30) {
+        fnChunks.push(firstNames.slice(i, i + 30));
+      }
+
+      const allContacts: ContactDoc[] = [];
+      await Promise.all(
+        fnChunks.map((chunk) =>
+          runQuery<ContactDoc>({
+            from: [{ collectionId: 'contacts' }],
+            where: buildInFilter('firstName', chunk),
+            limit: 500,
+          })
+            .then((docs) => allContacts.push(...docs))
+            .catch(() => {}),
+        ),
+      );
+
+      for (const contact of allContacts) {
+        const phone = normalizePhone(contact.phone || '');
+        if (!phone) continue;
+        const fullName = normalizeName(`${contact.firstName || ''} ${contact.lastName || ''}`);
+        if (fullName && normalizedTargetNames.has(fullName)) {
+          phones[fullName] = phone;
+        }
+      }
+    })(),
+  ]);
 
   return NextResponse.json({ phones });
 }
