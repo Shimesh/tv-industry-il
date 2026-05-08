@@ -188,7 +188,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
 
         <div className="border-t px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <Link
-            href="/productions"
+            href={`/productions?date=${dateStr}`}
             onClick={onClose}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-colors hover:opacity-90"
             style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
@@ -278,7 +278,12 @@ export default function WeeklyCalendarWidget() {
       saveToCache(weekId, merged);
 
       setMyProductionDates(
-        new Set([...personalProds.map((p) => p.date), ...myPhoneProds.map((p) => p.date)].filter(Boolean)),
+        new Set(
+          merged
+            .filter((p) => isMyProduction(p, displayName, phone))
+            .map((p) => p.date)
+            .filter(Boolean),
+        ),
       );
     };
 

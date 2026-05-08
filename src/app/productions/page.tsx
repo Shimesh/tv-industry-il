@@ -188,6 +188,20 @@ function ProductionsContent() {
     }
   }, [searchParams, teams]);
 
+  const [pendingScrollDate, setPendingScrollDate] = useState<string | null>(null);
+  const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
+
+  // Navigate to week and highlight day when arriving from widget "לצפייה בלוח המלא"
+  useEffect(() => {
+    const dateParam = searchParams.get('date');
+    if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
+    setCurrentDate(new Date(dateParam + 'T12:00:00'));
+    setPendingScrollDate(dateParam);
+    const team = searchParams.get('team');
+    router.replace(team ? `/productions?team=${team}` : '/productions', { scroll: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || null;
 
   const handleTeamChange = (teamId: string | null) => {
@@ -218,6 +232,18 @@ function ProductionsContent() {
   const [weekEnd, setWeekEnd] = useState('');
   const [workerName, setWorkerName] = useState('');
   const [currentWeekId, setCurrentWeekId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingScrollDate) return;
+    const el = document.getElementById(`day-${pendingScrollDate}`);
+    if (!el) return;
+    setPendingScrollDate(null);
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedDate(pendingScrollDate);
+    const t = setTimeout(() => setHighlightedDate(null), 1200);
+    return () => clearTimeout(t);
+  }, [pendingScrollDate, currentWeekId]);
+
   const [lastDiff, setLastDiff] = useState<ScheduleDiff | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -2270,6 +2296,7 @@ function ProductionsContent() {
             onLoadMore={handleLoadMoreList}
             hasMore={hasMoreList}
             loadingMore={loadingMoreList}
+            highlightedDate={highlightedDate}
           />
           <div
             className="mt-4 grid gap-3 rounded-2xl border p-4 sm:grid-cols-2"

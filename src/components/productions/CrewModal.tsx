@@ -194,6 +194,9 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeDepartment, setActiveDepartment] = useState<ActiveDepartment>('הכל');
   const [resolvedPhones, setResolvedPhones] = useState<Record<string, string>>({});
+  const [isPhonesLoading, setIsPhonesLoading] = useState(
+    () => (production.crew ?? []).some((m) => !normalizePhone(m.phone ?? '')),
+  );
   const { contacts } = useAppData();
   const { user } = useAuth();
 
@@ -210,7 +213,10 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
       .map((m) => m.name)
       .filter(Boolean);
 
-    if (!missingNames.length || !user) return;
+    if (!missingNames.length || !user) {
+      setIsPhonesLoading(false);
+      return;
+    }
 
     let cancelled = false;
     void user.getIdToken().then(async (token) => {
@@ -221,8 +227,11 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
       }).catch(() => null);
       if (!res?.ok || cancelled) return;
       const payload = (await res.json()) as { phones?: Record<string, string> };
-      if (!cancelled) setResolvedPhones(payload.phones ?? {});
-    }).catch(() => {});
+      if (!cancelled) {
+        setResolvedPhones(payload.phones ?? {});
+        setIsPhonesLoading(false);
+      }
+    }).catch(() => { setIsPhonesLoading(false); });
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -424,6 +433,13 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                 <Phone className="w-3.5 h-3.5" />
                 <span dir="ltr">{member.phone}</span>
               </motion.a>
+            ) : isPhonesLoading ? (
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium animate-pulse"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}
+              >
+                <span>טוען...</span>
+              </div>
             ) : (
               <div
                 className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
