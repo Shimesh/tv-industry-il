@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
+import { DIRECTORY_DEPARTMENTS } from '@/lib/contactsUtils';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -339,6 +340,19 @@ export default function AdminPage() {
   const [sendPush, setSendPush] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Record<string, boolean>>({});
+  const [autoLinkPending, setAutoLinkPending] = useState<Record<string, boolean>>({});
+  const [editModal, setEditModal] = useState<{
+    uid: string;
+    displayName: string;
+    phone: string;
+    department: string;
+    role: string;
+    forceContactId: string;
+  } | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [availableContacts, setAvailableContacts] = useState<
+    { id: string; firstName: string; lastName: string; phone: string }[]
+  >([]);
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
     events: [],
@@ -377,6 +391,47 @@ export default function AdminPage() {
       setReminderSent((prev) => ({ ...prev, [targetUid]: true }));
     } catch {
       showToast('err', 'שליחת התזכורת נכשלה');
+    }
+  }
+
+  async function handleAutoLink(uid: string) {
+    setAutoLinkPending((prev) => ({ ...prev, [uid]: true }));
+    try {
+      const data = await fetchWithAuth<{ success: boolean; message?: string; contact?: { name: string } }>(
+        '/api/admin/users/auto-link',
+        { method: 'POST', body: JSON.stringify({ uid }) },
+      );
+      if (data.success) {
+        showToast('ok', `קושר ל: ${data.contact?.name ?? '—'}`);
+        void loadOverview(true);
+      } else {
+        showToast('err', data.message || 'לא נמצא איש קשר');
+      }
+    } catch {
+      showToast('err', 'שגיאה בקישור אוטומטי');
+    } finally {
+      setAutoLinkPending((prev) => ({ ...prev, [uid]: false }));
+    }
+  }
+
+  async function handleEditSave() {
+    if (!editModal) return;
+    setEditSaving(true);
+    try {
+      await fetchWithAuth('/api/admin/users/update', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...editModal,
+          forceContactId: editModal.forceContactId || undefined,
+        }),
+      });
+      showToast('ok', 'הפרופיל עודכן');
+      setEditModal(null);
+      void loadOverview(true);
+    } catch {
+      showToast('err', 'שגיאה בשמירה');
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -482,6 +537,15 @@ export default function AdminPage() {
       cancelled = true;
     };
   }, [authLoading, user, isAdmin]);
+
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string }[] }>(
+      '/api/admin/contacts-list',
+    )
+      .then((data) => { if (Array.isArray(data.contacts)) setAvailableContacts(data.contacts); })
+      .catch(() => undefined);
+  }, [user, isAdmin]);
 
   async function claimAdmin() {
     setClaimingAdmin(true);
@@ -870,6 +934,31 @@ export default function AdminPage() {
                                     שלח תזכורת
                                   </button>
                                 )}
+                                <div className="mt-1 flex gap-2">
+                                  <button
+                                    onClick={() => void handleAutoLink(entry.uid)}
+                                    disabled={autoLinkPending[entry.uid]}
+                                    className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
+                                    title="חפש וקשר אוטומטית לאיש קשר"
+                                  >
+                                    {autoLinkPending[entry.uid] ? '...' : '🔗 קשר אוטומטית'}
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setEditModal({
+                                        uid: entry.uid,
+                                        displayName: entry.displayName ?? '',
+                                        phone: entry.phone ?? '',
+                                        department: entry.department ?? '',
+                                        role: entry.role ?? '',
+                                        forceContactId: '',
+                                      })
+                                    }
+                                    className="text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
+                                  >
+                                    ✏️ ערוך
+                                  </button>
+                                </div>
                               </div>
                             )}
                             <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
@@ -1389,6 +1478,100 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+    {editModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div
+          className="w-full max-w-md rounded-xl p-6 shadow-xl"
+          style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
+        >
+          <h3 className="mb-4 text-lg font-bold" style={{ color: 'var(--theme-text-primary)' }}>
+            ✏️ ערוך פרופיל
+          </h3>
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              שם בעברית
+              <input
+                value={editModal.displayName}
+                onChange={(e) => setEditModal((m) => m && { ...m, displayName: e.target.value })}
+                dir="rtl"
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              טלפון
+              <input
+                value={editModal.phone}
+                onChange={(e) => setEditModal((m) => m && { ...m, phone: e.target.value })}
+                dir="ltr"
+                type="tel"
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              מחלקה
+              <select
+                value={editModal.department}
+                onChange={(e) => setEditModal((m) => m && { ...m, department: e.target.value })}
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+              >
+                <option value="">-- בחר מחלקה --</option>
+                {DIRECTORY_DEPARTMENTS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              תפקיד
+              <input
+                value={editModal.role}
+                onChange={(e) => setEditModal((m) => m && { ...m, role: e.target.value })}
+                dir="rtl"
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              קשר לאיש קשר קיים (אופציונלי)
+              <select
+                value={editModal.forceContactId}
+                onChange={(e) => setEditModal((m) => m && { ...m, forceContactId: e.target.value })}
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+              >
+                <option value="">-- ללא קישור חדש --</option>
+                {availableContacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {`${c.firstName} ${c.lastName}`.trim()}{c.phone ? ` - ${c.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setEditModal(null)}
+              className="rounded-lg px-4 py-2 text-sm"
+              style={{ background: 'var(--theme-bg-primary)', color: 'var(--theme-text-secondary)' }}
+            >
+              ביטול
+            </button>
+            <button
+              onClick={() => void handleEditSave()}
+              disabled={editSaving}
+              className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+              style={{ background: 'var(--theme-accent)', color: 'white' }}
+            >
+              {editSaving ? 'שומר...' : 'שמור'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
