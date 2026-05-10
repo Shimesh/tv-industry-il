@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles } from 'lucide-react';
+import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const departments = [
   { value: 'צילום', label: 'צילום' },
@@ -15,6 +17,26 @@ const departments = [
 ];
 
 const roles = ['צלם', 'צלם רחף', 'כתוביות', 'ניהול במה', 'פיקוח קול', 'VTR', 'תפאורן', 'ניתוב', 'CCU', 'טלפרומפטר', 'תאורן', 'קול', 'עורך', 'מנהל הפקה', 'מפיק', 'במאי'];
+
+function formatIsraeliPhoneForFirebase(input: string): string | null {
+  const cleaned = input.replace(/[\s\-()]/g, '');
+
+  if (/^\+9725\d{8}$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  const digits = cleaned.replace(/\D/g, '');
+
+  if (/^05\d{8}$/.test(digits)) {
+    return `+972${digits.slice(1)}`;
+  }
+
+  if (/^9725\d{8}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  return null;
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -27,6 +49,12 @@ export default function LoginPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [phoneLoginOpen, setPhoneLoginOpen] = useState(false);
+  const [phoneStep, setPhoneStep] = useState<'phone' | 'otp'>('phone');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   const { user, loading: authLoading, signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
@@ -37,6 +65,37 @@ export default function LoginPage() {
       router.push('/');
     }
   }, [user, authLoading, router]);
+
+  const resetRecaptchaVerifier = useCallback(() => {
+    try {
+      recaptchaVerifierRef.current?.clear();
+    } catch {}
+    recaptchaVerifierRef.current = null;
+
+    if (typeof document !== 'undefined') {
+      document.getElementById('recaptcha-container')?.replaceChildren();
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => resetRecaptchaVerifier();
+  }, [resetRecaptchaVerifier]);
+
+  const getRecaptchaVerifier = () => {
+    if (recaptchaVerifierRef.current) {
+      return recaptchaVerifierRef.current;
+    }
+
+    if (typeof document === 'undefined' || !document.getElementById('recaptcha-container')) {
+      throw new Error('recaptcha-container-missing');
+    }
+
+    recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+    });
+
+    return recaptchaVerifierRef.current;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +172,110 @@ export default function LoginPage() {
       }
       setIsLoading(false);
     }
+  };
+
+  const handleTogglePhoneLogin = () => {
+    setError('');
+    setPhoneLoginOpen((open) => {
+      if (open) {
+        setPhoneStep('phone');
+        setOtpCode('');
+        setConfirmationResult(null);
+        resetRecaptchaVerifier();
+      }
+      return !open;
+    });
+  };
+
+  const handleSendPhoneCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isFirebaseConfigured) {
+      setError('Firebase לא מוגדר. יש להגדיר קובץ .env.local עם פרטי Firebase אמיתיים. ראה .env.local.example');
+      return;
+    }
+
+    const formattedPhone = formatIsraeliPhoneForFirebase(phoneNumber);
+    if (!formattedPhone) {
+      setError('יש להזין מספר טלפון ישראלי תקין, לדוגמה 050-0000000');
+      return;
+    }
+
+    setError('');
+    setIsLoading(true);
+    try {
+      const verifier = getRecaptchaVerifier();
+      const result = await signInWithPhoneNumber(auth, formattedPhone, verifier);
+      setConfirmationResult(result);
+      setPhoneStep('otp');
+      setOtpCode('');
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string; message?: string };
+      if (
+        firebaseError.code === 'auth/too-many-requests' ||
+        firebaseError.code === 'auth/captcha-check-failed' ||
+        firebaseError.code === 'auth/missing-app-credential' ||
+        firebaseError.code === 'auth/invalid-app-credential'
+      ) {
+        resetRecaptchaVerifier();
+      }
+
+      if (firebaseError.code === 'auth/invalid-phone-number') {
+        setError('מספר הטלפון לא תקין. בדקו את המספר ונסו שוב.');
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        setError('נשלחו יותר מדי בקשות. נסו שוב מאוחר יותר.');
+      } else if (firebaseError.code === 'auth/quota-exceeded') {
+        setError('לא ניתן לשלוח קוד כרגע. נסו שוב מאוחר יותר.');
+      } else {
+        setError('שגיאה בשליחת הקוד. נסו שוב.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = otpCode.trim();
+
+    if (!confirmationResult) {
+      setError('יש לשלוח קוד אימות לפני ההתחברות.');
+      setPhoneStep('phone');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      setError('יש להזין קוד בן 6 ספרות.');
+      return;
+    }
+
+    setError('');
+    setIsLoading(true);
+    try {
+      await confirmationResult.confirm(code);
+      resetRecaptchaVerifier();
+      router.push('/');
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string };
+      if (firebaseError.code === 'auth/invalid-verification-code') {
+        setError('קוד האימות שגוי. בדקו את הקוד ונסו שוב.');
+      } else if (firebaseError.code === 'auth/code-expired') {
+        setError('קוד האימות פג תוקף. שלחו קוד חדש.');
+        setPhoneStep('phone');
+        setConfirmationResult(null);
+        resetRecaptchaVerifier();
+      } else {
+        setError('שגיאה באימות הקוד. נסו שוב.');
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleBackToPhoneNumber = () => {
+    setError('');
+    setPhoneStep('phone');
+    setOtpCode('');
+    setConfirmationResult(null);
+    resetRecaptchaVerifier();
   };
 
   return (
@@ -350,6 +513,107 @@ export default function LoginPage() {
             </svg>
             כניסה עם Google
           </button>
+
+          {/* Phone Sign In */}
+          <button
+            onClick={handleTogglePhoneLogin}
+            disabled={isLoading}
+            className="mt-3 w-full py-3 rounded-xl border border-[var(--theme-border)] text-[var(--theme-text)] font-medium hover:bg-[var(--theme-accent-glow)] transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-sm"
+          >
+            <Phone className="w-5 h-5 text-[var(--theme-accent)]" />
+            התחבר עם מספר טלפון
+          </button>
+
+          <AnimatePresence>
+            {phoneLoginOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4 overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4"
+                dir="rtl"
+              >
+                <div id="recaptcha-container" />
+
+                {phoneStep === 'phone' ? (
+                  <form onSubmit={handleSendPhoneCode} className="space-y-3">
+                    <div className="relative">
+                      <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--theme-text-secondary)]" />
+                      <input
+                        type="tel"
+                        placeholder="050-0000000"
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          setPhoneNumber(e.target.value);
+                          setError('');
+                        }}
+                        className="w-full pr-11 pl-4 py-3 rounded-xl bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] text-[var(--theme-text)] placeholder:text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] outline-none transition-all text-sm"
+                        dir="ltr"
+                        inputMode="tel"
+                        autoComplete="tel"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          שלח קוד
+                          <ArrowLeft className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyPhoneCode} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="קוד בן 6 ספרות"
+                      value={otpCode}
+                      onChange={(e) => {
+                        setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                        setError('');
+                      }}
+                      className="w-full px-4 py-3 rounded-xl bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] text-[var(--theme-text)] placeholder:text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] outline-none transition-all text-sm text-center tracking-[0.3em]"
+                      dir="ltr"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          אמת והתחבר
+                          <ArrowLeft className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBackToPhoneNumber}
+                      disabled={isLoading}
+                      className="w-full py-2.5 rounded-xl text-sm font-medium text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all disabled:opacity-50"
+                    >
+                      חזור
+                    </button>
+                  </form>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Feature highlights */}
           <div className="mt-6 pt-5 border-t border-[var(--theme-border)]">
