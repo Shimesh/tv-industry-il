@@ -7,6 +7,7 @@ type ContactMin = {
   firstName?: string;
   lastName?: string;
   phone?: string | null;
+  department?: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
       firstName: c.firstName ?? '',
       lastName: c.lastName ?? '',
       phone: c.phone ?? '',
+      department: c.department ?? '',
     })),
   });
 }

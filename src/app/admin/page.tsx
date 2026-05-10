@@ -351,8 +351,9 @@ export default function AdminPage() {
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [availableContacts, setAvailableContacts] = useState<
-    { id: string; firstName: string; lastName: string; phone: string }[]
+    { id: string; firstName: string; lastName: string; phone: string; department: string }[]
   >([]);
+  const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
     events: [],
@@ -540,7 +541,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!user || !isAdmin) return;
-    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string }[] }>(
+    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; department: string }[] }>(
       '/api/admin/contacts-list',
     )
       .then((data) => { if (Array.isArray(data.contacts)) setAvailableContacts(data.contacts); })
@@ -945,7 +946,8 @@ export default function AdminPage() {
                               </div>
                             )}
                             <button
-                              onClick={() =>
+                              onClick={() => {
+                                setContactSearchTerm('');
                                 setEditModal({
                                   uid: entry.uid,
                                   displayName: entry.displayName ?? '',
@@ -953,8 +955,8 @@ export default function AdminPage() {
                                   department: entry.department ?? '',
                                   role: entry.role ?? '',
                                   forceContactId: '',
-                                })
-                              }
+                                });
+                              }}
                               className="mt-0.5 text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
                             >
                               ✏️ ערוך
@@ -1533,22 +1535,69 @@ export default function AdminPage() {
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              קשר לאיש קשר קיים (אופציונלי)
-              <select
-                value={editModal.forceContactId}
-                onChange={(e) => setEditModal((m) => m && { ...m, forceContactId: e.target.value })}
-                className="rounded-lg px-3 py-2 text-sm"
-                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
-              >
-                <option value="">-- ללא קישור חדש --</option>
-                {availableContacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {`${c.firstName} ${c.lastName}`.trim()}{c.phone ? ` - ${c.phone}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              <span>קשר לאיש קשר קיים (אופציונלי)</span>
+              {editModal.forceContactId && (() => {
+                const sel = availableContacts.find((c) => c.id === editModal.forceContactId);
+                return sel ? (
+                  <div className="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
+                    style={{ background: 'var(--theme-accent)20', border: '1px solid var(--theme-accent)', color: 'var(--theme-text-primary)' }}>
+                    <span>
+                      {sel.department ? `[${sel.department}] ` : ''}
+                      {`${sel.firstName} ${sel.lastName}`.trim()}
+                      {sel.phone ? ` - ${sel.phone}` : ''}
+                    </span>
+                    <button
+                      onClick={() => { setEditModal((m) => m && { ...m, forceContactId: '' }); setContactSearchTerm(''); }}
+                      className="mr-2 text-red-400 hover:text-red-300"
+                    >✕</button>
+                  </div>
+                ) : null;
+              })()}
+              {!editModal.forceContactId && (
+                <>
+                  <input
+                    value={contactSearchTerm}
+                    onChange={(e) => setContactSearchTerm(e.target.value)}
+                    placeholder="חפש לפי שם או טלפון..."
+                    dir="rtl"
+                    className="rounded-lg px-3 py-2 text-sm"
+                    style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                  />
+                  <div className="max-h-40 overflow-y-auto rounded-lg"
+                    style={{ border: '1px solid var(--theme-border)', background: 'var(--theme-bg-primary)' }}>
+                    {(() => {
+                      const term = contactSearchTerm.trim().toLowerCase();
+                      const filtered = availableContacts
+                        .filter((c) => {
+                          if (!term) return true;
+                          const name = `${c.firstName} ${c.lastName}`.toLowerCase();
+                          return name.includes(term) || c.phone.includes(term);
+                        })
+                        .sort((a, b) =>
+                          `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, 'he'),
+                        );
+                      if (!filtered.length) {
+                        return <p className="px-3 py-2 text-xs text-gray-500">לא נמצאו תוצאות</p>;
+                      }
+                      return filtered.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setEditModal((m) => m && { ...m, forceContactId: c.id })}
+                          className="block w-full px-3 py-2 text-right text-xs transition-colors hover:bg-white/5"
+                          style={{ color: 'var(--theme-text-primary)' }}
+                        >
+                          {c.department ? <span className="ml-1 text-gray-400">[{c.department}]</span> : null}
+                          {`${c.firstName} ${c.lastName}`.trim()}
+                          {c.phone ? <span className="mr-2 text-gray-400 text-[10px]"> - {c.phone}</span> : null}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <button
