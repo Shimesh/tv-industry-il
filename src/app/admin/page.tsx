@@ -934,33 +934,31 @@ export default function AdminPage() {
                                     שלח תזכורת
                                   </button>
                                 )}
-                                <div className="mt-1 flex gap-2">
-                                  <button
+                                <button
                                     onClick={() => void handleAutoLink(entry.uid)}
                                     disabled={autoLinkPending[entry.uid]}
-                                    className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
+                                    className="mt-1 text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
                                     title="חפש וקשר אוטומטית לאיש קשר"
                                   >
                                     {autoLinkPending[entry.uid] ? '...' : '🔗 קשר אוטומטית'}
                                   </button>
-                                  <button
-                                    onClick={() =>
-                                      setEditModal({
-                                        uid: entry.uid,
-                                        displayName: entry.displayName ?? '',
-                                        phone: entry.phone ?? '',
-                                        department: entry.department ?? '',
-                                        role: entry.role ?? '',
-                                        forceContactId: '',
-                                      })
-                                    }
-                                    className="text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
-                                  >
-                                    ✏️ ערוך
-                                  </button>
-                                </div>
                               </div>
                             )}
+                            <button
+                              onClick={() =>
+                                setEditModal({
+                                  uid: entry.uid,
+                                  displayName: entry.displayName ?? '',
+                                  phone: entry.phone ?? '',
+                                  department: entry.department ?? '',
+                                  role: entry.role ?? '',
+                                  forceContactId: '',
+                                })
+                              }
+                              className="mt-0.5 text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
+                            >
+                              ✏️ ערוך
+                            </button>
                             <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
                           </div>
                         </div>

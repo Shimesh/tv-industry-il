@@ -38,15 +38,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (contactId) {
-    const contactPatch: Record<string, string | boolean | null> = { updatedAt: now };
+    const contactPatch: Record<string, string | boolean | null> = {
+      updatedAt: now,
+      is_consented: true,
+      consentedAt: now,
+      consentedByUid: authUser.uid,
+    };
     if (body.phone !== undefined) contactPatch.phone = body.phone;
     if (body.department !== undefined) contactPatch.department = body.department;
     if (body.role !== undefined) contactPatch.role = body.role;
-    if (body.forceContactId) {
-      contactPatch.is_consented = true;
-      contactPatch.consentedAt = now;
-      contactPatch.consentedByUid = authUser.uid;
-    }
     await patchDocument(`contacts/${contactId}`, contactPatch);
   }
 
