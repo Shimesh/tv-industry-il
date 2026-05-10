@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
   Activity,
@@ -355,6 +356,7 @@ export default function AdminPage() {
     { id: string; firstName: string; lastName: string; phone: string; department: string }[]
   >([]);
   const [contactSearchTerm, setContactSearchTerm] = useState('');
+  const [showContactSearch, setShowContactSearch] = useState(false);
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
     events: [],
@@ -949,6 +951,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => {
                                 setContactSearchTerm('');
+                                setShowContactSearch(false);
                                 setEditModal({
                                   uid: entry.uid,
                                   displayName: entry.displayName ?? '',
@@ -1481,11 +1484,11 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Edit Profile Modal */}
-    {editModal && (
-      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 p-4">
+      {/* Edit Profile Modal — rendered via portal to escape stacking context */}
+    {editModal && createPortal(
+      <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4">
         <div
-          className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-xl"
+          className="w-full max-w-md rounded-xl p-6 shadow-xl"
           style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
         >
           <h3 className="mb-4 text-lg font-bold" style={{ color: 'var(--theme-text-primary)' }}>
@@ -1542,9 +1545,7 @@ export default function AdminPage() {
               const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : editModal.linkedContactId;
               return (
                 <Link
-                  href={`/directory?id=${editModal.linkedContactId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`/directory?search=${encodeURIComponent(name)}`}
                   className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs transition-colors hover:opacity-80"
                   style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-secondary)' }}
                 >
@@ -1555,9 +1556,9 @@ export default function AdminPage() {
                 </Link>
               );
             })()}
-            <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              <span>קשר לאיש קשר קיים (אופציונלי)</span>
-              {editModal.forceContactId && (() => {
+            {/* Contact picker — hidden behind toggle to keep modal compact */}
+            {editModal.forceContactId ? (
+              (() => {
                 const sel = availableContacts.find((c) => c.id === editModal.forceContactId);
                 return sel ? (
                   <div className="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
@@ -1568,56 +1569,70 @@ export default function AdminPage() {
                       {sel.phone ? ` - ${sel.phone}` : ''}
                     </span>
                     <button
-                      onClick={() => { setEditModal((m) => m && { ...m, forceContactId: '' }); setContactSearchTerm(''); }}
+                      onClick={() => { setEditModal((m) => m && { ...m, forceContactId: '' }); setContactSearchTerm(''); setShowContactSearch(false); }}
                       className="mr-2 text-red-400 hover:text-red-300"
                     >✕</button>
                   </div>
                 ) : null;
-              })()}
-              {!editModal.forceContactId && (
-                <>
-                  <input
-                    value={contactSearchTerm}
-                    onChange={(e) => setContactSearchTerm(e.target.value)}
-                    placeholder="חפש לפי שם או טלפון..."
-                    dir="rtl"
-                    className="rounded-lg px-3 py-2 text-sm"
-                    style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
-                  />
-                  <div className="max-h-40 overflow-y-auto rounded-lg"
-                    style={{ border: '1px solid var(--theme-border)', background: 'var(--theme-bg-primary)' }}>
-                    {(() => {
-                      const term = contactSearchTerm.trim().toLowerCase();
-                      const filtered = availableContacts
-                        .filter((c) => {
-                          if (!term) return true;
-                          const name = `${c.firstName} ${c.lastName}`.toLowerCase();
-                          return name.includes(term) || c.phone.includes(term);
-                        })
-                        .sort((a, b) =>
-                          `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, 'he'),
-                        );
-                      if (!filtered.length) {
-                        return <p className="px-3 py-2 text-xs text-gray-500">לא נמצאו תוצאות</p>;
-                      }
-                      return filtered.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setEditModal((m) => m && { ...m, forceContactId: c.id })}
-                          className="block w-full px-3 py-2 text-right text-xs transition-colors hover:bg-white/5"
-                          style={{ color: 'var(--theme-text-primary)' }}
-                        >
-                          {c.department ? <span className="ml-1 text-gray-400">[{c.department}]</span> : null}
-                          {`${c.firstName} ${c.lastName}`.trim()}
-                          {c.phone ? <span className="mr-2 text-gray-400 text-[10px]"> - {c.phone}</span> : null}
-                        </button>
-                      ));
-                    })()}
-                  </div>
-                </>
-              )}
-            </div>
+              })()
+            ) : !showContactSearch ? (
+              <button
+                type="button"
+                onClick={() => setShowContactSearch(true)}
+                className="text-right text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300"
+              >
+                🔗 קשר לאיש קשר אחר / שנה קישור
+              </button>
+            ) : (
+              <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                <div className="flex items-center justify-between">
+                  <span>קשר לאיש קשר קיים</span>
+                  <button
+                    onClick={() => { setShowContactSearch(false); setContactSearchTerm(''); }}
+                    className="text-xs text-red-400 hover:text-red-300"
+                  >ביטול</button>
+                </div>
+                <input
+                  value={contactSearchTerm}
+                  onChange={(e) => setContactSearchTerm(e.target.value)}
+                  placeholder="חפש לפי שם או טלפון..."
+                  dir="rtl"
+                  className="rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                />
+                <div className="max-h-40 overflow-y-auto rounded-lg"
+                  style={{ border: '1px solid var(--theme-border)', background: 'var(--theme-bg-primary)' }}>
+                  {(() => {
+                    const term = contactSearchTerm.trim().toLowerCase();
+                    const filtered = availableContacts
+                      .filter((c) => {
+                        if (!term) return true;
+                        const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
+                        return fullName.includes(term) || c.phone.includes(term);
+                      })
+                      .sort((a, b) =>
+                        `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, 'he'),
+                      );
+                    if (!filtered.length) {
+                      return <p className="px-3 py-2 text-xs text-gray-500">לא נמצאו תוצאות</p>;
+                    }
+                    return filtered.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => { setEditModal((m) => m && { ...m, forceContactId: c.id }); setShowContactSearch(false); setContactSearchTerm(''); }}
+                        className="block w-full px-3 py-2 text-right text-xs transition-colors hover:bg-white/5"
+                        style={{ color: 'var(--theme-text-primary)' }}
+                      >
+                        {c.department ? <span className="ml-1 text-gray-400">[{c.department}]</span> : null}
+                        {`${c.firstName} ${c.lastName}`.trim()}
+                        {c.phone ? <span className="mr-2 text-gray-400 text-[10px]"> - {c.phone}</span> : null}
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <button
@@ -1637,7 +1652,8 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body,
     )}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
@@ -112,6 +112,11 @@ function DirectoryContent() {
   } = useAppData();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('search');
+    if (q) setSearch(q);
+  }, []);
   const [workAreaFilter, setWorkAreaFilter] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
