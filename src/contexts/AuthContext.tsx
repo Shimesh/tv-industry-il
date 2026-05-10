@@ -322,12 +322,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // Silently refresh FCM token whenever a consented user opens the app
+  // Register FCM token for consented users — permission-aware
   useEffect(() => {
     if (!user || !profile?.termsAccepted) return;
-    import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
-      void registerFcmToken(user.uid);
-    }).catch(() => undefined);
+    if (typeof window === 'undefined') return;
+
+    const uid = user.uid;
+
+    if (Notification.permission === 'granted') {
+      import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
+        void registerFcmToken(uid);
+      }).catch(() => undefined);
+      return;
+    }
+
+    if (Notification.permission === 'default') {
+      const handleGesture = () => {
+        import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
+          void registerFcmToken(uid);
+        }).catch(() => undefined);
+      };
+      document.addEventListener('click', handleGesture, { capture: true, once: true });
+      return () => document.removeEventListener('click', handleGesture, true);
+    }
+    // 'denied' — do nothing
   }, [user?.uid, profile?.termsAccepted]);
 
   const signIn = async (email: string, password: string) => {
