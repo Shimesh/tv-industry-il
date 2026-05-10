@@ -348,6 +348,7 @@ export default function AdminPage() {
     department: string;
     role: string;
     forceContactId: string;
+    linkedContactId: string | null;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [availableContacts, setAvailableContacts] = useState<
@@ -955,6 +956,7 @@ export default function AdminPage() {
                                   department: entry.department ?? '',
                                   role: entry.role ?? '',
                                   forceContactId: '',
+                                  linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
                                 });
                               }}
                               className="mt-0.5 text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
@@ -1481,9 +1483,9 @@ export default function AdminPage() {
 
       {/* Edit Profile Modal */}
     {editModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 p-4">
         <div
-          className="w-full max-w-md rounded-xl p-6 shadow-xl"
+          className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-xl"
           style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
         >
           <h3 className="mb-4 text-lg font-bold" style={{ color: 'var(--theme-text-primary)' }}>
@@ -1535,6 +1537,24 @@ export default function AdminPage() {
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               />
             </label>
+            {editModal.linkedContactId && (() => {
+              const linked = availableContacts.find((c) => c.id === editModal.linkedContactId);
+              const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : editModal.linkedContactId;
+              return (
+                <Link
+                  href={`/directory?id=${editModal.linkedContactId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs transition-colors hover:opacity-80"
+                  style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-secondary)' }}
+                >
+                  <span className="h-2 w-2 rounded-full bg-green-400 shrink-0" />
+                  <span>מקושר כרגע אל:</span>
+                  <span className="font-medium" style={{ color: 'var(--theme-text-primary)' }}>{name}</span>
+                  <span className="mr-auto text-[10px] opacity-60">↗</span>
+                </Link>
+              );
+            })()}
             <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
               <span>קשר לאיש קשר קיים (אופציונלי)</span>
               {editModal.forceContactId && (() => {
