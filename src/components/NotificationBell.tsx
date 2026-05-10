@@ -34,7 +34,7 @@ const typeColors: Record<string, string> = {
   crew_assignment: '#3b82f6',
   file_upload: '#22c55e',
   status_change: '#a855f7',
-  general: '#6b7280',
+  general: 'var(--theme-text-secondary)',
   bug_report: '#f59e0b',
 };
 
@@ -216,7 +216,7 @@ export default function NotificationBell() {
                         <button
                           type="button"
                           onClick={() => void markAsRead(notification.id)}
-                          className="mt-1 rounded-full p-1 text-[var(--theme-accent)] hover:bg-white/10"
+                          className="mt-1 rounded-full p-1 text-[var(--theme-accent)] hover:bg-[var(--theme-accent-glow)]"
                           title="סמן כנקרא"
                           aria-label="סמן כנקרא"
                         >

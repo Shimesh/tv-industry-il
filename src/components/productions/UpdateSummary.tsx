@@ -41,7 +41,7 @@ export default function UpdateSummary({ diff, onDismiss }: UpdateSummaryProps) {
             {diff.changes.length} שינויים
           </span>
         </div>
-        <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
+        <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-[var(--theme-accent-glow)] transition-colors">
           <X className="w-4 h-4 text-green-400/60" />
         </button>
       </div>

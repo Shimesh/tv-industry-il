@@ -401,7 +401,7 @@ body.accessibility-high-contrast .gradient-text-warm {
 /* Thin custom scrollbar for dark UI */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.08) transparent;
+  scrollbar-color: var(--theme-border) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -413,12 +413,12 @@ body.accessibility-high-contrast .gradient-text-warm {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--theme-border);
   border-radius: 2px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.15);
+  background: color-mix(in srgb, var(--theme-text-secondary) 45%, transparent);
 }
 
 /* Chat bubble animations */

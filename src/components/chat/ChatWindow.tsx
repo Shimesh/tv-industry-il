@@ -327,13 +327,13 @@ export default function ChatWindow({
   }, [filteredMessages]);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0B141A] h-full relative">
-      <div className="flex items-center gap-3 px-4 py-[10px] bg-[#202C33] border-b border-[#2A3942] shrink-0" dir="rtl">
+    <div className="relative flex h-full flex-1 flex-col" style={{ background: 'var(--theme-bg)' }}>
+      <div className="flex shrink-0 items-center gap-3 border-b px-4 py-[10px]" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
         <button
           onClick={onBack}
-          className="lg:hidden p-1.5 -mr-1 rounded-full hover:bg-[#2A3942] transition-colors"
+          className="-mr-1 rounded-full p-1.5 transition-colors hover:bg-[var(--theme-accent-glow)] lg:hidden"
         >
-          <ArrowRight className="w-5 h-5 text-[#AEBAC1]" />
+          <ArrowRight className="h-5 w-5 text-[var(--theme-text-secondary)]" />
         </button>
 
         {(() => {
@@ -347,13 +347,13 @@ export default function ChatWindow({
               ) : (
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: isGroup ? '#00A884' : '#6B7C85' }}
+                  style={{ backgroundColor: isGroup ? 'var(--theme-accent)' : 'var(--theme-text-secondary)' }}
                 >
                   {chatName.charAt(0)}
                 </div>
               )}
               {isOtherOnline && (
-                <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full bg-[#00A884] border-2 border-[#202C33]" />
+                <span className="absolute bottom-0 left-0 h-[11px] w-[11px] rounded-full border-2 bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg-secondary)' }} />
               )}
             </div>
           );
@@ -361,14 +361,14 @@ export default function ChatWindow({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <h3 className="text-[15px] font-medium text-[#E9EDEF] truncate">{chatName}</h3>
+            <h3 className="truncate text-[15px] font-medium text-[var(--theme-text)]">{chatName}</h3>
             <span title="צ׳אט מוגן">
-              <Lock className="w-3 h-3 text-[#00A884] shrink-0" />
+              <Lock className="h-3 w-3 shrink-0 text-[var(--theme-accent)]" />
             </span>
           </div>
-          <p className="text-[12px] text-[#8696a0]">
+          <p className="text-[12px] text-[var(--theme-text-secondary)]">
             {typingUsers.length > 0 ? (
-              <span className="text-[#00A884]">{typingUsers.join(', ')} מקליד/ה...</span>
+              <span className="text-[var(--theme-accent)]">{typingUsers.join(', ')} מקליד/ה...</span>
             ) : isGroup ? (
               `${chat.members.length} משתתפים`
             ) : (
@@ -383,7 +383,7 @@ export default function ChatWindow({
           </span>
         )}
 
-        <span className="hidden xl:inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-[#AEBAC1]">
+        <span className="hidden rounded-full border px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] xl:inline-flex" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
           {signalingMode === 'socket-ready' ? 'שיחות מוכנות דרך Socket.IO' : 'שיחות דרך Firestore'}
         </span>
 
@@ -392,18 +392,18 @@ export default function ChatWindow({
             <button
               onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'voice')}
               disabled={!canCall}
-              className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-full p-2 transition-colors hover:bg-[var(--theme-accent-glow)] disabled:cursor-not-allowed disabled:opacity-40"
               title="שיחת קול"
             >
-              <Phone className="w-5 h-5 text-[#AEBAC1]" />
+              <Phone className="h-5 w-5 text-[var(--theme-text-secondary)]" />
             </button>
             <button
               onClick={() => startCall(otherMember.uid!, otherMember.displayName, 'video')}
               disabled={!canCall}
-              className="p-2 rounded-full hover:bg-[#2A3942] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-full p-2 transition-colors hover:bg-[var(--theme-accent-glow)] disabled:cursor-not-allowed disabled:opacity-40"
               title="שיחת וידאו"
             >
-              <Video className="w-5 h-5 text-[#AEBAC1]" />
+              <Video className="h-5 w-5 text-[var(--theme-text-secondary)]" />
             </button>
           </>
         )}
@@ -413,7 +413,7 @@ export default function ChatWindow({
             setShowSearch((s) => !s);
             setSearchQuery('');
           }}
-          className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-[#2A3942] text-[#00A884]' : 'hover:bg-[#2A3942] text-[#AEBAC1]'}`}
+          className={`rounded-full p-2 transition-colors ${showSearch ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)]'}`}
         >
           <Search className="w-5 h-5" />
         </button>
@@ -428,15 +428,16 @@ export default function ChatWindow({
       )}
 
       {showSearch && (
-        <div className="px-4 py-3 bg-[#202C33] border-b border-[#2A3942]">
+        <div className="border-b px-4 py-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
           <div className="relative">
-            <Search className="w-4 h-4 text-[#8696a0] absolute right-3 top-1/2 -translate-y-1/2" />
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--theme-text-secondary)]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="חיפוש בהודעות..."
-              className="w-full bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696a0] rounded-lg pr-10 pl-4 py-2.5 outline-none"
+              className="w-full rounded-lg border pr-10 pl-4 py-2.5 text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-text-secondary)]"
+              style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
               dir="rtl"
             />
           </div>
@@ -449,24 +450,25 @@ export default function ChatWindow({
         dir="ltr"
         onScroll={handleScroll}
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          background:
+            'radial-gradient(circle at 20% 10%, var(--theme-accent-glow), transparent 18rem), var(--theme-bg)',
         }}
       >
         {loadingMore && (
           <div className="flex justify-center py-3">
-            <div className="w-5 h-5 border-2 border-[#00A884] border-t-transparent rounded-full animate-spin" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--theme-accent)] border-t-transparent" />
           </div>
         )}
         {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-20 h-20 rounded-full bg-[#00A88415] flex items-center justify-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--theme-accent-glow)]">
               {searchQuery.trim() ? (
-                <Search className="w-8 h-8 text-[#8696a0]" />
+                <Search className="h-8 w-8 text-[var(--theme-text-secondary)]" />
               ) : (
-                <Send className="w-8 h-8 text-[#00A884]" />
+                <Send className="h-8 w-8 text-[var(--theme-accent)]" />
               )}
             </div>
-            <p className="text-[14px] text-[#8696a0]" dir="rtl">
+            <p className="text-[14px] text-[var(--theme-text-secondary)]" dir="rtl">
               {searchQuery.trim() ? `אין תוצאות עבור "${searchQuery}"` : 'שלחו את ההודעה הראשונה'}
             </p>
           </div>
@@ -474,7 +476,7 @@ export default function ChatWindow({
           groupedMessages.map((group) => (
             <div key={group.date}>
               <div className="flex justify-center my-3">
-                <span className="text-[12.5px] px-3 py-[5px] rounded-[7.5px] bg-[#182229] text-[#8696a0e6] shadow-sm">
+                <span className="rounded-[7.5px] border px-3 py-[5px] text-[12.5px] shadow-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
                   {group.date}
                 </span>
               </div>
@@ -510,11 +512,11 @@ export default function ChatWindow({
 
         {typingUsers.length > 0 && (
           <div className="flex justify-start px-[4.5%] mb-1">
-            <div className="bg-[#202C33] rounded-[7.5px] rounded-tl-[0px] px-3 py-2 shadow-sm">
+            <div className="rounded-[7.5px] rounded-tl-[0px] px-3 py-2 shadow-sm" style={{ background: 'var(--theme-bg-card)' }}>
               <div className="flex gap-1 items-center">
-                <span className="w-2 h-2 rounded-full bg-[#8696a0] animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 rounded-full bg-[#8696a0] animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 rounded-full bg-[#8696a0] animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--theme-text-secondary)]" style={{ animationDelay: '0ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--theme-text-secondary)]" style={{ animationDelay: '150ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--theme-text-secondary)]" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -524,19 +526,19 @@ export default function ChatWindow({
       </div>
 
       {replyTo && !isRecording && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
-          <div className="flex-1 min-w-0 border-r-[3px] border-[#00A884] pr-3">
-            <p className="text-[12px] font-medium text-[#00A884]">{replyTo.senderName}</p>
-            <p className="text-[12px] text-[#8696a0] truncate">{getReplyPreviewText(replyTo)}</p>
+        <div className="flex items-center gap-3 border-t px-4 py-2" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
+          <div className="min-w-0 flex-1 border-r-[3px] pr-3" style={{ borderColor: 'var(--theme-accent)' }}>
+            <p className="text-[12px] font-medium text-[var(--theme-accent)]">{replyTo.senderName}</p>
+            <p className="truncate text-[12px] text-[var(--theme-text-secondary)]">{getReplyPreviewText(replyTo)}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-[#2A3942] rounded-full transition-colors">
-            <X className="w-4 h-4 text-[#8696a0]" />
+          <button onClick={() => setReplyTo(null)} className="rounded-full p-1 transition-colors hover:bg-[var(--theme-accent-glow)]">
+            <X className="h-4 w-4 text-[var(--theme-text-secondary)]" />
           </button>
         </div>
       )}
 
       {showEmoji && !isRecording && (
-        <div className="bg-[#202C33] border-t border-[#2A3942] p-3" dir="rtl">
+        <div className="border-t p-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <div className="grid grid-cols-10 gap-1 max-h-[120px] overflow-y-auto">
             {EMOJI_LIST.map((emoji) => (
               <button
@@ -545,7 +547,7 @@ export default function ChatWindow({
                   setText((prev) => prev + emoji);
                   inputRef.current?.focus();
                 }}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#2A3942] text-lg transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded text-lg transition-colors hover:bg-[var(--theme-accent-glow)]"
               >
                 {emoji}
               </button>
@@ -555,39 +557,39 @@ export default function ChatWindow({
       )}
 
       {showAttach && !isRecording && (
-        <div className="bg-[#202C33] border-t border-[#2A3942] p-3 flex gap-4 justify-center" dir="rtl">
+        <div className="flex justify-center gap-4 border-t p-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <button
             onClick={() => imageInputRef.current?.click()}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[#2A3942] transition-colors"
+            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
           >
             <div className="w-12 h-12 rounded-full bg-[#BF59CF] flex items-center justify-center">
               <ImageIcon className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">תמונה</span>
+            <span className="text-[11px] text-[var(--theme-text-secondary)]">תמונה</span>
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[#2A3942] transition-colors"
+            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
           >
             <div className="w-12 h-12 rounded-full bg-[#5157AE] flex items-center justify-center">
               <FileText className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">מסמך</span>
+            <span className="text-[11px] text-[var(--theme-text-secondary)]">מסמך</span>
           </button>
           <button
             onClick={handleStartVideo}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[#2A3942] transition-colors"
+            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
           >
             <div className="w-12 h-12 rounded-full bg-[#E03E3E] flex items-center justify-center">
               <VideoIcon className="w-6 h-6 text-white" />
             </div>
-            <span className="text-[11px] text-[#8696a0]">וידאו</span>
+            <span className="text-[11px] text-[var(--theme-text-secondary)]">וידאו</span>
           </button>
         </div>
       )}
 
       {isRecording && recordingMode === 'video' && (
-        <div className="bg-[#111B21] border-t border-[#2A3942] p-2 flex justify-center">
+        <div className="flex justify-center border-t p-2" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
           <video
             ref={videoPreviewRef}
             muted
@@ -621,12 +623,12 @@ export default function ChatWindow({
       />
 
       {uploadProgress !== null && (
-        <div className="px-4 py-1.5 bg-[#1A2731] border-t border-[#2A3942]" dir="rtl">
+        <div className="border-t px-4 py-1.5" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#8696a0] shrink-0">מעלה... {uploadProgress}%</span>
-            <div className="flex-1 h-1 rounded-full bg-[#2A3942] overflow-hidden">
+            <span className="shrink-0 text-[11px] text-[var(--theme-text-secondary)]">מעלה... {uploadProgress}%</span>
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--theme-border)]">
               <div
-                className="h-full rounded-full bg-[#00A884] transition-all duration-200"
+                className="h-full rounded-full bg-[var(--theme-accent)] transition-all duration-200"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -635,38 +637,38 @@ export default function ChatWindow({
       )}
 
       {isRecording ? (
-        <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">
+        <div className="flex items-center gap-3 border-t px-4 py-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <button
             onClick={handleCancelRecording}
-            className="p-2 rounded-full bg-[#2A3942] hover:bg-[#3A4952] transition-colors shrink-0"
+            className="shrink-0 rounded-full bg-[var(--theme-bg-card)] p-2 transition-colors hover:bg-[var(--theme-accent-glow)]"
             title="ביטול"
           >
-            <X className="w-5 h-5 text-[#8696a0]" />
+            <X className="h-5 w-5 text-[var(--theme-text-secondary)]" />
           </button>
 
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-full bg-[#2A3942]">
+          <div className="flex flex-1 items-center gap-2 rounded-full bg-[var(--theme-bg-card)] px-3 py-2">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-            <span className="text-[13px] text-[#E9EDEF] font-medium">
+            <span className="text-[13px] font-medium text-[var(--theme-text)]">
               {recordingMode === 'video' ? 'וידאו' : 'קול'} מקליט... {formatRecordingDuration(duration)}
             </span>
           </div>
 
           <button
             onClick={handleStopAndSend}
-            className="p-2.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] transition-colors shrink-0"
+            className="shrink-0 rounded-full bg-[var(--theme-accent)] p-2.5 text-white transition-colors hover:opacity-90"
             title="שלח"
           >
-            <Send className="w-5 h-5 text-[#111B21]" />
+            <Send className="h-5 w-5" />
           </button>
         </div>
       ) : (
-        <div className="flex items-end gap-2 px-3 py-2 bg-[#202C33] border-t border-[#2A3942]" dir="rtl">
+        <div className="flex items-end gap-2 border-t px-3 py-2" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <button
             onClick={() => {
               setShowEmoji(!showEmoji);
               setShowAttach(false);
             }}
-            className={`p-2 rounded-full transition-colors shrink-0 ${showEmoji ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
+            className={`shrink-0 rounded-full p-2 transition-colors ${showEmoji ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)]'}`}
           >
             <Smile className="w-6 h-6" />
           </button>
@@ -676,7 +678,7 @@ export default function ChatWindow({
               setShowAttach(!showAttach);
               setShowEmoji(false);
             }}
-            className={`p-2 rounded-full transition-colors shrink-0 ${showAttach ? 'text-[#00A884]' : 'text-[#8696a0] hover:text-[#E9EDEF]'}`}
+            className={`shrink-0 rounded-full p-2 transition-colors ${showAttach ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)]'}`}
           >
             <Paperclip className="w-6 h-6" />
           </button>
@@ -690,22 +692,22 @@ export default function ChatWindow({
               placeholder="הקלד הודעה"
               rows={1}
               dir="auto"
-              className="w-full px-3 py-[9px] rounded-lg text-[14px] text-[#E9EDEF] bg-[#2A3942] placeholder:text-[#8696a0] outline-none resize-none leading-[20px] max-h-[120px]"
-              style={{ scrollbarWidth: 'none' }}
+              className="max-h-[120px] w-full resize-none rounded-lg border px-3 py-[9px] text-[14px] leading-[20px] text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-text-secondary)]"
+              style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', scrollbarWidth: 'none' }}
             />
           </div>
 
           {text.trim() ? (
             <button
               onClick={handleSend}
-              className="p-2.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] transition-colors shrink-0"
+              className="shrink-0 rounded-full bg-[var(--theme-accent)] p-2.5 text-white transition-colors hover:opacity-90"
             >
-              <Send className="w-5 h-5 text-[#111B21]" />
+              <Send className="h-5 w-5" />
             </button>
           ) : (
             <button
               onClick={handleStartVoice}
-              className="p-2 rounded-full text-[#8696a0] hover:text-[#E9EDEF] hover:bg-[#2A3942] transition-colors shrink-0"
+              className="shrink-0 rounded-full p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
               title="לחץ להקלטת הודעה קולית"
             >
               <Mic className="w-6 h-6" />

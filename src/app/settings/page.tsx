@@ -218,7 +218,7 @@ function SettingsContent() {
             </div>
             <button
               onClick={handleToggleOpenToWork}
-              className={`relative w-11 h-6 rounded-full transition-colors ${profile.openToWork ? 'bg-[var(--theme-accent)]' : 'bg-gray-600'}`}
+              className={`relative w-11 h-6 rounded-full transition-colors ${profile.openToWork ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${profile.openToWork ? 'right-0.5' : 'right-[22px]'}`} />
             </button>
@@ -378,7 +378,7 @@ function SettingsContent() {
         {/* App Info */}
         <div className="text-center py-4">
           <p className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
-            TV Industry IL v1.0.1
+            TV Industry IL v1.8.6
           </p>
         </div>
       </div>
@@ -416,7 +416,7 @@ function ToggleRow({
       </div>
       <button
         onClick={onToggle}
-        className={`relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-[var(--theme-accent)]' : 'bg-gray-600'}`}
+        className={`relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]'}`}
       >
         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'right-0.5' : 'right-[22px]'}`} />
       </button>

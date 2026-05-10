@@ -430,30 +430,30 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4 pointer-events-auto">
           {/* Settings panel */}
           {showSettings && (
-            <div className="mb-3 bg-black/80 backdrop-blur-sm rounded-xl p-4 text-white text-sm border border-white/10">
+            <div className="mb-3 rounded-xl border p-4 text-sm backdrop-blur-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block mb-1.5 text-gray-400 text-xs">בהירות</label>
+                  <label className="block mb-1.5 text-xs text-[var(--theme-text-secondary)]">בהירות</label>
                   <input
                     type="range" min="50" max="150" value={brightness}
                     onChange={e => setBrightness(Number(e.target.value))}
                     className="w-full accent-blue-500 h-1"
                   />
-                  <span className="text-[10px] text-gray-500">{brightness}%</span>
+                  <span className="text-[10px] text-[var(--theme-text-secondary)]">{brightness}%</span>
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-gray-400 text-xs">קונטרסט</label>
+                  <label className="block mb-1.5 text-xs text-[var(--theme-text-secondary)]">קונטרסט</label>
                   <input
                     type="range" min="50" max="150" value={contrast}
                     onChange={e => setContrast(Number(e.target.value))}
                     className="w-full accent-blue-500 h-1"
                   />
-                  <span className="text-[10px] text-gray-500">{contrast}%</span>
+                  <span className="text-[10px] text-[var(--theme-text-secondary)]">{contrast}%</span>
                 </div>
               </div>
               <button
                 onClick={() => { setBrightness(100); setContrast(100); }}
-                className="mt-2 text-[10px] text-gray-400 hover:text-white transition-colors"
+                className="mt-2 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:text-[var(--theme-text)]"
               >
                 אפס הגדרות
               </button>

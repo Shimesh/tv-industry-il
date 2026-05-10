@@ -142,7 +142,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
               {formatHebrewDate(dateStr, dayIndex)}
             </span>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 transition-colors hover:bg-white/10" aria-label="סגור">
+          <button onClick={onClose} className="rounded-lg p-1 transition-colors hover:bg-[var(--theme-accent-glow)]" aria-label="סגור">
             <X className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
           </button>
         </div>
@@ -152,11 +152,11 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
             const mine = isMyProduction(production, displayName, phone);
             const myRole = mine ? getMyRole(production, displayName, phone) : '';
             return (
-              <div key={production.id} className="px-4 py-3" style={mine ? { background: 'rgba(251, 146, 60, 0.08)' } : undefined}>
+              <div key={production.id} className="px-4 py-3" style={mine ? { background: 'color-mix(in srgb, var(--theme-warning) 12%, transparent)' } : undefined}>
                 <div className="flex items-start gap-2">
                   {mine && <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />}
                   <div className={`flex-1 ${mine ? '' : 'pr-3.5'}`}>
-                    <p className="text-sm font-bold leading-tight" style={{ color: mine ? 'rgb(251,146,60)' : 'var(--theme-text)' }}>
+                    <p className="text-sm font-bold leading-tight" style={{ color: mine ? 'var(--theme-warning)' : 'var(--theme-text)' }}>
                       {production.name}
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
@@ -345,8 +345,8 @@ export default function WeeklyCalendarWidget() {
       key={production.id}
       className="rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
       style={{
-        background: mine ? 'rgba(251, 146, 60, 0.22)' : 'rgba(255,255,255,0.05)',
-        color: mine ? 'rgb(251,146,60)' : 'var(--theme-text-secondary)',
+        background: mine ? 'color-mix(in srgb, var(--theme-warning) 22%, transparent)' : 'var(--theme-bg-secondary)',
+        color: mine ? 'var(--theme-warning)' : 'var(--theme-text-secondary)',
         opacity: isPast ? 0.65 : 1,
       }}
     >
@@ -380,19 +380,19 @@ export default function WeeklyCalendarWidget() {
           </div>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע קודם">
+            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-[var(--theme-accent-glow)]" title="שבוע קודם">
               <ChevronRight className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
             {!isCurrentWeek && (
               <button
                 onClick={() => setWeekOffset(0)}
                 className="rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors hover:opacity-80"
-                style={{ background: 'rgba(139,92,246,0.15)', color: 'var(--theme-accent)' }}
+                style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
               >
                 היום
               </button>
             )}
-            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-white/10" title="שבוע הבא">
+            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-[var(--theme-accent-glow)]" title="שבוע הבא">
               <ChevronLeft className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
             </button>
             <div className="mx-1 h-4 w-px opacity-20" style={{ background: 'var(--theme-border)' }} />
@@ -420,7 +420,7 @@ export default function WeeklyCalendarWidget() {
                 onClick={() => dayProds.length > 0 && setPopupDate(dateStr)}
                 className="relative flex flex-col items-center gap-1.5 px-1 py-3 transition-colors"
                 style={{
-                  background: isMyDay ? 'rgba(251, 146, 60, 0.10)' : isToday ? 'rgba(139, 92, 246, 0.06)' : 'transparent',
+                  background: isMyDay ? 'color-mix(in srgb, var(--theme-warning) 12%, transparent)' : isToday ? 'var(--theme-accent-glow)' : 'transparent',
                   borderLeft: index < 6 ? '1px solid var(--theme-border)' : undefined,
                   cursor: dayProds.length > 0 ? 'pointer' : 'default',
                 }}
@@ -430,7 +430,7 @@ export default function WeeklyCalendarWidget() {
                 <span
                   className="text-[10px] font-bold"
                   style={{
-                    color: isMyDay ? 'rgb(251,146,60)' : isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
+                    color: isMyDay ? 'var(--theme-warning)' : isToday ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
                     opacity: isPast && !isToday && !isMyDay ? 0.4 : 1,
                   }}
                 >
@@ -439,7 +439,7 @@ export default function WeeklyCalendarWidget() {
                 <div
                   className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black transition-all ${isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-sm' : ''}`}
                   style={!isToday ? {
-                    color: isMyDay ? 'rgb(251,146,60)' : isPast ? 'var(--theme-text-secondary)' : 'var(--theme-text)',
+                    color: isMyDay ? 'var(--theme-warning)' : isPast ? 'var(--theme-text-secondary)' : 'var(--theme-text)',
                     opacity: isPast && !isMyDay ? 0.4 : 1,
                   } : undefined}
                 >
@@ -455,7 +455,7 @@ export default function WeeklyCalendarWidget() {
                       {myProdsToday.slice(0, 3).map((production) => renderProductionChip(production, true, isPast))}
                       {otherProdsToday.slice(0, isMyDay ? 1 : 2).map((production) => renderProductionChip(production, false, isPast))}
                       {dayProds.length > myProdsToday.slice(0, 3).length + otherProdsToday.slice(0, isMyDay ? 1 : 2).length && (
-                        <span className="text-center text-[9px] font-semibold" style={{ color: isMyDay ? 'rgb(251,146,60)' : 'var(--theme-accent)', opacity: 0.7 }}>
+                        <span className="text-center text-[9px] font-semibold" style={{ color: isMyDay ? 'var(--theme-warning)' : 'var(--theme-accent)', opacity: 0.7 }}>
                           +{dayProds.length - myProdsToday.slice(0, 3).length - otherProdsToday.slice(0, isMyDay ? 1 : 2).length}
                         </span>
                       )}

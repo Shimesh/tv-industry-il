@@ -35,7 +35,7 @@ function ChannelCard({
   return (
     <button
       onClick={onSelect}
-      className={`group w-full rounded-lg p-2.5 text-right transition-all duration-200 ${isSelected ? 'ring-1' : 'hover:bg-white/[0.04]'}`}
+      className={`group w-full rounded-lg p-2.5 text-right transition-all duration-200 ${isSelected ? 'ring-1' : 'hover:bg-[var(--theme-accent-glow)]'}`}
       style={{
         backgroundColor: isSelected ? `${channel.color}15` : 'transparent',
         ...(isSelected
@@ -52,17 +52,17 @@ function ChannelCard({
       <div className="flex items-center gap-2.5">
         <div className="relative shrink-0">
           <span className="text-xl">{channel.logo}</span>
-          {hasLive && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-[#13131a] bg-green-400" />}
+          {hasLive && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg)' }} />}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`truncate text-sm font-bold ${isSelected ? 'text-white' : 'text-white/70 group-hover:text-white/90'}`}>
+            <span className={`truncate text-sm font-bold ${isSelected ? 'text-[var(--theme-text)]' : 'text-[var(--theme-text-secondary)] group-hover:text-[var(--theme-text)]'}`}>
               {channel.name}
             </span>
-            {channel.number > 0 && <span className="shrink-0 text-[10px] text-white/30">{channel.number}</span>}
+            {channel.number > 0 && <span className="shrink-0 text-[10px] text-[var(--theme-text-secondary)] opacity-70">{channel.number}</span>}
           </div>
-          <p className={`mt-0.5 truncate text-[11px] ${isSelected ? 'text-white/50' : 'text-white/30'}`}>{statusLabel}</p>
+          <p className="mt-0.5 truncate text-[11px] text-[var(--theme-text-secondary)] opacity-80">{statusLabel}</p>
         </div>
 
         {hasLive && <span className="shrink-0 rounded bg-green-400/10 px-1.5 py-0.5 text-[9px] font-bold text-green-400">LIVE</span>}
@@ -84,7 +84,7 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile, b
               onClick={() => onSelectChannel(channel.id)}
               className={`flex shrink-0 flex-col items-center gap-1 rounded-lg px-3 py-2 transition-all ${isSelected ? 'ring-1' : ''}`}
               style={{
-                backgroundColor: isSelected ? `${channel.color}20` : 'rgba(255,255,255,0.04)',
+                backgroundColor: isSelected ? `${channel.color}20` : 'var(--theme-bg-card)',
                 ...(isSelected ? { border: `1px solid ${channel.color}40` } : { border: '1px solid transparent' }),
               }}
             >
@@ -92,7 +92,7 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile, b
                 <span className="text-lg">{channel.logo}</span>
                 {stream?.hasLiveStream && <span className="absolute -right-1 -top-0.5 h-1.5 w-1.5 rounded-full bg-green-400" />}
               </div>
-              <span className={`whitespace-nowrap text-[10px] font-medium ${isSelected ? 'text-white' : 'text-white/50'}`}>{channel.name}</span>
+              <span className={`whitespace-nowrap text-[10px] font-medium ${isSelected ? 'text-[var(--theme-text)]' : 'text-[var(--theme-text-secondary)]'}`}>{channel.name}</span>
             </button>
           );
         })}
@@ -108,7 +108,7 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile, b
 
         return (
           <div key={group.id}>
-            <h3 className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-white/25">{group.label}</h3>
+            <h3 className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-secondary)] opacity-70">{group.label}</h3>
             <div className="space-y-0.5">
               {groupChannels.map((channel) => (
                 <ChannelCard

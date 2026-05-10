@@ -117,14 +117,14 @@ export default function SyncPage() {
   }, [user, profile?.siteRole]);
 
   if (!user) {
-    return <div className="p-8 text-center text-gray-400">יש להתחבר תחילה</div>;
+    return <div className="p-8 text-center text-[var(--theme-text-secondary)]">יש להתחבר תחילה</div>;
   }
 
   if (profile && profile.siteRole !== 'admin') {
     return (
       <div className="p-8 text-center space-y-2" dir="rtl">
         <p className="text-red-400 font-bold">גישה מוגבלת למנהלים בלבד</p>
-        <Link href="/" className="text-sm text-purple-400 hover:underline">חזרה לדף הבית</Link>
+        <Link href="/" className="text-sm text-[var(--theme-accent)] hover:underline">חזרה לדף הבית</Link>
       </div>
     );
   }
@@ -207,7 +207,7 @@ export default function SyncPage() {
     <div className="min-h-screen flex flex-col items-center justify-center gap-10 p-8" dir="rtl">
       <section className="w-full max-w-2xl flex flex-col gap-4">
         <h1 className="text-2xl font-bold">סנכרון אנשי צוות מהפקות</h1>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-[var(--theme-text-secondary)]">
           מקור האמת מחושב מכל לוחות ההפקה השמורים. כאן אפשר לראות את מצב ה-`contacts` הנוכחי,
           את הספירה הקנונית שחושבה מההפקות, ולהריץ backfill אידמפוטנטי.
         </p>
@@ -230,52 +230,52 @@ export default function SyncPage() {
         )}
 
         {previewResult && (
-          <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-6 space-y-4">
+          <div className="rounded-2xl border p-6 space-y-4" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-              <div className="rounded-xl bg-slate-800/60 p-4">
-                <p className="text-xs text-slate-400">כעת ב-contacts</p>
-                <p className="text-2xl font-bold text-white">{previewResult.currentContacts}</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">כעת ב-contacts</p>
+                <p className="text-2xl font-bold text-[var(--theme-text)]">{previewResult.currentContacts}</p>
               </div>
-              <div className="rounded-xl bg-slate-800/60 p-4">
-                <p className="text-xs text-slate-400">ספירה קנונית</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">ספירה קנונית</p>
                 <p className="text-2xl font-bold text-cyan-300">{previewResult.canonicalContacts}</p>
               </div>
-              <div className="rounded-xl bg-slate-800/60 p-4">
-                <p className="text-xs text-slate-400">חסר להשלמה</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">חסר להשלמה</p>
                 <p className="text-2xl font-bold text-amber-300">{previewResult.diff}</p>
               </div>
-              <div className="rounded-xl bg-slate-800/60 p-4">
-                <p className="text-xs text-slate-400">רשומות חלקיות</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">רשומות חלקיות</p>
                 <p className="text-2xl font-bold text-purple-300">{previewResult.partialWithoutPhone}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div className="rounded-xl bg-slate-800/40 p-4">
-                <p className="text-slate-400">הפקות שנסרקו</p>
-                <p className="text-lg font-semibold text-white">{previewResult.scannedProductions}</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">הפקות שנסרקו</p>
+                <p className="text-lg font-semibold text-[var(--theme-text)]">{previewResult.scannedProductions}</p>
               </div>
-              <div className="rounded-xl bg-slate-800/40 p-4">
-                <p className="text-slate-400">אנשי צוות ייחודיים</p>
-                <p className="text-lg font-semibold text-white">{previewResult.crewFound}</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">אנשי צוות ייחודיים</p>
+                <p className="text-lg font-semibold text-[var(--theme-text)]">{previewResult.crewFound}</p>
               </div>
-              <div className="rounded-xl bg-slate-800/40 p-4">
-                <p className="text-slate-400">דולגו כקיימים</p>
-                <p className="text-lg font-semibold text-white">{previewResult.skipped}</p>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">דולגו כקיימים</p>
+                <p className="text-lg font-semibold text-[var(--theme-text)]">{previewResult.skipped}</p>
               </div>
             </div>
 
             {previewResult.sampleMissing.length > 0 && (
-              <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-4">
-                <p className="font-semibold text-white mb-3">דוגמה לרשומות שיתווספו/ישודרגו</p>
+              <div className="rounded-xl border p-4" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+                <p className="font-semibold text-[var(--theme-text)] mb-3">דוגמה לרשומות שיתווספו/ישודרגו</p>
                 <div className="space-y-2 text-sm">
                   {previewResult.sampleMissing.map((entry) => (
-                    <div key={`${entry.name}-${entry.phone || 'no-phone'}`} className="flex items-center justify-between gap-3 border-b border-slate-800 pb-2 last:border-b-0 last:pb-0">
+                    <div key={`${entry.name}-${entry.phone || 'no-phone'}`} className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] pb-2 last:border-b-0 last:pb-0">
                       <div>
-                        <p className="text-white font-medium">{entry.name}</p>
-                        <p className="text-slate-400">{entry.role || 'ללא תפקיד'}</p>
+                        <p className="text-[var(--theme-text)] font-medium">{entry.name}</p>
+                        <p className="text-[var(--theme-text-secondary)]">{entry.role || 'ללא תפקיד'}</p>
                       </div>
-                      <span className="text-slate-300" dir="ltr">{entry.phone || 'ללא טלפון'}</span>
+                      <span className="text-[var(--theme-text-secondary)]" dir="ltr">{entry.phone || 'ללא טלפון'}</span>
                     </div>
                   ))}
                 </div>

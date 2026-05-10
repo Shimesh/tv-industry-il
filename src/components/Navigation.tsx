@@ -197,7 +197,7 @@ export default function Navigation() {
                       : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
                   }`}
                   style={isActive ? {
-                    background: 'linear-gradient(135deg, var(--theme-accent-glow), rgba(255,255,255,0.04))',
+                    background: 'linear-gradient(135deg, var(--theme-accent-glow), color-mix(in srgb, var(--theme-bg-card) 72%, transparent))',
                     boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 28%, transparent)',
                   } : undefined}
                 >

@@ -78,29 +78,30 @@ export default function ChatSidebar({
   }, [chats, currentUserId, search]);
 
   return (
-    <div className="flex flex-col h-full bg-[#111B21] border-l border-[#2A3942]">
+    <div className="flex flex-col h-full border-l" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
       {/* Header */}
-      <div className="px-4 py-3 bg-[#202C33] flex items-center justify-between">
-        <h2 className="text-[#E9EDEF] font-bold text-lg">צ׳אטים</h2>
+      <div className="flex items-center justify-between border-b px-4 py-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+        <h2 className="font-bold text-lg" style={{ color: 'var(--theme-text)' }}>צ׳אטים</h2>
         <button
           onClick={onNewChat}
-          className="p-2 rounded-full hover:bg-[#2A3942] transition-colors"
+          className="p-2 rounded-full transition-colors hover:bg-[var(--theme-accent-glow)]"
           title="שיחה חדשה"
         >
-          <Plus className="w-5 h-5 text-[#AEBAC1]" />
+          <Plus className="w-5 h-5 text-[var(--theme-text-secondary)]" />
         </button>
       </div>
 
       {/* Search */}
       <div className="px-3 py-2">
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--theme-text-secondary)]" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="חפש או התחל שיחה חדשה"
-            className="w-full pr-10 pl-3 py-[7px] rounded-lg text-[13px] outline-none bg-[#202C33] text-[#E9EDEF] placeholder:text-[#8696a0] border border-transparent focus:border-[#00A884] transition-colors"
+            className="w-full rounded-lg border pr-10 pl-3 py-[7px] text-[13px] outline-none transition-colors placeholder:text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)]"
+            style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
           />
         </div>
       </div>
@@ -112,11 +113,11 @@ export default function ChatSidebar({
       <div className="flex-1 overflow-y-auto pb-20">
         {filteredChats.length === 0 ? (
           <div className="p-8 text-center">
-            <MessageCircle className="w-12 h-12 text-[#3B4A54] mx-auto mb-3" />
-            <p className="text-[13px] text-[#8696a0]">
+            <MessageCircle className="mx-auto mb-3 h-12 w-12 text-[var(--theme-text-secondary)] opacity-40" />
+            <p className="text-[13px] text-[var(--theme-text-secondary)]">
               {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
             </p>
-            <p className="text-[11px] text-[#667781] mt-1">
+            <p className="mt-1 text-[11px] text-[var(--theme-text-secondary)] opacity-75">
               לחצו על `+` כדי להתחיל שיחה חדשה
             </p>
           </div>
@@ -138,9 +139,8 @@ export default function ChatSidebar({
               <button
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className={`w-full flex items-center gap-3 px-3 py-[10px] transition-colors ${
-                  isActive ? 'bg-[#2A3942]' : 'hover:bg-[#202C33]'
-                }`}
+                className="w-full flex items-center gap-3 px-3 py-[10px] transition-colors hover:bg-[var(--theme-accent-glow)]"
+                style={isActive ? { background: 'var(--theme-accent-glow)' } : undefined}
               >
                 {/* Avatar with optional online dot */}
                 <div className="relative shrink-0">
@@ -150,37 +150,37 @@ export default function ChatSidebar({
                     <div
                       className="w-[49px] h-[49px] rounded-full flex items-center justify-center text-white font-bold text-lg"
                       style={{
-                        backgroundColor: chat.type === 'group' ? '#00A884' : '#6B7C85',
+                        backgroundColor: chat.type === 'group' ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
                       }}
                     >
                       {chatInitial}
                     </div>
                   )}
                   {isOtherOnline && (
-                    <span className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full bg-[#00A884] border-2 border-[#111B21]" />
+                    <span className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full bg-[var(--theme-success)] border-2 border-[var(--theme-bg)]" />
                   )}
                 </div>
 
                 {/* Info */}
-                <div className="flex-1 min-w-0 border-b border-[#2A3942] py-[2px]">
+                <div className="min-w-0 flex-1 border-b py-[2px]" style={{ borderColor: 'var(--theme-border)' }}>
                   <div className="flex items-center justify-between">
-                    <span className="text-[15px] font-medium text-[#E9EDEF] truncate">
+                    <span className="truncate text-[15px] font-medium text-[var(--theme-text)]">
                       {chatName}
                     </span>
                     {chat.lastMessage && (
                     <span className={`text-[12px] shrink-0 mr-2 ${
-                        unreadCount > 0 ? 'text-[#00A884]' : 'text-[#8696a0]'
+                        unreadCount > 0 ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
                       }`}>
                         {formatTime(chat.lastMessage.timestamp)}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center justify-between mt-[2px]">
-                    <p className="text-[13px] text-[#8696a0] truncate flex-1">
+                    <p className="flex-1 truncate text-[13px] text-[var(--theme-text-secondary)]">
                       {chat.lastMessage ? (
                         <>
                           {chat.type !== 'private' && (
-                            <span className="text-[#E9EDEF99]">{chat.lastMessage.senderName}: </span>
+                            <span className="text-[var(--theme-text)] opacity-70">{chat.lastMessage.senderName}: </span>
                           )}
                           {getLastMessagePreview(chat)}
                         </>
@@ -189,7 +189,7 @@ export default function ChatSidebar({
                       )}
                     </p>
                     {unreadCount > 0 && (
-                      <span className="shrink-0 mr-2 min-w-[20px] h-[20px] px-[5px] rounded-full bg-[#00A884] text-white text-[11px] font-bold flex items-center justify-center">
+                      <span className="shrink-0 mr-2 min-w-[20px] h-[20px] px-[5px] rounded-full bg-[var(--theme-accent)] text-white text-[11px] font-bold flex items-center justify-center">
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )}
@@ -205,7 +205,7 @@ export default function ChatSidebar({
       <div className="absolute bottom-6 left-6">
         <button
           onClick={onNewChat}
-          className="w-[50px] h-[50px] rounded-full bg-[#00A884] text-white shadow-lg hover:bg-[#06CF9C] transition-colors flex items-center justify-center"
+          className="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-[var(--theme-accent)] text-white shadow-lg transition-colors hover:opacity-90"
         >
           <MessageCircle className="w-6 h-6" />
         </button>

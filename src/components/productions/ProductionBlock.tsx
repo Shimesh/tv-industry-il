@@ -46,11 +46,11 @@ export default function ProductionBlock({
       className={`w-full text-right rounded-xl p-3 transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] ${isCancelled ? 'opacity-50' : ''}`}
       style={{
         background: isHighlighted
-          ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.85), rgba(217, 119, 6, 0.85))'
-          : 'rgba(55, 65, 81, 0.5)',
+          ? 'linear-gradient(135deg, color-mix(in srgb, var(--theme-warning) 88%, white 12%), var(--theme-warning))'
+          : 'var(--theme-bg-card)',
         borderRight: isHighlighted
-          ? '4px solid #fbbf24'
-          : '4px solid rgba(107, 114, 128, 0.5)',
+          ? '4px solid var(--theme-warning)'
+          : '4px solid var(--theme-border)',
         borderTop: 'none',
         borderBottom: 'none',
         borderLeft: 'none',
@@ -61,7 +61,7 @@ export default function ProductionBlock({
           {/* Production name */}
           <h4
             className={`text-sm truncate ${isCancelled ? 'line-through' : ''} ${isHighlighted ? 'font-black' : 'font-bold'}`}
-            style={{ color: isHighlighted ? '#1f2937' : '#d1d5db' }}
+            style={{ color: isHighlighted ? '#1f2937' : 'var(--theme-text)' }}
           >
             {production.name}
           </h4>
@@ -69,8 +69,8 @@ export default function ProductionBlock({
           {/* Studio */}
           {production.studio && (
             <div className="flex items-center gap-1 mt-1">
-              <MapPin className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }} />
-              <span className="text-xs" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }}>
+              <MapPin className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : 'var(--theme-text-secondary)' }} />
+              <span className="text-xs" style={{ color: isHighlighted ? '#92400e' : 'var(--theme-text-secondary)' }}>
                 {production.studio}
               </span>
             </div>
@@ -79,10 +79,10 @@ export default function ProductionBlock({
           {/* Times */}
           {(production.startTime || production.endTime) && (
             <div className="flex items-center gap-1 mt-1">
-              <Clock className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : '#9ca3af' }} />
+              <Clock className="w-3 h-3" style={{ color: isHighlighted ? '#92400e' : 'var(--theme-text-secondary)' }} />
               <span
                 className={`text-xs ${isHighlighted ? 'font-bold' : 'font-medium'}`}
-                style={{ color: isHighlighted ? '#78350f' : '#9ca3af' }}
+                style={{ color: isHighlighted ? '#78350f' : 'var(--theme-text-secondary)' }}
                 dir="ltr"
               >
                 {production.startTime}{production.endTime ? ` - ${production.endTime}` : ''}
@@ -94,8 +94,8 @@ export default function ProductionBlock({
           {isCurrentUser && userRole && (
             <div className="mt-1.5 inline-block px-2 py-0.5 rounded-md text-xs font-bold"
               style={{
-                background: isHighlighted ? 'rgba(120, 53, 15, 0.3)' : 'rgba(251, 191, 36, 0.2)',
-                color: isHighlighted ? '#78350f' : '#fbbf24',
+                background: isHighlighted ? 'rgba(120, 53, 15, 0.3)' : 'var(--theme-accent-glow)',
+                color: isHighlighted ? '#78350f' : 'var(--theme-accent)',
               }}
             >
               {userRole}
@@ -116,8 +116,8 @@ export default function ProductionBlock({
           {getUniqueCrewCount(production.crew) > 0 && (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs"
               style={{
-                background: isHighlighted ? 'rgba(120, 53, 15, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-                color: isHighlighted ? '#78350f' : '#9ca3af',
+                background: isHighlighted ? 'rgba(120, 53, 15, 0.25)' : 'var(--theme-bg-secondary)',
+                color: isHighlighted ? '#78350f' : 'var(--theme-text-secondary)',
               }}
             >
               <Users className="w-3 h-3" />
@@ -132,7 +132,7 @@ export default function ProductionBlock({
                 e.stopPropagation();
                 onInfoClick();
               }}
-              className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              className="p-1 rounded-lg hover:bg-[var(--theme-accent-glow)] transition-colors"
               title="היסטוריית שינויים"
             >
               <Info className="w-3.5 h-3.5 text-blue-400" />

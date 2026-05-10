@@ -456,9 +456,10 @@ function ChatContent() {
 
   return (
     <div
-      className="relative z-0 flex overflow-hidden bg-[#111B21]"
+      className="relative z-0 flex overflow-hidden"
       dir="rtl"
       style={{
+        background: 'var(--theme-bg)',
         minHeight: 'calc(100dvh - var(--app-header-offset))',
         maxHeight: 'calc(100dvh - var(--app-header-offset))',
       }}
