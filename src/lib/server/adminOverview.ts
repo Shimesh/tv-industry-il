@@ -23,7 +23,9 @@ type RawUser = {
   city?: string | null;
   crewName?: string | null;
   is_consented?: boolean;
+  termsAccepted?: boolean;
   linkedContactId?: number | string | null;
+  phone?: string | null;
 };
 
 type RawContact = {
@@ -114,7 +116,9 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     lastSeen,
     crewName: raw.crewName || null,
     is_consented: raw.is_consented === true,
+    termsAccepted: raw.termsAccepted === true,
     linkedContactId: raw.linkedContactId ?? null,
+    phone: typeof raw.phone === 'string' && raw.phone.trim() ? raw.phone.trim() : null,
   };
 }
 

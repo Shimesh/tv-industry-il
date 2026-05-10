@@ -145,6 +145,7 @@ export async function PATCH(request: NextRequest) {
       'status',
       'isOnline',
       'is_consented',
+      'termsAccepted',
       'notificationsEnabled',
       'soundEnabled',
       'showPhone',
@@ -161,9 +162,45 @@ export async function PATCH(request: NextRequest) {
       }
     }
     patch.updatedAt = new Date().toISOString();
+    if (patch.termsAccepted === true) {
+      patch.termsAcceptedAt = new Date().toISOString();
+    }
 
     await patchDocument(`users/${authUser.uid}`, patch as Record<string, string | boolean | number | null | string[]>);
     await syncLinkedContactFields(authUser.uid, patch);
+
+    // If consenting and no linkedContactId yet, try to find+link the contact by phone number.
+    // This covers users who complete onboarding via phone match but have no contact link yet.
+    if (patch.is_consented === true) {
+      const freshUser = await getDocument<Record<string, unknown>>(`users/${authUser.uid}`);
+      if (freshUser && !freshUser.linkedContactId) {
+        const rawPhone = typeof patch.phone === 'string' ? patch.phone
+          : typeof freshUser.phone === 'string' ? freshUser.phone : '';
+        const normalizedUserPhone = normalizePhone(rawPhone);
+        if (normalizedUserPhone && normalizedUserPhone.length >= 9) {
+          const allContacts = await runQuery<{ id: string; normalizedPhone?: string | null; phone?: string | null }>({
+            from: [{ collectionId: 'contacts' }],
+          });
+          const match = allContacts.find((c) => {
+            const cp = normalizePhone(c.normalizedPhone || c.phone || '');
+            return cp === normalizedUserPhone;
+          });
+          if (match?.id) {
+            const now = new Date().toISOString();
+            await patchDocument(`contacts/${match.id}`, {
+              is_consented: true,
+              consentedAt: now,
+              consentedByUid: authUser.uid,
+              updatedAt: now,
+            });
+            await patchDocument(`users/${authUser.uid}`, {
+              linkedContactId: match.id,
+              updatedAt: now,
+            });
+          }
+        }
+      }
+    }
     await recordRouteMetric({ route: '/api/me/profile', ok: true, statusCode: 200 });
     return NextResponse.json({ success: true });
   } catch (error) {

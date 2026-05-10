@@ -185,6 +185,24 @@ function RoleBadge({ role }: { role: AdminRole }) {
   );
 }
 
+function getMissingItems(entry: AdminUserSummary): string[] {
+  const missing: string[] = [];
+  if (!entry.is_consented && !entry.termsAccepted) missing.push('לא הסכים לתנאים');
+  if (!entry.linkedContactId) missing.push('לא מקושר לאיש קשר');
+  if (!entry.phone) missing.push('חסר טלפון');
+  if (!entry.role) missing.push('חסר תפקיד');
+  if (!entry.department) missing.push('חסרה מחלקה');
+  return missing;
+}
+
+function isFullProfile(entry: AdminUserSummary): boolean {
+  return (entry.is_consented || entry.termsAccepted) &&
+    Boolean(entry.linkedContactId) &&
+    Boolean(entry.phone) &&
+    Boolean(entry.role) &&
+    Boolean(entry.department);
+}
+
 function PresenceBadges({ user }: { user: AdminUserSummary }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -320,6 +338,7 @@ export default function AdminPage() {
   const [notificationTargetUserId, setNotificationTargetUserId] = useState('');
   const [sendPush, setSendPush] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [reminderSent, setReminderSent] = useState<Record<string, boolean>>({});
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
     events: [],
@@ -340,6 +359,25 @@ export default function AdminPage() {
   function showToast(type: 'ok' | 'err', msg: string) {
     setToast({ type, msg });
     window.setTimeout(() => setToast(null), 3000);
+  }
+
+  async function sendReminder(targetUid: string) {
+    try {
+      await fetchWithAuth('/api/admin/notifications', {
+        method: 'POST',
+        body: JSON.stringify({
+          target: 'user',
+          targetUserId: targetUid,
+          title: 'השלם את הפרופיל שלך',
+          message: 'לחץ כאן כדי להשלים את הרישום ולהופיע ברשימת הצוות',
+          linkUrl: '/profile',
+          sendPush: true,
+        }),
+      });
+      setReminderSent((prev) => ({ ...prev, [targetUid]: true }));
+    } catch {
+      showToast('err', 'שליחת התזכורת נכשלה');
+    }
   }
 
   async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
@@ -808,16 +846,31 @@ export default function AdminPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
-                            {entry.is_consented && entry.linkedContactId ? (
+                            {isFullProfile(entry) ? (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                                 פרופיל מלא
                               </span>
                             ) : (
-                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
-                                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                                {!entry.linkedContactId ? 'לא מקושר' : 'לא הסכים'}
-                              </span>
+                              <div>
+                                <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                  {!entry.linkedContactId ? 'לא מקושר' : 'לא הסכים'}
+                                </span>
+                                <div className="mt-0.5 text-[9px] text-orange-300/60 leading-tight">
+                                  {getMissingItems(entry).join(' · ')}
+                                </div>
+                                {reminderSent[entry.uid] ? (
+                                  <span className="mt-0.5 text-[9px] text-green-400">נשלח ✓</span>
+                                ) : (
+                                  <button
+                                    onClick={() => void sendReminder(entry.uid)}
+                                    className="mt-0.5 text-[9px] text-purple-400 hover:text-purple-300 underline underline-offset-2"
+                                  >
+                                    שלח תזכורת
+                                  </button>
+                                )}
+                              </div>
                             )}
                             <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
                           </div>

@@ -34,7 +34,7 @@ export default function ConsentGate() {
     setError('');
 
     try {
-      await updateUserProfile({ is_consented: true });
+      await updateUserProfile({ is_consented: true, termsAccepted: true });
     } catch {
       setError('לא הצלחנו לשמור את האישור. נסה שוב בעוד רגע.');
       setSaving(false);

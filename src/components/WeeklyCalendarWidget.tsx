@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Clock, MapPin, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
 
-const CACHE_KEY = 'productions_global_widget_cache_v1';
-const CACHE_TTL = 24 * 60 * 60 * 1000;
+const CACHE_KEY = 'productions_global_widget_cache_v2';
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes — keeps data fresh across page navigations
 const DAY_NAMES = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
@@ -210,6 +210,8 @@ export default function WeeklyCalendarWidget() {
   const [myProductionDates, setMyProductionDates] = useState<Set<string> | null>(null);
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
+  // In-memory cache per session — mirrors the productions page's productionsByWeekRef pattern
+  const sessionCache = useRef<Map<string, Production[]>>(new Map());
 
   const displayName = profile?.crewName || profile?.displayName || user?.displayName || '';
   const phone = profile?.phone ?? '';
@@ -222,7 +224,10 @@ export default function WeeklyCalendarWidget() {
     const nextDays = getWeekDays(weekOffset);
     setDays(nextDays);
     const weekId = getWeekId(nextDays[0]);
-    setProductions(loadFromCache(weekId));
+    // Serve in-memory session cache instantly (survives week navigation like the productions page),
+    // then fall back to localStorage, then show null while the network fetch runs.
+    const inMemory = sessionCache.current.get(weekId);
+    setProductions(inMemory ?? loadFromCache(weekId));
     setMyProductionDates(null);
   }, [weekOffset]);
 
@@ -275,6 +280,8 @@ export default function WeeklyCalendarWidget() {
       const merged = mergeProductions(afterGlobal, myPhoneProds, displayName, phone);
 
       setProductions(merged);
+      // Write to both caches so subsequent navigations are instant
+      sessionCache.current.set(weekId, merged);
       saveToCache(weekId, merged);
 
       setMyProductionDates(
@@ -294,7 +301,9 @@ export default function WeeklyCalendarWidget() {
     return () => {
       cancelled = true;
     };
-  }, [days, user]);
+  // displayName and phone are included so isMyProduction always uses current profile data
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days, user, displayName, phone]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';
   const byDate = useMemo(() => {

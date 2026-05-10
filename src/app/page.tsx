@@ -74,9 +74,9 @@ function getGreeting(): string {
 
 export default function HomePage() {
   const { totalCount, availableCount, openToWorkCount } = useAppData();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [greeting] = useState(() => getGreeting());
-  const firstName = user?.displayName?.split(' ')[0] ?? '';
+  const firstName = (profile?.displayName || user?.displayName)?.split(' ')[0] ?? '';
   const [liveNews, setLiveNews] = useState<RssNewsItem[]>([]);
   const [newsLoaded, setNewsLoaded] = useState(false);
   const [events, setEvents] = useState<UpcomingEventItem[]>([]);

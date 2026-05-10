@@ -25,6 +25,8 @@ export interface UserProfile {
   phone: string;
   linkedContactId?: number | string;
   is_consented?: boolean;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
@@ -167,6 +169,8 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     role: typeof raw.role === 'string' ? raw.role : '',
     phone: typeof raw.phone === 'string' ? raw.phone : '',
     is_consented: raw.is_consented === true,
+    termsAccepted: raw.termsAccepted === true,
+    termsAcceptedAt: typeof raw.termsAcceptedAt === 'string' ? raw.termsAcceptedAt : undefined,
     skills: Array.isArray(raw.skills) ? raw.skills.map((item) => String(item)) : [],
     bio: typeof raw.bio === 'string' ? raw.bio : '',
     status: raw.status === 'busy' || raw.status === 'offline' ? raw.status : 'available',
