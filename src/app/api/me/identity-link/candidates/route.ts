@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
-import { findIdentityCandidates, getVerifiedNormalizedPhone } from '@/lib/server/identityLink';
+import { findIdentityCandidates, getVerifiedDisplayPhone, getVerifiedNormalizedPhone } from '@/lib/server/identityLink';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
@@ -12,10 +12,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const verifiedPhone = getVerifiedNormalizedPhone(authUser);
+    const verifiedPhoneDisplay = getVerifiedDisplayPhone(authUser);
     const candidates = await findIdentityCandidates(authUser);
     await recordRouteMetric({ route: '/api/me/identity-link/candidates', ok: true, statusCode: 200 });
     return NextResponse.json({
       verifiedPhone,
+      verifiedPhoneDisplay,
       candidates,
       primaryCandidate: candidates[0] || null,
     });
@@ -27,4 +29,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

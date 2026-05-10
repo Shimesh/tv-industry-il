@@ -442,6 +442,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setProfileReady(false);
+    await user.getIdToken(true).catch(() => undefined);
     const bootstrap = await fetchSessionBootstrap(user);
     applyBootstrap(bootstrap);
   };

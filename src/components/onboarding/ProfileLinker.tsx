@@ -23,6 +23,7 @@ type IdentityCandidate = {
 
 type CandidateResponse = {
   verifiedPhone?: string;
+  verifiedPhoneDisplay?: string;
   candidates?: IdentityCandidate[];
   primaryCandidate?: IdentityCandidate | null;
 };
@@ -67,6 +68,7 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
         });
         if (!response.ok) throw new Error('candidate lookup failed');
         const payload = (await response.json()) as CandidateResponse;
+        console.debug('[ProfileLinker] identity candidates response', payload);
         if (cancelled) return;
         const nextCandidate = payload.primaryCandidate || payload.candidates?.[0] || null;
         setCandidate(nextCandidate);
@@ -102,6 +104,8 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
   }, [contacts, manualName, profile?.displayName, query]);
 
   if (!profile || !user || !open) return null;
+
+  const candidateLookupLocked = loadingCandidates || Boolean(candidate && !manualMode);
 
   const complete = () => {
     setOpen(false);
@@ -197,14 +201,16 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
                 <p className="text-xs text-[var(--theme-text-secondary)]">כדי להציג הרשאות ומשמרות קיימות</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-lg p-2 text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
-              aria-label="סגור"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {!candidateLookupLocked && (
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-2 text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
+                aria-label="סגור"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           <div className="p-5">
@@ -362,4 +368,3 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
     </AnimatePresence>
   );
 }
-

@@ -10,13 +10,19 @@ const SKIP_ONBOARDING_ROUTES = new Set(['/login', '/terms', '/privacy', '/access
 export default function OnboardingWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, profile, loading, profileReady } = useAuth();
+  const phoneAuthNeedsLink = Boolean(
+    user?.phoneNumber &&
+      profile &&
+      !profile.profileId &&
+      !profile.linkedContactId,
+  );
   const shouldShowProfileLinker = Boolean(
     user &&
       !loading &&
       profileReady &&
       profile &&
       profile.is_consented === true &&
-      profile.onboardingComplete !== true &&
+      (profile.onboardingComplete !== true || phoneAuthNeedsLink) &&
       !SKIP_ONBOARDING_ROUTES.has(pathname),
   );
 
@@ -27,4 +33,3 @@ export default function OnboardingWrapper({ children }: { children: ReactNode })
     </>
   );
 }
-

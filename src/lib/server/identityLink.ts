@@ -1,5 +1,5 @@
 import type { VerifiedAuthUser } from '@/lib/apiAuth';
-import { normalizePhone } from '@/lib/contactsUtils';
+import { normalizePhone as normalizeDisplayPhone } from '@/lib/contactsUtils';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 
 type IdentitySource = 'profiles' | 'industry_people' | 'contacts';
@@ -47,7 +47,58 @@ function candidateName(doc: RawIdentityDoc): string {
 }
 
 function candidatePhone(doc: RawIdentityDoc): string {
-  return stringField(doc, ['phone', 'phoneNumber', 'mobile', 'normalizedPhone']);
+  return candidatePhones(doc)[0] || '';
+}
+
+function candidatePhones(doc: RawIdentityDoc): string[] {
+  const values = ['phone', 'phoneNumber', 'mobile', 'normalizedPhone']
+    .map((key) => doc[key])
+    .flatMap((value) => {
+      if (Array.isArray(value)) return value;
+      return value === undefined || value === null ? [] : [value];
+    })
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(values));
+}
+
+export function normalizePhoneForIdentity(value: unknown): string {
+  const raw = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+  let digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    if (digits.startsWith('972')) {
+      digits = digits.slice(3);
+      changed = true;
+    }
+    if (digits.startsWith('0')) {
+      digits = digits.replace(/^0+/, '');
+      changed = true;
+    }
+  }
+
+  if (digits.length > 9) {
+    digits = digits.slice(-9);
+  }
+
+  return digits.length === 9 && digits.startsWith('5') ? digits : '';
+}
+
+export function formatPhoneForIdentityDisplay(value: unknown): string {
+  const identityPhone = normalizePhoneForIdentity(value);
+  return identityPhone ? `0${identityPhone}` : '';
+}
+
+function phoneMatchesIdentity(value: unknown, identityPhone: string): boolean {
+  return Boolean(identityPhone && normalizePhoneForIdentity(value) === identityPhone);
+}
+
+function docMatchesIdentityPhone(doc: RawIdentityDoc, identityPhone: string): boolean {
+  return candidatePhones(doc).some((phone) => phoneMatchesIdentity(phone, identityPhone));
 }
 
 function toCandidate(source: IdentitySource, doc: RawIdentityDoc): IdentityCandidate | null {
@@ -73,7 +124,11 @@ function toCandidate(source: IdentitySource, doc: RawIdentityDoc): IdentityCandi
 }
 
 export function getVerifiedNormalizedPhone(authUser: VerifiedAuthUser): string {
-  return normalizePhone(authUser.phoneNumber || '');
+  return normalizePhoneForIdentity(authUser.phoneNumber || '');
+}
+
+export function getVerifiedDisplayPhone(authUser: VerifiedAuthUser): string {
+  return formatPhoneForIdentityDisplay(authUser.phoneNumber || '');
 }
 
 async function listCollectionSafe(collectionName: IdentitySource | 'users'): Promise<RawIdentityDoc[]> {
@@ -98,7 +153,7 @@ export async function findIdentityCandidates(authUser: VerifiedAuthUser): Promis
   const candidates: IdentityCandidate[] = [];
   for (const { source, docs } of docsBySource) {
     for (const doc of docs) {
-      if (normalizePhone(candidatePhone(doc)) !== verifiedPhone) continue;
+      if (!docMatchesIdentityPhone(doc, verifiedPhone)) continue;
       const candidate = toCandidate(source, doc);
       if (!candidate) continue;
       const key = `${candidate.source}:${candidate.id}`;
@@ -130,7 +185,7 @@ export async function confirmIdentityLink(
   }
 
   const candidate = toCandidate(source, rawCandidate);
-  if (!candidate || normalizePhone(candidate.phone) !== verifiedPhone) {
+  if (!candidate || !docMatchesIdentityPhone(rawCandidate, verifiedPhone)) {
     throw new Error('Identity candidate no longer matches verified phone');
   }
 
@@ -138,7 +193,7 @@ export async function confirmIdentityLink(
   const existingUser = await getDocument<RawIdentityDoc>(`users/${authUser.uid}`);
   const matchingUsers = (await listCollectionSafe('users'))
     .filter((doc) => String(doc.id || '') !== authUser.uid)
-    .filter((doc) => normalizePhone(candidatePhone(doc)) === verifiedPhone);
+    .filter((doc) => docMatchesIdentityPhone(doc, verifiedPhone));
   const previousLinkedUids = stringArrayField(existingUser?.linkedUids);
   const candidateLinkedUids = stringArrayField(rawCandidate.linkedUids);
   const matchedUserLinkedUids = matchingUsers.flatMap((doc) => [
@@ -237,7 +292,7 @@ export async function getLinkedProductionIdentity(authUser: VerifiedAuthUser): P
 
   const addPhone = (value: unknown) => {
     if (typeof value !== 'string') return;
-    const normalized = normalizePhone(value);
+    const normalized = normalizeDisplayPhone(value) || formatPhoneForIdentityDisplay(value);
     if (normalized) phones.add(normalized);
   };
   const addName = (value: unknown) => {
