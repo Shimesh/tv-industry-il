@@ -66,12 +66,15 @@ async function sendFcmPush(params: {
       tokens: tokens.slice(i, i + chunkSize),
       notification: { title, body },
       webpush: {
+        headers: { Urgency: 'high' },
         fcmOptions: { link },
         notification: {
           title,
           body,
           icon: '/icons/icon-192x192.png',
-          badge: '/icons/icon-192x192.png',
+          badge: '/icons/badge-72x72.png',
+          tag: 'tv-industry-push',
+          renotify: true,
         },
       },
     });

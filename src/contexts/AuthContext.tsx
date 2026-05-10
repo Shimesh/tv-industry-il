@@ -322,6 +322,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  // Silently refresh FCM token whenever a consented user opens the app
+  useEffect(() => {
+    if (!user || !profile?.termsAccepted) return;
+    import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
+      void registerFcmToken(user.uid);
+    }).catch(() => undefined);
+  }, [user?.uid, profile?.termsAccepted]);
+
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
   };
