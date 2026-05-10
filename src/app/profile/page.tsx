@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
+import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import { useAppData } from '@/contexts/AppDataContext';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
 import {
   User, Mail, Phone, Briefcase, MapPin, Edit3, Save, Camera,
   Shield, Bell, LogOut, Sparkles, CheckCircle, X,
@@ -41,7 +40,6 @@ function ProfileContent() {
   const [showSaved, setShowSaved] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     displayName: profile?.displayName || '',
@@ -103,15 +101,6 @@ function ProfileContent() {
     setEditing(false);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2500);
-  };
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile) return;
-    const storageRef = ref(storage, `avatars/${profile.uid}`);
-    await uploadBytes(storageRef, file);
-    const photoURL = await getDownloadURL(storageRef);
-    await updateUserProfile({ photoURL });
   };
 
   const handleOnboardingComplete = async (data: {
@@ -184,15 +173,25 @@ function ProfileContent() {
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             {/* Avatar */}
-            <div className="relative group shrink-0">
-              <UserAvatar name={profile.displayName} photoURL={profile.photoURL} size="xl" isOnline={profile.isOnline} />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+            <div className="flex shrink-0 flex-col items-center gap-3">
+              <div className="relative group">
+                <UserAvatar name={profile.displayName} photoURL={profile.photoURL} size="xl" isOnline={profile.isOnline} />
+                <ProfilePhotoUploadButton
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+                  onError={(message) => showToast(message, 'error')}
+                  onSuccess={() => showToast('תמונת הפרופיל עודכנה', 'success')}
+                >
+                  <Camera className="w-6 h-6 text-white" />
+                </ProfilePhotoUploadButton>
+              </div>
+              <ProfilePhotoUploadButton
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] px-3 py-2 text-xs font-bold text-[var(--theme-text)] transition hover:bg-[var(--theme-accent-glow)] disabled:opacity-60"
+                onError={(message) => showToast(message, 'error')}
+                onSuccess={() => showToast('תמונת הפרופיל עודכנה', 'success')}
               >
-                <Camera className="w-6 h-6 text-white" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                <Camera className="h-4 w-4" />
+                עריכת תמונה
+              </ProfilePhotoUploadButton>
             </div>
 
             <div className="text-center sm:text-right flex-1 min-w-0">

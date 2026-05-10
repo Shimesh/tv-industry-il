@@ -50,6 +50,10 @@ function candidatePhone(doc: RawIdentityDoc): string {
   return candidatePhones(doc)[0] || '';
 }
 
+function candidatePhotoURL(doc: RawIdentityDoc | null | undefined): string {
+  return doc ? stringField(doc, ['photoURL', 'photoUrl', 'picture', 'avatarUrl', 'avatarURL']) : '';
+}
+
 function candidatePhones(doc: RawIdentityDoc): string[] {
   const values = ['phone', 'phoneNumber', 'mobile', 'normalizedPhone']
     .map((key) => doc[key])
@@ -196,11 +200,27 @@ export async function confirmIdentityLink(
     .filter((doc) => docMatchesIdentityPhone(doc, verifiedPhone));
   const previousLinkedUids = stringArrayField(existingUser?.linkedUids);
   const candidateLinkedUids = stringArrayField(rawCandidate.linkedUids);
+  const candidateUidFields = ['firebaseUid', 'uid', 'primaryUid', 'lastLinkedUid']
+    .map((key) => rawCandidate[key])
+    .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    .map((value) => value.trim());
   const matchedUserLinkedUids = matchingUsers.flatMap((doc) => [
     String(doc.id || ''),
     ...stringArrayField(doc.linkedUids),
   ]);
-  const linkedUids = Array.from(new Set([...previousLinkedUids, ...candidateLinkedUids, ...matchedUserLinkedUids, authUser.uid].filter(Boolean)));
+  const linkedUids = Array.from(new Set([...previousLinkedUids, ...candidateLinkedUids, ...candidateUidFields, ...matchedUserLinkedUids, authUser.uid].filter(Boolean)));
+  const linkedUserDocs = await Promise.all(
+    linkedUids
+      .filter((uid) => uid !== authUser.uid)
+      .map((uid) => getDocument<RawIdentityDoc>(`users/${uid}`).catch(() => null)),
+  );
+  const mergedPhotoURL =
+    candidatePhotoURL(existingUser) ||
+    candidatePhotoURL(rawCandidate) ||
+    matchingUsers.map(candidatePhotoURL).find(Boolean) ||
+    linkedUserDocs.map(candidatePhotoURL).find(Boolean) ||
+    authUser.photoURL ||
+    '';
 
   const strongestAdmin =
     existingUser?.siteRole === 'admin' ||
@@ -225,6 +245,10 @@ export async function confirmIdentityLink(
     linkedAt: now,
     updatedAt: now,
   };
+
+  if (mergedPhotoURL) {
+    userPatch.photoURL = mergedPhotoURL;
+  }
 
   if (source === 'contacts') {
     userPatch.linkedContactId = candidate.id;

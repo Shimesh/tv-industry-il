@@ -6,9 +6,10 @@ import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import { useRouter } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
+import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
-  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle
+  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -30,6 +31,7 @@ function SettingsContent() {
   const [deletingProfile, setDeletingProfile] = useState(false);
   const [statusSaved, setStatusSaved] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
 
   const handleLogout = async () => {
     await logout();
@@ -39,6 +41,7 @@ function SettingsContent() {
   const handleDeleteDirectoryProfile = async () => {
     setDeletingProfile(true);
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await deleteDirectoryProfile();
       await logout();
@@ -52,6 +55,7 @@ function SettingsContent() {
 
   const handleStatusChange = async (status: 'available' | 'busy' | 'offline') => {
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await updateUserProfile({ status });
       setStatusSaved(true);
@@ -65,6 +69,7 @@ function SettingsContent() {
     const next = !notificationsEnabled;
     setNotificationsEnabled(next);
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await updateUserProfile({ notificationsEnabled: next });
     } catch {
@@ -77,6 +82,7 @@ function SettingsContent() {
     const next = !soundEnabled;
     setSoundEnabled(next);
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await updateUserProfile({ soundEnabled: next });
     } catch {
@@ -88,6 +94,7 @@ function SettingsContent() {
   const handleToggleShowPhone = async () => {
     const next = !(profile?.showPhone ?? true);
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await updateUserProfile({ showPhone: next });
     } catch {
@@ -98,6 +105,7 @@ function SettingsContent() {
   const handleToggleOpenToWork = async () => {
     if (!profile) return;
     setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       await updateUserProfile({ openToWork: !profile.openToWork });
     } catch {
@@ -126,6 +134,11 @@ function SettingsContent() {
             {settingsError}
           </div>
         ) : null}
+        {settingsSuccess ? (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+            {settingsSuccess}
+          </div>
+        ) : null}
 
         {/* Profile Card */}
         <div className="rounded-xl border p-4" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
@@ -148,6 +161,23 @@ function SettingsContent() {
             </div>
             <ChevronLeft className="w-5 h-5 text-[var(--theme-text-secondary)] group-hover:text-[var(--theme-text)] transition-colors" />
           </button>
+          <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--theme-border)' }}>
+            <ProfilePhotoUploadButton
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-accent-glow)] px-4 py-2.5 text-sm font-bold text-[var(--theme-accent)] transition hover:bg-[var(--theme-accent)] hover:text-white disabled:opacity-60"
+              onError={(message) => {
+                setSettingsSuccess(null);
+                setSettingsError(message);
+              }}
+              onSuccess={() => {
+                setSettingsError(null);
+                setSettingsSuccess('תמונת הפרופיל עודכנה');
+                setTimeout(() => setSettingsSuccess(null), 2500);
+              }}
+            >
+              <Camera className="h-4 w-4" />
+              עריכת תמונת פרופיל
+            </ProfilePhotoUploadButton>
+          </div>
         </div>
 
         {/* Status */}

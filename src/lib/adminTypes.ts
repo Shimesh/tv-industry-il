@@ -1,7 +1,11 @@
 export type AdminRole = 'admin' | 'moderator' | 'user';
+export type AdminLoginMethod = 'google' | 'phone' | 'email';
 
 export type AdminUserSummary = {
   uid: string;
+  linkedUids: string[];
+  uidCount: number;
+  profileId: string | null;
   displayName: string;
   email: string;
   role: string;
@@ -19,6 +23,7 @@ export type AdminUserSummary = {
   termsAccepted: boolean;
   linkedContactId: number | string | null;
   phone: string | null;
+  loginMethods: AdminLoginMethod[];
 };
 
 export type CountBucket = {

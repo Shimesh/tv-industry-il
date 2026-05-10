@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -15,6 +15,7 @@ import {
   Contact2,
   Crown,
   FileText,
+  Mail,
   Megaphone,
   MessageCircle,
   MousePointerClick,
@@ -23,6 +24,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Smartphone,
   X,
   UserIcon,
   Users,
@@ -31,7 +33,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
+import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { DIRECTORY_DEPARTMENTS } from '@/lib/contactsUtils';
 
 type ToastState = {
@@ -184,6 +186,48 @@ function RoleBadge({ role }: { role: AdminRole }) {
       <Icon className="h-3 w-3" />
       {roleLabel(role)}
     </span>
+  );
+}
+
+function LoginMethods({ methods, uidCount }: { methods: AdminLoginMethod[]; uidCount: number }) {
+  const items: Record<AdminLoginMethod, { label: string; icon: ReactNode; classes: string }> = {
+    google: {
+      label: 'Google',
+      icon: <span className="text-[11px] font-black leading-none">G</span>,
+      classes: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+    },
+    phone: {
+      label: 'Phone / SMS',
+      icon: <Smartphone className="h-3.5 w-3.5" />,
+      classes: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    },
+    email: {
+      label: 'Email',
+      icon: <Mail className="h-3.5 w-3.5" />,
+      classes: 'border-gray-500/30 bg-gray-500/10 text-gray-300',
+    },
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {(methods.length ? methods : ['email' as AdminLoginMethod]).map((method) => {
+        const item = items[method];
+        return (
+          <span
+            key={method}
+            title={item.label}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${item.classes}`}
+          >
+            {item.icon}
+          </span>
+        );
+      })}
+      {uidCount > 1 ? (
+        <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] font-bold text-gray-300" title="מספר כניסות מקושרות">
+          {uidCount}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -680,7 +724,7 @@ export default function AdminPage() {
     const term = search.trim().toLowerCase();
     const filtered = term
       ? overview.users.filter((entry) =>
-          [entry.displayName, entry.email, entry.role, entry.department, entry.city || '', roleLabel(entry.siteRole)]
+          [entry.displayName, entry.email, entry.phone || '', entry.role, entry.department, entry.city || '', roleLabel(entry.siteRole), ...entry.linkedUids]
             .join(' ')
             .toLowerCase()
             .includes(term),
@@ -880,6 +924,7 @@ export default function AdminPage() {
                   <tr className="border-b border-gray-800 text-xs text-gray-500">
                     <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-5" />
                     <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
+                    <th className="hidden px-4 py-3 text-right font-medium md:table-cell">שיטות כניסה</th>
                     <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden lg:table-cell" />
                     <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
                     <SortHeader label="נראה לאחרונה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden sm:table-cell" />
@@ -914,6 +959,11 @@ export default function AdminPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                            {entry.uidCount > 1 ? (
+                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-300">
+                                {entry.uidCount} כניסות מאוחדות
+                              </span>
+                            ) : null}
                             {isFullProfile(entry) ? (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
@@ -973,6 +1023,9 @@ export default function AdminPage() {
                       <td className="hidden max-w-[180px] px-4 py-3 text-gray-400 md:table-cell">
                         <span className="block truncate">{entry.email || '—'}</span>
                       </td>
+                      <td className="hidden px-4 py-3 md:table-cell">
+                        <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
+                      </td>
                       <td className="hidden px-4 py-3 lg:table-cell">
                         <p className="text-white">{entry.role || '—'}</p>
                         <p className="text-xs text-gray-500">{entry.department || '—'}</p>
@@ -984,7 +1037,7 @@ export default function AdminPage() {
                         {formatRelativeTime(entry.lastSeen)}
                       </td>
                       <td className="px-4 py-3">
-                        {entry.uid === user.uid ? (
+                        {entry.linkedUids.includes(user.uid) ? (
                           <RoleBadge role={entry.siteRole} />
                         ) : (
                           <>
@@ -1031,7 +1084,7 @@ export default function AdminPage() {
 
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-gray-500">
+                      <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
                         לא נמצאו משתמשים
                       </td>
                     </tr>

@@ -1,4 +1,5 @@
 import type {
+  AdminLoginMethod,
   AdminOverview,
   AdminRole,
   AdminUserSummary,
@@ -26,6 +27,8 @@ type RawUser = {
   termsAccepted?: boolean;
   linkedContactId?: number | string | null;
   phone?: string | null;
+  profileId?: string | null;
+  linkedUids?: unknown;
 };
 
 type RawContact = {
@@ -82,6 +85,124 @@ function normalizeDisplayName(raw: RawUser): string {
   return '\u05de\u05e9\u05ea\u05de\u05e9 \u05dc\u05dc\u05d0 \u05e9\u05dd';
 }
 
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((entry) => String(entry)).filter(Boolean) : [];
+}
+
+function roleRank(role: AdminRole): number {
+  return role === 'admin' ? 2 : role === 'moderator' ? 1 : 0;
+}
+
+function bestSiteRole(users: RawUser[]): AdminRole {
+  return users
+    .map((user) => normalizeSiteRole(user.siteRole))
+    .sort((a, b) => roleRank(b) - roleRank(a))[0] || 'user';
+}
+
+function firstString(users: RawUser[], picker: (user: RawUser) => unknown): string {
+  for (const user of users) {
+    const value = picker(user);
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function firstValue<T>(users: RawUser[], picker: (user: RawUser) => T | null | undefined): T | null {
+  for (const user of users) {
+    const value = picker(user);
+    if (value !== null && value !== undefined && String(value).trim()) return value;
+  }
+  return null;
+}
+
+function inferLoginMethods(users: RawUser[]): AdminLoginMethod[] {
+  const methods = new Set<AdminLoginMethod>();
+  for (const user of users) {
+    if (typeof user.email === 'string' && user.email.trim()) {
+      methods.add(user.photoURL ? 'google' : 'email');
+    }
+    if (typeof user.phone === 'string' && user.phone.trim()) {
+      methods.add('phone');
+    }
+  }
+  return Array.from(methods).sort((a, b) => {
+    const rank: Record<AdminLoginMethod, number> = { google: 0, phone: 1, email: 2 };
+    return rank[a] - rank[b];
+  });
+}
+
+function canonicalUser(users: RawUser[]): RawUser {
+  return [...users].sort((a, b) => {
+    const roleDiff = roleRank(normalizeSiteRole(b.siteRole)) - roleRank(normalizeSiteRole(a.siteRole));
+    if (roleDiff !== 0) return roleDiff;
+    if (Boolean(a.profileId) !== Boolean(b.profileId)) return a.profileId ? -1 : 1;
+    if (Boolean(a.linkedContactId) !== Boolean(b.linkedContactId)) return a.linkedContactId ? -1 : 1;
+    const aSeen = toMs(a.lastSeen) || 0;
+    const bSeen = toMs(b.lastSeen) || 0;
+    return bSeen - aSeen;
+  })[0] || users[0];
+}
+
+function groupUsersByIdentity(rawUsers: RawUser[]): RawUser[][] {
+  const ids = rawUsers.map((user) => user.id).filter(Boolean);
+  const parent = new Map<string, string>();
+  const byId = new Map(rawUsers.map((user) => [user.id, user]));
+  const profileGroups = new Map<string, string>();
+  const contactGroups = new Map<string, string>();
+
+  for (const id of ids) parent.set(id, id);
+
+  const find = (id: string): string => {
+    const current = parent.get(id) || id;
+    if (current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+
+  const union = (a: string, b: string) => {
+    if (!parent.has(a) || !parent.has(b)) return;
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+
+  for (const user of rawUsers) {
+    if (!user.id) continue;
+    for (const linkedUid of stringArrayField(user.linkedUids)) {
+      union(user.id, linkedUid);
+    }
+
+    const profileId = typeof user.profileId === 'string' && user.profileId.trim() ? user.profileId.trim() : '';
+    if (profileId) {
+      const existing = profileGroups.get(profileId);
+      if (existing) union(existing, user.id);
+      profileGroups.set(profileId, user.id);
+    }
+
+    const linkedContactId = user.linkedContactId !== null && user.linkedContactId !== undefined
+      ? String(user.linkedContactId).trim()
+      : '';
+    if (linkedContactId) {
+      const existing = contactGroups.get(linkedContactId);
+      if (existing) union(existing, user.id);
+      contactGroups.set(linkedContactId, user.id);
+    }
+  }
+
+  const groups = new Map<string, RawUser[]>();
+  for (const id of ids) {
+    const root = find(id);
+    const user = byId.get(id);
+    if (!user) continue;
+    const list = groups.get(root) || [];
+    list.push(user);
+    groups.set(root, list);
+  }
+
+  return Array.from(groups.values());
+}
+
 function bucketize(values: Array<string | null | undefined>, fallback: string): CountBucket[] {
   const counts = new Map<string, number>();
   for (const rawValue of values) {
@@ -102,6 +223,9 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
 
   return {
     uid: raw.id,
+    linkedUids: [raw.id],
+    uidCount: 1,
+    profileId: raw.profileId || null,
     displayName: normalizeDisplayName(raw),
     email: String(raw.email || ''),
     role: String(raw.role || ''),
@@ -119,6 +243,49 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     termsAccepted: raw.termsAccepted === true,
     linkedContactId: raw.linkedContactId ?? null,
     phone: typeof raw.phone === 'string' && raw.phone.trim() ? raw.phone.trim() : null,
+    loginMethods: inferLoginMethods([raw]),
+  };
+}
+
+function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
+  const canonical = canonicalUser(group);
+  const linkedUids = Array.from(new Set(group.flatMap((user) => [user.id, ...stringArrayField(user.linkedUids)]).filter(Boolean)));
+  const lastSeen = group
+    .map((user) => user.lastSeen || null)
+    .filter(Boolean)
+    .sort((a, b) => (toMs(b) || 0) - (toMs(a) || 0))[0] || null;
+  const lastSeenMs = toMs(lastSeen);
+  const onlineNow = group.some((user) => {
+    const seen = toMs(user.lastSeen);
+    return Boolean(user.isOnline) && seen !== null && nowMs() - seen <= PRESENCE_WINDOW_MS;
+  });
+  const stalePresence = lastSeenMs === null || nowMs() - lastSeenMs > STALE_PRESENCE_MS;
+  const displayNameSource = group.find((user) => !isBrokenOrEmpty(user.displayName)) || canonical;
+  const profileId = firstValue(group, (user) => user.profileId) || null;
+
+  return {
+    uid: canonical.id,
+    linkedUids,
+    uidCount: linkedUids.length,
+    profileId,
+    displayName: normalizeDisplayName(displayNameSource),
+    email: firstString(group, (user) => user.email),
+    role: firstString(group, (user) => user.role),
+    department: firstString(group, (user) => user.department),
+    siteRole: bestSiteRole(group),
+    isOnline: group.some((user) => user.isOnline === true),
+    onlineNow,
+    stalePresence,
+    onboardingComplete: group.some((user) => user.onboardingComplete === true),
+    photoURL: firstString(group, (user) => user.photoURL) || null,
+    city: firstString(group, (user) => user.city) || null,
+    lastSeen,
+    crewName: firstString(group, (user) => user.crewName) || null,
+    is_consented: group.some((user) => user.is_consented === true),
+    termsAccepted: group.some((user) => user.termsAccepted === true),
+    linkedContactId: firstValue(group, (user) => user.linkedContactId) || null,
+    phone: firstString(group, (user) => user.phone) || null,
+    loginMethods: inferLoginMethods(group),
   };
 }
 
@@ -203,7 +370,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
   ]);
 
   const repairedUsersRaw = await repairMissingUserIdentity(usersRaw);
-  const users = sortUsers(repairedUsersRaw.map(toAdminUserSummary));
+  const users = sortUsers(groupUsersByIdentity(repairedUsersRaw).map(toUnifiedAdminUserSummary));
   const now = nowMs();
   const stats = {
     totalUsers: users.length,

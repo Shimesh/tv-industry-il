@@ -1,6 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
-import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+
+type RawUser = Record<string, unknown> & {
+  id?: string;
+  profileId?: string | null;
+  linkedContactId?: string | number | null;
+  linkedUids?: unknown;
+};
+
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((entry) => String(entry)).filter(Boolean) : [];
+}
+
+async function resolveLinkedUserIds(uid: string): Promise<{ documentIds: string[]; linkedUids: string[] }> {
+  const [target, users] = await Promise.all([
+    getDocument<RawUser>(`users/${uid}`),
+    listDocuments<RawUser>('users'),
+  ]);
+
+  if (!target) return { documentIds: [uid], linkedUids: [uid] };
+
+  const linkedUids = new Set<string>([uid, ...stringArrayField(target.linkedUids)]);
+  const documentIds = new Set<string>([uid]);
+  const profileId = typeof target.profileId === 'string' && target.profileId.trim() ? target.profileId.trim() : '';
+  const linkedContactId = target.linkedContactId !== null && target.linkedContactId !== undefined
+    ? String(target.linkedContactId).trim()
+    : '';
+
+  for (const user of users) {
+    if (!user.id) continue;
+    const userLinkedUids = stringArrayField(user.linkedUids);
+    const sharesUid = user.id === uid || userLinkedUids.includes(uid) || userLinkedUids.some((linkedUid) => linkedUids.has(linkedUid));
+    const sharesProfile = profileId && user.profileId === profileId;
+    const sharesContact = linkedContactId && user.linkedContactId !== null && user.linkedContactId !== undefined && String(user.linkedContactId).trim() === linkedContactId;
+    if (sharesUid || sharesProfile || sharesContact) {
+      documentIds.add(user.id);
+      linkedUids.add(user.id);
+      userLinkedUids.forEach((linkedUid) => linkedUids.add(linkedUid));
+    }
+  }
+
+  return { documentIds: Array.from(documentIds), linkedUids: Array.from(linkedUids) };
+}
 
 export async function POST(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
@@ -25,7 +67,9 @@ export async function POST(request: NextRequest) {
   if (body.role !== undefined) userPatch.role = body.role;
   if (body.forceContactId) userPatch.linkedContactId = body.forceContactId;
 
-  await patchDocument(`users/${body.uid}`, userPatch);
+  const linkedUserIds = await resolveLinkedUserIds(body.uid);
+  const syncedPatch = { ...userPatch, linkedUids: linkedUserIds.linkedUids };
+  await Promise.all(linkedUserIds.documentIds.map((uid) => patchDocument(`users/${uid}`, syncedPatch)));
 
   // Determine which contact to sync: forceContactId > existing linkedContactId
   let contactId: string | null = body.forceContactId || null;

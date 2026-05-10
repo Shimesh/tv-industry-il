@@ -197,6 +197,24 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
     repaired = true;
   }
 
+  if (!profile.photoURL) {
+    const linkedUids = asStringArray(existing?.linkedUids) || [];
+    const linkedProfiles = await Promise.all(
+      linkedUids
+        .filter((uid) => uid && uid !== authUser.uid)
+        .map((uid) => getDocument<RawUserProfile>(`users/${uid}`).catch(() => null)),
+    );
+    const linkedPhotoURL = linkedProfiles
+      .map((linkedProfile) => asString(linkedProfile?.photoURL))
+      .find(Boolean);
+
+    if (linkedPhotoURL) {
+      patch.photoURL = linkedPhotoURL;
+      profile = { ...profile, photoURL: linkedPhotoURL };
+      repaired = true;
+    }
+  }
+
   if (isBrokenOrEmptyName(existing?.displayName) && authUser.displayName) {
     patch.displayName = authUser.displayName;
     profile = { ...profile, displayName: authUser.displayName };
