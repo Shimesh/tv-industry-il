@@ -12,6 +12,10 @@ export type SessionProfile = {
   department: string;
   role: string;
   phone: string;
+  profileId?: string;
+  profileSource?: string;
+  linkedUids?: string[];
+  isAdmin?: boolean;
   linkedContactId?: number | string;
   is_consented?: boolean;
   skills: string[];
@@ -79,7 +83,7 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     photoURL: authUser.photoURL || null,
     department: '',
     role: '',
-    phone: '',
+    phone: authUser.phoneNumber || '',
     is_consented: false,
     skills: [],
     bio: '',
@@ -119,6 +123,10 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     department: asString(raw.department),
     role: asString(raw.role),
     phone: asString(raw.phone),
+    profileId: asOptionalString(raw.profileId),
+    profileSource: asOptionalString(raw.profileSource),
+    linkedUids: asStringArray(raw.linkedUids),
+    isAdmin: raw.isAdmin === true,
     is_consented: raw.is_consented === true,
     skills: asStringArray(raw.skills) || [],
     bio: asString(raw.bio),
@@ -180,6 +188,12 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
   if (!profile.email && authUser.email) {
     patch.email = authUser.email;
     profile = { ...profile, email: authUser.email };
+    repaired = true;
+  }
+
+  if (!profile.phone && authUser.phoneNumber) {
+    patch.phone = authUser.phoneNumber;
+    profile = { ...profile, phone: authUser.phoneNumber };
     repaired = true;
   }
 

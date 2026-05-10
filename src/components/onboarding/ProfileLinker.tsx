@@ -1,507 +1,365 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle, Loader2, Phone, Search, ShieldCheck, UserCheck, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Contact } from '@/data/contacts';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, ChevronRight, Loader2, Phone, Search, ShieldCheck, UserCheck, X } from 'lucide-react';
+import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
-import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 
-const departmentOptions = ['צילום', 'טכני', 'הפקה', 'סאונד', 'תאורה'];
+type IdentityCandidate = {
+  id: string;
+  source: 'profiles' | 'industry_people' | 'contacts';
+  displayName: string;
+  phone: string;
+  department: string;
+  role: string;
+  profileId: string;
+  isAdmin: boolean;
+  siteRole?: string;
+};
+
+type CandidateResponse = {
+  verifiedPhone?: string;
+  candidates?: IdentityCandidate[];
+  primaryCandidate?: IdentityCandidate | null;
+};
+
+const sourceLabels: Record<IdentityCandidate['source'], string> = {
+  profiles: 'פרופיל מקצועי',
+  industry_people: 'מאגר אנשי התעשייה',
+  contacts: 'אלפון',
+};
+
+function fullContactName(contact: Contact): string {
+  return `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+}
 
 export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
-  const { profile, updateUserProfile } = useAuth();
+  const { user, profile, updateUserProfile, refreshUserProfile } = useAuth();
+  const { contacts } = useAppData();
   const [open, setOpen] = useState(true);
+  const [loadingCandidates, setLoadingCandidates] = useState(true);
+  const [candidate, setCandidate] = useState<IdentityCandidate | null>(null);
+  const [manualMode, setManualMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [manualName, setManualName] = useState(profile?.displayName || '');
+  const [manualRole, setManualRole] = useState(profile?.role || '');
+  const [manualDepartment, setManualDepartment] = useState(profile?.department || '');
 
-  if (!profile || !open) return null;
+  useEffect(() => {
+    if (!user || !open) return;
+    let cancelled = false;
 
-  const handleComplete = async (data: {
-    displayName: string;
-    department: string;
-    role: string;
-    phone: string;
-    linkedContactId?: number | string;
-    is_consented?: boolean;
-  }) => {
-    await updateUserProfile({
-      ...data,
-      onboardingComplete: true,
-    });
+    const loadCandidates = async () => {
+      setLoadingCandidates(true);
+      setError('');
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/me/identity-link/candidates', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('candidate lookup failed');
+        const payload = (await response.json()) as CandidateResponse;
+        if (cancelled) return;
+        const nextCandidate = payload.primaryCandidate || payload.candidates?.[0] || null;
+        setCandidate(nextCandidate);
+        setManualMode(!nextCandidate);
+      } catch {
+        if (!cancelled) {
+          setCandidate(null);
+          setManualMode(true);
+        }
+      } finally {
+        if (!cancelled) setLoadingCandidates(false);
+      }
+    };
+
+    void loadCandidates();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, open]);
+
+  const filteredContacts = useMemo(() => {
+    const needle = normalizeName(query || manualName || profile?.displayName || '');
+    if (!needle) return contacts.slice(0, 50);
+
+    return contacts
+      .filter((contact) => {
+        const name = normalizeName(fullContactName(contact));
+        const role = normalizeName(String(contact.role || ''));
+        const department = normalizeName(String(contact.department || ''));
+        return name.includes(needle) || role.includes(needle) || department.includes(needle);
+      })
+      .slice(0, 50);
+  }, [contacts, manualName, profile?.displayName, query]);
+
+  if (!profile || !user || !open) return null;
+
+  const complete = () => {
     setOpen(false);
     onComplete?.();
   };
 
+  const confirmCandidate = async () => {
+    if (!candidate || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/me/identity-link/confirm', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ source: candidate.source, candidateId: candidate.id }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || 'identity link failed');
+      }
+      await refreshUserProfile();
+      void registerFcmToken(profile.uid).catch(() => undefined);
+      complete();
+    } catch {
+      setError('לא הצלחנו לקשר את הפרופיל. נסה שוב או עבור לחיפוש ידני.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const completeManual = async () => {
+    if (saving) return;
+    const selectedName = selectedContact ? fullContactName(selectedContact) : manualName.trim();
+    if (!selectedName) {
+      setError('יש לבחור פרופיל או להזין שם מלא.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      await updateUserProfile({
+        displayName: selectedName,
+        department: selectedContact ? String(selectedContact.department || '') : manualDepartment,
+        role: selectedContact ? String(selectedContact.role || '') : manualRole,
+        phone: selectedContact ? String(selectedContact.phone || profile.phone || '') : profile.phone,
+        linkedContactId: selectedContact?.id,
+        profileId: selectedContact ? String(selectedContact.id) : profile.profileId,
+        profileSource: selectedContact ? 'contacts' : profile.profileSource,
+        crewName: selectedName,
+        onboardingComplete: true,
+        is_consented: true,
+      });
+      await refreshUserProfile();
+      void registerFcmToken(profile.uid).catch(() => undefined);
+      complete();
+    } catch {
+      setError('לא הצלחנו לשמור את הפרטים. נסה שוב.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <AnimatePresence>
-      <OnboardingModal
-        profile={{
-          uid: profile.uid,
-          displayName: profile.displayName,
-          email: profile.email,
-          phone: profile.phone,
-          department: profile.department,
-          role: profile.role,
-        }}
-        onComplete={handleComplete}
-        onDismiss={() => setOpen(false)}
-      />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[1001] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+        dir="rtl"
+        role="dialog"
+        aria-modal="true"
+      >
+        <motion.div
+          initial={{ scale: 0.96, opacity: 0, y: 10 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.96, opacity: 0, y: 10 }}
+          className="w-full max-w-lg overflow-hidden rounded-2xl border shadow-2xl"
+          style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}
+        >
+          <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--theme-border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-blue-600">
+                {manualMode ? <Search className="h-5 w-5 text-white" /> : <ShieldCheck className="h-5 w-5 text-white" />}
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-[var(--theme-text)]">קישור זהות מקצועית</h2>
+                <p className="text-xs text-[var(--theme-text-secondary)]">כדי להציג הרשאות ומשמרות קיימות</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg p-2 text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
+              aria-label="סגור"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="p-5">
+            {loadingCandidates ? (
+              <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--theme-text-secondary)]">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                מחפש התאמה לפי מספר הטלפון המאומת...
+              </div>
+            ) : candidate && !manualMode ? (
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-lg font-black text-emerald-300">
+                      {candidate.displayName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-xl font-black text-[var(--theme-text)]">
+                        היי, זיהינו אותך כ-{candidate.displayName}. האם זה אתה?
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--theme-text-secondary)]">
+                        נמצא ב{sourceLabels[candidate.source]}
+                        {candidate.role ? ` · ${candidate.role}` : ''}
+                        {candidate.department ? ` · ${candidate.department}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span dir="ltr">{normalizePhone(candidate.phone) || candidate.phone}</span>
+                    {candidate.isAdmin && (
+                      <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 font-bold text-yellow-300">Admin</span>
+                    )}
+                  </div>
+                </div>
+
+                {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={confirmCandidate}
+                    disabled={saving}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white transition hover:shadow-lg disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                    כן, זה אני
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualMode(true);
+                      setError('');
+                    }}
+                    disabled={saving}
+                    className="rounded-xl border px-4 py-3 text-sm font-bold text-[var(--theme-text)] transition hover:bg-[var(--theme-accent-glow)] disabled:opacity-50"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  >
+                    לא, חפש ידנית
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border p-3 text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                  לא נמצאה התאמה ודאית לפי הטלפון. בחר את עצמך מהרשימה או מלא ידנית.
+                </div>
+
+                <div className="relative">
+                  <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--theme-text-secondary)]" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="חיפוש לפי שם, תפקיד או מחלקה"
+                    className="w-full rounded-xl border bg-[var(--theme-bg-secondary)] py-3 pl-4 pr-10 text-sm text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)]"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                    dir="rtl"
+                  />
+                </div>
+
+                <div className="max-h-56 overflow-y-auto rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
+                  {filteredContacts.map((contact) => {
+                    const name = fullContactName(contact);
+                    const selected = String(selectedContact?.id) === String(contact.id);
+                    return (
+                      <button
+                        key={String(contact.id)}
+                        type="button"
+                        onClick={() => {
+                          setSelectedContact(contact);
+                          setManualName(name);
+                          setManualRole(String(contact.role || ''));
+                          setManualDepartment(String(contact.department || ''));
+                          setError('');
+                        }}
+                        className="flex w-full items-center gap-3 border-b p-3 text-right transition last:border-b-0 hover:bg-[var(--theme-accent-glow)]"
+                        style={{ borderColor: 'var(--theme-border)', background: selected ? 'var(--theme-accent-glow)' : undefined }}
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-sm font-black text-purple-200">
+                          {name.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-[var(--theme-text)]">{name || 'ללא שם'}</p>
+                          <p className="truncate text-xs text-[var(--theme-text-secondary)]">
+                            {String(contact.role || '')}
+                            {contact.role && contact.department ? ' · ' : ''}
+                            {String(contact.department || '')}
+                          </p>
+                        </div>
+                        {selected && <CheckCircle className="h-4 w-4 text-emerald-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={manualName}
+                    onChange={(event) => setManualName(event.target.value)}
+                    placeholder="שם מלא"
+                    className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  />
+                  <input
+                    value={manualRole}
+                    onChange={(event) => setManualRole(event.target.value)}
+                    placeholder="תפקיד"
+                    className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  />
+                  <input
+                    value={manualDepartment}
+                    onChange={(event) => setManualDepartment(event.target.value)}
+                    placeholder="מחלקה"
+                    className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] sm:col-span-2"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  />
+                </div>
+
+                {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+
+                <button
+                  type="button"
+                  onClick={completeManual}
+                  disabled={saving || !manualName.trim()}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 px-4 py-3 text-sm font-black text-white transition hover:shadow-lg disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                  שמור וקשר פרופיל
+                </button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
     </AnimatePresence>
   );
 }
 
-function OnboardingModal({
-  profile,
-  onComplete,
-  onDismiss,
-}: {
-  profile: { uid: string; displayName: string; email: string; phone: string; department: string; role: string };
-  onComplete: (data: { displayName: string; department: string; role: string; phone: string; linkedContactId?: number | string; is_consented?: boolean }) => void;
-  onDismiss: () => void;
-}) {
-  const { updateUserProfile } = useAuth();
-  const [step, setStep] = useState(1);
-  const { contacts: contactsList } = useAppData();
-
-  // Step 1 state
-  const [termsChecked, setTermsChecked] = useState(false);
-  const [termsSaving, setTermsSaving] = useState(false);
-
-  // Step 2 state
-  const [phoneInput, setPhoneInput] = useState(profile.phone || '');
-  const [phoneError, setPhoneError] = useState('');
-
-  // Step 3 state
-  const [phoneMatchFound, setPhoneMatchFound] = useState(false);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [manualName, setManualName] = useState('');
-
-  // Step 4 (confirm) form state
-  const [form, setForm] = useState({
-    displayName: profile.displayName || '',
-    department: profile.department || '',
-    role: profile.role || '',
-    phone: profile.phone || '',
-  });
-
-  // ── Step 1: accept terms + trigger FCM ──────────────────────────────────
-  const handleTermsAccept = async () => {
-    if (!termsChecked || termsSaving) return;
-    setTermsSaving(true);
-    try {
-      // Fire-and-forget FCM — user gesture required for permission prompt
-      registerFcmToken(profile.uid).catch(() => undefined);
-      // Write terms acceptance; termsAcceptedAt is generated server-side
-      await updateUserProfile({ is_consented: true, termsAccepted: true });
-      setStep(2);
-    } finally {
-      setTermsSaving(false);
-    }
-  };
-
-  // ── Step 2: phone lookup ─────────────────────────────────────────────────
-  const handlePhoneLookup = () => {
-    const normalized = normalizePhone(phoneInput);
-    if (!normalized || normalized.length < 9) {
-      setPhoneError('יש להזין מספר טלפון תקין (לפחות 9 ספרות)');
-      return;
-    }
-    setPhoneError('');
-
-    const match = contactsList.find(
-      (c) => normalizePhone(c.phone ?? '') === normalized,
-    );
-
-    const updatedPhone = normalized;
-
-    if (match) {
-      setSelectedContact(match);
-      setForm({
-        displayName: `${match.firstName || ''} ${match.lastName || ''}`.trim(),
-        department: String(match.department || ''),
-        role: match.role || '',
-        phone: match.phone || updatedPhone,
-      });
-      setPhoneMatchFound(true);
-    } else {
-      setSelectedContact(null);
-      setForm((prev) => ({ ...prev, phone: updatedPhone }));
-      setPhoneMatchFound(false);
-      // Pre-filter contacts dropdown using normalized Google name tokens
-      // (filtering happens inline in the render)
-    }
-    setStep(3);
-  };
-
-  // ── Step 3: contact selected from dropdown ───────────────────────────────
-  const handleContactSelect = (contact: Contact | null) => {
-    setSelectedContact(contact);
-    if (contact) {
-      setForm({
-        displayName: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
-        department: String(contact.department || ''),
-        role: contact.role || '',
-        phone: contact.phone || form.phone,
-      });
-      setManualName('');
-    } else {
-      // "אחר" — manual entry
-      setForm((prev) => ({ ...prev, displayName: manualName }));
-    }
-  };
-
-  // ── Step 4: final submit ─────────────────────────────────────────────────
-  const handleSubmit = () => {
-    const finalName = selectedContact === null && !phoneMatchFound
-      ? manualName || form.displayName
-      : form.displayName;
-
-    onComplete({
-      displayName: finalName,
-      department: form.department,
-      role: form.role,
-      phone: form.phone,
-      linkedContactId: selectedContact?.id,
-      is_consented: true,
-    });
-  };
-
-  // ── Pre-filtered contacts for Step 3B dropdown ───────────────────────────
-  const filteredContacts = (() => {
-    const googleName = normalizeName(profile.displayName || '');
-    const tokens = googleName.split(/\s+/).filter((t) => t.length >= 2);
-    if (!tokens.length) return contactsList.slice(0, 50);
-    return contactsList.filter((c) => {
-      const fullName = normalizeName(`${c.firstName || ''} ${c.lastName || ''}`);
-      return tokens.some((token) => fullName.includes(token));
-    });
-  })();
-
-  const stepTitles: Record<number, string> = {
-    1: 'ברוך הבא',
-    2: 'מה מספר הטלפון שלך?',
-    3: phoneMatchFound ? 'נמצאת בצוות!' : 'בחר את שמך',
-    4: 'אשר פרטים',
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      style={{ pointerEvents: 'auto' }}
-      onClick={onDismiss}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="rounded-2xl border max-w-md w-full overflow-hidden"
-        style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}
-        onClick={(e) => e.stopPropagation()}
-        dir="rtl"
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--theme-border)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-              {step === 1 ? <ShieldCheck className="w-4 h-4 text-white" /> : <UserCheck className="w-4 h-4 text-white" />}
-            </div>
-            <h2 className="font-bold" style={{ color: 'var(--theme-text)' }}>
-              {stepTitles[step]}
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              שלב {step} מתוך 4
-            </span>
-            <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-[var(--theme-accent-glow)]">
-              <X className="w-4 h-4 text-[var(--theme-text-secondary)]" />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* ── Step 1: Terms + FCM ── */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
-                כדי להשתמש באפליקציה, עליך לאשר את{' '}
-                <Link href="/terms" target="_blank" className="underline underline-offset-4 hover:text-[var(--theme-accent)]">
-                  תנאי השימוש
-                </Link>{' '}
-                ו
-                <Link href="/privacy" target="_blank" className="underline underline-offset-4 hover:text-[var(--theme-accent)]">
-                  מדיניות הפרטיות
-                </Link>.
-              </p>
-
-              <label
-                className="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm leading-6"
-                style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={termsChecked}
-                  onChange={(e) => setTermsChecked(e.target.checked)}
-                  className="mt-1 h-4 w-4 shrink-0 accent-purple-500"
-                />
-                <span style={{ color: 'var(--theme-text)' }}>קראתי והסכמתי לתנאי השימוש ומדיניות הפרטיות</span>
-              </label>
-
-              <button
-                onClick={handleTermsAccept}
-                disabled={!termsChecked || termsSaving}
-                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
-              >
-                {termsSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                המשך
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 2: Phone input ── */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-                הכנס את מספר הטלפון שלך כדי שנוכל לזהות אותך בצוות אוטומטית.
-              </p>
-
-              <div>
-                <div className="relative">
-                  <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
-                  <input
-                    type="tel"
-                    value={phoneInput}
-                    onChange={(e) => { setPhoneInput(e.target.value); setPhoneError(''); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handlePhoneLookup(); }}
-                    placeholder="050-0000000"
-                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--theme-accent)]"
-                    style={{ background: 'var(--theme-bg-secondary)', borderColor: phoneError ? 'rgb(248 113 113)' : 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    dir="ltr"
-                    autoFocus
-                  />
-                </div>
-                {phoneError && (
-                  <p className="mt-1 text-xs text-red-400">{phoneError}</p>
-                )}
-              </div>
-
-              <button
-                onClick={handlePhoneLookup}
-                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all"
-              >
-                <Search className="w-4 h-4" />
-                חפש בצוות
-              </button>
-
-              <button
-                onClick={() => { setPhoneMatchFound(false); setStep(3); }}
-                className="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
-                style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
-              >
-                דלג — אמלא ידנית
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 3A: Phone match found — confirm auto-populated fields ── */}
-          {step === 3 && phoneMatchFound && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
-                <span className="text-sm text-green-400 font-medium">
-                  נמצאת בצוות! הפרטים מולאו אוטומטית.
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>שם מלא</label>
-                  <input
-                    value={form.displayName}
-                    onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                    style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>מחלקה</label>
-                    <select
-                      value={form.department}
-                      onChange={(e) => setForm({ ...form, department: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                      style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    >
-                      <option value="">בחר</option>
-                      {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>תפקיד</label>
-                    <input
-                      value={form.role}
-                      onChange={(e) => setForm({ ...form, role: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                      style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setStep(4)}
-                disabled={!form.displayName || !form.department}
-                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
-              >
-                <CheckCircle className="w-4 h-4" />
-                אשר ✓
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 3B: No phone match — name dropdown ── */}
-          {step === 3 && !phoneMatchFound && (
-            <div className="space-y-4">
-              <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-                לא נמצאה התאמה לפי טלפון. בחר את שמך מהרשימה או הכנס ידנית.
-              </p>
-
-              <div className="max-h-52 overflow-y-auto rounded-xl border divide-y" style={{ borderColor: 'var(--theme-border)' }}>
-                {filteredContacts.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => handleContactSelect(c)}
-                    className="w-full flex items-center gap-3 p-3 text-right hover:bg-[var(--theme-accent-glow)] transition-all"
-                    style={{
-                      background: selectedContact?.id === c.id ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
-                    }}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {(c.firstName?.[0] || '') + (c.lastName?.[0] || '')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--theme-text)' }}>{c.firstName} {c.lastName}</p>
-                      {(c.role || c.department) && (
-                        <p className="text-xs truncate" style={{ color: 'var(--theme-text-secondary)' }}>{c.role}{c.role && c.department ? ' · ' : ''}{c.department}</p>
-                      )}
-                    </div>
-                    {selectedContact?.id === c.id && <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />}
-                  </button>
-                ))}
-
-                {/* "אחר" option */}
-                <button
-                  onClick={() => handleContactSelect(null)}
-                  className="w-full flex items-center gap-3 p-3 text-right hover:bg-[var(--theme-accent-glow)] transition-all"
-                  style={{
-                    background: selectedContact === null ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
-                  }}
-                >
-                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    ?
-                  </div>
-                  <span className="text-sm font-medium" style={{ color: 'var(--theme-text)' }}>אחר</span>
-                </button>
-              </div>
-
-              {selectedContact === null && (
-                <input
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="כתוב את שמך בעברית"
-                  className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--theme-accent)]"
-                  style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                  autoFocus
-                />
-              )}
-
-              <button
-                onClick={() => {
-                  if (selectedContact) {
-                    setStep(4);
-                  } else if (manualName.trim()) {
-                    setForm((prev) => ({ ...prev, displayName: manualName.trim() }));
-                    setStep(4);
-                  }
-                }}
-                disabled={!selectedContact && !manualName.trim()}
-                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
-              >
-                <ChevronRight className="w-4 h-4" />
-                המשך
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 4: Final confirm & submit ── */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
-                בדוק שהפרטים נכונים ולחץ על ״סיום״.
-              </p>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>שם מלא</label>
-                  <input
-                    value={form.displayName}
-                    onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                    style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>מחלקה</label>
-                    <select
-                      value={form.department}
-                      onChange={(e) => setForm({ ...form, department: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                      style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    >
-                      <option value="">בחר</option>
-                      {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>תפקיד</label>
-                    <input
-                      value={form.role}
-                      onChange={(e) => setForm({ ...form, role: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                      style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs mb-1 block" style={{ color: 'var(--theme-text-secondary)' }}>טלפון</label>
-                  <input
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none border focus:border-[var(--theme-accent)]"
-                    style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                    dir="ltr"
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={handleSubmit}
-                disabled={!form.displayName || !form.department}
-                className="w-full py-3 rounded-xl bg-gradient-to-l from-purple-500 to-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
-              >
-                <CheckCircle className="w-4 h-4" />
-                סיום
-              </button>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}

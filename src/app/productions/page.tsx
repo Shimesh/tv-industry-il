@@ -463,15 +463,23 @@ function ProductionsContent() {
         return prodDocs.length > 0 ? parseProductionDocs(prodDocs, weekId) : [];
       }
 
-      // Personal mode: fetch user's own data + global data in parallel
+      // Personal mode: fetch linked identity data + global data in parallel
       const weekStart = weekId;
       const weekEnd = getWeekEndStr(weekId);
       const token = await user.getIdToken().catch(() => '');
 
       const normalizedPhone = normalizePhone(profile?.phone || '');
+      const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
 
-      const [prodDocs, globalRes, phoneRes] = await Promise.all([
-        restListDocs(path),
+      const [personalRes, globalRes, phoneRes, profileRes] = await Promise.all([
+        token
+          ? fetch(`/api/productions/personal?weekId=${weekId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
+            })
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
         token
           ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
               headers: { Authorization: `Bearer ${token}` },
@@ -487,16 +495,25 @@ function ProductionsContent() {
               .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
               .catch(() => ({ productions: [] as Production[] }))
           : Promise.resolve({ productions: [] as Production[] }),
+        token && profileIdentityId
+          ? fetch(`/api/productions/global?profileId=${encodeURIComponent(profileIdentityId)}&weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
+            })
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
       ]);
 
-      console.warn('[loadExistingWeek] user docs:', prodDocs.length, '/ global docs:', globalRes.productions?.length ?? 0, '/ phone-matched:', phoneRes.productions?.length ?? 0);
+      console.warn('[loadExistingWeek] personal docs:', personalRes.productions?.length ?? 0, '/ global docs:', globalRes.productions?.length ?? 0, '/ phone-matched:', phoneRes.productions?.length ?? 0, '/ profile-matched:', profileRes.productions?.length ?? 0);
 
-      const userProds = prodDocs.length > 0 ? parseProductionDocs(prodDocs, weekId) : [];
+      const userProds = personalRes.productions ?? [];
       const displayName = profile?.crewName || profile?.displayName || user.displayName || '';
 
-      // Merge legacy global (name-based) first, then phone-matched global (always authoritative)
+      // Merge legacy global (name-based), phone matches, then linked profile matches.
       const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
-      return mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
+      const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
+      return mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
     } catch (error) {
       console.error('[loadExistingWeek] Error:', error);
       return [];

@@ -8,6 +8,7 @@ const adminAuth = require('firebase-admin/auth') as {
       email?: string;
       name?: string;
       picture?: string;
+      phone_number?: string;
     }>;
     getUser: (uid: string) => Promise<{
       uid: string;

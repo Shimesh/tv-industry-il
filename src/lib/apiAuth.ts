@@ -6,6 +6,7 @@ export type VerifiedAuthUser = {
   email?: string | null;
   displayName?: string | null;
   photoURL?: string | null;
+  phoneNumber?: string | null;
 };
 
 /**
@@ -26,6 +27,7 @@ export async function verifyAuthToken(request: NextRequest): Promise<VerifiedAut
       email: typeof decoded.email === 'string' ? decoded.email : null,
       displayName: typeof decoded.name === 'string' ? decoded.name : null,
       photoURL: typeof decoded.picture === 'string' ? decoded.picture : null,
+      phoneNumber: typeof decoded.phone_number === 'string' ? decoded.phone_number : null,
     };
   } catch {
     // Fall back to Google Identity Toolkit only if Admin verification is unavailable.
@@ -52,6 +54,7 @@ export async function verifyAuthToken(request: NextRequest): Promise<VerifiedAut
       email: typeof user.email === 'string' ? user.email : null,
       displayName: typeof user.displayName === 'string' ? user.displayName : null,
       photoURL: typeof user.photoUrl === 'string' ? user.photoUrl : null,
+      phoneNumber: typeof user.phoneNumber === 'string' ? user.phoneNumber : null,
     };
   } catch {
     return null;

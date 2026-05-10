@@ -9,6 +9,7 @@ function writeDoc(path: string, data: Record<string, unknown>): Promise<void> {
 import { toGlobalProduction, fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
+import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -59,6 +60,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const scope = searchParams.get('scope');
   const phone = searchParams.get('phone');
+  const profileId = searchParams.get('profileId');
   const shadowKey = searchParams.get('shadowKey');
   const weekStart = searchParams.get('weekStart');
   const weekEnd = searchParams.get('weekEnd');
@@ -100,6 +102,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid date format — expected YYYY-MM-DD' }, { status: 400 });
   }
 
+  const identity = profileId ? await getLinkedProductionIdentity(authUser) : null;
   const normalizedPhone = phone ? normalizePhone(phone) : null;
   const queryKey = normalizedPhone || shadowKey || null;
 
@@ -121,7 +124,17 @@ export async function GET(request: NextRequest) {
       },
     ];
 
-    const filters = queryKey
+    const shouldFilterByLinkedProfile = Boolean(
+      profileId &&
+      identity &&
+      (identity.profileId === profileId || identity.linkedContactId === profileId),
+    );
+
+    if (profileId && !shouldFilterByLinkedProfile) {
+      return NextResponse.json({ success: true, count: 0, productions: [] });
+    }
+
+    const filters = queryKey && !shouldFilterByLinkedProfile
       ? [
           {
             fieldFilter: {
@@ -145,8 +158,21 @@ export async function GET(request: NextRequest) {
       limit: 500,
     });
 
-    const productions = docs.map(fromGlobalProduction);
-    return NextResponse.json({ success: true, count: productions.length, productions });
+    const sourceDocs = shouldFilterByLinkedProfile
+      ? docs.filter((doc) => {
+          const phoneSet = new Set(identity?.phones ?? []);
+          const nameSet = new Set((identity?.names ?? []).map((name) => normalizeName(name)).filter(Boolean));
+          return (doc.crew_list ?? []).some((entry) => {
+            const entryPhone = normalizePhone(entry.normalizedPhone || entry.phone_number || '');
+            const entryName = normalizeName(entry.name || '');
+            if (entryPhone && phoneSet.has(entryPhone)) return true;
+            return Boolean(entryName && nameSet.has(entryName));
+          });
+        })
+      : docs;
+
+    const productions = sourceDocs.map(fromGlobalProduction);
+    return NextResponse.json({ success: true, count: productions.length, productions, identity });
   } catch (error) {
     console.error('[/api/productions/global GET]', error);
     return NextResponse.json({ success: false, count: 0, productions: [] });

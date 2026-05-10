@@ -23,6 +23,10 @@ export interface UserProfile {
   department: string;
   role: string;
   phone: string;
+  profileId?: string;
+  profileSource?: string;
+  linkedUids?: string[];
+  isAdmin?: boolean;
   linkedContactId?: number | string;
   is_consented?: boolean;
   termsAccepted?: boolean;
@@ -76,6 +80,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
   deleteDirectoryProfile: () => Promise<void>;
   repairUserProfile: () => Promise<void>;
   can: (permission: Permission) => boolean;
@@ -95,6 +100,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   logout: async () => {},
   updateUserProfile: async () => {},
+  refreshUserProfile: async () => {},
   deleteDirectoryProfile: async () => {},
   repairUserProfile: async () => {},
   can: () => false,
@@ -112,7 +118,7 @@ function defaultProfile(firebaseUser: User): UserProfile {
     photoURL: firebaseUser.photoURL,
     department: '',
     role: '',
-    phone: '',
+    phone: firebaseUser.phoneNumber || '',
     is_consented: false,
     skills: [],
     bio: '',
@@ -168,6 +174,10 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     department: typeof raw.department === 'string' ? raw.department : '',
     role: typeof raw.role === 'string' ? raw.role : '',
     phone: typeof raw.phone === 'string' ? raw.phone : '',
+    profileId: typeof raw.profileId === 'string' ? raw.profileId : undefined,
+    profileSource: typeof raw.profileSource === 'string' ? raw.profileSource : undefined,
+    linkedUids: Array.isArray(raw.linkedUids) ? raw.linkedUids.map((item) => String(item)) : undefined,
+    isAdmin: raw.isAdmin === true,
     is_consented: raw.is_consented === true,
     termsAccepted: raw.termsAccepted === true,
     termsAcceptedAt: typeof raw.termsAcceptedAt === 'string' ? raw.termsAcceptedAt : undefined,
@@ -249,6 +259,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return (await response.json()) as SessionBootstrapResponse;
   };
 
+  const applyBootstrap = (bootstrap: SessionBootstrapResponse) => {
+    setProfile(bootstrap.profile);
+    setProfileReady(true);
+    setProfileSource('server');
+    setBootstrapContactsTotal(bootstrap.contactsTotal ?? null);
+    setBootstrapContactsUpdatedAt(bootstrap.contactsUpdatedAt ?? null);
+  };
+
   const fetchClientProfile = async (firebaseUser: User): Promise<UserProfile | null> => {
     if (!db) return null;
 
@@ -290,11 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const bootstrap = await fetchSessionBootstrap(firebaseUser);
-        setProfile(bootstrap.profile);
-        setProfileReady(true);
-        setProfileSource('server');
-        setBootstrapContactsTotal(bootstrap.contactsTotal ?? null);
-        setBootstrapContactsUpdatedAt(bootstrap.contactsUpdatedAt ?? null);
+        applyBootstrap(bootstrap);
       } catch {
         try {
           const clientProfile = await fetchClientProfile(firebaseUser);
@@ -346,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => document.removeEventListener('click', handleGesture, true);
     }
     // 'denied' — do nothing
-  }, [user?.uid, profile?.termsAccepted]);
+  }, [user, user?.uid, profile?.termsAccepted]);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -418,6 +432,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshUserProfile = async () => {
+    if (!user) return;
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.removeItem(SESSION_BOOTSTRAP_CACHE_KEY);
+        window.sessionStorage.removeItem(AUTH_PROFILE_CACHE_KEY);
+      } catch {}
+    }
+
+    setProfileReady(false);
+    const bootstrap = await fetchSessionBootstrap(user);
+    applyBootstrap(bootstrap);
+  };
+
   const deleteDirectoryProfile = async () => {
     if (!user) return;
     const token = await user.getIdToken();
@@ -453,11 +481,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     const bootstrap = await fetchSessionBootstrap(user);
-    setProfile(bootstrap.profile);
-    setProfileReady(true);
-    setProfileSource('server');
-    setBootstrapContactsTotal(bootstrap.contactsTotal ?? null);
-    setBootstrapContactsUpdatedAt(bootstrap.contactsUpdatedAt ?? null);
+    applyBootstrap(bootstrap);
   };
 
   const canDo = (permission: Permission): boolean => can(profile?.siteRole, permission);
@@ -478,6 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         logout,
         updateUserProfile,
+        refreshUserProfile,
         deleteDirectoryProfile,
         repairUserProfile,
         can: canDo,

@@ -215,6 +215,7 @@ export default function WeeklyCalendarWidget() {
 
   const displayName = profile?.crewName || profile?.displayName || user?.displayName || '';
   const phone = profile?.phone ?? '';
+  const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
 
   useEffect(() => {
     setMounted(true);
@@ -245,7 +246,7 @@ export default function WeeklyCalendarWidget() {
 
       const normalizedPhone = normalizePhone(phone) ?? '';
 
-      const [globalPayload, personalPayload, myPayload] = await Promise.all([
+      const [globalPayload, personalPayload, myPayload, profilePayload] = await Promise.all([
         fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
@@ -268,6 +269,14 @@ export default function WeeklyCalendarWidget() {
               .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
               .catch(() => ({ productions: [] as Production[] }))
           : Promise.resolve({ productions: [] as Production[] }),
+        profileIdentityId
+          ? fetch(
+              `/api/productions/global?profileId=${encodeURIComponent(profileIdentityId)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
+              { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+            )
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
+              .catch(() => ({ productions: [] as Production[] }))
+          : Promise.resolve({ productions: [] as Production[] }),
       ]);
 
       if (cancelled) return;
@@ -275,9 +284,11 @@ export default function WeeklyCalendarWidget() {
       const personalProds = personalPayload.productions ?? [];
       const globalProds = globalPayload.productions ?? [];
       const myPhoneProds = myPayload.productions ?? [];
+      const myProfileProds = profilePayload.productions ?? [];
 
       const afterGlobal = mergeProductions(personalProds, globalProds, displayName, phone);
-      const merged = mergeProductions(afterGlobal, myPhoneProds, displayName, phone);
+      const afterPhone = mergeProductions(afterGlobal, myPhoneProds, displayName, phone);
+      const merged = mergeProductions(afterPhone, myProfileProds, displayName, phone);
 
       setProductions(merged);
       // Write to both caches so subsequent navigations are instant
@@ -301,9 +312,8 @@ export default function WeeklyCalendarWidget() {
     return () => {
       cancelled = true;
     };
-  // displayName and phone are included so isMyProduction always uses current profile data
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, user, displayName, phone]);
+  // displayName, phone, and profileIdentityId are included so matching uses current profile data
+  }, [days, user, displayName, phone, profileIdentityId]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';
   const byDate = useMemo(() => {
