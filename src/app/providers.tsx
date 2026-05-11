@@ -14,6 +14,7 @@ import IncomingCall from '@/components/call/IncomingCall';
 import CallScreen from '@/components/call/CallScreen';
 import ConsentGate, { useConsentGateState } from '@/components/ConsentGate';
 import OnboardingWrapper from '@/components/onboarding/OnboardingWrapper';
+import AccountApprovalGate from '@/components/AccountApprovalGate';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -129,16 +130,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 <FCMForegroundListener />
                 <PushBanner />
                 <CallProvider>
-                  <OnboardingWrapper>
-                    <ConsentBoundary>
-                      <PresenceManager />
-                      <UsageTracker />
-                      <ConsentGate />
-                      {children}
-                      <IncomingCall />
-                      <CallScreen />
-                    </ConsentBoundary>
-                  </OnboardingWrapper>
+                  <AccountApprovalGate>
+                    <OnboardingWrapper>
+                      <ConsentBoundary>
+                        <PresenceManager />
+                        <UsageTracker />
+                        <ConsentGate />
+                        {children}
+                        <IncomingCall />
+                        <CallScreen />
+                      </ConsentBoundary>
+                    </OnboardingWrapper>
+                  </AccountApprovalGate>
                 </CallProvider>
               </ToastProvider>
             </NotificationProvider>

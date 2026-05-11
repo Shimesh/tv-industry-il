@@ -16,6 +16,7 @@ const adminAuth = require('firebase-admin/auth') as {
       displayName?: string;
       photoURL?: string;
     }>;
+    deleteUser: (uid: string) => Promise<void>;
   };
 };
 

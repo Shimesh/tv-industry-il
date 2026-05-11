@@ -1,5 +1,7 @@
 import type { VerifiedAuthUser } from '@/lib/apiAuth';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { isPrimaryAdminUid } from '@/lib/server/primaryAdmin';
+import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
 
 type RawUserProfile = Record<string, unknown>;
 type RawContact = Record<string, unknown>;
@@ -21,6 +23,7 @@ export type SessionProfile = {
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
+  approvalStatus: UserApprovalStatus;
   isOnline: boolean;
   onboardingComplete: boolean;
   theme: string;
@@ -88,6 +91,7 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     skills: [],
     bio: '',
     status: 'available',
+    approvalStatus: isPrimaryAdminUid(authUser.uid) ? 'active' : 'pending',
     isOnline: true,
     onboardingComplete: false,
     theme: 'dark',
@@ -131,6 +135,7 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     skills: asStringArray(raw.skills) || [],
     bio: asString(raw.bio),
     status: raw.status === 'busy' || raw.status === 'offline' ? raw.status : 'available',
+    approvalStatus: normalizeApprovalStatus(raw.approvalStatus, 'active'),
     isOnline: raw.isOnline === true,
     onboardingComplete: raw.onboardingComplete === true,
     theme: asString(raw.theme, 'dark'),
@@ -169,6 +174,10 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
       createdAt: new Date().toISOString(),
     });
     repaired = true;
+  } else if (!existing.approvalStatus) {
+    patch.approvalStatus = 'active';
+    profile = { ...profile, approvalStatus: 'active' };
+    repaired = true;
   } else if (typeof existing.is_consented !== 'boolean') {
     patch.is_consented = false;
     profile = { ...profile, is_consented: false };
@@ -183,6 +192,19 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
     patch.siteRole = 'admin';
     profile = { ...profile, siteRole: 'admin' };
     repaired = true;
+  }
+
+  if (isPrimaryAdminUid(authUser.uid)) {
+    if (profile.approvalStatus !== 'active') {
+      patch.approvalStatus = 'active';
+      profile = { ...profile, approvalStatus: 'active' };
+      repaired = true;
+    }
+    if (profile.siteRole !== 'admin') {
+      patch.siteRole = 'admin';
+      profile = { ...profile, siteRole: 'admin' };
+      repaired = true;
+    }
   }
 
   if (!profile.email && authUser.email) {

@@ -14,6 +14,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { can, hasRole, type Permission, type UserRole } from '@/lib/permissions';
+import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
 
 export interface UserProfile {
   uid: string;
@@ -34,6 +35,7 @@ export interface UserProfile {
   skills: string[];
   bio: string;
   status: 'available' | 'busy' | 'offline';
+  approvalStatus?: UserApprovalStatus;
   isOnline: boolean;
   onboardingComplete: boolean;
   theme: string;
@@ -123,6 +125,7 @@ function defaultProfile(firebaseUser: User): UserProfile {
     skills: [],
     bio: '',
     status: 'available',
+    approvalStatus: 'pending',
     isOnline: true,
     onboardingComplete: false,
     theme: 'dark',
@@ -184,6 +187,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     skills: Array.isArray(raw.skills) ? raw.skills.map((item) => String(item)) : [],
     bio: typeof raw.bio === 'string' ? raw.bio : '',
     status: raw.status === 'busy' || raw.status === 'offline' ? raw.status : 'available',
+    approvalStatus: normalizeApprovalStatus(raw.approvalStatus, 'active'),
     isOnline: raw.isOnline === true,
     onboardingComplete: raw.onboardingComplete === true,
     theme: typeof raw.theme === 'string' && raw.theme.trim() ? raw.theme : 'dark',
