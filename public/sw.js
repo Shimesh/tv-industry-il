@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v1';
+const CACHE_NAME = 'tv-industry-il-v1.8.8';
 const STATIC_ASSETS = [
   '/',
   '/schedule',
@@ -6,63 +6,73 @@ const STATIC_ASSETS = [
   '/news',
   '/studios',
   '/manifest.json',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
 ];
 
-// Install event - cache static assets
+const SKIP_PATH_PREFIXES = [
+  '/api/',
+  '/__/auth/',
+  '/auth/',
+];
+
+function shouldHandleRequest(request) {
+  if (request.method !== 'GET') return false;
+  if (request.headers.has('range')) return false;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  if (SKIP_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return false;
+
+  return true;
+}
+
+function shouldCacheResponse(response) {
+  return response && response.ok && response.status === 200 && response.type === 'basic';
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
 
-// Activate event - clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((cacheNames) => Promise.all(
+      cacheNames
+        .filter((name) => name.startsWith('tv-industry-il-') && name !== CACHE_NAME)
+        .map((name) => caches.delete(name))
+    ))
   );
   self.clients.claim();
 });
 
-// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
-
-  // Skip external requests
-  if (!event.request.url.startsWith(self.location.origin)) return;
-
-  // Skip API calls and map embeds
-  if (event.request.url.includes('/api/') || event.request.url.includes('maps.google.com')) return;
+  if (!shouldHandleRequest(event.request)) return;
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response and cache it
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
+        if (shouldCacheResponse(response)) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
         return response;
       })
-      .catch(() => {
-        // Fallback to cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
+      .catch(async () => {
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) return cachedResponse;
 
-          // If navigating and no cache, return index
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
-        });
+        if (event.request.mode === 'navigate') {
+          const cachedRoot = await caches.match('/');
+          if (cachedRoot) return cachedRoot;
+        }
+
+        return Response.error();
       })
   );
 });

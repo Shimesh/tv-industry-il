@@ -23,6 +23,8 @@ interface RssNewsItem {
 let cachedNews: RssNewsItem[] = [];
 let lastFetch = 0;
 const CACHE_TTL = 5 * 60 * 1000;
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+const USER_AGENT = `Mozilla/5.0 (compatible; TVIndustryIL/1.8.8; +${APP_URL})`;
 
 type RssSource = {
   name: string;
@@ -235,7 +237,7 @@ async function enrichImage(item: Omit<RssNewsItem, 'imageSource' | 'isSourceLogo
   try {
     const response = await fetch(item.link, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/1.2.3; +https://tv-industry-il.vercel.app)',
+        'User-Agent': USER_AGENT,
         Accept: 'text/html,application/xhtml+xml,*/*',
       },
       cache: 'no-store',
@@ -272,7 +274,7 @@ async function fetchRssFeed(source: RssSource): Promise<Array<Omit<RssNewsItem, 
   try {
     const res = await fetch(source.url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/1.2.3; +https://tv-industry-il.vercel.app)',
+        'User-Agent': USER_AGENT,
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
       cache: 'no-store',

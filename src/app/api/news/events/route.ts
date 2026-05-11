@@ -4,6 +4,9 @@ import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+const USER_AGENT = `Mozilla/5.0 (compatible; TVIndustryIL/1.8.8; +${APP_URL})`;
+
 type EventKind = 'industry' | 'culture' | 'conference' | 'festival' | 'music';
 
 type EventItem = {
@@ -371,7 +374,7 @@ async function fetchFeedEvents(source: EventSource): Promise<EventItem[]> {
   try {
     const response = await fetch(source.url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/1.3.9; +https://tv-industry-il.vercel.app)',
+        'User-Agent': USER_AGENT,
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
       cache: 'no-store',

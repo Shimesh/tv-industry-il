@@ -10,7 +10,23 @@ import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import ScrollToTop from '@/components/ScrollToTop';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+const appDescription =
+  'הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - שידור חי, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'TV Industry IL',
+    description: appDescription,
+    url: '/',
+    siteName: 'TV Industry IL',
+    locale: 'he_IL',
+    type: 'website',
+  },
   title: 'TV Industry IL - פלטפורמת תעשיית הטלוויזיה הישראלית',
   description:
     'הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - שידור חי, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד',

@@ -1,15 +1,18 @@
 {
+  "id": "/",
   "name": "TV Industry IL - תעשיית הטלוויזיה הישראלית",
   "short_name": "TV Industry IL",
-  "description": "הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל",
+  "description": "הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל: שידורים חיים, אלפון מקצועי, חדשות, אולפנים וכלי עבודה.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#030712",
   "theme_color": "#7c3aed",
   "dir": "rtl",
   "lang": "he",
   "orientation": "any",
-  "categories": ["entertainment", "business", "productivity"],
+  "categories": ["entertainment", "business", "productivity", "news"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
@@ -65,26 +68,54 @@
     {
       "name": "לוח שידורים",
       "short_name": "שידורים",
+      "description": "צפייה בשידורים חיים ולוח שידורים",
       "url": "/schedule",
-      "icons": []
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "אלפון מקצועי",
       "short_name": "אלפון",
+      "description": "חיפוש אנשי מקצוע בתעשייה",
       "url": "/directory",
-      "icons": []
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "חדשות ואירועים",
       "short_name": "חדשות",
+      "description": "חדשות ועדכונים מענף הטלוויזיה",
       "url": "/news",
-      "icons": []
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "אולפנים",
       "short_name": "אולפנים",
+      "description": "איתור אולפנים וספקי הפקה",
       "url": "/studios",
-      "icons": []
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
