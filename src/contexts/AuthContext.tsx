@@ -210,14 +210,23 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const cachedBootstrap = readCachedBootstrap();
   const [user, setUser] = useState<User | null>(() => auth?.currentUser ?? null);
-  const [profile, setProfile] = useState<UserProfile | null>(() => cachedBootstrap?.profile || null);
-  const [profileReady, setProfileReady] = useState<boolean>(() => Boolean(cachedBootstrap?.profile));
-  const [profileSource, setProfileSource] = useState<ProfileSource>(() => (cachedBootstrap?.profile ? 'cache' : 'fallback'));
-  const [bootstrapContactsTotal, setBootstrapContactsTotal] = useState<number | null>(() => cachedBootstrap?.contactsTotal ?? null);
-  const [bootstrapContactsUpdatedAt, setBootstrapContactsUpdatedAt] = useState<string | null>(() => cachedBootstrap?.contactsUpdatedAt ?? null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileSource, setProfileSource] = useState<ProfileSource>('fallback');
+  const [bootstrapContactsTotal, setBootstrapContactsTotal] = useState<number | null>(null);
+  const [bootstrapContactsUpdatedAt, setBootstrapContactsUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const cachedBootstrap = readCachedBootstrap();
+    if (!cachedBootstrap?.profile || auth.currentUser) return;
+    setProfile(cachedBootstrap.profile);
+    setProfileReady(true);
+    setProfileSource('cache');
+    setBootstrapContactsTotal(cachedBootstrap.contactsTotal ?? null);
+    setBootstrapContactsUpdatedAt(cachedBootstrap.contactsUpdatedAt ?? null);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -340,17 +349,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || !profile?.termsAccepted) return;
     if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) return;
+    if (typeof document === 'undefined') return;
 
     const uid = user.uid;
 
-    if (Notification.permission === 'granted') {
+    if (window.Notification.permission === 'granted') {
       import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
         void registerFcmToken(uid);
       }).catch(() => undefined);
       return;
     }
 
-    if (Notification.permission === 'default') {
+    if (window.Notification.permission === 'default') {
       const handleGesture = () => {
         import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
           void registerFcmToken(uid);

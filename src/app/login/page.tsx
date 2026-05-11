@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   const { user, loading: authLoading, signIn, signUp, signInWithGoogle } = useAuth();
@@ -65,6 +66,11 @@ export default function LoginPage() {
       router.push('/');
     }
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!pendingRedirect) return;
+    router.push(pendingRedirect);
+  }, [pendingRedirect, router]);
 
   const resetRecaptchaVerifier = useCallback(() => {
     try {
@@ -122,7 +128,7 @@ export default function LoginPage() {
         }
         await signUp(email, password, name, department, role);
       }
-      router.push('/');
+      setPendingRedirect('/');
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
       if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password') {
@@ -253,7 +259,7 @@ export default function LoginPage() {
     try {
       await confirmationResult.confirm(code);
       resetRecaptchaVerifier();
-      router.push('/');
+      setPendingRedirect('/');
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
       if (firebaseError.code === 'auth/invalid-verification-code') {

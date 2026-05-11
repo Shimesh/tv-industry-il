@@ -1,7 +1,8 @@
 'use client';
 
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { logClientError } from '@/lib/clientErrorLogging';
 
 interface Props {
   children: ReactNode;
@@ -10,7 +11,6 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
@@ -19,36 +19,43 @@ export default class ErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo);
+    console.error('[ErrorBoundary] component crash:', error, errorInfo);
+    logClientError({ error, errorInfo, source: 'component-error-boundary' });
   }
 
   render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) return this.props.fallback;
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-8">
-          <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle className="w-7 h-7 text-red-400" />
-          </div>
-          <div className="text-center">
-            <h3 className="font-bold text-base mb-1" style={{ color: 'var(--theme-text)' }}>משהו השתבש</h3>
-            <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>אירעה שגיאה בטעינת הרכיב</p>
-          </div>
-          <button
-            onClick={() => this.setState({ hasError: false })}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] hover:opacity-80 transition-opacity"
-          >
-            <RefreshCw className="w-4 h-4" />
-            נסה שוב
-          </button>
+    if (!this.state.hasError) return this.props.children;
+    if (this.props.fallback) return this.props.fallback;
+
+    return (
+      <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 p-8" dir="rtl">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10">
+          <AlertTriangle className="h-7 w-7 text-red-400" />
         </div>
-      );
-    }
-    return this.props.children;
+        <div className="text-center">
+          <h3 className="mb-1 text-base font-bold" style={{ color: 'var(--theme-text)' }}>
+            משהו השתבש
+          </h3>
+          <p className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
+            אירעה שגיאה בטעינת הרכיב
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined') window.location.reload();
+          }}
+          className="flex items-center gap-2 rounded-lg bg-[var(--theme-accent-glow)] px-4 py-2 text-sm font-medium text-[var(--theme-accent)] transition-opacity hover:opacity-80"
+        >
+          <RefreshCw className="h-4 w-4" />
+          טען מחדש
+        </button>
+      </div>
+    );
   }
 }

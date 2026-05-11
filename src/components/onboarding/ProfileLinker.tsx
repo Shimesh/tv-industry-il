@@ -223,14 +223,14 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
               <div className="space-y-5">
                 <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4">
                   <div className="mb-3 flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-lg font-black text-emerald-300">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-lg font-black text-emerald-300" suppressHydrationWarning>
                       {candidate.displayName.charAt(0)}
                     </div>
                     <div>
-                      <p className="text-xl font-black text-[var(--theme-text)]">
+                      <p className="text-xl font-black text-[var(--theme-text)]" suppressHydrationWarning>
                         היי, זיהינו אותך כ-{candidate.displayName}. האם זה אתה?
                       </p>
-                      <p className="mt-1 text-xs text-[var(--theme-text-secondary)]">
+                      <p className="mt-1 text-xs text-[var(--theme-text-secondary)]" suppressHydrationWarning>
                         נמצא ב{sourceLabels[candidate.source]}
                         {candidate.role ? ` · ${candidate.role}` : ''}
                         {candidate.department ? ` · ${candidate.department}` : ''}
@@ -239,7 +239,9 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
                     <Phone className="h-3.5 w-3.5" />
-                    <span dir="ltr">{normalizePhone(candidate.phone) || candidate.phone}</span>
+                    <span dir="ltr" {...{ 'x-apple-data-detectors': 'false' }} suppressHydrationWarning>
+                      {normalizePhone(candidate.phone) || candidate.phone}
+                    </span>
                     {candidate.isAdmin && (
                       <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 font-bold text-yellow-300">Admin</span>
                     )}
@@ -312,8 +314,8 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
                           {name.charAt(0) || '?'}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-[var(--theme-text)]">{name || 'ללא שם'}</p>
-                          <p className="truncate text-xs text-[var(--theme-text-secondary)]">
+                          <p className="truncate text-sm font-bold text-[var(--theme-text)]" suppressHydrationWarning>{name || 'ללא שם'}</p>
+                          <p className="truncate text-xs text-[var(--theme-text-secondary)]" suppressHydrationWarning>
                             {String(contact.role || '')}
                             {contact.role && contact.department ? ' · ' : ''}
                             {String(contact.department || '')}

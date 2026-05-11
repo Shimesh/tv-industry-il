@@ -6,6 +6,7 @@ import Footer from '@/components/Footer';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import ScrollToTop from '@/components/ScrollToTop';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 
@@ -44,26 +45,29 @@ export default function RootLayout({
         />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="format-detection" content="telephone=no" />
       </head>
       <body
         className="antialiased min-h-screen flex flex-col app-safe-x app-safe-bottom app-ambient"
         style={{ background: 'var(--theme-bg, #030712)', color: 'var(--theme-text, #f3f4f6)' }}
         suppressHydrationWarning
       >
-        <Providers>
-          <ScrollToTop />
-          <Navigation />
-          <main
-            className="flex-1"
-            style={{ paddingTop: 'var(--app-header-offset)', paddingBottom: 'var(--safe-area-bottom)' }}
-          >
-            <ErrorBoundary>{children}</ErrorBoundary>
-          </main>
-          <Footer />
-          <ServiceWorkerRegistration />
-<InstallPrompt />
-          <AccessibilityWidget />
-        </Providers>
+        <GlobalErrorBoundary>
+          <Providers>
+            <ScrollToTop />
+            <Navigation />
+            <main
+              className="flex-1"
+              style={{ paddingTop: 'var(--app-header-offset)', paddingBottom: 'var(--safe-area-bottom)' }}
+            >
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </main>
+            <Footer />
+            <ServiceWorkerRegistration />
+            <InstallPrompt />
+            <AccessibilityWidget />
+          </Providers>
+        </GlobalErrorBoundary>
       </body>
     </html>
   );

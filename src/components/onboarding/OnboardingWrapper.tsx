@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileLinker } from '@/components/onboarding/ProfileLinker';
@@ -10,6 +10,12 @@ const SKIP_ONBOARDING_ROUTES = new Set(['/login', '/terms', '/privacy', '/access
 export default function OnboardingWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, profile, loading, profileReady } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const phoneAuthNeedsLink = Boolean(
     user?.phoneNumber &&
       profile &&
@@ -17,7 +23,8 @@ export default function OnboardingWrapper({ children }: { children: ReactNode })
       !profile.linkedContactId,
   );
   const shouldShowProfileLinker = Boolean(
-    user &&
+    mounted &&
+      user &&
       !loading &&
       profileReady &&
       profile &&
