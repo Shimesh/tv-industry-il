@@ -21,10 +21,10 @@ export interface StreamConfig {
 export const streamConfigs: Record<string, StreamConfig> = {
   // === CHANNELS WITH DIRECT HLS STREAMS ===
 
-  // כאן 11 — token-free CDN from kancdn.medonecdn.net (confirmed 24/7)
+  // כאן 11 — stable HTTPS Redge CDN source
   kan11: {
     type: 'hls',
-    streamUrl: 'https://kancdn.medonecdn.net/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8',
+    streamUrl: 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8',
     websiteUrl: 'https://www.kan.org.il/live/',
     requiresAuth: false,
     hasLiveStream: true,

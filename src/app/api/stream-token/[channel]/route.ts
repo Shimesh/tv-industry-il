@@ -8,6 +8,7 @@ const NOW14_GUID = '9fb14ce7-fcc2-4695-839b-e641390d7a00';
 const NOW14_API_BASE = 'https://insight-api-channel14.univtec.com/';
 const NOW14_TENANT_ID = 'channel14';
 const NOW14_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/ch14/live/ch14/live.livx/playlist.m3u8';
+const KAN11_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8';
 
 type BrightcovePlaybackResponse = {
   sources?: Array<{
@@ -132,16 +133,16 @@ export async function GET(
   const { channel } = await params;
 
   try {
-    // === כאן 11 — static CDN URL is preferred; this is a dynamic fallback ===
+    // === כאן 11 — prefer the stable HTTPS Redge CDN URL ===
     if (channel === 'kan11') {
       const html = await fetchPage('https://www.kan.org.il/live/');
       if (html) {
         const url = extractM3u8(html);
-        if (url) return NextResponse.json({ url, expires: Date.now() + 3600000 });
+        if (url?.includes('cdn-redge.media')) return NextResponse.json({ url, expires: Date.now() + 3600000 });
       }
       // Return known stable CDN as fallback
       return NextResponse.json({
-        url: 'https://kancdn.medonecdn.net/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8',
+        url: KAN11_STABLE_HLS,
         expires: Date.now() + 3600000,
       });
     }

@@ -13,6 +13,9 @@ interface VideoPlayerProps {
   currentProgram?: string;
 }
 
+const KAN11_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8';
+const KAN11_720P_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8?bitrate=2992000&audioId=1&videoId=4';
+
 export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,16 +94,82 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
 
   // Load HLS stream (either static streamUrl or dynamic URL fetched from API)
   useEffect(() => {
-    const hlsUrl = dynamicStreamUrl ?? stream?.streamUrl;
-    if (!videoRef.current || !hlsUrl) return;
+    const primaryHlsUrl = dynamicStreamUrl ?? stream?.streamUrl;
+    const channelFallbackUrls = channel.id === 'kan11' ? [KAN11_STABLE_HLS, KAN11_720P_HLS] : [];
+    const hlsSources = Array.from(new Set([primaryHlsUrl, ...channelFallbackUrls].filter((url): url is string => !!url)));
+    if (!videoRef.current || hlsSources.length === 0) return;
+    const video = videoRef.current;
 
     let hlsInstance: import('hls.js').default | null = null;
+    let activeSourceIndex = 0;
+    let mediaRecoverAttempts = 0;
+
+    const getVideoErrorDetails = () => {
+      const videoError = video.error;
+      return videoError ? { code: videoError.code, message: videoError.message } : null;
+    };
+
+    const logStreamError = (message: string, details?: unknown) => {
+      console.error(`[VideoPlayer] ${message}`, {
+        channelId: channel.id,
+        channelName: channel.name,
+        sourceUrl: hlsSources[activeSourceIndex],
+        sourceIndex: activeSourceIndex,
+        sourceCount: hlsSources.length,
+        details,
+      });
+    };
+
+    const tryNextSource = () => {
+      if (activeSourceIndex < hlsSources.length - 1) {
+        activeSourceIndex += 1;
+        mediaRecoverAttempts = 0;
+        setError(null);
+        setLoading(true);
+        setNeedsUserGesture(false);
+        void loadStream();
+        return true;
+      }
+      return false;
+    };
+
+    const handleNativeVideoError = () => {
+      logStreamError('Native video error', getVideoErrorDetails());
+      if (!tryNextSource()) {
+        setError('השידור אינו זמין כרגע. נסו לרענן או לפתוח באתר הערוץ.');
+        setLoading(false);
+      }
+    };
+
+    const logNativeState = (eventName: string) => {
+      console.error(`[VideoPlayer] Native video ${eventName}`, {
+        channelId: channel.id,
+        channelName: channel.name,
+        sourceUrl: hlsSources[activeSourceIndex],
+        networkState: video.networkState,
+        readyState: video.readyState,
+        error: getVideoErrorDetails(),
+      });
+    };
+
+    const handleStalled = () => logNativeState('stalled');
+    const handleWaiting = () => logNativeState('waiting');
+
+    video.addEventListener('error', handleNativeVideoError);
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('waiting', handleWaiting);
     setLoading(true);
     setError(null);
     setNeedsUserGesture(false);
 
-    const loadStream = async () => {
+    async function loadStream() {
+      const hlsUrl = hlsSources[activeSourceIndex];
       if (hlsUrl.includes('.m3u8')) {
+        hlsInstance?.destroy();
+        hlsInstance = null;
+        video.removeAttribute('src');
+        video.load();
+
         const HlsModule = await import('hls.js');
         const Hls = HlsModule.default;
 
@@ -108,54 +177,68 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           hlsInstance = new Hls({
             enableWorker: true,
             lowLatencyMode: true,
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: 8,
           });
           hlsInstance.loadSource(hlsUrl);
-          hlsInstance.attachMedia(videoRef.current!);
-          if (videoRef.current) { videoRef.current.muted = false; videoRef.current.volume = 1; }
+          hlsInstance.attachMedia(video);
+          video.muted = false;
+          video.volume = 1;
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            const vid = videoRef.current;
-            if (!vid) return;
-            vid.play().then(() => {
+            video.play().then(() => {
               setIsPlaying(true);
               setLoading(false);
               setNeedsUserGesture(false);
-            }).catch(() => {
+            }).catch((playError) => {
+              logStreamError('Autoplay blocked or failed', playError);
               setLoading(false);
               setNeedsUserGesture(true);
             });
           });
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+            logStreamError('HLS error', data);
             if (data.fatal) {
-              setError('שגיאה בטעינת השידור');
+              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoverAttempts < 1) {
+                mediaRecoverAttempts += 1;
+                logStreamError('Recovering from fatal HLS media error', data);
+                hlsInstance?.recoverMediaError();
+                return;
+              }
+              if (tryNextSource()) return;
+              setError('שגיאה בטעינת השידור. נסו לרענן או לפתוח באתר הערוץ.');
               setLoading(false);
             }
           });
-        } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari / iOS native HLS support
-          const vid = videoRef.current;
-          vid.src = hlsUrl;
-          vid.load();
-          vid.play().then(() => {
+          video.src = hlsUrl;
+          video.load();
+          video.play().then(() => {
             setIsPlaying(true);
             setLoading(false);
             setNeedsUserGesture(false);
-          }).catch(() => {
+          }).catch((playError) => {
+            logStreamError('Autoplay blocked or failed', playError);
             setLoading(false);
             setNeedsUserGesture(true);
           });
         } else {
+          logStreamError('Browser does not support HLS playback');
           setError('הדפדפן לא תומך בפורמט השידור');
           setLoading(false);
         }
       }
-    };
+    }
 
-    loadStream();
+    void loadStream();
 
     return () => {
+      video.removeEventListener('error', handleNativeVideoError);
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('waiting', handleWaiting);
       hlsInstance?.destroy();
     };
-  }, [stream?.streamUrl, dynamicStreamUrl]);
+  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl]);
 
   // Sync volume and muted state to the video element
   // Note: React's `muted` JSX prop is broken (known React bug) — must use ref imperatively
@@ -235,7 +318,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   // Resolve final URLs: HLS takes priority over iframe embed
   const resolvedEmbedUrl = stream?.embedUrl ?? dynamicEmbedUrl;
   const resolvedAutoplayEmbedUrl = resolvedEmbedUrl ? appendAutoplayParams(resolvedEmbedUrl) : null;
-  const resolvedHlsUrl = stream?.streamUrl ?? dynamicStreamUrl;
+  const resolvedHlsUrl = dynamicStreamUrl ?? stream?.streamUrl;
   const hasDirectStream = !!resolvedHlsUrl;
   const hasEmbed = !!resolvedEmbedUrl;
   const isResolvingDynamicStream = !!(stream?.dynamicStream && dynamicLoading && !hasDirectStream);
@@ -277,8 +360,16 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             muted={false}
             controls={true}
             onError={() => {
-              setError('השידור אינו זמין כרגע');
-              setLoading(false);
+              console.error('[VideoPlayer] React video onError', {
+                channelId: channel.id,
+                channelName: channel.name,
+                networkState: videoRef.current?.networkState,
+                readyState: videoRef.current?.readyState,
+                error: videoRef.current?.error ? {
+                  code: videoRef.current.error.code,
+                  message: videoRef.current.error.message,
+                } : null,
+              });
             }}
           />
 
