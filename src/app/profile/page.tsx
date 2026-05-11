@@ -12,10 +12,10 @@ import { useAppData } from '@/contexts/AppDataContext';
 import {
   User, Mail, Phone, Briefcase, MapPin, Edit3, Save, Camera,
   Shield, Bell, LogOut, Sparkles, CheckCircle, X,
-  Search, Link2, UserCheck, Star, Wrench, Clock, Settings,
+  Search, Link2, UserCheck, Star, Wrench, Clock, Settings, Plus, Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
+import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS, getRolesForDepartment } from '@/constants/departments';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 const STATUS_OPTS = [
@@ -28,6 +28,43 @@ function arrToStr(arr: string[] | undefined) { return (arr || []).join(', '); }
 function strToArr(s: string) { return s.split(',').map(v => v.trim()).filter(Boolean); }
 function selectValues(options: HTMLCollectionOf<HTMLOptionElement>) {
   return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
+}
+
+type RoleRow = {
+  id: string;
+  department: string;
+  role: string;
+};
+
+function unique(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value) continue;
+    const key = value.toLocaleLowerCase('he');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+function createRoleRows(departments: string[], roles: string[]): RoleRow[] {
+  const count = Math.max(departments.length, roles.length, 1);
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${index}-${departments[index] || ''}-${roles[index] || ''}`,
+    department: departments[index] || '',
+    role: roles[index] || '',
+  }));
+}
+
+function roleRowsToFields(rows: RoleRow[]) {
+  const activeRows = rows.filter((row) => row.department || row.role);
+  return {
+    departments: unique(activeRows.map((row) => row.department)),
+    roles: unique(activeRows.map((row) => row.role)),
+  };
 }
 
 export default function ProfilePage() {
@@ -49,6 +86,10 @@ function ProfileContent() {
     displayName: profile?.displayName || '',
     departments: normalizeProfessionalFields(profile || null).departments,
     roles: normalizeProfessionalFields(profile || null).roles,
+    roleRows: createRoleRows(
+      normalizeProfessionalFields(profile || null).departments,
+      normalizeProfessionalFields(profile || null).roles,
+    ),
     phone: profile?.phone || '',
     bio: profile?.bio || '',
     city: profile?.city || '',
@@ -62,12 +103,12 @@ function ProfileContent() {
   // Sync form when profile loads
   useEffect(() => {
     if (profile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       const professional = normalizeProfessionalFields(profile);
       setForm({
         displayName: profile.displayName || '',
         departments: professional.departments,
         roles: professional.roles,
+        roleRows: createRoleRows(professional.departments, professional.roles),
         phone: profile.phone || '',
         bio: profile.bio || '',
         city: profile.city || '',
@@ -83,19 +124,19 @@ function ProfileContent() {
   useEffect(() => {
     const professional = normalizeProfessionalFields(profile || null);
     if (profile && !profile.onboardingComplete && (!professional.departments.length || !professional.roles.length)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowOnboarding(true);
     }
   }, [profile]);
 
   const handleSave = async () => {
     setSaving(true);
+    const professionalFields = roleRowsToFields(form.roleRows);
     await updateUserProfile({
       displayName: form.displayName,
-      department: form.departments[0] || '',
-      departments: form.departments,
-      role: form.roles[0] || '',
-      roles: form.roles,
+      department: professionalFields.departments[0] || '',
+      departments: professionalFields.departments,
+      role: professionalFields.roles[0] || '',
+      roles: professionalFields.roles,
       phone: form.phone,
       bio: form.bio,
       city: form.city,
@@ -116,7 +157,13 @@ function ProfileContent() {
   }) => {
     await updateUserProfile({ ...data, onboardingComplete: true });
     const professional = normalizeProfessionalFields(data);
-    setForm(prev => ({ ...prev, ...data, departments: professional.departments, roles: professional.roles }));
+    setForm(prev => ({
+      ...prev,
+      ...data,
+      departments: professional.departments,
+      roles: professional.roles,
+      roleRows: createRoleRows(professional.departments, professional.roles),
+    }));
     setShowOnboarding(false);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2500);
@@ -161,8 +208,9 @@ function ProfileContent() {
   const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)]';
   const labelCls = 'text-xs text-[var(--theme-text-secondary)] mb-1 block';
   const professional = normalizeProfessionalFields(profile);
-  const departmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, ...form.departments].filter(Boolean)));
-  const roleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...form.roles].filter(Boolean)));
+  const currentRoleFields = roleRowsToFields(form.roleRows);
+  const departmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, ...currentRoleFields.departments].filter(Boolean)));
+  const roleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...currentRoleFields.roles].filter(Boolean)));
 
   return (
     <div className="min-h-screen">
@@ -269,7 +317,7 @@ function ProfileContent() {
                     <label className={labelCls}>שם מלא</label>
                     <input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} className={inputCls} />
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="hidden">
                     <div>
                       <label className={labelCls}>מחלקות</label>
                       <select multiple value={form.departments} onChange={e => setForm({ ...form, departments: selectValues(e.currentTarget.selectedOptions) })} className={`${inputCls} min-h-32`}>
@@ -283,6 +331,15 @@ function ProfileContent() {
                       </select>
                     </div>
                   </div>
+                  <RoleRowsEditor
+                    rows={form.roleRows}
+                    departmentOptions={departmentOptions}
+                    inputClassName={inputCls}
+                    onChange={(nextRows) => {
+                      const fields = roleRowsToFields(nextRows);
+                      setForm((prev) => ({ ...prev, roleRows: nextRows, ...fields }));
+                    }}
+                  />
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>טלפון</label>
@@ -603,6 +660,111 @@ function OnboardingModal({
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function RoleRowsEditor({
+  rows,
+  departmentOptions,
+  inputClassName,
+  onChange,
+}: {
+  rows: RoleRow[];
+  departmentOptions: string[];
+  inputClassName: string;
+  onChange: (rows: RoleRow[]) => void;
+}) {
+  const updateRow = (index: number, patch: Partial<RoleRow>) => {
+    onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  };
+
+  const addRow = () => {
+    onChange([...rows, { id: `new-${Date.now()}`, department: '', role: '' }]);
+  };
+
+  const removeRow = (index: number) => {
+    const nextRows = rows.length > 1
+      ? rows.filter((_, rowIndex) => rowIndex !== index)
+      : [{ id: `empty-${Date.now()}`, department: '', role: '' }];
+    onChange(nextRows);
+  };
+
+  return (
+    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)]/70 p-3 sm:p-4" dir="rtl">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <label className="block text-sm font-black text-[var(--theme-text)]">תפקידים מקצועיים</label>
+          <p className="mt-0.5 text-xs text-[var(--theme-text-secondary)]">בחרו מחלקה ואז תפקיד. אפשר להוסיף כמה שורות.</p>
+        </div>
+        <button
+          type="button"
+          onClick={addRow}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--theme-accent)] px-3 py-2 text-xs font-black text-white shadow-lg shadow-purple-500/20 transition hover:scale-[1.01]"
+        >
+          <Plus className="h-4 w-4" />
+          הוסף תפקיד
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((row, index) => {
+          const departmentRoles = getRolesForDepartment(row.department);
+          const rolesForDepartment = Array.from(new Set([
+            ...departmentRoles,
+            ...INDUSTRY_ROLE_OPTIONS,
+            row.role,
+          ].filter(Boolean)));
+          const isCustomRole = row.role && row.department && !departmentRoles.includes(row.role);
+
+          return (
+            <div
+              key={row.id}
+              className="grid grid-cols-1 gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <select
+                aria-label="מחלקה"
+                value={row.department}
+                onChange={(event) => updateRow(index, { department: event.target.value, role: '' })}
+                className={inputClassName}
+              >
+                <option value="">בחר מחלקה</option>
+                {departmentOptions.map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
+              </select>
+
+              <div>
+                <select
+                  aria-label="תפקיד"
+                  value={row.role}
+                  onChange={(event) => updateRow(index, { role: event.target.value })}
+                  className={inputClassName}
+                >
+                  <option value="">בחר תפקיד</option>
+                  {rolesForDepartment.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+                {isCustomRole && (
+                  <span className="mt-1 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                    תפקיד מותאם נשמר
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                aria-label="הסר תפקיד"
+                onClick={() => removeRow(index)}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-red-400/20 px-3 text-red-300 transition hover:bg-red-500/10"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

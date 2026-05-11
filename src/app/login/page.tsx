@@ -7,7 +7,7 @@ import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, Phone } from 'l
 import { motion, AnimatePresence } from 'framer-motion';
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { INDUSTRY_DEPARTMENTS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
+import { INDUSTRY_DEPARTMENTS, INDUSTRY_ROLE_OPTIONS, getRolesForDepartment } from '@/constants/departments';
 
 function formatIsraeliPhoneForFirebase(input: string): string | null {
   const cleaned = input.replace(/[\s\-()]/g, '');
@@ -138,6 +138,9 @@ export default function LoginPage() {
   // Check if Firebase is configured with real credentials
   const isFirebaseConfigured = process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'demo-api-key';
   const isRegisterSubmitDisabled = isLoading || (mode === 'register' && !acceptedTerms);
+  const roleOptions = department
+    ? Array.from(new Set([...getRolesForDepartment(department), role].filter(Boolean)))
+    : INDUSTRY_ROLE_OPTIONS;
 
   const handleGoogleSignIn = async () => {
     if (mode === 'register' && !acceptedTerms) {
@@ -380,7 +383,10 @@ export default function LoginPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <select
                       value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
+                      onChange={(e) => {
+                        setDepartment(e.target.value);
+                        setRole('');
+                      }}
                       className="py-3 px-3 rounded-xl bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)] transition-all"
                     >
                       <option value="">מחלקה</option>
@@ -394,7 +400,7 @@ export default function LoginPage() {
                       className="py-3 px-3 rounded-xl bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)] transition-all"
                     >
                       <option value="">תפקיד</option>
-                      {INDUSTRY_ROLE_OPTIONS.map(r => (
+                      {roleOptions.map(r => (
                         <option key={r} value={r}>{r}</option>
                       ))}
                     </select>

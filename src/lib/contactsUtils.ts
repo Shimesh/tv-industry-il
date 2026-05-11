@@ -5,7 +5,6 @@ export function normalizeContactName(name: string): string {
 
   let cleaned = name.replace(/^[\u05d0-\u05ea"'׳]+?\s*:\s*/u, '');
   cleaned = cleaned.replace(/\s*[-\u2013\u2014]\s*[\u05d0-\u05ea\s"'׳]+$/u, '');
-
   cleaned = cleaned
     .replace(/[()[\]{}]/g, ' ')
     .replace(/[,:;|]/g, ' ')
@@ -14,45 +13,11 @@ export function normalizeContactName(name: string): string {
     .trim();
 
   const roleWords = [
-    'צילום',
-    'צלם',
-    'צלמת',
-    'עוזר צלם',
-    'ע צלם',
-    'רחף',
-    'רחפן',
-    'רחפנית',
-    'סטדיקאם',
-    'סטדי',
-    'קאם',
-    'סאונד',
-    'במאי',
-    'במאית',
-    'בימוי',
-    'מפיק',
-    'מפיקת',
-    'עורך',
-    'עורכת',
-    'קול',
-    'מקליט',
-    'מקליטה',
-    'תאורה',
-    'תאורן',
-    'איפור',
-    'סטיילינג',
-    'ארט',
-    'תפאורה',
-    'תפאורן',
-    'CG',
-    'VTR',
-    'LSM',
-    'CCU',
-    'כתוביות',
-    'פרומפטר',
-    'נתב',
-    'ניתוב',
-    'מנהל במה',
-    'בקליינר',
+    'צילום', 'צלם', 'צלמת', 'עוזר צלם', 'ע צלם', 'רחף', 'רחפן', 'רחפנית', 'סטדיקאם', 'סטדי',
+    'סאונד', 'במאי', 'במאית', 'בימוי', 'מפיק', 'מפיקה', 'עורך', 'עורכת', 'קול', 'מקליט',
+    'מקליטה', 'תאורה', 'תאורן', 'איפור', 'סטיילינג', 'ארט', 'תפאורה', 'תפאורן',
+    'CG', 'VTR', 'LSM', 'CCU', 'כתוביות', 'פרומפטר', 'טלפרומפטר', 'נתב', 'ניתוב',
+    'מנהל במה', 'בקליינר',
   ];
 
   let changed = true;
@@ -70,19 +35,13 @@ export function normalizeContactName(name: string): string {
   return cleaned;
 }
 
-export function normalizePhone(phone: string): string {
+export function normalizePhone(phone: string | null | undefined): string {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
   if (!digits) return '';
-  if (digits.startsWith('972') && digits.length >= 12) {
-    return `0${digits.slice(-9)}`;
-  }
-  if (digits.length === 9) {
-    return `0${digits}`;
-  }
-  if (digits.length >= 10) {
-    return digits.slice(-10);
-  }
+  if (digits.startsWith('972') && digits.length >= 12) return `0${digits.slice(-9)}`;
+  if (digits.length === 9) return `0${digits}`;
+  if (digits.length >= 10) return digits.slice(-10);
   return '';
 }
 
@@ -95,34 +54,29 @@ export function splitName(fullName: string): { firstName: string; lastName: stri
 export type ContactDepartment = (typeof INDUSTRY_DEPARTMENT_OPTIONS)[number];
 export type ContactWorkArea = 'אולפן' | 'קונטרול' | 'הפקה' | 'פוסט';
 export type ContactSpecialty =
-  | 'צלם'
+  | 'צילום'
   | 'ע. צלם'
-  | 'צלם רחף/רחפן'
-  | 'סטדי'
-  | 'מנהל במה'
-  | 'בקליינר'
-  | 'במאי'
-  | 'ע. במאי'
-  | 'נתב'
-  | 'VTR'
+  | 'טלפרומפטר'
   | 'LSM'
-  | 'CCU'
-  | 'CG'
-  | 'כתוביות'
-  | 'פרומפטר'
-  | 'מיקסר/וידאו'
+  | 'כתוביות / CG'
+  | 'מנהל במה'
   | 'סאונד'
-  | 'תאורן'
-  | 'גריפ'
-  | 'תפאורן'
-  | 'מפיק'
-  | 'תחקירן'
-  | 'עורך'
+  | 'תאורה'
   | 'טכני'
-  | 'שיבוץ/כח אדם'
   | 'במאי/ת'
   | 'עוזר/ת במאי'
+  | 'נתב'
+  | 'VTR'
+  | 'CCU'
+  | 'מיקסר/וידאו'
+  | 'גריפ'
+  | 'בקליינר'
+  | 'תפאורן'
   | 'מפיק/ה'
+  | 'מנהל הפקה'
+  | 'תחקירן'
+  | 'עורך'
+  | 'שיבוץ/כח אדם'
   | 'ארט דירקטור'
   | 'מעצב/ת תפאורה'
   | 'אביזרים'
@@ -145,66 +99,61 @@ type ClassificationRule = ContactClassification & {
 
 const CLASSIFICATION_RULES: ClassificationRule[] = [
   { pattern: /שיבוץ|כח\s*אדם|כוח\s*אדם|staffing|personnel/iu, department: 'מבצעים', workArea: 'הפקה', specialty: 'שיבוץ/כח אדם' },
-  { pattern: /^עוזר\/ת\s*במאי$|^עוזרת\s*במאי$|^עוזר\s*במאי\/ת$/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'עוזר/ת במאי' },
-  { pattern: /^במאי\/ת$|^במאית$/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'במאי/ת' },
-  { pattern: /^מפיק\/ה$|^מפיקה$/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'מפיק/ה' },
+  { pattern: /עוזר\/ת\s*במאי|עוזרת\s*במאי|עוזר\s*במאי|ע\.?\s*במאי|assistant\s*director/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'עוזר/ת במאי' },
+  { pattern: /במאי\/ת|במאית|במאי|בימוי|director/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'במאי/ת' },
+  { pattern: /מפעיל\s*lsm|\blsm\b|סלומושן/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'LSM' },
+  { pattern: /כתוביות\s*\/?\s*cg|\bcg\b|כתוביות|גרפיקה|subtitle/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'כתוביות / CG' },
+  { pattern: /מפעיל\s*טלפרומפטר|טלפרומפטר|פרומפטר|prompter/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'טלפרומפטר' },
+  { pattern: /\bvtr\b|וי[\s-]?טי[\s-]?אר/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'VTR' },
+  { pattern: /\bccu\b/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'CCU' },
+  { pattern: /ניתוב|נתב/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'נתב' },
+  { pattern: /מיקסר|vision|video\s*mixer|switcher|וידאו/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'מיקסר/וידאו' },
+  { pattern: /פיקוח\s*טכני|טכנאי\s*תורן|טכני|technical/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'טכני' },
+  { pattern: /פיקוח\s*קול|סאונד|קול|מקליט|מקליטה|boom|sound/iu, department: 'סאונד', workArea: 'קונטרול', specialty: 'סאונד' },
+  { pattern: /תאורן|עיצוב\s*תאורה|תאורה|light/iu, department: 'תאורה', workArea: 'אולפן', specialty: 'תאורה' },
+  { pattern: /סטדי|סטדיקאם|רחף|רחפן|רחפנית|צלם\s*רחף|צלם|צלמת|צילום|camera|cam\b|drone/iu, department: 'צילום', workArea: 'אולפן', specialty: 'צילום' },
+  { pattern: /עוזר\s*צלם|ע\.?\s*צלם/iu, department: 'צילום', workArea: 'אולפן', specialty: 'ע. צלם' },
+  { pattern: /מנהל\s*במה|ניהול\s*במה|floor\s*manager/iu, department: 'הפקה', workArea: 'אולפן', specialty: 'מנהל במה' },
+  { pattern: /בקליינר|backliner/iu, department: 'טכני', workArea: 'אולפן', specialty: 'בקליינר' },
+  { pattern: /גריפ|grip/iu, department: 'טכני', workArea: 'אולפן', specialty: 'גריפ' },
+  { pattern: /תפאורן|תפאורה|set/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'תפאורן' },
   { pattern: /ארט\s*דירקטור|art\s*director/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'ארט דירקטור' },
   { pattern: /מעצב\/ת\s*תפאורה|מעצבת\s*תפאורה|מעצב\s*תפאורה|set\s*designer/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'מעצב/ת תפאורה' },
   { pattern: /אביזרים|props?/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'אביזרים' },
   { pattern: /מאפר\/ת|מאפרת|מאפר|makeup/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מאפר/ת' },
   { pattern: /מעצב\/ת\s*שיער|מעצבת\s*שיער|מעצב\s*שיער|hair/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מעצב/ת שיער' },
   { pattern: /מלביש\/ה|מלבישה|מלביש|wardrobe/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מלביש/ה' },
-  { pattern: /\b(vtr)\b|וי[\s-]?טי[\s-]?אר/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'VTR' },
-  { pattern: /\b(lsm)\b|מפעיל\s*lsm|סלומושן/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'LSM' },
-  { pattern: /\b(ccu)\b/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'CCU' },
-  { pattern: /\b(cg)\b|גרפיקה|כתוביות גרפיות/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'CG' },
-  { pattern: /כתוביות|סאבטייטל|subtitle/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'כתוביות' },
-  { pattern: /פרומפטר|טלפרומפטר|prompter/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'פרומפטר' },
-  { pattern: /ניתוב|נתב/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'נתב' },
-  { pattern: /עוזר\s*במאי|ע\.?\s*במאי/iu, department: 'הפקה', workArea: 'קונטרול', specialty: 'ע. במאי' },
-  { pattern: /במאי|במאית|בימוי/iu, department: 'הפקה', workArea: 'קונטרול', specialty: 'במאי' },
-  { pattern: /מיקסר|מיקסר וידאו|vision|switcher|וידאו/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'מיקסר/וידאו' },
-  { pattern: /סאונד|קול|מקליט|מקליטה|פיקוח\s*קול|boom|sound/iu, department: 'סאונד', workArea: 'קונטרול', specialty: 'סאונד' },
-  { pattern: /עוזר\s*צלם|ע\.?\s*צלם/iu, department: 'צילום', workArea: 'אולפן', specialty: 'ע. צלם' },
-  { pattern: /רחף|רחפן|רחפנית|drone/iu, department: 'צילום', workArea: 'אולפן', specialty: 'צלם רחף/רחפן' },
-  { pattern: /סטדי|סטדיקאם|steadicam/iu, department: 'צילום', workArea: 'אולפן', specialty: 'סטדי' },
-  { pattern: /צלם|צלמת|צילום|דולי|camera|cam\b/iu, department: 'צילום', workArea: 'אולפן', specialty: 'צלם' },
-  { pattern: /מנהל\s*במה|ניהול\s*במה/iu, department: 'הפקה', workArea: 'אולפן', specialty: 'מנהל במה' },
-  { pattern: /בקליינר|backliner/iu, department: 'טכני', workArea: 'אולפן', specialty: 'בקליינר' },
-  { pattern: /תאורן|תאורה|אור|light/iu, department: 'תאורה', workArea: 'אולפן', specialty: 'תאורן' },
-  { pattern: /גריפ|grip/iu, department: 'טכני', workArea: 'אולפן', specialty: 'גריפ' },
-  { pattern: /תפאורן|תפאורה|פירוק\s*במה|הקמת\s*במה|set/iu, department: 'הפקה', workArea: 'אולפן', specialty: 'תפאורן' },
+  { pattern: /מפיק\/ה|מפיקה|מפיק|הפקה|producer/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'מפיק/ה' },
+  { pattern: /מנהל\s*הפקה|production\s*manager/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'מנהל הפקה' },
   { pattern: /תחקירן|תחקירנית|תחקיר/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'תחקירן' },
-  { pattern: /מפיק|מפיקת|הפקה|תיאום|לוגיסטיקה|מנהל\s*הפקה|מלהקת|producer/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'מפיק' },
   { pattern: /עורך|עורכת|עריכה|edit|editor/iu, department: 'הפקה', workArea: 'פוסט', specialty: 'עורך' },
 ];
 
-const CANONICAL_NAME_OVERRIDES: Array<{
-  match: RegExp;
-  classification: ContactClassification;
-}> = [
-  {
-    match: /מוניר\s+אברהים/iu,
-    classification: { department: 'צילום', workArea: 'אולפן', specialty: 'ע. צלם' },
-  },
-  {
-    match: /חוסאם\s+אלסוס/iu,
-    classification: { department: 'צילום', workArea: 'אולפן', specialty: 'ע. צלם' },
-  },
+const SEMANTIC_KEY_RULES: Array<[RegExp, string]> = [
+  [/מפעיל\s*טלפרומפטר|טלפרומפטר|פרומפטר|prompter/iu, 'teleprompter'],
+  [/מפעיל\s*lsm|\blsm\b/iu, 'lsm'],
+  [/כתוביות\s*\/?\s*cg|\bcg\b|כתוביות|subtitle/iu, 'subtitles-cg'],
+  [/ניהול\s*במה|מנהל\s*במה|floor\s*manager/iu, 'floor-manager'],
+  [/פיקוח\s*קול|סאונד|קול|sound/iu, 'sound'],
+  [/תאורן|עיצוב\s*תאורה|תאורה|light/iu, 'lighting'],
+  [/פיקוח\s*טכני|טכנאי\s*תורן|טכני|technical/iu, 'technical'],
+  [/סטדי|סטדיקאם|צלם\s*רחף|רחף|רחפן|צילום|צלם|צלמת|camera|drone/iu, 'camera'],
+  [/עוזר\/ת\s*במאי|עוזרת\s*במאי|עוזר\s*במאי|ע\.?\s*במאי|assistant\s*director/iu, 'assistant-director'],
+  [/במאי\/ת|במאית|במאי|בימוי|director/iu, 'director'],
 ];
 
-function getCanonicalNameOverride(name: string): ContactClassification | null {
-  const normalizedName = normalizeContactName(name || '');
-  if (!normalizedName) return null;
-
-  for (const override of CANONICAL_NAME_OVERRIDES) {
-    if (override.match.test(normalizedName)) {
-      return override.classification;
-    }
-  }
-
-  return null;
-}
+const DISPLAY_ROLE_LABELS: Record<string, string> = {
+  teleprompter: 'טלפרומפטר',
+  lsm: 'LSM',
+  'subtitles-cg': 'כתוביות / CG',
+  'floor-manager': 'מנהל במה',
+  sound: 'סאונד',
+  lighting: 'תאורה',
+  technical: 'טכני',
+  camera: 'צילום',
+  director: 'במאי/ת',
+  'assistant-director': 'עוזר/ת במאי',
+};
 
 function normalizeRoleSemanticKey(value: string): string {
   const normalized = String(value || '')
@@ -214,69 +163,13 @@ function normalizeRoleSemanticKey(value: string): string {
     .toLocaleLowerCase('he');
 
   if (!normalized) return '';
-  if (/^ע\.?\s*צלם$|^עוזר\s*צלם$/iu.test(normalized)) return 'assistant-camera';
-  if (/^צלם\s*רחף\/רחפן$|^צלם\s*רחף$|^רחפן$|^רחף$/iu.test(normalized)) return 'drone-camera';
-  if (/^צלם$|^צילום$/iu.test(normalized)) return 'camera';
-  if (/^ccu$/iu.test(normalized)) return 'ccu';
-  if (/^cg$/iu.test(normalized)) return 'cg';
-  if (/^vtr$/iu.test(normalized)) return 'vtr';
-  if (/^lsm$/iu.test(normalized)) return 'lsm';
-  if (/^ניתוב$|^נתב$/iu.test(normalized)) return 'switcher';
-  if (/^במאי$|^בימוי$|^director$/iu.test(normalized)) return 'director';
-  if (/^ע\.?\s*במאי$|^עוזר\s*במאי$/iu.test(normalized)) return 'assistant-director';
-  if (/^מיקסר\/וידאו$|^מיקסר$|^וידאו$|^vision mixer$|^video mixer$|^switcher$/iu.test(normalized)) return 'video-mixer';
-  if (/^סאונד$|^קול$/iu.test(normalized)) return 'sound';
-  if (/^תאורן$|^תאורה$/iu.test(normalized)) return 'lighting';
-  if (/^תפאורן$|^תפאורה$/iu.test(normalized)) return 'set-design';
-  if (/^מפיק$|^הפקה$/iu.test(normalized)) return 'producer';
-  if (/^שיבוץ\/כח אדם$|^שיבוץ$|^כח אדם$|^כוח אדם$/iu.test(normalized)) return 'staffing';
-  if (/^במאי\/ת$|^במאית$/iu.test(normalized)) return 'director-inclusive';
-  if (/^עוזר\/ת במאי$|^עוזרת במאי$/iu.test(normalized)) return 'assistant-director-inclusive';
-  if (/^מפיק\/ה$|^מפיקה$/iu.test(normalized)) return 'producer-inclusive';
-  if (/^ארט דירקטור$/iu.test(normalized)) return 'art-director';
-  if (/^מעצב\/ת תפאורה$|^מעצב תפאורה$|^מעצבת תפאורה$/iu.test(normalized)) return 'set-designer';
-  if (/^אביזרים$/iu.test(normalized)) return 'props';
-  if (/^מאפר\/ת$|^מאפר$|^מאפרת$/iu.test(normalized)) return 'makeup';
-  if (/^מעצב\/ת שיער$|^מעצב שיער$|^מעצבת שיער$/iu.test(normalized)) return 'hair-stylist';
-  if (/^מלביש\/ה$|^מלביש$|^מלבישה$/iu.test(normalized)) return 'wardrobe';
-  if (/^תחקירן$|^תחקיר$/iu.test(normalized)) return 'researcher';
-  if (/^עורך$|^עריכה$/iu.test(normalized)) return 'editor';
 
-  return normalized
-    .replace(/\./g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  for (const [pattern, key] of SEMANTIC_KEY_RULES) {
+    if (pattern.test(normalized)) return key;
+  }
+
+  return normalized.replace(/\./g, '').replace(/\s+/g, ' ').trim();
 }
-
-const DISPLAY_ROLE_LABELS: Record<string, string> = {
-  'assistant-camera': 'ע. צלם',
-  'drone-camera': 'צלם רחף/רחפן',
-  camera: 'צלם',
-  ccu: 'CCU',
-  cg: 'CG',
-  vtr: 'VTR',
-  lsm: 'LSM',
-  switcher: 'נתב',
-  director: 'במאי',
-  'assistant-director': 'ע. במאי',
-  'video-mixer': 'מיקסר/וידאו',
-  sound: 'סאונד',
-  lighting: 'תאורן',
-  'set-design': 'תפאורן',
-  producer: 'מפיק',
-  staffing: 'שיבוץ/כח אדם',
-  'director-inclusive': 'במאי/ת',
-  'assistant-director-inclusive': 'עוזר/ת במאי',
-  'producer-inclusive': 'מפיק/ה',
-  'art-director': 'ארט דירקטור',
-  'set-designer': 'מעצב/ת תפאורה',
-  props: 'אביזרים',
-  makeup: 'מאפר/ת',
-  'hair-stylist': 'מעצב/ת שיער',
-  wardrobe: 'מלביש/ה',
-  researcher: 'תחקירן',
-  editor: 'עורך',
-};
 
 export function normalizeDisplayRoleLabel(value: string): string {
   const semanticKey = normalizeRoleSemanticKey(value);
@@ -289,13 +182,9 @@ export function areSemanticallySameRole(a?: string | null, b?: string | null): b
   return normalizeRoleSemanticKey(a) === normalizeRoleSemanticKey(b);
 }
 
-export function classifyContactRole(role: string, name?: string): ContactClassification {
-  const override = getCanonicalNameOverride(name || '');
-  if (override) {
-    return override;
-  }
-
-  const normalizedRole = String(role || '').trim().toLowerCase();
+export function classifyContactRole(role: string, _name?: string): ContactClassification {
+  void _name;
+  const normalizedRole = String(role || '').trim();
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.pattern.test(normalizedRole)) {
       return {

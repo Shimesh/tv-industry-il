@@ -24,6 +24,7 @@ export default function Footer() {
     <footer
       className="border-t transition-colors app-safe-bottom"
       style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+      dir="rtl"
     >
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -32,7 +33,7 @@ export default function Footer() {
               <Tv className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0">
-              <div className="text-base font-bold gradient-text">TV Industry IL</div>
+              <div className="text-base font-bold gradient-text" dir="ltr">TV Industry IL</div>
               <p className="text-[11px] leading-snug" style={{ color: 'var(--theme-text-secondary)' }}>
                 קהילה, אלפון, שידור חי, חדשות וכלי עבודה במקום אחד.
               </p>
@@ -59,7 +60,7 @@ export default function Footer() {
         >
           <div className="flex items-center gap-3">
             <p className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>
-              © 2026 TV Industry IL
+              <span dir="ltr">© 2026 TV Industry IL</span>
               <Heart className="h-3 w-3 text-red-400" />
               לתעשיית הטלוויזיה
             </p>
@@ -76,8 +77,8 @@ export default function Footer() {
                 {link.label}
               </Link>
             ))}
-            <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
-              Version 1.9.4 · By Yaron Orbach
+            <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }} dir="ltr">
+              Version 1.9.5 · By Yaron Orbach
             </span>
           </div>
         </div>

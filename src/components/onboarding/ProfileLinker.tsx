@@ -8,7 +8,7 @@ import { useAppData } from '@/contexts/AppDataContext';
 import type { Contact } from '@/data/contacts';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
-import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
+import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS, getRolesForDepartment } from '@/constants/departments';
 
 type IdentityCandidate = {
   id: string;
@@ -104,7 +104,11 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
       .slice(0, 50);
   }, [contacts, manualName, profile?.displayName, query]);
   const manualDepartmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, manualDepartment].filter(Boolean)));
-  const manualRoleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, manualRole].filter(Boolean)));
+  const manualRoleOptions = Array.from(new Set([
+    ...getRolesForDepartment(manualDepartment),
+    ...INDUSTRY_ROLE_OPTIONS,
+    manualRole,
+  ].filter(Boolean)));
 
   if (!profile || !user || !open) return null;
 

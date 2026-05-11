@@ -5,6 +5,7 @@ import { X, Search, Users, User, MessageCircle, Phone, Copy, Check } from 'lucid
 import type { UserProfile } from '@/contexts/AuthContext';
 import type { Contact } from '@/data/contacts';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 interface NewChatModalProps {
   users: UserProfile[];
@@ -49,11 +50,12 @@ export default function NewChatModal({
 
     for (const u of users) {
       if (u.uid === currentUserId) continue;
+      const professional = normalizeProfessionalFields(u);
       nextPeople.push({
         key: `user-${u.uid}`,
         displayName: u.displayName || '',
-        role: u.role || '',
-        department: u.department || '',
+        role: professional.role,
+        department: professional.department,
         phone: u.phone || undefined,
         photoURL: u.photoURL,
         userId: u.uid,
@@ -79,11 +81,12 @@ export default function NewChatModal({
         continue;
       }
 
+      const professional = normalizeProfessionalFields(contact);
       nextPeople.push({
         key: `contact-${contact.id}`,
         displayName: fullName,
-        role: contact.role || '',
-        department: contact.department || '',
+        role: professional.role,
+        department: professional.department,
         phone: contact.phone,
         photoURL: null,
         userId: undefined,
