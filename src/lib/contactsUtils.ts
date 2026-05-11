@@ -1,3 +1,5 @@
+import { INDUSTRY_DEPARTMENT_OPTIONS } from '@/constants/departments';
+
 export function normalizeContactName(name: string): string {
   if (!name) return '';
 
@@ -90,7 +92,7 @@ export function splitName(fullName: string): { firstName: string; lastName: stri
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
 
-export type ContactDepartment = 'צילום' | 'סאונד' | 'תאורה' | 'טכני' | 'הפקה';
+export type ContactDepartment = (typeof INDUSTRY_DEPARTMENT_OPTIONS)[number];
 export type ContactWorkArea = 'אולפן' | 'קונטרול' | 'הפקה' | 'פוסט';
 export type ContactSpecialty =
   | 'צלם'
@@ -116,9 +118,19 @@ export type ContactSpecialty =
   | 'מפיק'
   | 'תחקירן'
   | 'עורך'
-  | 'טכני';
+  | 'טכני'
+  | 'שיבוץ/כח אדם'
+  | 'במאי/ת'
+  | 'עוזר/ת במאי'
+  | 'מפיק/ה'
+  | 'ארט דירקטור'
+  | 'מעצב/ת תפאורה'
+  | 'אביזרים'
+  | 'מאפר/ת'
+  | 'מעצב/ת שיער'
+  | 'מלביש/ה';
 
-export const DIRECTORY_DEPARTMENTS: ContactDepartment[] = ['צילום', 'טכני', 'הפקה', 'סאונד', 'תאורה'];
+export const DIRECTORY_DEPARTMENTS: ContactDepartment[] = [...INDUSTRY_DEPARTMENT_OPTIONS];
 export const DIRECTORY_WORK_AREAS: ContactWorkArea[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט'];
 
 type ContactClassification = {
@@ -132,6 +144,16 @@ type ClassificationRule = ContactClassification & {
 };
 
 const CLASSIFICATION_RULES: ClassificationRule[] = [
+  { pattern: /שיבוץ|כח\s*אדם|כוח\s*אדם|staffing|personnel/iu, department: 'מבצעים', workArea: 'הפקה', specialty: 'שיבוץ/כח אדם' },
+  { pattern: /^עוזר\/ת\s*במאי$|^עוזרת\s*במאי$|^עוזר\s*במאי\/ת$/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'עוזר/ת במאי' },
+  { pattern: /^במאי\/ת$|^במאית$/iu, department: 'בימוי', workArea: 'קונטרול', specialty: 'במאי/ת' },
+  { pattern: /^מפיק\/ה$|^מפיקה$/iu, department: 'הפקה', workArea: 'הפקה', specialty: 'מפיק/ה' },
+  { pattern: /ארט\s*דירקטור|art\s*director/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'ארט דירקטור' },
+  { pattern: /מעצב\/ת\s*תפאורה|מעצבת\s*תפאורה|מעצב\s*תפאורה|set\s*designer/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'מעצב/ת תפאורה' },
+  { pattern: /אביזרים|props?/iu, department: 'ארט ותפאורה', workArea: 'אולפן', specialty: 'אביזרים' },
+  { pattern: /מאפר\/ת|מאפרת|מאפר|makeup/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מאפר/ת' },
+  { pattern: /מעצב\/ת\s*שיער|מעצבת\s*שיער|מעצב\s*שיער|hair/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מעצב/ת שיער' },
+  { pattern: /מלביש\/ה|מלבישה|מלביש|wardrobe/iu, department: 'ביוטי', workArea: 'אולפן', specialty: 'מלביש/ה' },
   { pattern: /\b(vtr)\b|וי[\s-]?טי[\s-]?אר/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'VTR' },
   { pattern: /\b(lsm)\b|מפעיל\s*lsm|סלומושן/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'LSM' },
   { pattern: /\b(ccu)\b/iu, department: 'טכני', workArea: 'קונטרול', specialty: 'CCU' },
@@ -206,6 +228,16 @@ function normalizeRoleSemanticKey(value: string): string {
   if (/^תאורן$|^תאורה$/iu.test(normalized)) return 'lighting';
   if (/^תפאורן$|^תפאורה$/iu.test(normalized)) return 'set-design';
   if (/^מפיק$|^הפקה$/iu.test(normalized)) return 'producer';
+  if (/^שיבוץ\/כח אדם$|^שיבוץ$|^כח אדם$|^כוח אדם$/iu.test(normalized)) return 'staffing';
+  if (/^במאי\/ת$|^במאית$/iu.test(normalized)) return 'director-inclusive';
+  if (/^עוזר\/ת במאי$|^עוזרת במאי$/iu.test(normalized)) return 'assistant-director-inclusive';
+  if (/^מפיק\/ה$|^מפיקה$/iu.test(normalized)) return 'producer-inclusive';
+  if (/^ארט דירקטור$/iu.test(normalized)) return 'art-director';
+  if (/^מעצב\/ת תפאורה$|^מעצב תפאורה$|^מעצבת תפאורה$/iu.test(normalized)) return 'set-designer';
+  if (/^אביזרים$/iu.test(normalized)) return 'props';
+  if (/^מאפר\/ת$|^מאפר$|^מאפרת$/iu.test(normalized)) return 'makeup';
+  if (/^מעצב\/ת שיער$|^מעצב שיער$|^מעצבת שיער$/iu.test(normalized)) return 'hair-stylist';
+  if (/^מלביש\/ה$|^מלביש$|^מלבישה$/iu.test(normalized)) return 'wardrobe';
   if (/^תחקירן$|^תחקיר$/iu.test(normalized)) return 'researcher';
   if (/^עורך$|^עריכה$/iu.test(normalized)) return 'editor';
 
@@ -230,6 +262,16 @@ const DISPLAY_ROLE_LABELS: Record<string, string> = {
   lighting: 'תאורן',
   'set-design': 'תפאורן',
   producer: 'מפיק',
+  staffing: 'שיבוץ/כח אדם',
+  'director-inclusive': 'במאי/ת',
+  'assistant-director-inclusive': 'עוזר/ת במאי',
+  'producer-inclusive': 'מפיק/ה',
+  'art-director': 'ארט דירקטור',
+  'set-designer': 'מעצב/ת תפאורה',
+  props: 'אביזרים',
+  makeup: 'מאפר/ת',
+  'hair-stylist': 'מעצב/ת שיער',
+  wardrobe: 'מלביש/ה',
   researcher: 'תחקירן',
   editor: 'עורך',
 };

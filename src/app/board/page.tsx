@@ -17,6 +17,7 @@ import {
   where, Timestamp, updateDoc, doc, increment, setDoc, deleteDoc, getDoc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
 
 const typeFilters = [
   { key: 'all', label: 'הכל', icon: Megaphone },
@@ -28,11 +29,7 @@ const typeFilters = [
 
 const departmentFilters = [
   { key: 'all', label: 'הכל' },
-  { key: 'צילום', label: 'צילום' },
-  { key: 'טכני', label: 'טכני' },
-  { key: 'הפקה', label: 'הפקה' },
-  { key: 'סאונד', label: 'סאונד' },
-  { key: 'תאורה', label: 'תאורה' },
+  ...PROFILE_DEPARTMENT_OPTIONS.map((department) => ({ key: department, label: department })),
 ];
 
 const locationFilters = [

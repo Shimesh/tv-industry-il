@@ -20,6 +20,10 @@ const deptColors: Record<string, string> = {
   'הפקה': 'from-purple-500 to-purple-600',
   'סאונד': 'from-orange-500 to-orange-600',
   'תאורה': 'from-yellow-500 to-amber-600',
+  'מבצעים': 'from-cyan-500 to-cyan-600',
+  'בימוי': 'from-rose-500 to-rose-600',
+  'ארט ותפאורה': 'from-pink-500 to-pink-600',
+  'ביוטי': 'from-teal-500 to-teal-600',
 };
 
 const deptBadgeColors: Record<string, string> = {
@@ -28,6 +32,10 @@ const deptBadgeColors: Record<string, string> = {
   'הפקה': 'bg-purple-500/15 text-purple-300',
   'סאונד': 'bg-orange-500/15 text-orange-300',
   'תאורה': 'bg-yellow-500/15 text-yellow-300',
+  'מבצעים': 'bg-cyan-500/15 text-cyan-300',
+  'בימוי': 'bg-rose-500/15 text-rose-300',
+  'ארט ותפאורה': 'bg-pink-500/15 text-pink-300',
+  'ביוטי': 'bg-teal-500/15 text-teal-300',
 };
 
 const deptGlowColors: Record<string, string> = {
@@ -36,6 +44,10 @@ const deptGlowColors: Record<string, string> = {
   'הפקה': 'shadow-purple-500/20',
   'סאונד': 'shadow-orange-500/20',
   'תאורה': 'shadow-yellow-500/20',
+  'מבצעים': 'shadow-cyan-500/20',
+  'בימוי': 'shadow-rose-500/20',
+  'ארט ותפאורה': 'shadow-pink-500/20',
+  'ביוטי': 'shadow-teal-500/20',
 };
 
 const cardVariants = {

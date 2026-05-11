@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Tag } from 'lucide-react';
+import { STAFFING_CATEGORY_OPTIONS } from '@/constants/departments';
 
 interface PostFormProps {
   onSubmit: (data: PostFormData) => Promise<void>;
@@ -21,8 +22,8 @@ export interface PostFormData {
 }
 
 const categories = {
-  job_offer: ['הפקה', 'צילום', 'עריכה', 'סאונד', 'תאורה', 'במאות', 'כתיבה', 'שחקנות', 'גרפיקה', 'אחר'],
-  job_search: ['הפקה', 'צילום', 'עריכה', 'סאונד', 'תאורה', 'במאות', 'כתיבה', 'שחקנות', 'גרפיקה', 'אחר'],
+  job_offer: STAFFING_CATEGORY_OPTIONS,
+  job_search: STAFFING_CATEGORY_OPTIONS,
   equipment_sale: ['מצלמות', 'עדשות', 'תאורה', 'סאונד', 'חצובות', 'מייצבים', 'מחשבים', 'אחר'],
   equipment_free: ['מצלמות', 'עדשות', 'תאורה', 'סאונד', 'חצובות', 'מייצבים', 'מחשבים', 'אחר'],
 };

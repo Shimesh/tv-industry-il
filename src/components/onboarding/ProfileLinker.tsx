@@ -8,6 +8,7 @@ import { useAppData } from '@/contexts/AppDataContext';
 import type { Contact } from '@/data/contacts';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
+import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
 
 type IdentityCandidate = {
   id: string;
@@ -102,6 +103,8 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
       })
       .slice(0, 50);
   }, [contacts, manualName, profile?.displayName, query]);
+  const manualDepartmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, manualDepartment].filter(Boolean)));
+  const manualRoleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, manualRole].filter(Boolean)));
 
   if (!profile || !user || !open) return null;
 
@@ -335,20 +338,28 @@ export function ProfileLinker({ onComplete }: { onComplete?: () => void }) {
                     className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
                     style={{ borderColor: 'var(--theme-border)' }}
                   />
-                  <input
+                  <select
                     value={manualRole}
                     onChange={(event) => setManualRole(event.target.value)}
-                    placeholder="תפקיד"
                     className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
                     style={{ borderColor: 'var(--theme-border)' }}
-                  />
-                  <input
+                  >
+                    <option value="">תפקיד</option>
+                    {manualRoleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                  <select
                     value={manualDepartment}
                     onChange={(event) => setManualDepartment(event.target.value)}
-                    placeholder="מחלקה"
                     className="rounded-xl border bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] sm:col-span-2"
                     style={{ borderColor: 'var(--theme-border)' }}
-                  />
+                  >
+                    <option value="">מחלקה</option>
+                    {manualDepartmentOptions.map((department) => (
+                      <option key={department} value={department}>{department}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}

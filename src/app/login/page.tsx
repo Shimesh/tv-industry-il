@@ -7,16 +7,7 @@ import { Tv, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, Phone } from 'l
 import { motion, AnimatePresence } from 'framer-motion';
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-
-const departments = [
-  { value: 'צילום', label: 'צילום' },
-  { value: 'טכני', label: 'טכני' },
-  { value: 'הפקה', label: 'הפקה' },
-  { value: 'סאונד', label: 'סאונד' },
-  { value: 'תאורה', label: 'תאורה' },
-];
-
-const roles = ['צלם', 'צלם רחף', 'כתוביות', 'ניהול במה', 'פיקוח קול', 'VTR', 'תפאורן', 'ניתוב', 'CCU', 'טלפרומפטר', 'תאורן', 'קול', 'עורך', 'מנהל הפקה', 'מפיק', 'במאי'];
+import { INDUSTRY_DEPARTMENTS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 
 function formatIsraeliPhoneForFirebase(input: string): string | null {
   const cleaned = input.replace(/[\s\-()]/g, '');
@@ -393,7 +384,7 @@ export default function LoginPage() {
                       className="py-3 px-3 rounded-xl bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)] transition-all"
                     >
                       <option value="">מחלקה</option>
-                      {departments.map(d => (
+                      {INDUSTRY_DEPARTMENTS.map(d => (
                         <option key={d.value} value={d.value}>{d.label}</option>
                       ))}
                     </select>
@@ -403,7 +394,7 @@ export default function LoginPage() {
                       className="py-3 px-3 rounded-xl bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)] transition-all"
                     >
                       <option value="">תפקיד</option>
-                      {roles.map(r => (
+                      {INDUSTRY_ROLE_OPTIONS.map(r => (
                         <option key={r} value={r}>{r}</option>
                       ))}
                     </select>

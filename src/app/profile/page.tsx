@@ -15,8 +15,8 @@ import {
   Search, Link2, UserCheck, Star, Wrench, Clock, Settings,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
 
-const departmentOptions = ['צילום', 'טכני', 'הפקה', 'סאונד', 'תאורה', 'עריכה', 'גרפיקה', 'שידור'];
 const STATUS_OPTS = [
   { value: 'available', label: 'פנוי', dot: 'bg-green-500', text: 'text-green-300', bg: 'bg-green-500/10' },
   { value: 'busy',      label: 'תפוס', dot: 'bg-amber-500', text: 'text-amber-300', bg: 'bg-amber-500/10' },
@@ -151,6 +151,8 @@ function ProfileContent() {
   const statusOpt = STATUS_OPTS.find(s => s.value === profile.status) ?? STATUS_OPTS[0];
   const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)]';
   const labelCls = 'text-xs text-[var(--theme-text-secondary)] mb-1 block';
+  const departmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, form.department].filter(Boolean)));
+  const roleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, form.role].filter(Boolean)));
 
   return (
     <div className="min-h-screen">
@@ -267,7 +269,10 @@ function ProfileContent() {
                     </div>
                     <div>
                       <label className={labelCls}>תפקיד</label>
-                      <input value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls} />
+                      <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls}>
+                        <option value="">בחר</option>
+                        {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">

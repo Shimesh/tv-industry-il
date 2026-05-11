@@ -52,7 +52,7 @@ function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string |
 
   const body = JSON.stringify({
     source: 'home-carousel',
-    version: '1.9.1',
+    version: '1.9.2',
     name: 'MOBILE_KESHET_START_ATTEMPT',
     message: 'MOBILE_KESHET_START_ATTEMPT',
     href: window.location.href,

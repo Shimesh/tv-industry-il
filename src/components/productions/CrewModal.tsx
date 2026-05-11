@@ -19,7 +19,7 @@ interface CrewModalProps {
 type CrewBucket = Exclude<ContactWorkArea, null> | ContactDepartment;
 type ActiveDepartment = CrewBucket | 'הכל';
 
-const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'טכני', 'תאורה', 'צילום', 'סאונד'];
+const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'טכני', 'תאורה', 'צילום', 'סאונד', 'מבצעים', 'בימוי', 'ארט ותפאורה', 'ביוטי'];
 
 const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
   אולפן: {
@@ -77,6 +77,34 @@ const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: 
     border: 'rgba(236, 72, 153, 0.25)',
     pill: 'bg-pink-500/10 text-pink-300 border-pink-500/20',
     pillActive: 'bg-pink-500/25 text-pink-200 border-pink-400/50 shadow-pink-500/20 shadow-sm',
+  },
+  מבצעים: {
+    bg: 'rgba(6, 182, 212, 0.10)',
+    text: '#67e8f9',
+    border: 'rgba(6, 182, 212, 0.25)',
+    pill: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+    pillActive: 'bg-cyan-500/25 text-cyan-200 border-cyan-400/50 shadow-cyan-500/20 shadow-sm',
+  },
+  בימוי: {
+    bg: 'rgba(244, 63, 94, 0.10)',
+    text: '#fda4af',
+    border: 'rgba(244, 63, 94, 0.25)',
+    pill: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
+    pillActive: 'bg-rose-500/25 text-rose-200 border-rose-400/50 shadow-rose-500/20 shadow-sm',
+  },
+  'ארט ותפאורה': {
+    bg: 'rgba(236, 72, 153, 0.10)',
+    text: '#f9a8d4',
+    border: 'rgba(236, 72, 153, 0.25)',
+    pill: 'bg-pink-500/10 text-pink-300 border-pink-500/20',
+    pillActive: 'bg-pink-500/25 text-pink-200 border-pink-400/50 shadow-pink-500/20 shadow-sm',
+  },
+  ביוטי: {
+    bg: 'rgba(20, 184, 166, 0.10)',
+    text: '#5eead4',
+    border: 'rgba(20, 184, 166, 0.25)',
+    pill: 'bg-teal-500/10 text-teal-300 border-teal-500/20',
+    pillActive: 'bg-teal-500/25 text-teal-200 border-teal-400/50 shadow-teal-500/20 shadow-sm',
   },
 };
 
