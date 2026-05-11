@@ -42,6 +42,46 @@ function getVideoErrorDetails(video: HTMLVideoElement | null) {
   return error ? { code: error.code, message: error.message } : null;
 }
 
+function isMobileBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(navigator.userAgent);
+}
+
+function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string | null) {
+  if (typeof window === 'undefined' || !isMobileBrowser()) return;
+
+  const body = JSON.stringify({
+    source: 'home-carousel',
+    version: '1.9.1',
+    name: 'MOBILE_KESHET_START_ATTEMPT',
+    message: 'MOBILE_KESHET_START_ATTEMPT',
+    href: window.location.href,
+    pathname: window.location.pathname,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    stack: JSON.stringify({
+      channelId: 'keshet12',
+      mode,
+      sourceUrl,
+    }),
+  });
+
+  try {
+    if (typeof navigator.sendBeacon === 'function') {
+      const sent = navigator.sendBeacon('/api/client-system-logs', new Blob([body], { type: 'application/json' }));
+      if (sent) return;
+    }
+  } catch {}
+
+  void fetch('/api/client-system-logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 function configureAutoplayVideo(video: HTMLVideoElement | null) {
   if (!video) return;
   video.autoplay = true;
@@ -59,6 +99,7 @@ function configureAutoplayVideo(video: HTMLVideoElement | null) {
 
 function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const loggedKeshetStartRef = useRef<string | null>(null);
   const stream = streamConfigs[channelId];
   const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
   const [dynamicStreamResolved, setDynamicStreamResolved] = useState(false);
@@ -104,6 +145,19 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
   const rawHlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
   const hlsUrl = rawHlsUrl && rawHlsUrl !== failedHlsUrl ? rawHlsUrl : null;
+  const isKeshetMobile = channelId === 'keshet12' && isMobileBrowser();
+
+  useEffect(() => {
+    if (!isKeshetMobile) return;
+
+    const mode = hlsUrl ? 'HLS' : (dynamicStreamResolved && stream?.embedUrl ? 'IFRAME' : null);
+    if (!mode) return;
+
+    const key = `${mode}:${hlsUrl ?? stream?.embedUrl ?? ''}`;
+    if (loggedKeshetStartRef.current === key) return;
+    loggedKeshetStartRef.current = key;
+    logMobileKeshetStartAttempt(mode, hlsUrl ?? stream?.embedUrl ?? null);
+  }, [dynamicStreamResolved, hlsUrl, isKeshetMobile, stream?.embedUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -132,6 +186,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       void video.play().catch(error => {
         failPreview(`Autoplay failed during ${context}`, error);
       });
+      if (isKeshetMobile) {
+        window.setTimeout(() => {
+          configureAutoplayVideo(video);
+          void video.play().catch(error => {
+            failPreview(`Delayed mobile autoplay failed during ${context}`, error);
+          });
+        }, 200);
+      }
     };
 
     const handleNativeVideoError = () => {
@@ -199,11 +261,28 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       video.removeEventListener('waiting', handleWaiting);
       hls?.destroy();
     };
-  }, [channelId, hlsUrl]);
+  }, [channelId, hlsUrl, isKeshetMobile]);
 
   const keepMuted = useCallback(() => {
     configureAutoplayVideo(videoRef.current);
   }, []);
+
+  const handleLoadedMetadata = useCallback(() => {
+    const video = videoRef.current;
+    configureAutoplayVideo(video);
+    if (!video || !isKeshetMobile) return;
+    window.setTimeout(() => {
+      configureAutoplayVideo(video);
+      void video.play().catch(error => {
+        console.error('[OnAirNowCarousel] Delayed mobile Keshet metadata play failed', {
+          channelId,
+          sourceUrl: hlsUrl,
+          error,
+          videoError: getVideoErrorDetails(video),
+        });
+      });
+    }, 200);
+  }, [channelId, hlsUrl, isKeshetMobile]);
 
   if (!stream?.hasLiveStream) {
     return (
@@ -227,7 +306,10 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         playsInline={true}
         loop={true}
         preload="metadata"
-        onLoadedMetadata={keepMuted}
+        controls={false}
+        disablePictureInPicture
+        controlsList="nodownload"
+        onLoadedMetadata={handleLoadedMetadata}
         onPlay={keepMuted}
         onVolumeChange={keepMuted}
         onError={() => {

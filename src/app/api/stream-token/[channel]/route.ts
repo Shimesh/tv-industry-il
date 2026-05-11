@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const DESKTOP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const MOBILE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const I24_ACCOUNT_ID = '5377161796001';
 const I24_VIDEO_ID = '6352464366112';
 const I24_POLICY_KEY = 'BCpkADawqM1UIU4favtR1Jj4rqM0ZAkYwMEbgN9bsEpJ2150CdxJmRIG8jK-Up_9w4w37x3tP1AsoO_MZhD_XoAGkdKWxymaaw4OHuhPn_lEJczODTm3AO7S08gLFPnLnb-FcKJwXhbxCQ10';
@@ -24,11 +25,15 @@ type UnivtecPlayResponse = {
   };
 };
 
-async function fetchPage(url: string): Promise<string | null> {
+function isMobileUserAgent(userAgent: string | null): boolean {
+  return /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(userAgent ?? '');
+}
+
+async function fetchPage(url: string, userAgent = DESKTOP_USER_AGENT): Promise<string | null> {
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': USER_AGENT,
+        'User-Agent': userAgent,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8',
         'Cache-Control': 'no-cache',
@@ -57,7 +62,7 @@ function extractM3u8(html: string): string | null {
   return null;
 }
 
-async function resolveKeshet12Stream(): Promise<string | null> {
+async function resolveKeshet12Stream(userAgent: string | null): Promise<string | null> {
   const candidateUrls = [
     'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
     'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&videoChannelId=5d28d21b4580e310VgnVCM2000002a0c10acRCRD&vcmid=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&autoPlay=true',
@@ -65,17 +70,25 @@ async function resolveKeshet12Stream(): Promise<string | null> {
     'https://www.mako.co.il/live-news?partner=NavBar',
   ];
 
-  for (const url of candidateUrls) {
-    const html = await fetchPage(url);
-    if (!html) continue;
+  const userAgents = isMobileUserAgent(userAgent)
+    ? [MOBILE_USER_AGENT, userAgent || MOBILE_USER_AGENT, DESKTOP_USER_AGENT]
+    : [DESKTOP_USER_AGENT, MOBILE_USER_AGENT];
 
-    const cloudFrontMatch = html.match(/https:\/\/[^"']+(?:cloudfront|akamaized|mako)[^"']+\.m3u8[^"']*/i);
-    if (cloudFrontMatch?.[0]) {
-      return cloudFrontMatch[0].replace(/\\\//g, '/');
+  for (const fetchUserAgent of userAgents) {
+    for (const url of candidateUrls) {
+      const html = await fetchPage(url, fetchUserAgent);
+      if (!html) continue;
+
+      const directHlsMatches = html.match(/https:\/\/[^"'\s<>]+(?:cloudfront|akamaized|mako|keshet)[^"'\s<>]+\.m3u8[^"'\s<>]*/gi)
+        ?? html.match(/https:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/gi);
+      const directHls = directHlsMatches?.find(match => !match.includes('/iframe/') && !match.includes('/embed/'));
+      if (directHls) {
+        return directHls.replace(/\\\//g, '/').replace(/\\\\/g, '');
+      }
+
+      const extracted = extractM3u8(html);
+      if (extracted) return extracted;
     }
-
-    const extracted = extractM3u8(html);
-    if (extracted) return extracted;
   }
 
   return null;
@@ -110,7 +123,7 @@ async function resolveNow14Stream(): Promise<string | null> {
     const response = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': USER_AGENT,
+        'User-Agent': DESKTOP_USER_AGENT,
         'x-tenant-id': NOW14_TENANT_ID,
       },
       signal: AbortSignal.timeout(12000),
@@ -131,6 +144,7 @@ export async function GET(
   { params }: { params: Promise<{ channel: string }> }
 ) {
   const { channel } = await params;
+  const requestUserAgent = request.headers.get('user-agent');
 
   try {
     // === כאן 11 — prefer the stable HTTPS Redge CDN URL ===
@@ -185,9 +199,12 @@ export async function GET(
 
     // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
     if (channel === 'keshet12') {
-      const url = await resolveKeshet12Stream();
+      const url = await resolveKeshet12Stream(requestUserAgent);
       return NextResponse.json({
         url,
+        type: url ? 'hls' : null,
+        source: url ? 'direct-hls' : null,
+        mobileRequest: isMobileUserAgent(requestUserAgent),
         expires: Date.now() + (url ? 1800000 : 300000),
       });
     }

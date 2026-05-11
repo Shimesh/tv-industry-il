@@ -16,9 +16,50 @@ interface VideoPlayerProps {
 const KAN11_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8';
 const KAN11_720P_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8?bitrate=2992000&audioId=1&videoId=4';
 
+function isMobileBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(navigator.userAgent);
+}
+
+function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string | null) {
+  if (typeof window === 'undefined' || !isMobileBrowser()) return;
+
+  const body = JSON.stringify({
+    source: 'schedule-player',
+    version: '1.9.1',
+    name: 'MOBILE_KESHET_START_ATTEMPT',
+    message: 'MOBILE_KESHET_START_ATTEMPT',
+    href: window.location.href,
+    pathname: window.location.pathname,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    stack: JSON.stringify({
+      channelId: 'keshet12',
+      mode,
+      sourceUrl,
+    }),
+  });
+
+  try {
+    if (typeof navigator.sendBeacon === 'function') {
+      const sent = navigator.sendBeacon('/api/client-system-logs', new Blob([body], { type: 'application/json' }));
+      if (sent) return;
+    }
+  } catch {}
+
+  void fetch('/api/client-system-logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const loggedKeshetStartRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(80);
   const [isMuted, setIsMuted] = useState(false);
@@ -31,7 +72,15 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   // needsUserGesture: autoplay was blocked — show tap-to-play overlay
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
 
-  const appendAutoplayParams = (url: string): string => {
+  const isKeshetMobile = channel.id === 'keshet12' && isMobileBrowser();
+
+  useEffect(() => {
+    if (!isKeshetMobile) return;
+    setIsMuted(true);
+    setVolume(0);
+  }, [isKeshetMobile]);
+
+  const appendAutoplayParams = (url: string, forceMuted = false): string => {
     try {
       const parsed = new URL(url);
       parsed.searchParams.set('autoplay', '1');
@@ -43,15 +92,17 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       parsed.searchParams.delete('isMuted');
       parsed.searchParams.delete('isMute');
       parsed.searchParams.delete('volume');
-      parsed.searchParams.set('mute', '0');
-      parsed.searchParams.set('muted', '0');
-      parsed.searchParams.set('isMuted', 'false');
-      parsed.searchParams.set('isMute', 'false');
-      parsed.searchParams.set('volume', '1');
+      parsed.searchParams.set('mute', forceMuted ? '1' : '0');
+      parsed.searchParams.set('muted', forceMuted ? 'true' : '0');
+      parsed.searchParams.set('isMuted', forceMuted ? 'true' : 'false');
+      parsed.searchParams.set('isMute', forceMuted ? 'true' : 'false');
+      parsed.searchParams.set('volume', forceMuted ? '0' : '1');
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}autoplay=1&autoPlay=true&playsinline=1&mute=0&muted=0&isMuted=false&isMute=false&volume=1`;
+      return forceMuted
+        ? `${url}${separator}autoplay=1&autoPlay=true&playsinline=1&playsInline=1&mute=1&muted=true&isMuted=true&isMute=true&volume=0`
+        : `${url}${separator}autoplay=1&autoPlay=true&playsinline=1&playsInline=1&mute=0&muted=0&isMuted=false&isMute=false&volume=1`;
     }
   };
   const [loading, setLoading] = useState(false);
@@ -167,6 +218,17 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       if (hlsUrl.includes('.m3u8')) {
         hlsInstance?.destroy();
         hlsInstance = null;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.setAttribute('autoplay', '');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        if (isKeshetMobile) {
+          video.muted = true;
+          video.defaultMuted = true;
+          video.volume = 0;
+          video.setAttribute('muted', '');
+        }
         video.removeAttribute('src');
         video.load();
 
@@ -182,8 +244,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           });
           hlsInstance.loadSource(hlsUrl);
           hlsInstance.attachMedia(video);
-          video.muted = false;
-          video.volume = 1;
+          video.muted = isKeshetMobile;
+          video.defaultMuted = isKeshetMobile;
+          video.volume = isKeshetMobile ? 0 : 1;
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             video.play().then(() => {
               setIsPlaying(true);
@@ -194,6 +257,19 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
               setLoading(false);
               setNeedsUserGesture(true);
             });
+            if (isKeshetMobile) {
+              window.setTimeout(() => {
+                video.muted = true;
+                video.volume = 0;
+                void video.play().then(() => {
+                  setIsPlaying(true);
+                  setLoading(false);
+                  setNeedsUserGesture(false);
+                }).catch((playError) => {
+                  logStreamError('Delayed mobile Keshet autoplay blocked or failed', playError);
+                });
+              }, 200);
+            }
           });
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
             logStreamError('HLS error', data);
@@ -222,6 +298,19 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             setLoading(false);
             setNeedsUserGesture(true);
           });
+          if (isKeshetMobile) {
+            window.setTimeout(() => {
+              video.muted = true;
+              video.volume = 0;
+              void video.play().then(() => {
+                setIsPlaying(true);
+                setLoading(false);
+                setNeedsUserGesture(false);
+              }).catch((playError) => {
+                logStreamError('Delayed mobile Keshet native autoplay blocked or failed', playError);
+              });
+            }, 200);
+          }
         } else {
           logStreamError('Browser does not support HLS playback');
           setError('הדפדפן לא תומך בפורמט השידור');
@@ -238,7 +327,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       video.removeEventListener('waiting', handleWaiting);
       hlsInstance?.destroy();
     };
-  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl]);
+  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile]);
 
   // Sync volume and muted state to the video element
   // Note: React's `muted` JSX prop is broken (known React bug) — must use ref imperatively
@@ -317,7 +406,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
 
   // Resolve final URLs: HLS takes priority over iframe embed
   const resolvedEmbedUrl = stream?.embedUrl ?? dynamicEmbedUrl;
-  const resolvedAutoplayEmbedUrl = resolvedEmbedUrl ? appendAutoplayParams(resolvedEmbedUrl) : null;
+  const resolvedAutoplayEmbedUrl = resolvedEmbedUrl ? appendAutoplayParams(resolvedEmbedUrl, isKeshetMobile) : null;
   const resolvedHlsUrl = dynamicStreamUrl ?? stream?.streamUrl;
   const hasDirectStream = !!resolvedHlsUrl;
   const hasEmbed = !!resolvedEmbedUrl;
@@ -329,6 +418,39 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const showLiveBadge = showHls || showEmbed;
   const showDynamicLoading = isResolvingDynamicStream;
   const showFallback = !showEmbed && !showHls && !showDynamicLoading;
+
+  useEffect(() => {
+    if (!isKeshetMobile) return;
+    const mode = showHls ? 'HLS' : (showEmbed ? 'IFRAME' : null);
+    if (!mode) return;
+
+    const sourceUrl = showHls ? resolvedHlsUrl : (resolvedAutoplayEmbedUrl ?? resolvedEmbedUrl);
+    const key = `${mode}:${sourceUrl ?? ''}`;
+    if (loggedKeshetStartRef.current === key) return;
+    loggedKeshetStartRef.current = key;
+    logMobileKeshetStartAttempt(mode, sourceUrl ?? null);
+  }, [isKeshetMobile, resolvedAutoplayEmbedUrl, resolvedEmbedUrl, resolvedHlsUrl, showEmbed, showHls]);
+
+  const handleLoadedMetadata = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !isKeshetMobile) return;
+    window.setTimeout(() => {
+      video.muted = true;
+      video.volume = 0;
+      void video.play().then(() => {
+        setIsPlaying(true);
+        setLoading(false);
+        setNeedsUserGesture(false);
+      }).catch((playError) => {
+        console.error('[VideoPlayer] Delayed mobile Keshet metadata play failed', {
+          channelId: channel.id,
+          channelName: channel.name,
+          sourceUrl: resolvedHlsUrl,
+          error: playError,
+        });
+      });
+    }, 200);
+  }, [channel.id, channel.name, isKeshetMobile, resolvedHlsUrl]);
 
   return (
     <div
@@ -358,7 +480,11 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
             style={videoStyle}
             playsInline
             muted={false}
-            controls={true}
+            controls={channel.id === 'keshet12' ? false : true}
+            preload="metadata"
+            disablePictureInPicture
+            controlsList="nodownload"
+            onLoadedMetadata={handleLoadedMetadata}
             onError={() => {
               console.error('[VideoPlayer] React video onError', {
                 channelId: channel.id,
