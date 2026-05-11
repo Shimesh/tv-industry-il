@@ -37,11 +37,24 @@ function appendMutedParams(url: string): string {
   }
 }
 
-function enforceMutedVideo(video: HTMLVideoElement | null) {
+function getVideoErrorDetails(video: HTMLVideoElement | null) {
+  const error = video?.error;
+  return error ? { code: error.code, message: error.message } : null;
+}
+
+function configureAutoplayVideo(video: HTMLVideoElement | null) {
   if (!video) return;
+  video.autoplay = true;
+  video.loop = true;
+  video.playsInline = true;
   video.defaultMuted = true;
   video.muted = true;
   video.volume = 0;
+  video.setAttribute('autoplay', '');
+  video.setAttribute('loop', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
 }
 
 function MutedLivePreview({ channelId }: { channelId: string }) {
@@ -49,6 +62,7 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
   const stream = streamConfigs[channelId];
   const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
   const [dynamicStreamResolved, setDynamicStreamResolved] = useState(false);
+  const [failedHlsUrl, setFailedHlsUrl] = useState<string | null>(null);
   const needsDynamicResolution = Boolean((stream?.dynamicStream && !stream.streamUrl) || channelId === 'now14');
 
   useEffect(() => {
@@ -56,12 +70,29 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
     let cancelled = false;
     fetch(`/api/stream-token/${channelId}`)
-      .then(res => res.ok ? res.json() : null)
+      .then(res => {
+        if (!res.ok) {
+          console.error('[OnAirNowCarousel] Failed to resolve dynamic stream', {
+            channelId,
+            status: res.status,
+            statusText: res.statusText,
+          });
+          return null;
+        }
+        return res.json();
+      })
       .then(data => {
         if (cancelled) return;
-        if (data?.url) setDynamicHlsUrl(data.url);
+        if (data?.url) {
+          setDynamicHlsUrl(data.url);
+          setFailedHlsUrl(null);
+        } else {
+          console.error('[OnAirNowCarousel] Dynamic stream returned no HLS URL', { channelId });
+        }
       })
-      .catch(() => {})
+      .catch(error => {
+        console.error('[OnAirNowCarousel] Dynamic stream request failed', { channelId, error });
+      })
       .finally(() => {
         if (!cancelled) setDynamicStreamResolved(true);
       });
@@ -71,24 +102,77 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     };
   }, [channelId, needsDynamicResolution]);
 
-  const hlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
+  const rawHlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
+  const hlsUrl = rawHlsUrl && rawHlsUrl !== failedHlsUrl ? rawHlsUrl : null;
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !hlsUrl) return;
 
-    enforceMutedVideo(video);
+    let hls: Hls | null = null;
+
+    const logPlaybackError = (message: string, details?: unknown) => {
+      console.error(`[OnAirNowCarousel] ${message}`, {
+        channelId,
+        sourceUrl: hlsUrl,
+        networkState: video.networkState,
+        readyState: video.readyState,
+        videoError: getVideoErrorDetails(video),
+        details,
+      });
+    };
+
+    const failPreview = (message: string, details?: unknown) => {
+      logPlaybackError(message, details);
+      setFailedHlsUrl(hlsUrl);
+    };
+
+    const playMutedPreview = (context: string) => {
+      configureAutoplayVideo(video);
+      void video.play().catch(error => {
+        failPreview(`Autoplay failed during ${context}`, error);
+      });
+    };
+
+    const handleNativeVideoError = () => {
+      failPreview('Native video error');
+    };
+
+    const handleStalled = () => {
+      logPlaybackError('Native video stalled');
+    };
+
+    const handleWaiting = () => {
+      logPlaybackError('Native video waiting for data');
+    };
+
+    video.addEventListener('error', handleNativeVideoError);
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('waiting', handleWaiting);
+
+    configureAutoplayVideo(video);
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = hlsUrl;
-      enforceMutedVideo(video);
-      void video.play().catch(() => {});
-      return;
+      video.load();
+      playMutedPreview('native HLS setup');
+      return () => {
+        video.removeEventListener('error', handleNativeVideoError);
+        video.removeEventListener('stalled', handleStalled);
+        video.removeEventListener('waiting', handleWaiting);
+      };
     }
 
-    if (!Hls.isSupported()) return;
+    if (!Hls.isSupported()) {
+      failPreview('Browser does not support HLS playback');
+      return () => {
+        video.removeEventListener('error', handleNativeVideoError);
+        video.removeEventListener('stalled', handleStalled);
+        video.removeEventListener('waiting', handleWaiting);
+      };
+    }
 
-    const hls = new Hls({
+    hls = new Hls({
       lowLatencyMode: false,
       maxBufferLength: 30,
       maxMaxBufferLength: 60,
@@ -98,26 +182,27 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
-    if (videoRef.current) {
-      videoRef.current.muted = true;
-      videoRef.current.defaultMuted = true;
-      videoRef.current.volume = 0;
-    }
+    configureAutoplayVideo(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      enforceMutedVideo(video);
-      if (videoRef.current) {
-        videoRef.current.muted = true;
-        videoRef.current.defaultMuted = true;
-        videoRef.current.volume = 0;
+      playMutedPreview('HLS manifest parsed');
+    });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      logPlaybackError('HLS error', data);
+      if (data.fatal) {
+        failPreview('Fatal HLS error', data);
       }
-      void video.play().catch(() => {});
     });
 
-    return () => hls.destroy();
-  }, [hlsUrl]);
+    return () => {
+      video.removeEventListener('error', handleNativeVideoError);
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('waiting', handleWaiting);
+      hls?.destroy();
+    };
+  }, [channelId, hlsUrl]);
 
   const keepMuted = useCallback(() => {
-    enforceMutedVideo(videoRef.current);
+    configureAutoplayVideo(videoRef.current);
   }, []);
 
   if (!stream?.hasLiveStream) {
@@ -140,10 +225,21 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         autoPlay={true}
         muted={true}
         playsInline={true}
+        loop={true}
         preload="metadata"
         onLoadedMetadata={keepMuted}
         onPlay={keepMuted}
         onVolumeChange={keepMuted}
+        onError={() => {
+          console.error('[OnAirNowCarousel] React video onError', {
+            channelId,
+            sourceUrl: hlsUrl,
+            networkState: videoRef.current?.networkState,
+            readyState: videoRef.current?.readyState,
+            videoError: getVideoErrorDetails(videoRef.current),
+          });
+          if (hlsUrl) setFailedHlsUrl(hlsUrl);
+        }}
       />
     );
   }
