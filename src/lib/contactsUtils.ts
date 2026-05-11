@@ -221,9 +221,10 @@ function normalizeRoleSemanticKey(value: string): string {
   if (/^cg$/iu.test(normalized)) return 'cg';
   if (/^vtr$/iu.test(normalized)) return 'vtr';
   if (/^lsm$/iu.test(normalized)) return 'lsm';
-  if (/^במאי$|^בימוי$/iu.test(normalized)) return 'director';
+  if (/^ניתוב$|^נתב$/iu.test(normalized)) return 'switcher';
+  if (/^במאי$|^בימוי$|^director$/iu.test(normalized)) return 'director';
   if (/^ע\.?\s*במאי$|^עוזר\s*במאי$/iu.test(normalized)) return 'assistant-director';
-  if (/^מיקסר\/וידאו$|^מיקסר$|^וידאו$/iu.test(normalized)) return 'video-mixer';
+  if (/^מיקסר\/וידאו$|^מיקסר$|^וידאו$|^vision mixer$|^video mixer$|^switcher$/iu.test(normalized)) return 'video-mixer';
   if (/^סאונד$|^קול$/iu.test(normalized)) return 'sound';
   if (/^תאורן$|^תאורה$/iu.test(normalized)) return 'lighting';
   if (/^תפאורן$|^תפאורה$/iu.test(normalized)) return 'set-design';
@@ -255,6 +256,7 @@ const DISPLAY_ROLE_LABELS: Record<string, string> = {
   cg: 'CG',
   vtr: 'VTR',
   lsm: 'LSM',
+  switcher: 'נתב',
   director: 'במאי',
   'assistant-director': 'ע. במאי',
   'video-mixer': 'מיקסר/וידאו',

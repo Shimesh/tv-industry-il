@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { type Contact } from '@/data/contacts';
 import { splitName, inferDepartment, inferSpecialty, inferWorkArea } from '@/lib/contactsUtils';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import {
   deduplicateCrewEntries,
   normalizeName,
@@ -75,22 +76,27 @@ export function useContacts(): ContactsHookResult {
           total?: number;
         };
 
-        const authoritativeContacts = (payload.contacts || []).map((contact) => ({
-          id: String(contact.id || ''),
-          firstName: String(contact.firstName || ''),
-          lastName: String(contact.lastName || ''),
-          email: typeof contact.email === 'string' ? contact.email : undefined,
-          is_consented: contact.is_consented === true,
-          department: String(contact.department || ''),
-          workArea: typeof contact.workArea === 'string' ? contact.workArea : null,
-          specialty: typeof contact.specialty === 'string' ? contact.specialty : undefined,
-          role: String(contact.role || ''),
-          availability: typeof contact.availability === 'string' ? contact.availability as Contact['availability'] : undefined,
-          phone: typeof contact.phone === 'string' ? contact.phone : undefined,
-          source: typeof contact.source === 'string' ? contact.source : undefined,
-          openToWork: contact.openToWork === true,
-          skills: Array.isArray(contact.skills) ? contact.skills.map((item) => String(item)) : undefined,
-        }));
+        const authoritativeContacts = (payload.contacts || []).map((contact) => {
+          const professional = normalizeProfessionalFields(contact);
+          return {
+            id: String(contact.id || ''),
+            firstName: String(contact.firstName || ''),
+            lastName: String(contact.lastName || ''),
+            email: typeof contact.email === 'string' ? contact.email : undefined,
+            is_consented: contact.is_consented === true,
+            department: professional.department,
+            departments: professional.departments,
+            workArea: typeof contact.workArea === 'string' ? contact.workArea : null,
+            specialty: typeof contact.specialty === 'string' ? contact.specialty : undefined,
+            role: professional.role,
+            roles: professional.roles,
+            availability: typeof contact.availability === 'string' ? contact.availability as Contact['availability'] : undefined,
+            phone: typeof contact.phone === 'string' ? contact.phone : undefined,
+            source: typeof contact.source === 'string' ? contact.source : undefined,
+            openToWork: contact.openToWork === true,
+            skills: Array.isArray(contact.skills) ? contact.skills.map((item) => String(item)) : undefined,
+          };
+        });
 
         if (authoritativeContacts.length > 0) {
           setContacts(authoritativeContacts);
@@ -154,7 +160,9 @@ export function useContacts(): ContactsHookResult {
         phone: phoneKey || null,
         is_consented: false,
         role,
+        roles: role ? [role] : [],
         department,
+        departments: department ? [department] : [],
         workArea,
         specialty,
         availability: 'available',

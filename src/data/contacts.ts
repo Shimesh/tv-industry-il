@@ -12,9 +12,11 @@ export interface Contact {
   removalRequestedByUid?: string;
   removalReason?: string;
   department?: ContactDepartment | string;
+  departments?: string[];
   workArea?: ContactWorkArea | string | null;
   specialty?: ContactSpecialty | string;
   role?: string;
+  roles?: string[];
   availability?: string;
   phone?: string;
   skills?: string[];

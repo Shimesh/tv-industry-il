@@ -35,6 +35,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { DIRECTORY_DEPARTMENTS } from '@/lib/contactsUtils';
+import { INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -126,6 +127,10 @@ function formatPageViewLocation(event: PageViewEvent): string {
 
 function formatPageViewDevice(event: PageViewEvent): string {
   return [event.deviceType, event.browser, event.os].filter(Boolean).join(' · ') || 'לא זמין';
+}
+
+function selectedOptionValues(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
+  return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
 }
 
 function rolePresentation(role: AdminRole) {
@@ -236,8 +241,8 @@ function getMissingItems(entry: AdminUserSummary): string[] {
   if (!entry.is_consented && !entry.termsAccepted) missing.push('לא הסכים לתנאים');
   if (!entry.linkedContactId) missing.push('לא מקושר לאיש קשר');
   if (!entry.phone) missing.push('חסר טלפון');
-  if (!entry.role) missing.push('חסר תפקיד');
-  if (!entry.department) missing.push('חסרה מחלקה');
+  if (!(entry.roles || []).length) missing.push('חסר תפקיד');
+  if (!(entry.departments || []).length) missing.push('חסרה מחלקה');
   return missing;
 }
 
@@ -245,8 +250,8 @@ function isFullProfile(entry: AdminUserSummary): boolean {
   return (entry.is_consented || entry.termsAccepted) &&
     Boolean(entry.linkedContactId) &&
     Boolean(entry.phone) &&
-    Boolean(entry.role) &&
-    Boolean(entry.department);
+    Boolean((entry.roles || []).length) &&
+    Boolean((entry.departments || []).length);
 }
 
 function PresenceBadges({ user }: { user: AdminUserSummary }) {
@@ -391,13 +396,15 @@ export default function AdminPage() {
     displayName: string;
     phone: string;
     department: string;
+    departments: string[];
     role: string;
+    roles: string[];
     forceContactId: string;
     linkedContactId: string | null;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [availableContacts, setAvailableContacts] = useState<
-    { id: string; firstName: string; lastName: string; phone: string; department: string }[]
+    { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[]
   >([]);
   const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [showContactSearch, setShowContactSearch] = useState(false);
@@ -470,6 +477,8 @@ export default function AdminPage() {
         method: 'POST',
         body: JSON.stringify({
           ...editModal,
+          department: editModal.departments[0] || '',
+          role: editModal.roles[0] || '',
           forceContactId: editModal.forceContactId || undefined,
         }),
       });
@@ -588,7 +597,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!user || !isAdmin) return;
-    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; department: string }[] }>(
+    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[] }>(
       '/api/admin/contacts-list',
     )
       .then((data) => { if (Array.isArray(data.contacts)) setAvailableContacts(data.contacts); })
@@ -724,7 +733,7 @@ export default function AdminPage() {
     const term = search.trim().toLowerCase();
     const filtered = term
       ? overview.users.filter((entry) =>
-          [entry.displayName, entry.email, entry.phone || '', entry.role, entry.department, entry.city || '', roleLabel(entry.siteRole), ...entry.linkedUids]
+          [entry.displayName, entry.email, entry.phone || '', entry.role, entry.department, ...(entry.roles || []), ...(entry.departments || []), entry.city || '', roleLabel(entry.siteRole), ...entry.linkedUids]
             .join(' ')
             .toLowerCase()
             .includes(term),
@@ -740,7 +749,7 @@ export default function AdminPage() {
       } else if (userSort.key === 'email') {
         result = a.email.localeCompare(b.email, 'en');
       } else if (userSort.key === 'role') {
-        result = `${a.role} ${a.department}`.localeCompare(`${b.role} ${b.department}`, 'he');
+        result = `${(a.roles || []).join(' ')} ${(a.departments || []).join(' ')}`.localeCompare(`${(b.roles || []).join(' ')} ${(b.departments || []).join(' ')}`, 'he');
       } else if (userSort.key === 'status') {
         result = statusRank(a) - statusRank(b);
       } else if (userSort.key === 'lastSeen') {
@@ -1014,7 +1023,9 @@ export default function AdminPage() {
                                   displayName: entry.displayName ?? '',
                                   phone: entry.phone ?? '',
                                   department: entry.department ?? '',
+                                  departments: entry.departments ?? (entry.department ? [entry.department] : []),
                                   role: entry.role ?? '',
+                                  roles: entry.roles ?? (entry.role ? [entry.role] : []),
                                   forceContactId: '',
                                   linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
                                 });
@@ -1034,8 +1045,8 @@ export default function AdminPage() {
                         <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
                       </td>
                       <td className="hidden px-4 py-3 lg:table-cell">
-                        <p className="text-white">{entry.role || '—'}</p>
-                        <p className="text-xs text-gray-500">{entry.department || '—'}</p>
+                        <p className="text-white">{(entry.roles || []).join(', ') || '—'}</p>
+                        <p className="text-xs text-gray-500">{(entry.departments || []).join(', ') || '—'}</p>
                       </td>
                       <td className="px-4 py-3">
                         <PresenceBadge user={entry} />
@@ -1149,7 +1160,7 @@ export default function AdminPage() {
                   <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
                     <div>
                       <p className="text-sm text-white">{entry.displayName || entry.email}</p>
-                      <p className="text-xs text-gray-500">{entry.role || entry.department || 'ללא תפקיד'}</p>
+                      <p className="text-xs text-gray-500">{(entry.roles || []).join(', ') || (entry.departments || []).join(', ') || 'ללא תפקיד'}</p>
                     </div>
                     <span className="text-xs text-green-300">פעיל</span>
                   </div>
@@ -1577,28 +1588,33 @@ export default function AdminPage() {
               />
             </label>
             <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              מחלקה
+              מחלקות
               <select
-                value={editModal.department}
-                onChange={(e) => setEditModal((m) => m && { ...m, department: e.target.value })}
-                className="rounded-lg px-3 py-2 text-sm"
+                multiple
+                value={editModal.departments}
+                onChange={(e) => setEditModal((m) => m && { ...m, departments: selectedOptionValues(e.currentTarget.selectedOptions), department: selectedOptionValues(e.currentTarget.selectedOptions)[0] || '' })}
+                className="min-h-28 rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               >
-                <option value="">-- בחר מחלקה --</option>
                 {DIRECTORY_DEPARTMENTS.map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              תפקיד
-              <input
-                value={editModal.role}
-                onChange={(e) => setEditModal((m) => m && { ...m, role: e.target.value })}
+              תפקידים
+              <select
+                multiple
+                value={editModal.roles}
+                onChange={(e) => setEditModal((m) => m && { ...m, roles: selectedOptionValues(e.currentTarget.selectedOptions), role: selectedOptionValues(e.currentTarget.selectedOptions)[0] || '' })}
                 dir="rtl"
-                className="rounded-lg px-3 py-2 text-sm"
+                className="min-h-28 rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
-              />
+              >
+                {Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...editModal.roles].filter(Boolean))).map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
             </label>
             {editModal.linkedContactId && (() => {
               const linked = availableContacts.find((c) => c.id === editModal.linkedContactId);

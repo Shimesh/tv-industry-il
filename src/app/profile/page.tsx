@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { INDUSTRY_ROLE_OPTIONS, PROFILE_DEPARTMENT_OPTIONS } from '@/constants/departments';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 const STATUS_OPTS = [
   { value: 'available', label: 'פנוי', dot: 'bg-green-500', text: 'text-green-300', bg: 'bg-green-500/10' },
@@ -25,6 +26,9 @@ const STATUS_OPTS = [
 
 function arrToStr(arr: string[] | undefined) { return (arr || []).join(', '); }
 function strToArr(s: string) { return s.split(',').map(v => v.trim()).filter(Boolean); }
+function selectValues(options: HTMLCollectionOf<HTMLOptionElement>) {
+  return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
+}
 
 export default function ProfilePage() {
   return <AuthGuard><ProfileContent /></AuthGuard>;
@@ -43,8 +47,8 @@ function ProfileContent() {
 
   const [form, setForm] = useState({
     displayName: profile?.displayName || '',
-    department: profile?.department || '',
-    role: profile?.role || '',
+    departments: normalizeProfessionalFields(profile || null).departments,
+    roles: normalizeProfessionalFields(profile || null).roles,
     phone: profile?.phone || '',
     bio: profile?.bio || '',
     city: profile?.city || '',
@@ -59,10 +63,11 @@ function ProfileContent() {
   useEffect(() => {
     if (profile) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      const professional = normalizeProfessionalFields(profile);
       setForm({
         displayName: profile.displayName || '',
-        department: profile.department || '',
-        role: profile.role || '',
+        departments: professional.departments,
+        roles: professional.roles,
         phone: profile.phone || '',
         bio: profile.bio || '',
         city: profile.city || '',
@@ -76,7 +81,8 @@ function ProfileContent() {
   }, [profile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (profile && !profile.onboardingComplete && (!profile.department || !profile.role)) {
+    const professional = normalizeProfessionalFields(profile || null);
+    if (profile && !profile.onboardingComplete && (!professional.departments.length || !professional.roles.length)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowOnboarding(true);
     }
@@ -86,8 +92,10 @@ function ProfileContent() {
     setSaving(true);
     await updateUserProfile({
       displayName: form.displayName,
-      department: form.department,
-      role: form.role,
+      department: form.departments[0] || '',
+      departments: form.departments,
+      role: form.roles[0] || '',
+      roles: form.roles,
       phone: form.phone,
       bio: form.bio,
       city: form.city,
@@ -104,10 +112,11 @@ function ProfileContent() {
   };
 
   const handleOnboardingComplete = async (data: {
-    displayName: string; department: string; role: string; phone: string; linkedContactId?: number | string; is_consented?: boolean;
+    displayName: string; department: string; departments?: string[]; role: string; roles?: string[]; phone: string; linkedContactId?: number | string; is_consented?: boolean;
   }) => {
     await updateUserProfile({ ...data, onboardingComplete: true });
-    setForm(prev => ({ ...prev, ...data }));
+    const professional = normalizeProfessionalFields(data);
+    setForm(prev => ({ ...prev, ...data, departments: professional.departments, roles: professional.roles }));
     setShowOnboarding(false);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2500);
@@ -151,8 +160,9 @@ function ProfileContent() {
   const statusOpt = STATUS_OPTS.find(s => s.value === profile.status) ?? STATUS_OPTS[0];
   const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-[var(--theme-bg)] border border-[var(--theme-border)] text-[var(--theme-text)] text-sm outline-none focus:border-[var(--theme-accent)]';
   const labelCls = 'text-xs text-[var(--theme-text-secondary)] mb-1 block';
-  const departmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, form.department].filter(Boolean)));
-  const roleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, form.role].filter(Boolean)));
+  const professional = normalizeProfessionalFields(profile);
+  const departmentOptions = Array.from(new Set([...PROFILE_DEPARTMENT_OPTIONS, ...form.departments].filter(Boolean)));
+  const roleOptions = Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...form.roles].filter(Boolean)));
 
   return (
     <div className="min-h-screen">
@@ -199,16 +209,16 @@ function ProfileContent() {
             <div className="text-center sm:text-right flex-1 min-w-0">
               <h1 className="text-2xl font-black text-[var(--theme-text)]">{profile.displayName}</h1>
               <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 flex-wrap">
-                {profile.role && (
-                  <span className="px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-300 text-xs flex items-center gap-1">
-                    <Briefcase className="w-3 h-3" />{profile.role}
+                {professional.roles.map((role) => (
+                  <span key={role} className="px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-300 text-xs flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />{role}
                   </span>
-                )}
-                {profile.department && (
-                  <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-300 text-xs flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />{profile.department}
+                ))}
+                {professional.departments.map((department) => (
+                  <span key={department} className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-300 text-xs flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />{department}
                   </span>
-                )}
+                ))}
                 <span className={`px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5 ${statusOpt.bg} ${statusOpt.text}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${statusOpt.dot}`} />{statusOpt.label}
                 </span>
@@ -259,18 +269,16 @@ function ProfileContent() {
                     <label className={labelCls}>שם מלא</label>
                     <input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} className={inputCls} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className={labelCls}>מחלקה</label>
-                      <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} className={inputCls}>
-                        <option value="">בחר</option>
+                      <label className={labelCls}>מחלקות</label>
+                      <select multiple value={form.departments} onChange={e => setForm({ ...form, departments: selectValues(e.currentTarget.selectedOptions) })} className={`${inputCls} min-h-32`}>
                         {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className={labelCls}>תפקיד</label>
-                      <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls}>
-                        <option value="">בחר</option>
+                      <label className={labelCls}>תפקידים</label>
+                      <select multiple value={form.roles} onChange={e => setForm({ ...form, roles: selectValues(e.currentTarget.selectedOptions) })} className={`${inputCls} min-h-32`}>
                         {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
                     </div>
@@ -295,8 +303,8 @@ function ProfileContent() {
                 <div className="space-y-2.5">
                   <InfoRow icon={<Mail className="w-4 h-4" />} label="אימייל" value={profile.email} />
                   <InfoRow icon={<Phone className="w-4 h-4" />} label="טלפון" value={profile.phone || 'לא צוין'} />
-                  <InfoRow icon={<Briefcase className="w-4 h-4" />} label="תפקיד" value={profile.role || 'לא צוין'} />
-                  <InfoRow icon={<MapPin className="w-4 h-4" />} label="מחלקה" value={profile.department || 'לא צוין'} />
+                  <InfoRow icon={<Briefcase className="w-4 h-4" />} label="תפקידים" value={professional.roles.join(', ') || 'לא צוין'} />
+                  <InfoRow icon={<MapPin className="w-4 h-4" />} label="מחלקות" value={professional.departments.join(', ') || 'לא צוין'} />
                   {profile.city && <InfoRow icon={<MapPin className="w-4 h-4" />} label="עיר" value={profile.city} />}
                   {profile.bio && (
                     <div className="pt-3 border-t border-[var(--theme-border)]">

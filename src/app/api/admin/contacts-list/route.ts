@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { runQuery } from '@/lib/server/firestoreAdminRest';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 type ContactMin = {
   id: string;
@@ -8,6 +9,9 @@ type ContactMin = {
   lastName?: string;
   phone?: string | null;
   department?: string | null;
+  departments?: unknown;
+  role?: string | null;
+  roles?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -17,12 +21,18 @@ export async function GET(request: NextRequest) {
   const contacts = await runQuery<ContactMin>({ from: [{ collectionId: 'contacts' }] });
 
   return NextResponse.json({
-    contacts: contacts.map((c) => ({
-      id: c.id,
-      firstName: c.firstName ?? '',
-      lastName: c.lastName ?? '',
-      phone: c.phone ?? '',
-      department: c.department ?? '',
-    })),
+    contacts: contacts.map((c) => {
+      const professional = normalizeProfessionalFields(c as Record<string, unknown>);
+      return {
+        id: c.id,
+        firstName: c.firstName ?? '',
+        lastName: c.lastName ?? '',
+        phone: c.phone ?? '',
+        department: professional.department,
+        departments: professional.departments,
+        role: professional.role,
+        roles: professional.roles,
+      };
+    }),
   });
 }

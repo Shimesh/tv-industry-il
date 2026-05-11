@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { getDocument, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
 import { normalizeContactName, normalizePhone } from '@/lib/contactsUtils';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 type ContactRecord = {
   id: string;
@@ -11,7 +12,9 @@ type ContactRecord = {
   normalizedName?: string;
   normalizedPhone?: string | null;
   department?: string;
+  departments?: unknown;
   role?: string;
+  roles?: unknown;
 };
 
 export async function POST(request: NextRequest) {
@@ -54,12 +57,12 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date().toISOString();
+  const professional = normalizeProfessionalFields(match as Record<string, unknown>);
 
   await patchDocument(`users/${body.uid}`, {
     linkedContactId: match.id,
     ...(match.phone ? { phone: match.phone } : {}),
-    ...(match.role ? { role: match.role } : {}),
-    ...(match.department ? { department: match.department } : {}),
+    ...professional,
     updatedAt: now,
   });
 
@@ -76,8 +79,10 @@ export async function POST(request: NextRequest) {
       id: match.id,
       name: `${match.firstName || ''} ${match.lastName || ''}`.trim(),
       phone: match.phone ?? null,
-      role: match.role ?? null,
-      department: match.department ?? null,
+      role: professional.role || null,
+      roles: professional.roles,
+      department: professional.department || null,
+      departments: professional.departments,
     },
   });
 }

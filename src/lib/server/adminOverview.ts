@@ -9,13 +9,16 @@ import type {
 import { getRecentSystemEvents, getUsageSnapshot } from '@/lib/server/adminTelemetry';
 import { getFirebaseAdminAuth } from '@/lib/server/firebaseAdmin';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 type RawUser = {
   id: string;
   displayName?: string;
   email?: string;
   role?: string;
+  roles?: unknown;
   department?: string;
+  departments?: unknown;
   siteRole?: string | null;
   isOnline?: boolean;
   lastSeen?: string | null;
@@ -34,6 +37,7 @@ type RawUser = {
 type RawContact = {
   id: string;
   department?: string | null;
+  departments?: unknown;
   workArea?: string | null;
 };
 
@@ -203,11 +207,14 @@ function groupUsersByIdentity(rawUsers: RawUser[]): RawUser[][] {
   return Array.from(groups.values());
 }
 
-function bucketize(values: Array<string | null | undefined>, fallback: string): CountBucket[] {
+function bucketize(values: Array<string | string[] | null | undefined>, fallback: string): CountBucket[] {
   const counts = new Map<string, number>();
   for (const rawValue of values) {
-    const label = String(rawValue || '').trim() || fallback;
-    counts.set(label, (counts.get(label) || 0) + 1);
+    const labels = Array.isArray(rawValue) ? rawValue : [rawValue];
+    for (const rawLabel of labels) {
+      const label = String(rawLabel || '').trim() || fallback;
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
   }
 
   return Array.from(counts.entries())
@@ -220,6 +227,7 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
   const lastSeenMs = toMs(lastSeen);
   const onlineNow = Boolean(raw.isOnline) && lastSeenMs !== null && nowMs() - lastSeenMs <= PRESENCE_WINDOW_MS;
   const stalePresence = lastSeenMs === null || nowMs() - lastSeenMs > STALE_PRESENCE_MS;
+  const professional = normalizeProfessionalFields(raw as Record<string, unknown>);
 
   return {
     uid: raw.id,
@@ -228,8 +236,10 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     profileId: raw.profileId || null,
     displayName: normalizeDisplayName(raw),
     email: String(raw.email || ''),
-    role: String(raw.role || ''),
-    department: String(raw.department || ''),
+    role: professional.role,
+    roles: professional.roles,
+    department: professional.department,
+    departments: professional.departments,
     siteRole: normalizeSiteRole(raw.siteRole),
     isOnline: Boolean(raw.isOnline),
     onlineNow,
@@ -262,6 +272,10 @@ function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
   const stalePresence = lastSeenMs === null || nowMs() - lastSeenMs > STALE_PRESENCE_MS;
   const displayNameSource = group.find((user) => !isBrokenOrEmpty(user.displayName)) || canonical;
   const profileId = firstValue(group, (user) => user.profileId) || null;
+  const professional = normalizeProfessionalFields({
+    roles: group.flatMap((user) => normalizeProfessionalFields(user as Record<string, unknown>).roles),
+    departments: group.flatMap((user) => normalizeProfessionalFields(user as Record<string, unknown>).departments),
+  });
 
   return {
     uid: canonical.id,
@@ -270,8 +284,10 @@ function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
     profileId,
     displayName: normalizeDisplayName(displayNameSource),
     email: firstString(group, (user) => user.email),
-    role: firstString(group, (user) => user.role),
-    department: firstString(group, (user) => user.department),
+    role: professional.role || firstString(group, (user) => user.role),
+    roles: professional.roles,
+    department: professional.department || firstString(group, (user) => user.department),
+    departments: professional.departments,
     siteRole: bestSiteRole(group),
     isOnline: group.some((user) => user.isOnline === true),
     onlineNow,
@@ -398,7 +414,10 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     presenceWindowMs: PRESENCE_WINDOW_MS,
     stats,
     appConfig,
-    contactsByDepartment: bucketize(contactsRaw.map((contact) => contact.department), '\u05dc\u05d0 \u05de\u05e9\u05d5\u05d9\u05da'),
+    contactsByDepartment: bucketize(
+      contactsRaw.map((contact) => normalizeProfessionalFields(contact as Record<string, unknown>).departments),
+      '\u05dc\u05d0 \u05de\u05e9\u05d5\u05d9\u05da',
+    ),
     contactsByWorkArea: bucketize(contactsRaw.map((contact) => contact.workArea), '\u05dc\u05dc\u05d0 \u05e9\u05d9\u05d5\u05da'),
     users,
     onlineUsers: users.filter((user) => user.onlineNow),

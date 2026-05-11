@@ -12,6 +12,7 @@ import {
   PhoneCall, ArrowRight, Clock, Shield
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 const statusLabels: Record<string, { label: string; color: string; bgColor: string }> = {
   available: { label: 'פנוי', color: 'text-green-300', bgColor: 'bg-green-500/10' },
@@ -77,6 +78,7 @@ export default function UserProfilePage() {
 
   const statusInfo = statusLabels[profile.status] || statusLabels.offline;
   const isOwnProfile = user?.uid === userId;
+  const professional = normalizeProfessionalFields(profile);
 
   return (
     <div className="min-h-screen">
@@ -96,18 +98,18 @@ export default function UserProfilePage() {
             <div className="text-center sm:text-right flex-1">
               <h1 className="text-2xl font-black text-[var(--theme-text)]">{profile.displayName}</h1>
               <div className="flex items-center justify-center sm:justify-start gap-3 mt-2 flex-wrap">
-                {profile.role && (
-                  <span className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 text-sm flex items-center gap-1">
+                {professional.roles.map((role) => (
+                  <span key={role} className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 text-sm flex items-center gap-1">
                     <Briefcase className="w-3.5 h-3.5" />
-                    {profile.role}
+                    {role}
                   </span>
-                )}
-                {profile.department && (
-                  <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 text-sm flex items-center gap-1">
+                ))}
+                {professional.departments.map((department) => (
+                  <span key={department} className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 text-sm flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5" />
-                    {profile.department}
+                    {department}
                   </span>
-                )}
+                ))}
                 <span className={`px-3 py-1 rounded-full text-sm flex items-center gap-1.5 ${statusInfo.bgColor} ${statusInfo.color}`}>
                   <span className={`w-2 h-2 rounded-full ${profile.status === 'available' ? 'bg-green-500' : profile.status === 'busy' ? 'bg-red-500' : 'bg-gray-500'}`} />
                   {statusInfo.label}
@@ -165,8 +167,8 @@ export default function UserProfilePage() {
               <div className="space-y-3">
                 <InfoRow icon={<Mail className="w-4 h-4" />} label="אימייל" value={profile.email} />
                 <InfoRow icon={<Phone className="w-4 h-4" />} label="טלפון" value={profile.phone || 'לא צוין'} />
-                <InfoRow icon={<Briefcase className="w-4 h-4" />} label="תפקיד" value={profile.role || 'לא צוין'} />
-                <InfoRow icon={<MapPin className="w-4 h-4" />} label="מחלקה" value={profile.department || 'לא צוין'} />
+                <InfoRow icon={<Briefcase className="w-4 h-4" />} label="תפקידים" value={professional.roles.join(', ') || 'לא צוין'} />
+                <InfoRow icon={<MapPin className="w-4 h-4" />} label="מחלקות" value={professional.departments.join(', ') || 'לא צוין'} />
                 {profile.bio && (
                   <div className="pt-3 border-t border-[var(--theme-border)]">
                     <p className="text-sm text-[var(--theme-text-secondary)]">{profile.bio}</p>

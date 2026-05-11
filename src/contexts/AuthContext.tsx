@@ -14,6 +14,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { can, hasRole, type Permission, type UserRole } from '@/lib/permissions';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
 
 export interface UserProfile {
@@ -22,7 +23,9 @@ export interface UserProfile {
   email: string;
   photoURL: string | null;
   department: string;
+  departments: string[];
   role: string;
+  roles: string[];
   phone: string;
   profileId?: string;
   profileSource?: string;
@@ -119,7 +122,9 @@ function defaultProfile(firebaseUser: User): UserProfile {
     email: firebaseUser.email || '',
     photoURL: firebaseUser.photoURL,
     department: '',
+    departments: [],
     role: '',
+    roles: [],
     phone: firebaseUser.phoneNumber || '',
     is_consented: false,
     skills: [],
@@ -152,6 +157,7 @@ function readCachedBootstrap(): SessionBootstrapCache | null {
 function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser: User): UserProfile {
   const fallback = defaultProfile(firebaseUser);
   if (!raw) return fallback;
+  const professional = normalizeProfessionalFields(raw);
 
   const linkedContactIdRaw = raw.linkedContactId;
   const linkedContactId =
@@ -174,8 +180,10 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     photoURL: typeof raw.photoURL === 'string'
       ? raw.photoURL
       : firebaseUser.photoURL || null,
-    department: typeof raw.department === 'string' ? raw.department : '',
-    role: typeof raw.role === 'string' ? raw.role : '',
+    department: professional.department,
+    departments: professional.departments,
+    role: professional.role,
+    roles: professional.roles,
     phone: typeof raw.phone === 'string' ? raw.phone : '',
     profileId: typeof raw.profileId === 'string' ? raw.profileId : undefined,
     profileSource: typeof raw.profileSource === 'string' ? raw.profileSource : undefined,
@@ -389,7 +397,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName: name,
       email,
       department,
+      departments: department ? [department] : [],
       role,
+      roles: role ? [role] : [],
     });
     setProfileReady(false);
     setProfileSource('fallback');

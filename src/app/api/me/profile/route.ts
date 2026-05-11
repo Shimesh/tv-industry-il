@@ -4,6 +4,7 @@ import { getDocument, patchDocument, runQuery } from '@/lib/server/firestoreAdmi
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 import { loadAndRepairSessionProfile } from '@/lib/server/sessionBootstrap';
 import { normalizeContactName, normalizePhone } from '@/lib/contactsUtils';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 type ContactRecord = {
   id: string;
@@ -87,6 +88,14 @@ async function syncLinkedContactFields(userUid: string, patch: Record<string, un
     contactPatch.isOnline = patch.isOnline === true;
   }
 
+  if ('departments' in patch || 'roles' in patch || 'department' in patch || 'role' in patch) {
+    const professional = normalizeProfessionalFields(patch);
+    contactPatch.department = professional.department;
+    contactPatch.role = professional.role;
+    (contactPatch as Record<string, unknown>).departments = professional.departments;
+    (contactPatch as Record<string, unknown>).roles = professional.roles;
+  }
+
   if (patch.is_consented === true) {
     contactPatch.is_consented = true;
     contactPatch.consentedAt = new Date().toISOString();
@@ -131,7 +140,9 @@ export async function PATCH(request: NextRequest) {
     const allowedKeys = [
       'displayName',
       'department',
+      'departments',
       'role',
+      'roles',
       'phone',
       'profileId',
       'profileSource',
@@ -166,6 +177,9 @@ export async function PATCH(request: NextRequest) {
       }
     }
     patch.updatedAt = new Date().toISOString();
+    if ('departments' in patch || 'roles' in patch || 'department' in patch || 'role' in patch) {
+      Object.assign(patch, normalizeProfessionalFields(patch));
+    }
     if (patch.termsAccepted === true) {
       patch.termsAcceptedAt = new Date().toISOString();
     }

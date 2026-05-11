@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 
 type RawUser = Record<string, unknown> & {
   id?: string;
@@ -53,19 +54,24 @@ export async function POST(request: NextRequest) {
     displayName?: string;
     phone?: string;
     department?: string;
+    departments?: string[];
     role?: string;
+    roles?: string[];
     forceContactId?: string;
   };
 
   if (!body.uid) return NextResponse.json({ error: 'uid required' }, { status: 400 });
 
   const now = new Date().toISOString();
-  const userPatch: Record<string, string | null> = { updatedAt: now };
+  const userPatch: Record<string, string | null | string[]> = { updatedAt: now };
   if (body.displayName !== undefined) userPatch.displayName = body.displayName;
   if (body.phone !== undefined) userPatch.phone = body.phone;
   if (body.department !== undefined) userPatch.department = body.department;
+  if (body.departments !== undefined) userPatch.departments = body.departments;
   if (body.role !== undefined) userPatch.role = body.role;
+  if (body.roles !== undefined) userPatch.roles = body.roles;
   if (body.forceContactId) userPatch.linkedContactId = body.forceContactId;
+  Object.assign(userPatch, normalizeProfessionalFields(userPatch));
 
   const linkedUserIds = await resolveLinkedUserIds(body.uid);
   const syncedPatch = { ...userPatch, linkedUids: linkedUserIds.linkedUids };
@@ -82,15 +88,16 @@ export async function POST(request: NextRequest) {
   }
 
   if (contactId) {
-    const contactPatch: Record<string, string | boolean | null> = {
+    const contactPatch: Record<string, string | boolean | null | string[]> = {
       updatedAt: now,
       is_consented: true,
       consentedAt: now,
       consentedByUid: authUser.uid,
     };
     if (body.phone !== undefined) contactPatch.phone = body.phone;
-    if (body.department !== undefined) contactPatch.department = body.department;
-    if (body.role !== undefined) contactPatch.role = body.role;
+    if (body.department !== undefined || body.departments !== undefined || body.role !== undefined || body.roles !== undefined) {
+      Object.assign(contactPatch, normalizeProfessionalFields(userPatch));
+    }
     await patchDocument(`contacts/${contactId}`, contactPatch);
   }
 

@@ -1,6 +1,7 @@
 import type { VerifiedAuthUser } from '@/lib/apiAuth';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import { isPrimaryAdminUid } from '@/lib/server/primaryAdmin';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
 
 type RawUserProfile = Record<string, unknown>;
@@ -12,7 +13,9 @@ export type SessionProfile = {
   email: string;
   photoURL: string | null;
   department: string;
+  departments: string[];
   role: string;
+  roles: string[];
   phone: string;
   profileId?: string;
   profileSource?: string;
@@ -85,7 +88,9 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     email: authUser.email || '',
     photoURL: authUser.photoURL || null,
     department: '',
+    departments: [],
     role: '',
+    roles: [],
     phone: authUser.phoneNumber || '',
     is_consented: false,
     skills: [],
@@ -106,6 +111,7 @@ function normalizeSiteRole(value: unknown): 'admin' | 'moderator' | 'user' | und
 function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser): SessionProfile {
   const fallback = buildDefaultSessionProfile(authUser);
   if (!raw) return fallback;
+  const professional = normalizeProfessionalFields(raw);
 
   const linkedContactIdRaw = raw.linkedContactId;
   const linkedContactId =
@@ -124,8 +130,10 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
       : asString(raw.displayName, fallback.displayName),
     email: asString(raw.email, authUser.email || fallback.email),
     photoURL: typeof raw.photoURL === 'string' ? raw.photoURL : authUser.photoURL || null,
-    department: asString(raw.department),
-    role: asString(raw.role),
+    department: professional.department,
+    departments: professional.departments,
+    role: professional.role,
+    roles: professional.roles,
     phone: asString(raw.phone),
     profileId: asOptionalString(raw.profileId),
     profileSource: asOptionalString(raw.profileSource),

@@ -1,5 +1,6 @@
 import type { VerifiedAuthUser } from '@/lib/apiAuth';
 import { normalizePhone as normalizeDisplayPhone } from '@/lib/contactsUtils';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 
 type IdentitySource = 'profiles' | 'industry_people' | 'contacts';
@@ -10,7 +11,9 @@ export type IdentityCandidate = {
   displayName: string;
   phone: string;
   department: string;
+  departments: string[];
   role: string;
+  roles: string[];
   profileId: string;
   isAdmin: boolean;
   siteRole?: 'admin' | 'moderator' | 'editor' | 'viewer' | 'user';
@@ -114,13 +117,20 @@ function toCandidate(source: IdentitySource, doc: RawIdentityDoc): IdentityCandi
   if (!displayName || !phone) return null;
 
   const siteRole = normalizeSiteRole(doc.siteRole);
+  const professional = normalizeProfessionalFields({
+    ...doc,
+    department: stringField(doc, ['department', 'workArea']),
+    role: stringField(doc, ['role', 'specialty', 'profession']),
+  });
   return {
     id,
     source,
     displayName,
     phone,
-    department: stringField(doc, ['department', 'workArea']),
-    role: stringField(doc, ['role', 'specialty', 'profession']),
+    department: professional.department,
+    departments: professional.departments,
+    role: professional.role,
+    roles: professional.roles,
     profileId: stringField(doc, ['profileId'], id),
     isAdmin: booleanField(doc, ['isAdmin', 'admin']) || siteRole === 'admin',
     siteRole,
@@ -233,7 +243,9 @@ export async function confirmIdentityLink(
     displayName: candidate.displayName,
     phone: candidate.phone,
     department: candidate.department,
+    departments: candidate.departments,
     role: candidate.role,
+    roles: candidate.roles,
     profileId: candidate.profileId,
     profileSource: source,
     linkedUids,
@@ -270,6 +282,10 @@ export async function confirmIdentityLink(
 
   const sourcePatch: Record<string, string | boolean | null | string[]> = {
     linkedUids,
+    departments: candidate.departments,
+    roles: candidate.roles,
+    department: candidate.department,
+    role: candidate.role,
     firebaseUid: authUser.uid,
     lastLinkedUid: authUser.uid,
     lastLinkedAt: now,

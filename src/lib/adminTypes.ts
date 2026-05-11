@@ -9,7 +9,9 @@ export type AdminUserSummary = {
   displayName: string;
   email: string;
   role: string;
+  roles: string[];
   department: string;
+  departments: string[];
   siteRole: AdminRole;
   isOnline: boolean;
   onlineNow: boolean;

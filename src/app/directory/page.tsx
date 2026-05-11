@@ -5,10 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { departments, type Contact } from '@/data/contacts';
 import {
-  DIRECTORY_WORK_AREAS,
-  areSemanticallySameRole,
   normalizeDisplayRoleLabel,
 } from '@/lib/contactsUtils';
+import { normalizeProfessionalFields, professionalSearchText } from '@/lib/professionalFields';
 import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
@@ -87,19 +86,32 @@ const modalContentVariants = {
   },
 };
 
-function getPrimaryRoleLabel(contact: Contact) {
-  return normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
+function uniqueLabels(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of values) {
+    const value = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!value) continue;
+    const key = value.toLocaleLowerCase('he');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
 }
 
-function getSecondaryRoleLabel(contact: Contact) {
-  const role = normalizeDisplayRoleLabel(contact.role || '');
+function getContactRoles(contact: Contact) {
+  const professional = normalizeProfessionalFields(contact);
   const specialty = normalizeDisplayRoleLabel(contact.specialty || '');
+  return uniqueLabels([...professional.roles, specialty]);
+}
 
-  if (!role || !specialty || areSemanticallySameRole(role, specialty)) {
-    return null;
-  }
+function getContactDepartments(contact: Contact) {
+  return normalizeProfessionalFields(contact).departments;
+}
 
-  return role;
+function getPrimaryDepartment(contact: Contact) {
+  return getContactDepartments(contact)[0] || '';
 }
 
 export default function DirectoryPage() {
@@ -111,8 +123,6 @@ export default function DirectoryPage() {
 }
 
 function DirectoryContent() {
-  const noWorkAreaCount = 0;
-  const unassignedWorkAreaKey = '__unassigned__';
   const { profile, loading: authLoading } = useAuth();
   const {
     contacts: contactsList,
@@ -123,14 +133,13 @@ function DirectoryContent() {
     contactsError,
   } = useAppData();
   const [search, setSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
+  const [departmentFilters, setDepartmentFilters] = useState<string[]>([]);
+  const [roleFilters, setRoleFilters] = useState<string[]>([]);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('search');
     if (q) setSearch(q);
   }, []);
-  const [workAreaFilter, setWorkAreaFilter] = useState('');
-  const [specialtyFilter, setSpecialtyFilter] = useState('');
   const [availFilter, setAvailFilter] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -153,22 +162,25 @@ function DirectoryContent() {
   }, [profile]);
 
   const filtered = useMemo(() => {
+    const seen = new Set<string>();
     return contactsList.filter(c => {
-      const canonicalRole = normalizeDisplayRoleLabel(c.role || '');
-      const canonicalSpecialty = normalizeDisplayRoleLabel(c.specialty || '');
-      const haystack = `${c.firstName} ${c.lastName} ${c.role} ${canonicalRole} ${c.department} ${c.workArea || ''} ${c.specialty || ''} ${canonicalSpecialty}`.toLocaleLowerCase('he');
+      const key = String(c.id || `${c.firstName || ''}-${c.lastName || ''}-${c.phone || ''}`);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      const roles = getContactRoles(c);
+      const contactDepartments = getContactDepartments(c);
+      const haystack = professionalSearchText(c);
       const matchSearch = !normalizedSearch || haystack.includes(normalizedSearch);
-      const matchDept = !deptFilter || c.department === deptFilter;
-      const matchWorkArea = !workAreaFilter || c.workArea === workAreaFilter;
-      const matchSpecialty = !specialtyFilter || normalizeDisplayRoleLabel(c.specialty || c.role || '') === specialtyFilter;
+      const matchDept = departmentFilters.length === 0 || departmentFilters.some((department) => contactDepartments.includes(department));
+      const matchRole = roleFilters.length === 0 || roleFilters.some((role) => roles.includes(role));
       const matchAvail = !availFilter ||
         (availFilter === 'available' && c.availability === 'available') ||
         (availFilter === 'unavailable' && c.availability === 'unavailable') ||
         (availFilter === 'maybe' && c.availability === 'maybe');
       const matchOpenToWork = !openToWorkFilter || c.openToWork === true;
-      return matchSearch && matchDept && matchWorkArea && matchSpecialty && matchAvail && matchOpenToWork;
+      return matchSearch && matchDept && matchRole && matchAvail && matchOpenToWork;
     });
-  }, [normalizedSearch, deptFilter, workAreaFilter, specialtyFilter, availFilter, openToWorkFilter, contactsList]);
+  }, [normalizedSearch, departmentFilters, roleFilters, availFilter, openToWorkFilter, contactsList]);
 
   // Sort: current user first
   const sortedFiltered = useMemo(() => {
@@ -205,62 +217,48 @@ function DirectoryContent() {
 
   const deptCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    contactsList.forEach(c => {
-      const department = c.department;
-      if (!department) return;
-      counts[department] = (counts[department] || 0) + 1;
+    contactsList.forEach((contact) => {
+      getContactDepartments(contact).forEach((department) => {
+        if (!department) return;
+        counts[department] = (counts[department] || 0) + 1;
+      });
     });
     return counts;
   }, [contactsList]);
 
-  const workAreaCounts = useMemo(() => {
+  const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contactsList.forEach((contact) => {
-      if (!contact.workArea) return;
-      counts[contact.workArea] = (counts[contact.workArea] || 0) + 1;
-    });
-    return counts;
-  }, [contactsList]);
-  const specialtyCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    contactsList.forEach((contact) => {
-      const specialty = normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
-      if (!specialty) return;
-      counts[specialty] = (counts[specialty] || 0) + 1;
+      getContactRoles(contact).forEach((role) => {
+        if (!role) return;
+        counts[role] = (counts[role] || 0) + 1;
+      });
     });
     return counts;
   }, [contactsList]);
 
-  const specialtyOptions = useMemo(
-    () => Object.keys(specialtyCounts).sort((a, b) => a.localeCompare(b, 'he')),
-    [specialtyCounts],
-  );
-  const visibleSpecialtyCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    contactsList.forEach((contact) => {
-      const matchesDepartment = !deptFilter || contact.department === deptFilter;
-      const matchesWorkArea = !workAreaFilter || contact.workArea === workAreaFilter;
-      const specialty = normalizeDisplayRoleLabel(contact.specialty || contact.role || '');
-      if (!matchesDepartment || !matchesWorkArea || !specialty) {
-        return;
-      }
-      counts[specialty] = (counts[specialty] || 0) + 1;
-    });
-
-    return Object.entries(counts)
+  const roleOptions = useMemo(
+    () => Object.entries(roleCounts)
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he'))
-      .slice(0, 12);
-  }, [contactsList, deptFilter, workAreaFilter]);
-  const visibleWorkAreas = useMemo(
-    () => DIRECTORY_WORK_AREAS.filter((area) => (workAreaCounts[area] || 0) > 0 || workAreaFilter === area),
-    [workAreaCounts, workAreaFilter],
+      .slice(0, 24),
+    [roleCounts],
   );
-  const workAreaSummary = useMemo(
-    () => visibleWorkAreas
-      .map((area) => `${area} ${workAreaCounts[area] || 0}`)
-      .join(' • '),
-    [visibleWorkAreas, workAreaCounts],
-  );
+
+  const toggleDepartmentFilter = (department: string) => {
+    setDepartmentFilters((current) =>
+      current.includes(department)
+        ? current.filter((item) => item !== department)
+        : [...current, department],
+    );
+  };
+
+  const toggleRoleFilter = (role: string) => {
+    setRoleFilters((current) =>
+      current.includes(role)
+        ? current.filter((item) => item !== role)
+        : [...current, role],
+    );
+  };
 
   if (authLoading || (contactsLoading && !contactsReady)) return <DirectorySkeleton />;
 
@@ -342,20 +340,20 @@ function DirectoryContent() {
       </section>
 
       {/* Search & Filters */}
-      <section className="sticky z-30 backdrop-blur-xl border-b" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
-          <div className="space-y-2">
-            {/* Search - glass morphism */}
-            <div className="relative flex-1 group">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
+      <section className="sticky z-30 border-b backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }} dir="rtl">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+          <div className="space-y-3">
+            <div className="relative group">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors group-focus-within:text-purple-400" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }} />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="חיפוש לפי שם, תפקיד..."
+                placeholder="חיפוש לפי שם, תפקיד או מחלקה..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border text-xs sm:text-sm transition-all duration-300 focus:outline-none focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20 focus:shadow-lg focus:shadow-purple-500/10 backdrop-blur-sm placeholder-gray-500"
+                className="w-full rounded-xl border py-2.5 pl-10 pr-10 text-sm transition-all duration-300 placeholder:text-gray-500 focus:border-purple-500/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                 style={{ background: 'color-mix(in srgb, var(--theme-bg-secondary) 70%, transparent)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+                dir="rtl"
               />
               {search.length > 0 && (
                 <button
@@ -373,207 +371,119 @@ function DirectoryContent() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {/* Availability Filter */}
-            <select
-              value={availFilter}
-              onChange={(e) => setAvailFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300 shrink-0"
-              style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-            >
-              <option value="">כל הסטטוסים</option>
-              <option value="available">פנויים</option>
-              <option value="maybe">אולי פנוי</option>
-              <option value="unavailable">לא פנויים</option>
-            </select>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <select
+                value={availFilter}
+                onChange={(e) => setAvailFilter(e.target.value)}
+                className="shrink-0 cursor-pointer appearance-none rounded-xl border px-3 py-2 text-xs transition-all duration-300 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 sm:text-sm"
+                style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+              >
+                <option value="">כל הסטטוסים</option>
+                <option value="available">פנויים</option>
+                <option value="maybe">אולי פנוי</option>
+                <option value="unavailable">לא פנויים</option>
+              </select>
 
-            <select
-              value={specialtyFilter}
-              onChange={(e) => setSpecialtyFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 appearance-none cursor-pointer transition-all duration-300 shrink-0"
-              style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-            >
-              <option value="">כל המקצועות</option>
-              {specialtyOptions.map((specialty) => (
-                <option key={specialty} value={specialty}>
-                  {specialty}
-                </option>
-              ))}
-            </select>
-
-            {/* Open to Work Toggle */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setOpenToWorkFilter(!openToWorkFilter)}
-              className={`px-3 py-2 rounded-xl border text-xs sm:text-sm whitespace-nowrap transition-all duration-300 shrink-0 ${
-                openToWorkFilter
-                  ? 'border-green-500/50 bg-green-500/15 text-green-300 shadow-sm shadow-green-500/10'
-                  : 'hover:border-green-500/30'
-              }`}
-              style={!openToWorkFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
-            >
-              מחפשים עבודה בלבד
-            </motion.button>
-
-            {/* View Toggle */}
-            <div className="flex rounded-xl border overflow-hidden shrink-0" style={{ borderColor: 'var(--theme-border)' }}>
               <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setViewMode('grid')}
-                className={`p-2.5 transition-all duration-300 ${viewMode === 'grid' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
-                style={viewMode !== 'grid' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setViewMode('list')}
-                className={`p-2.5 transition-all duration-300 ${viewMode === 'list' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
-                style={viewMode !== 'list' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
-              >
-                <List className="w-4 h-4" />
-              </motion.button>
-            </div>
-            </div>
-          </div>
-
-          <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 mt-2.5 overflow-x-auto scrollbar-hide pb-1">
-            <button
-              onClick={() => setWorkAreaFilter('')}
-              className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
-                !workAreaFilter ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
-              }`}
-              style={!workAreaFilter ? undefined : { borderColor: 'var(--theme-border)' }}
-            >
-              כל אזורי העבודה
-            </button>
-            {visibleWorkAreas.map((area) => (
-              <button
-                key={area}
-                onClick={() => setWorkAreaFilter(workAreaFilter === area ? '' : area)}
-                className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
-                  workAreaFilter === area ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setOpenToWorkFilter(!openToWorkFilter)}
+                className={`shrink-0 whitespace-nowrap rounded-xl border px-3 py-2 text-xs transition-all duration-300 sm:text-sm ${
+                  openToWorkFilter
+                    ? 'border-green-500/50 bg-green-500/15 text-green-300 shadow-sm shadow-green-500/10'
+                    : 'hover:border-green-500/30'
                 }`}
-                style={workAreaFilter === area ? undefined : { borderColor: 'var(--theme-border)' }}
+                style={!openToWorkFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
               >
-                {area} {workAreaCounts[area] || 0}
-              </button>
-            ))}
-            {false && noWorkAreaCount > 0 && (
-            <button
-              onClick={() => setWorkAreaFilter(workAreaFilter === unassignedWorkAreaKey ? '' : unassignedWorkAreaKey)}
-              className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
-                workAreaFilter === unassignedWorkAreaKey ? 'bg-white/10 border-purple-400/50 text-white' : 'text-[var(--theme-text-secondary)]'
-              }`}
-              style={workAreaFilter === unassignedWorkAreaKey ? undefined : { borderColor: 'var(--theme-border)' }}
-            >
-              ללא שיוך אזורי {noWorkAreaCount}
-            </button>
-            )}
-          </div>
+                מחפשים עבודה בלבד
+              </motion.button>
 
-          {visibleSpecialtyCounts.length > 0 && (
-            <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 mt-2.5 overflow-x-auto scrollbar-hide pb-1">
-              <button
-                onClick={() => setSpecialtyFilter('')}
-                className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
-                  !specialtyFilter ? 'bg-cyan-500/10 border-cyan-400/40 text-cyan-200' : 'text-[var(--theme-text-secondary)]'
-                }`}
-                style={specialtyFilter ? { borderColor: 'var(--theme-border)' } : undefined}
-              >
-                כל המקצועות
-              </button>
-              {visibleSpecialtyCounts.map(([specialty, count]) => (
-                <button
-                  key={specialty}
-                  onClick={() => setSpecialtyFilter(specialtyFilter === specialty ? '' : specialty)}
-                  className={`px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs border transition-all whitespace-nowrap ${
-                    specialtyFilter === specialty ? 'bg-cyan-500/10 border-cyan-400/40 text-cyan-200' : 'text-[var(--theme-text-secondary)]'
-                  }`}
-                  style={specialtyFilter === specialty ? undefined : { borderColor: 'var(--theme-border)' }}
+              <div className="mr-auto flex shrink-0 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2.5 transition-all duration-300 ${viewMode === 'grid' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
+                  style={viewMode !== 'grid' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
+                  aria-label="תצוגת כרטיסים"
                 >
-                  {specialty} {count}
-                </button>
-              ))}
+                  <LayoutGrid className="h-4 w-4" />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setViewMode('list')}
+                  className={`p-2.5 transition-all duration-300 ${viewMode === 'list' ? 'bg-purple-500/20 text-purple-400 shadow-inner' : ''}`}
+                  style={viewMode !== 'list' ? { background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' } : undefined}
+                  aria-label="תצוגת רשימה"
+                >
+                  <List className="h-4 w-4" />
+                </motion.button>
+              </div>
             </div>
-          )}
 
-          {/* Active Filters & Count */}
-          <div className="flex items-center justify-between mt-3">
-            <motion.span
-              key={filtered.length}
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-sm"
-              style={{ color: 'var(--theme-text-secondary)' }}
-            >
-              {filtered.length} תוצאות
-            </motion.span>
-            <span className="text-xs hidden md:block" style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }}>
-              {workAreaSummary} • סה״כ {totalCount}
-            </span>
-            {(search || deptFilter || workAreaFilter || specialtyFilter || availFilter || openToWorkFilter) && (
-              <motion.button
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                onClick={() => { setSearch(''); setDeptFilter(''); setWorkAreaFilter(''); setSpecialtyFilter(''); setAvailFilter(''); setOpenToWorkFilter(false); }}
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
-              >
-                <X className="w-3 h-3" /> נקה פילטרים
-              </motion.button>
-            )}
-          </div>
-        </div>
-      </section>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:flex-wrap">
+                <span className="shrink-0 text-[11px] font-bold text-[var(--theme-text-secondary)]">מחלקות</span>
+                {departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || departmentFilters.includes(dept.label)).map((dept) => {
+                  const active = departmentFilters.includes(dept.label);
+                  return (
+                    <button
+                      key={dept.id}
+                      type="button"
+                      onClick={() => toggleDepartmentFilter(dept.label)}
+                      className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] transition-all sm:text-xs ${
+                        active ? 'border-purple-400/50 bg-purple-500/15 text-purple-200' : 'text-[var(--theme-text-secondary)] hover:border-purple-400/40'
+                      }`}
+                      style={active ? undefined : { borderColor: 'var(--theme-border)' }}
+                    >
+                      {dept.label} {deptCounts[dept.label] || 0}
+                    </button>
+                  );
+                })}
+              </div>
 
-      {/* Department Filter — large card buttons */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-2">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {/* All */}
-          <motion.button
-            whileHover={{ y: -3, transition: { duration: 0.2 } }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setDeptFilter('')}
-            className={`relative p-4 rounded-2xl border text-center transition-all duration-300 overflow-hidden ${
-              !deptFilter ? 'border-purple-500/50 shadow-lg shadow-purple-500/10' : 'hover:shadow-md'
-            }`}
-            style={deptFilter ? { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' } : undefined}
-          >
-            <div className={`absolute inset-0 bg-gradient-to-br from-purple-500 to-violet-600 transition-opacity duration-300 ${!deptFilter ? 'opacity-15' : 'opacity-0'}`} />
-            <div className="relative">
-              <span className="text-2xl block">🔍</span>
-              <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{totalCount}</div>
-              <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>הכל</div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:flex-wrap">
+                <span className="shrink-0 text-[11px] font-bold text-[var(--theme-text-secondary)]">תפקידים</span>
+                {roleOptions.map(([role, count]) => {
+                  const active = roleFilters.includes(role);
+                  return (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => toggleRoleFilter(role)}
+                      className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] transition-all sm:text-xs ${
+                        active ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-200' : 'text-[var(--theme-text-secondary)] hover:border-cyan-400/40'
+                      }`}
+                      style={active ? undefined : { borderColor: 'var(--theme-border)' }}
+                    >
+                      {role} {count}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </motion.button>
 
-          {departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || deptFilter === dept.label).map((dept, i) => {
-            const count = deptCounts[dept.label] || 0;
-            const isActive = deptFilter === dept.label;
-            return (
-              <motion.button
-                key={dept.id}
-                initial={{ opacity: 0, y: 15 }}
+            <div className="flex items-center justify-between gap-3">
+              <motion.span
+                key={filtered.length}
+                initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, duration: 0.3 }}
-                whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setDeptFilter(isActive ? '' : dept.label)}
-                className={`relative p-4 rounded-2xl border text-center transition-all duration-300 overflow-hidden ${
-                  isActive ? 'border-purple-500/50 shadow-lg shadow-purple-500/10' : 'hover:shadow-md'
-                } ${deptGlowColors[dept.label] || ''}`}
-                style={!isActive ? { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' } : undefined}
+                className="text-sm"
+                style={{ color: 'var(--theme-text-secondary)' }}
               >
-                <div className={`absolute inset-0 bg-gradient-to-br ${deptColors[dept.label] || 'from-gray-500 to-gray-600'} transition-opacity duration-300 ${isActive ? 'opacity-15' : 'opacity-0'}`} />
-                <div className="relative">
-                  <span className="text-2xl block">{dept.icon}</span>
-                  <div className="font-black text-xl mt-1.5 transition-colors" style={{ color: 'var(--theme-text)' }}>{count}</div>
-                  <div className="text-xs mt-0.5 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>{dept.label}</div>
-                </div>
-              </motion.button>
-            );
-          })}
+                {filtered.length} תוצאות
+              </motion.span>
+              {(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter) && (
+                <motion.button
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  onClick={() => { setSearch(''); setDepartmentFilters([]); setRoleFilters([]); setAvailFilter(''); setOpenToWorkFilter(false); }}
+                  className="flex items-center gap-1 text-xs text-purple-400 transition-colors hover:text-purple-300"
+                >
+                  <X className="h-3 w-3" /> נקה פילטרים
+                </motion.button>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -593,8 +503,9 @@ function DirectoryContent() {
                 {sortedFiltered.map((contact, i) => {
                   const isMeCard = isCurrentUser(contact);
                   const showContactInfo = canShowContactInfo(contact);
-                  const primaryRoleLabel = getPrimaryRoleLabel(contact);
-                  const secondaryRoleLabel = getSecondaryRoleLabel(contact);
+                  const contactRoles = getContactRoles(contact);
+                  const contactDepartments = getContactDepartments(contact);
+                  const primaryDepartment = getPrimaryDepartment(contact);
                   return (
                     <motion.div
                       key={contact.id}
@@ -611,7 +522,7 @@ function DirectoryContent() {
                       }}
                       className={`rounded-2xl border p-5 cursor-pointer transition-all duration-300 relative group ${
                         isMeCard ? 'ring-2 ring-[var(--theme-accent)]' : ''
-                      } hover:shadow-xl ${deptGlowColors[contact.department || ''] || 'hover:shadow-gray-500/10'}`}
+                      } hover:shadow-xl ${deptGlowColors[primaryDepartment] || 'hover:shadow-gray-500/10'}`}
                       style={{
                         background: isMeCard ? 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-card))' : 'var(--theme-bg-card)',
                         borderColor: isMeCard ? 'var(--theme-accent)' : 'var(--theme-border)',
@@ -635,8 +546,8 @@ function DirectoryContent() {
                       <div className="flex items-start gap-3 relative">
                         {/* Gradient avatar with glow */}
                         <div className="relative">
-                          <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
-                          <div className={`relative w-13 h-13 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
+                          <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
+                          <div className={`relative w-13 h-13 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
                             isMeCard ? 'ring-2 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg-card)]' : ''
                           }`}>
                             {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
@@ -652,19 +563,16 @@ function DirectoryContent() {
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            {primaryRoleLabel && (
-                              <span className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                                {primaryRoleLabel}
+                            {contactRoles.map((role) => (
+                              <span key={role} className="text-xs px-2.5 py-0.5 rounded-full transition-colors" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                                {role}
                               </span>
-                            )}
-                            {secondaryRoleLabel && (
-                              <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                                {secondaryRoleLabel}
+                            ))}
+                            {contactDepartments.map((department) => (
+                              <span key={department} className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[department] || 'bg-gray-700/50 text-gray-300'}`}>
+                                {department}
                               </span>
-                            )}
-                            <span className={`text-xs px-2.5 py-0.5 rounded-full ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
-                              {contact.department}
-                            </span>
+                            ))}
                             {contact.workArea && (
                               <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/5 text-white/80 border border-white/10">
                                 {contact.workArea}
@@ -726,6 +634,9 @@ function DirectoryContent() {
                 {sortedFiltered.map((contact, i) => {
                   const isMeRow = isCurrentUser(contact);
                   const showContactInfo = canShowContactInfo(contact);
+                  const contactRoles = getContactRoles(contact);
+                  const contactDepartments = getContactDepartments(contact);
+                  const primaryDepartment = getPrimaryDepartment(contact);
                   return (
                     <motion.div
                       key={contact.id}
@@ -741,7 +652,7 @@ function DirectoryContent() {
                       style={i > 0 ? { borderTop: '1px solid var(--theme-border)' } : undefined}
                     >
                       {isMeRow && <Star className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />}
-                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[contact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
                         {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
                       </div>
                       <div className="flex-1 min-w-0 flex items-center gap-1.5">
@@ -753,12 +664,20 @@ function DirectoryContent() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">מחפש עבודה</span>
                         )}
                       </div>
-                      <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>
-                        {getPrimaryRoleLabel(contact)}
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full hidden md:block ${deptBadgeColors[contact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
-                        {contact.department || 'לא מוגדר'}
-                      </span>
+                      <div className="hidden max-w-[280px] flex-wrap gap-1.5 sm:flex">
+                        {contactRoles.slice(0, 3).map((role) => (
+                          <span key={role} className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="hidden max-w-[240px] flex-wrap gap-1.5 md:flex">
+                        {contactDepartments.slice(0, 3).map((department) => (
+                          <span key={department} className={`text-xs px-2 py-0.5 rounded-full ${deptBadgeColors[department] || 'bg-gray-700/50 text-gray-300'}`}>
+                            {department}
+                          </span>
+                        ))}
+                      </div>
                       {contact.workArea && (
                         <span className="text-xs px-2 py-0.5 rounded-full hidden md:block bg-white/5 text-white/80 border border-white/10">
                           {contact.workArea}
@@ -830,7 +749,7 @@ function DirectoryContent() {
               }}
             >
               {/* Top gradient bar */}
-              <div className={`h-1.5 w-full bg-gradient-to-l ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'}`} />
+              <div className={`h-1.5 w-full bg-gradient-to-l ${deptColors[getPrimaryDepartment(selectedContact)] || 'from-gray-500 to-gray-600'}`} />
 
               {/* Close button */}
               <motion.button
@@ -854,8 +773,8 @@ function DirectoryContent() {
                     className="relative inline-block"
                   >
                     {/* Avatar glow */}
-                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'} blur-xl opacity-30`} />
-                    <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br ${deptColors[selectedContact.department || ''] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-3xl shadow-2xl ${
+                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[getPrimaryDepartment(selectedContact)] || 'from-gray-500 to-gray-600'} blur-xl opacity-30`} />
+                    <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br ${deptColors[getPrimaryDepartment(selectedContact)] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-black text-3xl shadow-2xl ${
                       isCurrentUser(selectedContact) ? 'ring-3 ring-[var(--theme-accent)] ring-offset-4 ring-offset-[var(--theme-bg)]' : ''
                     }`}>
                       {(selectedContact.firstName?.[0] || '') + (selectedContact.lastName?.[0] || '')}
@@ -888,19 +807,16 @@ function DirectoryContent() {
                     transition={{ delay: 0.25, duration: 0.3 }}
                     className="flex items-center justify-center gap-2 mt-3"
                   >
-                    {getPrimaryRoleLabel(selectedContact) && (
-                      <span className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                        <Briefcase className="w-3.5 h-3.5" />{getPrimaryRoleLabel(selectedContact)}
+                    {getContactRoles(selectedContact).map((role) => (
+                      <span key={role} className="text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                        <Briefcase className="w-3.5 h-3.5" />{role}
                       </span>
-                    )}
-                    {getSecondaryRoleLabel(selectedContact) && (
-                      <span className="text-sm px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                        {getSecondaryRoleLabel(selectedContact)}
+                    ))}
+                    {getContactDepartments(selectedContact).map((department) => (
+                      <span key={department} className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[department] || 'bg-gray-700/50 text-gray-300'}`}>
+                        {department}
                       </span>
-                    )}
-                    <span className={`text-sm px-3 py-1.5 rounded-full ${deptBadgeColors[selectedContact.department || ''] || 'bg-gray-700/50 text-gray-300'}`}>
-                      {selectedContact.department || 'לא מוגדר'}
-                    </span>
+                    ))}
                     {selectedContact.workArea && (
                       <span className="text-sm px-3 py-1.5 rounded-full bg-white/5 text-white/80 border border-white/10">
                         {selectedContact.workArea}

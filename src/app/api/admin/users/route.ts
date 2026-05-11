@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest, getPrimaryAdminUid, isPrimaryAdminUid } from '@/lib/server/primaryAdmin';
 import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
 
 export const runtime = 'nodejs';
@@ -10,7 +11,9 @@ type RawUser = {
   displayName?: string;
   email?: string;
   department?: string;
+  departments?: unknown;
   role?: string;
+  roles?: unknown;
   phone?: string | null;
   photoURL?: string | null;
   siteRole?: string | null;
@@ -24,7 +27,9 @@ export type AdminManagedUser = {
   displayName: string;
   email: string;
   department: string;
+  departments: string[];
   role: string;
+  roles: string[];
   phone: string | null;
   photoURL: string | null;
   siteRole: string;
@@ -44,12 +49,15 @@ function displayNameFor(user: RawUser): string {
 
 function toManagedUser(user: RawUser, primaryAdminUid: string): AdminManagedUser {
   const isPrimaryAdmin = user.id === primaryAdminUid;
+  const professional = normalizeProfessionalFields(user as Record<string, unknown>);
   return {
     uid: user.id,
     displayName: displayNameFor(user),
     email: cleanString(user.email),
-    department: cleanString(user.department),
-    role: cleanString(user.role),
+    department: professional.department,
+    departments: professional.departments,
+    role: professional.role,
+    roles: professional.roles,
     phone: cleanString(user.phone) || null,
     photoURL: cleanString(user.photoURL) || null,
     siteRole: cleanString(user.siteRole) || 'user',
