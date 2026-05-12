@@ -114,6 +114,15 @@ function getPrimaryDepartment(contact: Contact) {
   return getContactDepartments(contact)[0] || '';
 }
 
+function getRoleSearchText(role: string) {
+  const normalizedRole = normalizeDisplayRoleLabel(role);
+  const aliases: Record<string, string[]> = {
+    'עוזר צלם': ['ע.צלם', 'ע צלם', 'עוזר צלם', 'עוזרת צלם', 'עוזר/ת צלם', 'assistant camera', 'camera assistant'],
+  };
+
+  return uniqueLabels([role, normalizedRole, ...(aliases[normalizedRole] || [])]).join(' ').toLocaleLowerCase('he');
+}
+
 export default function DirectoryPage() {
   return (
     <AuthGuard>
@@ -260,14 +269,20 @@ function DirectoryContent() {
   );
 
   const visibleRoleOptions = useMemo(
-    () => roleOptions.filter(([role]) => !normalizedDrawerSearch || role.toLocaleLowerCase('he').includes(normalizedDrawerSearch)),
+    () => roleOptions.filter(([role]) => !normalizedDrawerSearch || getRoleSearchText(role).includes(normalizedDrawerSearch)),
     [roleOptions, normalizedDrawerSearch],
   );
 
   const hasActiveFilters = Boolean(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter);
   const selectedDepartment = departmentFilters[0] || '';
   const selectedRole = roleFilters[0] || '';
-  const filterCardActiveClass = 'ring-1 ring-[var(--theme-accent)]/70 border-[var(--theme-accent)]/70 bg-[var(--theme-accent-glow)]';
+  const filterCardActiveStyle = {
+    background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 48%, #2563eb 100%)',
+    borderColor: 'rgba(255,255,255,0.34)',
+    boxShadow: '0 18px 46px rgba(124,58,237,0.34), 0 0 0 1px rgba(255,255,255,0.16)',
+  };
+  const activeTextStyle = { color: '#ffffff' };
+  const activeMutedTextStyle = { color: 'rgba(255,255,255,0.86)' };
 
   const resetAllFilters = () => {
     setSearch('');
@@ -415,14 +430,15 @@ function DirectoryContent() {
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={resetAllFilters}
-                className={`app-card min-h-[92px] p-3.5 text-right ${!hasActiveFilters ? filterCardActiveClass : ''}`}
+                className="app-card min-h-[92px] p-3.5 text-right"
+                style={!hasActiveFilters ? filterCardActiveStyle : undefined}
                 aria-pressed={!hasActiveFilters}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <CircleDot className="h-4 w-4 text-purple-400" />
-                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>כל הסטטוסים</span>
+                  <CircleDot className={`h-4 w-4 ${!hasActiveFilters ? 'text-white' : 'text-purple-400'}`} />
+                  <span className="text-[11px] font-medium" style={!hasActiveFilters ? activeMutedTextStyle : { color: 'var(--theme-text-secondary)' }}>כל הסטטוסים</span>
                 </div>
-                <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                <div className="text-xs font-bold leading-snug" style={!hasActiveFilters ? activeTextStyle : { color: 'var(--theme-text)' }}>
                   {hasActiveFilters ? 'איפוס כל הפילטרים' : 'מציג את כולם'}
                 </div>
               </motion.button>
@@ -434,14 +450,15 @@ function DirectoryContent() {
                   setOpenToWorkFilter((current) => !current);
                   setAvailFilter('');
                 }}
-                className={`app-card min-h-[92px] p-3.5 text-right ${openToWorkFilter ? filterCardActiveClass : ''}`}
+                className="app-card min-h-[92px] p-3.5 text-right"
+                style={openToWorkFilter ? filterCardActiveStyle : undefined}
                 aria-pressed={openToWorkFilter}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <Briefcase className="h-4 w-4 text-green-400" />
-                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>מחפשים עבודה בלבד</span>
+                  <Briefcase className={`h-4 w-4 ${openToWorkFilter ? 'text-white' : 'text-green-400'}`} />
+                  <span className="text-[11px] font-medium" style={openToWorkFilter ? activeMutedTextStyle : { color: 'var(--theme-text-secondary)' }}>מחפשים עבודה בלבד</span>
                 </div>
-                <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                <div className="text-xs font-bold leading-snug" style={openToWorkFilter ? activeTextStyle : { color: 'var(--theme-text)' }}>
                   {openToWorkFilter ? `${filtered.length} תוצאות` : `${openToWorkCount} זמינים לפנייה`}
                 </div>
               </motion.button>
@@ -450,16 +467,17 @@ function DirectoryContent() {
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={() => selectedDepartment ? selectDepartmentFilter(selectedDepartment) : openFilterDrawer('departments')}
-                className={`app-card min-h-[92px] p-3.5 text-right ${selectedDepartment ? filterCardActiveClass : ''}`}
+                className="app-card min-h-[92px] p-3.5 text-right"
+                style={selectedDepartment ? filterCardActiveStyle : undefined}
                 aria-label={selectedDepartment ? `נקה מחלקה ${selectedDepartment}` : 'חיפוש לפי מחלקה'}
                 aria-haspopup="dialog"
                 aria-expanded={activeDrawer === 'departments'}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-purple-400" />
-                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי מחלקה</span>
+                  <Building2 className={`h-4 w-4 ${selectedDepartment ? 'text-white' : 'text-purple-400'}`} />
+                  <span className="text-[11px] font-medium" style={selectedDepartment ? activeMutedTextStyle : { color: 'var(--theme-text-secondary)' }}>חיפוש לפי מחלקה</span>
                 </div>
-                <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                <div className="truncate text-xs font-bold leading-snug" style={selectedDepartment ? activeTextStyle : { color: 'var(--theme-text)' }}>
                   {selectedDepartment ? `מחלקה: ${selectedDepartment}` : `${departmentOptions.length} מחלקות`}
                 </div>
               </motion.button>
@@ -468,16 +486,17 @@ function DirectoryContent() {
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={() => selectedRole ? selectRoleFilter(selectedRole) : openFilterDrawer('roles')}
-                className={`app-card min-h-[92px] p-3.5 text-right ${selectedRole ? filterCardActiveClass : ''}`}
+                className="app-card min-h-[92px] p-3.5 text-right"
+                style={selectedRole ? filterCardActiveStyle : undefined}
                 aria-label={selectedRole ? `נקה תפקיד ${selectedRole}` : 'חיפוש לפי תפקיד'}
                 aria-haspopup="dialog"
                 aria-expanded={activeDrawer === 'roles'}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-cyan-400" />
-                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי תפקיד</span>
+                  <Wrench className={`h-4 w-4 ${selectedRole ? 'text-white' : 'text-cyan-400'}`} />
+                  <span className="text-[11px] font-medium" style={selectedRole ? activeMutedTextStyle : { color: 'var(--theme-text-secondary)' }}>חיפוש לפי תפקיד</span>
                 </div>
-                <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                <div className="truncate text-xs font-bold leading-snug" style={selectedRole ? activeTextStyle : { color: 'var(--theme-text)' }}>
                   {selectedRole ? `תפקיד: ${selectedRole}` : `${roleOptions.length} תפקידים`}
                 </div>
               </motion.button>
