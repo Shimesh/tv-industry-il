@@ -232,13 +232,16 @@ function DirectoryContent() {
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contactsList.forEach((contact) => {
+      const contactDepartments = getContactDepartments(contact);
+      const matchDept = departmentFilters.length === 0 || departmentFilters.some((department) => contactDepartments.includes(department));
+      if (!matchDept) return;
       getContactRoles(contact).forEach((role) => {
         if (!role) return;
         counts[role] = (counts[role] || 0) + 1;
       });
     });
     return counts;
-  }, [contactsList]);
+  }, [contactsList, departmentFilters]);
 
   const roleOptions = useMemo(
     () => Object.entries(roleCounts)
@@ -264,6 +267,7 @@ function DirectoryContent() {
   const hasActiveFilters = Boolean(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter);
   const selectedDepartment = departmentFilters[0] || '';
   const selectedRole = roleFilters[0] || '';
+  const filterCardActiveClass = 'ring-1 ring-[var(--theme-accent)]/70 border-[var(--theme-accent)]/70 bg-[var(--theme-accent-glow)]';
 
   const resetAllFilters = () => {
     setSearch('');
@@ -274,13 +278,13 @@ function DirectoryContent() {
   };
 
   const selectDepartmentFilter = (department: string) => {
-    setDepartmentFilters([department]);
+    setDepartmentFilters((current) => current[0] === department ? [] : [department]);
     setDrawerSearch('');
     setActiveDrawer(null);
   };
 
   const selectRoleFilter = (role: string) => {
-    setRoleFilters([role]);
+    setRoleFilters((current) => current[0] === role ? [] : [role]);
     setDrawerSearch('');
     setActiveDrawer(null);
   };
@@ -411,7 +415,7 @@ function DirectoryContent() {
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={resetAllFilters}
-                className={`app-card min-h-[92px] p-3.5 text-right ${!hasActiveFilters ? 'ring-1 ring-[var(--theme-accent)]/50' : ''}`}
+                className={`app-card min-h-[92px] p-3.5 text-right ${!hasActiveFilters ? filterCardActiveClass : ''}`}
                 aria-pressed={!hasActiveFilters}
               >
                 <div className="mb-2 flex items-center gap-2">
@@ -427,10 +431,10 @@ function DirectoryContent() {
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={() => {
-                  setOpenToWorkFilter(true);
+                  setOpenToWorkFilter((current) => !current);
                   setAvailFilter('');
                 }}
-                className={`app-card min-h-[92px] p-3.5 text-right ${openToWorkFilter ? 'ring-1 ring-green-400/50' : ''}`}
+                className={`app-card min-h-[92px] p-3.5 text-right ${openToWorkFilter ? filterCardActiveClass : ''}`}
                 aria-pressed={openToWorkFilter}
               >
                 <div className="mb-2 flex items-center gap-2">
@@ -445,8 +449,9 @@ function DirectoryContent() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}
-                onClick={() => openFilterDrawer('departments')}
-                className={`app-card min-h-[92px] p-3.5 text-right ${selectedDepartment ? 'ring-1 ring-purple-400/50' : ''}`}
+                onClick={() => selectedDepartment ? selectDepartmentFilter(selectedDepartment) : openFilterDrawer('departments')}
+                className={`app-card min-h-[92px] p-3.5 text-right ${selectedDepartment ? filterCardActiveClass : ''}`}
+                aria-label={selectedDepartment ? `נקה מחלקה ${selectedDepartment}` : 'חיפוש לפי מחלקה'}
                 aria-haspopup="dialog"
                 aria-expanded={activeDrawer === 'departments'}
               >
@@ -455,15 +460,16 @@ function DirectoryContent() {
                   <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי מחלקה</span>
                 </div>
                 <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
-                  {selectedDepartment ? `${selectedDepartment} · ${deptCounts[selectedDepartment] || 0}` : `${departmentOptions.length} מחלקות`}
+                  {selectedDepartment ? `מחלקה: ${selectedDepartment}` : `${departmentOptions.length} מחלקות`}
                 </div>
               </motion.button>
 
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}
-                onClick={() => openFilterDrawer('roles')}
-                className={`app-card min-h-[92px] p-3.5 text-right ${selectedRole ? 'ring-1 ring-cyan-400/50' : ''}`}
+                onClick={() => selectedRole ? selectRoleFilter(selectedRole) : openFilterDrawer('roles')}
+                className={`app-card min-h-[92px] p-3.5 text-right ${selectedRole ? filterCardActiveClass : ''}`}
+                aria-label={selectedRole ? `נקה תפקיד ${selectedRole}` : 'חיפוש לפי תפקיד'}
                 aria-haspopup="dialog"
                 aria-expanded={activeDrawer === 'roles'}
               >
@@ -472,7 +478,7 @@ function DirectoryContent() {
                   <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי תפקיד</span>
                 </div>
                 <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
-                  {selectedRole ? `${selectedRole} · ${roleCounts[selectedRole] || 0}` : `${roleOptions.length} תפקידים`}
+                  {selectedRole ? `תפקיד: ${selectedRole}` : `${roleOptions.length} תפקידים`}
                 </div>
               </motion.button>
             </div>
@@ -755,8 +761,18 @@ function DirectoryContent() {
             <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: 'var(--theme-bg-secondary)' }}>
               <Search className="w-8 h-8" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }} />
             </div>
-            <h3 className="font-bold text-lg mb-2" style={{ color: 'var(--theme-text-secondary)' }}>לא נמצאו תוצאות</h3>
-            <p className="text-sm" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>נסו לשנות את הפילטרים או לחפש מחדש</p>
+            <h3 className="font-bold text-lg mb-2" style={{ color: 'var(--theme-text)' }}>לא נמצאו אנשי מקצוע</h3>
+            <p className="text-sm" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>נסו לשנות את הפילטרים או להתחיל מחדש</p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="mt-5 rounded-xl border px-4 py-2 text-sm font-bold transition hover:bg-[var(--theme-accent-glow)]"
+                style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+              >
+                נקה את כל הפילטרים
+              </button>
+            )}
           </motion.div>
         )}
       </section>
