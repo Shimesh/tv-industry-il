@@ -9,7 +9,7 @@ import {
 } from '@/lib/contactsUtils';
 import { normalizeProfessionalFields, professionalSearchText } from '@/lib/professionalFields';
 import { useAppData } from '@/contexts/AppDataContext';
-import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench } from 'lucide-react';
+import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench, CircleDot, Building2, Check } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 import AuthGuard from '@/components/AuthGuard';
 
@@ -144,8 +144,11 @@ function DirectoryContent() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [openToWorkFilter, setOpenToWorkFilter] = useState(false);
+  const [activeDrawer, setActiveDrawer] = useState<'departments' | 'roles' | null>(null);
+  const [drawerSearch, setDrawerSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const normalizedSearch = search.trim().toLocaleLowerCase('he');
+  const normalizedDrawerSearch = drawerSearch.trim().toLocaleLowerCase('he');
 
   // Check if a contact matches the logged-in user
   const isCurrentUser = useCallback((contact: Contact): boolean => {
@@ -239,25 +242,57 @@ function DirectoryContent() {
 
   const roleOptions = useMemo(
     () => Object.entries(roleCounts)
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he'))
-      .slice(0, 24),
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he')),
     [roleCounts],
   );
 
-  const toggleDepartmentFilter = (department: string) => {
-    setDepartmentFilters((current) =>
-      current.includes(department)
-        ? current.filter((item) => item !== department)
-        : [...current, department],
-    );
+  const departmentOptions = useMemo(
+    () => departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || departmentFilters.includes(dept.label)),
+    [deptCounts, departmentFilters],
+  );
+
+  const visibleDepartmentOptions = useMemo(
+    () => departmentOptions.filter((dept) => !normalizedDrawerSearch || dept.label.toLocaleLowerCase('he').includes(normalizedDrawerSearch)),
+    [departmentOptions, normalizedDrawerSearch],
+  );
+
+  const visibleRoleOptions = useMemo(
+    () => roleOptions.filter(([role]) => !normalizedDrawerSearch || role.toLocaleLowerCase('he').includes(normalizedDrawerSearch)),
+    [roleOptions, normalizedDrawerSearch],
+  );
+
+  const hasActiveFilters = Boolean(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter);
+  const selectedDepartment = departmentFilters[0] || '';
+  const selectedRole = roleFilters[0] || '';
+
+  const resetAllFilters = () => {
+    setSearch('');
+    setDepartmentFilters([]);
+    setRoleFilters([]);
+    setAvailFilter('');
+    setOpenToWorkFilter(false);
   };
 
-  const toggleRoleFilter = (role: string) => {
-    setRoleFilters((current) =>
-      current.includes(role)
-        ? current.filter((item) => item !== role)
-        : [...current, role],
-    );
+  const selectDepartmentFilter = (department: string) => {
+    setDepartmentFilters([department]);
+    setDrawerSearch('');
+    setActiveDrawer(null);
+  };
+
+  const selectRoleFilter = (role: string) => {
+    setRoleFilters([role]);
+    setDrawerSearch('');
+    setActiveDrawer(null);
+  };
+
+  const openFilterDrawer = (drawer: 'departments' | 'roles') => {
+    setDrawerSearch('');
+    setActiveDrawer(drawer);
+  };
+
+  const closeFilterDrawer = () => {
+    setDrawerSearch('');
+    setActiveDrawer(null);
   };
 
   if (authLoading || (contactsLoading && !contactsReady)) return <DirectorySkeleton />;
@@ -371,31 +406,87 @@ function DirectoryContent() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              <select
-                value={availFilter}
-                onChange={(e) => setAvailFilter(e.target.value)}
-                className="shrink-0 cursor-pointer appearance-none rounded-xl border px-3 py-2 text-xs transition-all duration-300 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 sm:text-sm"
-                style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={resetAllFilters}
+                className={`app-card min-h-[92px] p-3.5 text-right ${!hasActiveFilters ? 'ring-1 ring-[var(--theme-accent)]/50' : ''}`}
+                aria-pressed={!hasActiveFilters}
               >
-                <option value="">כל הסטטוסים</option>
-                <option value="available">פנויים</option>
-                <option value="maybe">אולי פנוי</option>
-                <option value="unavailable">לא פנויים</option>
-              </select>
+                <div className="mb-2 flex items-center gap-2">
+                  <CircleDot className="h-4 w-4 text-purple-400" />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>כל הסטטוסים</span>
+                </div>
+                <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                  {hasActiveFilters ? 'איפוס כל הפילטרים' : 'מציג את כולם'}
+                </div>
+              </motion.button>
 
               <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setOpenToWorkFilter(!openToWorkFilter)}
-                className={`shrink-0 whitespace-nowrap rounded-xl border px-3 py-2 text-xs transition-all duration-300 sm:text-sm ${
-                  openToWorkFilter
-                    ? 'border-green-500/50 bg-green-500/15 text-green-300 shadow-sm shadow-green-500/10'
-                    : 'hover:border-green-500/30'
-                }`}
-                style={!openToWorkFilter ? { background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' } : undefined}
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  setOpenToWorkFilter(true);
+                  setAvailFilter('');
+                }}
+                className={`app-card min-h-[92px] p-3.5 text-right ${openToWorkFilter ? 'ring-1 ring-green-400/50' : ''}`}
+                aria-pressed={openToWorkFilter}
               >
-                מחפשים עבודה בלבד
+                <div className="mb-2 flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-green-400" />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>מחפשים עבודה בלבד</span>
+                </div>
+                <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                  {openToWorkFilter ? `${filtered.length} תוצאות` : `${openToWorkCount} זמינים לפנייה`}
+                </div>
               </motion.button>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={() => openFilterDrawer('departments')}
+                className={`app-card min-h-[92px] p-3.5 text-right ${selectedDepartment ? 'ring-1 ring-purple-400/50' : ''}`}
+                aria-haspopup="dialog"
+                aria-expanded={activeDrawer === 'departments'}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-purple-400" />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי מחלקה</span>
+                </div>
+                <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                  {selectedDepartment ? `${selectedDepartment} · ${deptCounts[selectedDepartment] || 0}` : `${departmentOptions.length} מחלקות`}
+                </div>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={() => openFilterDrawer('roles')}
+                className={`app-card min-h-[92px] p-3.5 text-right ${selectedRole ? 'ring-1 ring-cyan-400/50' : ''}`}
+                aria-haspopup="dialog"
+                aria-expanded={activeDrawer === 'roles'}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-cyan-400" />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חיפוש לפי תפקיד</span>
+                </div>
+                <div className="truncate text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>
+                  {selectedRole ? `${selectedRole} · ${roleCounts[selectedRole] || 0}` : `${roleOptions.length} תפקידים`}
+                </div>
+              </motion.button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <motion.span
+                key={filtered.length}
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-sm"
+                style={{ color: 'var(--theme-text-secondary)' }}
+              >
+                {filtered.length} תוצאות
+              </motion.span>
 
               <div className="mr-auto flex shrink-0 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
                 <motion.button
@@ -417,66 +508,13 @@ function DirectoryContent() {
                   <List className="h-4 w-4" />
                 </motion.button>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:flex-wrap">
-                <span className="shrink-0 text-[11px] font-bold text-[var(--theme-text-secondary)]">מחלקות</span>
-                {departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || departmentFilters.includes(dept.label)).map((dept) => {
-                  const active = departmentFilters.includes(dept.label);
-                  return (
-                    <button
-                      key={dept.id}
-                      type="button"
-                      onClick={() => toggleDepartmentFilter(dept.label)}
-                      className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] transition-all sm:text-xs ${
-                        active ? 'border-purple-400/50 bg-purple-500/15 text-purple-200' : 'text-[var(--theme-text-secondary)] hover:border-purple-400/40'
-                      }`}
-                      style={active ? undefined : { borderColor: 'var(--theme-border)' }}
-                    >
-                      {dept.label} {deptCounts[dept.label] || 0}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:flex-wrap">
-                <span className="shrink-0 text-[11px] font-bold text-[var(--theme-text-secondary)]">תפקידים</span>
-                {roleOptions.map(([role, count]) => {
-                  const active = roleFilters.includes(role);
-                  return (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => toggleRoleFilter(role)}
-                      className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] transition-all sm:text-xs ${
-                        active ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-200' : 'text-[var(--theme-text-secondary)] hover:border-cyan-400/40'
-                      }`}
-                      style={active ? undefined : { borderColor: 'var(--theme-border)' }}
-                    >
-                      {role} {count}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <motion.span
-                key={filtered.length}
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-sm"
-                style={{ color: 'var(--theme-text-secondary)' }}
-              >
-                {filtered.length} תוצאות
-              </motion.span>
-              {(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter) && (
+              {hasActiveFilters && (
                 <motion.button
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
-                  onClick={() => { setSearch(''); setDepartmentFilters([]); setRoleFilters([]); setAvailFilter(''); setOpenToWorkFilter(false); }}
+                  onClick={resetAllFilters}
                   className="flex items-center gap-1 text-xs text-purple-400 transition-colors hover:text-purple-300"
                 >
                   <X className="h-3 w-3" /> נקה פילטרים
@@ -722,6 +760,154 @@ function DirectoryContent() {
           </motion.div>
         )}
       </section>
+
+      <AnimatePresence>
+        {activeDrawer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-end bg-black/70 backdrop-blur-sm"
+            onClick={closeFilterDrawer}
+            role="presentation"
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full overflow-hidden rounded-t-3xl border-t shadow-2xl"
+              style={{
+                maxHeight: '75vh',
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--theme-bg-card) 94%, white 6%), var(--theme-bg))',
+                borderColor: 'var(--theme-border)',
+                boxShadow: '0 -24px 60px rgba(0,0,0,0.45)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={activeDrawer === 'departments' ? 'חיפוש לפי מחלקה' : 'חיפוש לפי תפקיד'}
+              dir="rtl"
+            >
+              <div className="sticky top-0 z-10 border-b px-4 pb-3 pt-4 sm:px-6" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+                <div className="mx-auto h-1.5 w-12 rounded-full bg-white/20" />
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--theme-accent-glow)]">
+                      {activeDrawer === 'departments' ? (
+                        <Building2 className="h-4 w-4 text-purple-300" />
+                      ) : (
+                        <Wrench className="h-4 w-4 text-cyan-300" />
+                      )}
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black" style={{ color: 'var(--theme-text)' }}>
+                        {activeDrawer === 'departments' ? 'חיפוש לפי מחלקה' : 'חיפוש לפי תפקיד'}
+                      </h2>
+                      <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                        בחירה אחת תסנן ותסגור את הרשימה
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeFilterDrawer}
+                    className="rounded-full p-2 transition-colors hover:bg-white/10"
+                    style={{ color: 'var(--theme-text-secondary)' }}
+                    aria-label="סגור"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="relative mt-4">
+                  <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--theme-text-secondary)' }} />
+                  <input
+                    type="text"
+                    value={drawerSearch}
+                    onChange={(e) => setDrawerSearch(e.target.value)}
+                    placeholder={activeDrawer === 'departments' ? 'חיפוש מחלקה...' : 'חיפוש תפקיד...'}
+                    className="w-full rounded-xl border py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20"
+                    style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+                    dir="rtl"
+                    autoFocus
+                  />
+                  {drawerSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDrawerSearch('')}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-1 transition-colors hover:bg-white/10"
+                      style={{ color: 'var(--theme-text-secondary)' }}
+                      aria-label="נקה חיפוש"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-[calc(75vh-150px)] overflow-y-auto px-4 py-3 sm:px-6">
+                {activeDrawer === 'departments' ? (
+                  visibleDepartmentOptions.length > 0 ? (
+                    <div className="space-y-2">
+                      {visibleDepartmentOptions.map((dept) => {
+                        const selected = selectedDepartment === dept.label;
+                        return (
+                          <button
+                            key={dept.id}
+                            type="button"
+                            onClick={() => selectDepartmentFilter(dept.label)}
+                            className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-right transition ${
+                              selected ? 'border-purple-400/60 bg-purple-500/15' : 'hover:border-purple-400/40 hover:bg-white/[0.03]'
+                            }`}
+                            style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
+                          >
+                            <Building2 className="h-4 w-4 shrink-0 text-purple-300" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{dept.label}</span>
+                            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                              {deptCounts[dept.label] || 0}
+                            </span>
+                            {selected && <Check className="h-4 w-4 shrink-0 text-purple-300" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-10 text-center text-sm" style={{ color: 'var(--theme-text-secondary)' }}>לא נמצאו תוצאות</div>
+                  )
+                ) : visibleRoleOptions.length > 0 ? (
+                  <div className="space-y-2">
+                    {visibleRoleOptions.map(([role, count]) => {
+                      const selected = selectedRole === role;
+                      return (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => selectRoleFilter(role)}
+                          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-right transition ${
+                            selected ? 'border-cyan-400/60 bg-cyan-500/15' : 'hover:border-cyan-400/40 hover:bg-white/[0.03]'
+                          }`}
+                          style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
+                        >
+                          <Wrench className="h-4 w-4 shrink-0 text-cyan-300" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{role}</span>
+                          <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                            {count}
+                          </span>
+                          {selected && <Check className="h-4 w-4 shrink-0 text-cyan-300" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-sm" style={{ color: 'var(--theme-text-secondary)' }}>לא נמצאו תוצאות</div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
 
       {/* Contact Detail Modal - Glass Morphism Dark */}
