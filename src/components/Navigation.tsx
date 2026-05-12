@@ -11,10 +11,8 @@ import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
 import {
   Tv,
-  Calendar,
   Users,
   Newspaper,
-  Building2,
   Menu,
   X,
   MessageCircle,
@@ -35,14 +33,12 @@ import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
-  { href: '/schedule', label: 'שידור חי', icon: Calendar },
   { href: '/productions', label: 'יומן אישי', icon: Clapperboard, auth: true },
   { href: '/teams', label: 'צוותים', icon: UsersRound, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
   { href: '/chat', label: 'צ׳אט', icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
   { href: '/news', label: 'חדשות', icon: Newspaper },
-  { href: '/studios', label: 'אולפנים', icon: Building2 },
   { href: '/tools', label: 'כלים', icon: Wrench },
   { href: '/admin', label: 'ניהול', icon: Shield, auth: true, adminOnly: true },
 ];

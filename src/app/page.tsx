@@ -5,17 +5,19 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
-  Briefcase,
   Calendar,
-  CircleDot,
+  CalendarDays,
   Clock,
-  Film,
-  Mail,
+  MessageCircle,
+  Newspaper,
+  Radio,
+  SlidersHorizontal,
   Sparkles,
   TrendingUp,
-  Tv,
   Users,
-  Zap,
+  UserRoundCog,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 
 import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
@@ -23,7 +25,6 @@ import LiveNewsTicker from '@/components/home/LiveNewsTicker';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
-import { useAppData } from '@/contexts/AppDataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { channels } from '@/data/channels';
 import { useBroadcasts } from '@/hooks/useBroadcasts';
@@ -73,7 +74,6 @@ function getGreeting(): string {
 }
 
 export default function HomePage() {
-  const { totalCount, availableCount, openToWorkCount } = useAppData();
   const { user, profile } = useAuth();
   const [greeting] = useState(() => getGreeting());
   const firstName = (profile?.displayName || user?.displayName)?.split(' ')[0] ?? '';
@@ -117,26 +117,22 @@ export default function HomePage() {
     };
   }, []);
 
-  const stats = [
-    { label: 'אנשי מקצוע', value: totalCount, icon: Users, color: '#a855f7' },
-    { label: 'זמינים לעבודה', value: availableCount, icon: Zap, color: '#22c55e' },
-    { label: 'ערוצי טלוויזיה', value: channels.length, icon: Tv, color: '#3b82f6' },
-    { label: 'מחפשים עבודה', value: openToWorkCount, icon: Briefcase, color: '#f97316' },
-  ];
-
-  const dashboardCards = [
-    { id: 'status', icon: CircleDot, label: 'הסטטוס שלי', value: 'פנוי לעבודה', href: '/settings' },
-    { id: 'jobs', icon: Briefcase, label: 'לוח מודעות', value: 'דרושים ושיתופי פעולה', href: '/board' },
-    { id: 'directory', icon: Users, label: 'אלפון מקצועי', value: `${totalCount} אנשי מקצוע`, href: '/directory' },
-    { id: 'messages', icon: Mail, label: 'הודעות', value: 'מעבר ישיר לצ׳אט', href: '/chat' },
-    { id: 'production', icon: Film, label: 'יומן אישי', value: 'מעבר ליומן האישי', href: '/productions' },
+  const controlHubCards = [
+    { id: 'live', icon: Radio, label: 'שידורים חיים', value: `${channels.length} ערוצים`, href: '/live', accent: '#ef4444' },
+    { id: 'news', icon: Newspaper, label: 'חדשות', value: liveNews.length > 0 ? `${liveNews.length} כותרות` : 'מתעדכן עכשיו', href: '/news', accent: '#38bdf8' },
+    { id: 'calendar', icon: CalendarDays, label: 'יומן אישי', value: 'הפקות ולו״ז', href: '/calendar', accent: '#60a5fa' },
+    { id: 'teams', icon: Users, label: 'צוותים', value: 'ניהול צוותים', href: '/teams', accent: '#22c55e' },
+    { id: 'studios', icon: Building2, label: 'אולפנים', value: 'מפת אולפנים', href: '/studios', accent: '#a855f7' },
+    { id: 'directory', icon: UserRoundCog, label: 'אלפון מקצועי', value: '203 אנשי מקצוע', href: '/directory', accent: '#f59e0b' },
+    { id: 'chat', icon: MessageCircle, label: 'צ׳אט', value: 'שיחות תעשייה', href: '/chat', accent: '#ec4899' },
+    { id: 'toolbox', icon: Wrench, label: 'ארגז כלים', value: 'כלי הפקה', href: '/toolbox', accent: '#14b8a6' },
   ];
 
   return (
     <div className="min-h-screen">
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
-          <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
+          <div className="grid gap-6 lg:grid-cols-[1fr_520px] lg:items-end">
             <div>
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
@@ -149,40 +145,55 @@ export default function HomePage() {
               <p className="mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link
-                  href="/studios"
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-purple-500 via-fuchsia-500 to-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-purple-500/20 transition hover:shadow-purple-500/35"
-                >
-                  אולפנים
-                  <ArrowLeft className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/schedule"
-                  className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition hover:bg-[var(--theme-accent-glow)]"
-                  style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
-                >
-                  שידור חי
-                  <CircleDot className="h-4 w-4 text-red-400" />
-                </Link>
-              </div>
             </div>
 
-            <div className="app-panel p-4">
-              <LiveClock />
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {stats.map((stat) => {
-                  const Icon = stat.icon;
+            <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/[0.45] p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl" dir="rtl">
+              <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-cyan-200 shadow-lg shadow-cyan-500/10">
+                    <SlidersHorizontal className="h-[18px] w-[18px]" />
+                  </span>
+                  <div className="text-right">
+                    <p className="text-xs font-bold uppercase tracking-wide text-white/50">Control Hub</p>
+                    <p className="text-sm font-black text-white">מרכז שליטה</p>
+                  </div>
+                </div>
+                <LiveClock />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {controlHubCards.map((card) => {
+                  const Icon = card.icon;
                   return (
-                    <div
-                      key={stat.label}
-                      className="rounded-xl border p-3"
-                      style={{ borderColor: 'var(--theme-border)', background: `${stat.color}12` }}
+                    <Link
+                      key={card.id}
+                      href={card.href}
+                      className="group relative isolate min-h-[122px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-4 text-right shadow-lg shadow-black/15 backdrop-blur-xl transition duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.1] hover:shadow-xl active:translate-y-0 active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                      style={{ boxShadow: `0 16px 42px rgba(0, 0, 0, 0.18), 0 0 0 1px ${card.accent}00` }}
                     >
-                      <Icon className="mb-2 h-5 w-5" style={{ color: stat.color }} />
-                      <div className="text-2xl font-black" style={{ color: 'var(--theme-text)' }}>{stat.value}</div>
-                      <div className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>{stat.label}</div>
-                    </div>
+                      <div
+                        className="pointer-events-none absolute inset-0 opacity-0 blur-xl transition duration-200 group-hover:opacity-40 group-focus-visible:opacity-40"
+                        style={{ background: `radial-gradient(circle at 82% 16%, ${card.accent}88, transparent 42%)` }}
+                      />
+                      <div className="relative flex h-full flex-col items-start justify-between gap-5">
+                        <div className="flex w-full items-start justify-between gap-3">
+                          <div className="min-w-0 text-right">
+                            <div className="text-[15px] font-black leading-tight text-white">{card.label}</div>
+                            <div className="mt-1 text-xs font-semibold leading-snug text-white/60">{card.value}</div>
+                          </div>
+                          <span
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 transition duration-200 group-hover:scale-105"
+                            style={{ color: card.accent }}
+                          >
+                            <Icon className="h-6 w-6" />
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white/50 transition group-hover:text-white/75">
+                          פתיחה מהירה
+                          <ArrowLeft className="h-3.5 w-3.5" />
+                        </span>
+                      </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -212,31 +223,6 @@ export default function HomePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <div className="mb-3 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-400" />
-            <h2 className="app-section-kicker">האזור שלי</h2>
-          </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-5 md:overflow-visible">
-            {dashboardCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <Link
-                  key={card.id}
-                  href={card.href}
-                  className="app-card block min-w-[160px] p-3.5 md:min-w-0"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />
-                    <span className="text-[11px] font-medium" style={{ color: 'var(--theme-text-secondary)' }}>{card.label}</span>
-                  </div>
-                  <div className="text-xs font-bold leading-snug" style={{ color: 'var(--theme-text)' }}>{card.value}</div>
-                </Link>
-              );
-            })}
-          </div>
-        </motion.section>
-
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-2 mb-3">
             <span className="relative flex h-2 w-2">
