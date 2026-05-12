@@ -132,17 +132,17 @@ export default function HomePage() {
     <div className="min-h-screen">
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
-          <div className="grid gap-6 lg:grid-cols-[1fr_520px] lg:items-end">
-            <div>
+          <div className="space-y-7">
+            <div className="max-w-3xl">
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 מרכז העבודה של תעשיית הטלוויזיה
               </div>
-              <h1 className="max-w-3xl text-4xl font-black leading-tight sm:text-5xl" style={{ color: 'var(--theme-text)' }}>
+              <h1 className="text-4xl font-black leading-tight sm:text-5xl" style={{ color: 'var(--theme-text)' }}>
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
-              <p className="mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+              <p className="mt-3 text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
@@ -161,7 +161,7 @@ export default function HomePage() {
                 <LiveClock />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 {controlHubCards.map((card) => {
                   const Icon = card.icon;
                   return (
