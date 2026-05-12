@@ -1,5 +1,6 @@
 import type { CrewMember } from '@/lib/productionDiff';
 import { normalizeContactName } from '@/lib/contactsUtils';
+import { normalizeRoleToCanonical } from '@/constants/departments';
 
 export type NormalizedCrewMember = CrewMember & {
   normalizedName: string;
@@ -12,10 +13,13 @@ export function normalizeName(name: string): string {
 }
 
 export function normalizeRole(role: string): string {
-  return (role || '')
+  const cleaned = (role || '')
     .replace(/[|,:;]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  const normalized = normalizeRoleToCanonical(cleaned);
+  if (normalized.ignoredAsNoise) return '';
+  return normalized.canonicalRole || normalized.cleaned;
 }
 
 export function normalizePhone(phone: string | null | undefined): string | null {

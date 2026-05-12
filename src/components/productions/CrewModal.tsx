@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
-import { classifyContactRole, normalizeContactName, type ContactDepartment, type ContactWorkArea } from '@/lib/contactsUtils';
+import { classifyContactRole, normalizeContactName } from '@/lib/contactsUtils';
 import { deduplicateCrewEntries, normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { type CrewMember, type Production, formatDateShort } from '@/lib/productionDiff';
 
@@ -16,10 +16,10 @@ interface CrewModalProps {
   onClose: () => void;
 }
 
-type CrewBucket = Exclude<ContactWorkArea, null> | ContactDepartment;
+type CrewBucket = string;
 type ActiveDepartment = CrewBucket | 'הכל';
 
-const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'טכני', 'תאורה', 'צילום', 'סאונד', 'מבצעים', 'בימוי', 'ארט ותפאורה', 'ביוטי'];
+const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'בימוי וניתוב', 'צילום', 'סאונד', 'תאורה', 'טכני', 'ארט ותפאורה', 'ביוטי', 'מבצעים'];
 
 const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
   אולפן: {
@@ -85,7 +85,7 @@ const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: 
     pill: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
     pillActive: 'bg-cyan-500/25 text-cyan-200 border-cyan-400/50 shadow-cyan-500/20 shadow-sm',
   },
-  בימוי: {
+  'בימוי וניתוב': {
     bg: 'rgba(244, 63, 94, 0.10)',
     text: '#fda4af',
     border: 'rgba(244, 63, 94, 0.25)',

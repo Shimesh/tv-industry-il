@@ -1,3 +1,4 @@
+import { getDepartmentForRole, normalizeRolesToCanonical } from '@/constants/departments';
 import { classifyContactRole, normalizeDisplayRoleLabel } from '@/lib/contactsUtils';
 
 export type ProfessionalFields = {
@@ -43,8 +44,7 @@ export function normalizeRoleLabel(value: unknown): string {
 }
 
 export function normalizeRoles(value: unknown, fallback?: unknown): string[] {
-  const values = [...stringArray(value), ...stringArray(fallback)];
-  return unique(values.map((role) => normalizeRoleLabel(role)));
+  return normalizeRolesToCanonical(value, fallback);
 }
 
 export function normalizeDepartments(value: unknown, fallback?: unknown): string[] {
@@ -56,7 +56,7 @@ export function normalizeProfessionalFields(raw: object | null | undefined): Pro
   const roles = normalizeRoles(source.roles, source.role);
   const departments = normalizeDepartments(source.departments, source.department);
   const inferredDepartments = roles
-    .map((role) => classifyContactRole(role).department)
+    .map((role) => getDepartmentForRole(role) || classifyContactRole(role).department)
     .filter(Boolean);
   const mergedDepartments = normalizeDepartments([...departments, ...inferredDepartments]);
 

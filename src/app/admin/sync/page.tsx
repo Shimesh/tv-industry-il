@@ -265,6 +265,39 @@ export default function SyncPage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">תפקידים שישוחזרו</p>
+                <p className="text-2xl font-bold text-emerald-300">{previewResult.recoveredRoles ?? 0}</p>
+              </div>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">רעש שסונן</p>
+                <p className="text-2xl font-bold text-slate-300">{previewResult.ignoredNoiseRoles ?? 0}</p>
+              </div>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">Custom</p>
+                <p className="text-2xl font-bold text-amber-300">{previewResult.customRoles ?? 0}</p>
+              </div>
+              <div className="rounded-xl p-4" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-xs text-[var(--theme-text-secondary)]">משתמשים לעדכון</p>
+                <p className="text-2xl font-bold text-cyan-300">{previewResult.usersToUpdate ?? 0}</p>
+              </div>
+            </div>
+
+            {(previewResult.sampleRecoveredRoles?.length ?? 0) > 0 && (
+              <div className="rounded-xl border p-4" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+                <p className="font-semibold text-[var(--theme-text)] mb-3">תפקידי לוחות עבודה שיוספו לפרופילים</p>
+                <div className="space-y-2 text-sm">
+                  {previewResult.sampleRecoveredRoles?.map((entry) => (
+                    <div key={`${entry.name}-${entry.phone || 'no-phone'}-${entry.addedRoles.join('-')}`} className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] pb-2 last:border-b-0 last:pb-0">
+                      <p className="text-[var(--theme-text)] font-medium">{entry.name}</p>
+                      <p className="text-emerald-300">{entry.addedRoles.join(', ')}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {previewResult.sampleMissing.length > 0 && (
               <div className="rounded-xl border p-4" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
                 <p className="font-semibold text-[var(--theme-text)] mb-3">דוגמה לרשומות שיתווספו/ישודרגו</p>

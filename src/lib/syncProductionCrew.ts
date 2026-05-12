@@ -11,7 +11,16 @@ export type SyncResult = {
   skipped: number;
   partialWithoutPhone: number;
   deletedDuplicates?: number;
+  recategorized?: number;
+  recoveredRoles?: number;
+  ignoredNoiseRoles?: number;
+  customRoles?: number;
+  contactsToUpdate?: number;
+  usersToUpdate?: number;
   sampleMissing: Array<{ name: string; phone: string | null; role: string }>;
+  sampleRecoveredRoles?: Array<{ name: string; phone: string | null; addedRoles: string[] }>;
+  sampleIgnoredNoiseRoles?: Array<{ name: string; rawRole: string }>;
+  sampleCustomRoles?: Array<{ name: string; role: string }>;
 };
 
 async function callAdminContactsSync(method: 'GET' | 'POST'): Promise<SyncResult> {

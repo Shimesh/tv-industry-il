@@ -19,6 +19,18 @@ const adminAuth = require('firebase-admin/auth') as {
     deleteUser: (uid: string) => Promise<void>;
   };
 };
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const adminFirestore = require('firebase-admin/firestore') as {
+  getFirestore: (app?: ReturnType<typeof getApp>) => {
+    batch: () => {
+      set: (ref: unknown, data: Record<string, unknown>, options?: { merge?: boolean }) => unknown;
+      update: (ref: unknown, data: Record<string, unknown>) => unknown;
+      delete: (ref: unknown) => unknown;
+      commit: () => Promise<unknown>;
+    };
+    doc: (path: string) => unknown;
+  };
+};
 
 function getFirebaseAdminApp() {
   if (getApps().length > 0) {
@@ -48,4 +60,8 @@ export function getFirebaseAdminAuth() {
 
 export function getFirebaseAdminMessaging() {
   return getMessaging(getFirebaseAdminApp());
+}
+
+export function getFirebaseAdminFirestore() {
+  return adminFirestore.getFirestore(getFirebaseAdminApp());
 }
