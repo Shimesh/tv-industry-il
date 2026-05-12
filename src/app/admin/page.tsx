@@ -34,8 +34,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
-import { DIRECTORY_DEPARTMENTS } from '@/lib/contactsUtils';
-import { INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
+import { INDUSTRY_DEPARTMENT_OPTIONS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
+import { normalizeProfessionalFields, stringArray } from '@/lib/professionalFields';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -131,6 +131,22 @@ function formatPageViewDevice(event: PageViewEvent): string {
 
 function selectedOptionValues(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
   return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
+}
+
+function safeProfileFields(entry: unknown) {
+  return normalizeProfessionalFields((entry || {}) as Record<string, unknown>);
+}
+
+function safeProfileRoles(entry: unknown): string[] {
+  return safeProfileFields(entry).roles;
+}
+
+function safeProfileDepartments(entry: unknown): string[] {
+  return safeProfileFields(entry).departments;
+}
+
+function roleOptionsForEditor(roles: unknown): string[] {
+  return Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...safeProfileRoles({ roles })].filter(Boolean)));
 }
 
 function rolePresentation(role: AdminRole) {
@@ -241,8 +257,8 @@ function getMissingItems(entry: AdminUserSummary): string[] {
   if (!entry.is_consented && !entry.termsAccepted) missing.push('לא הסכים לתנאים');
   if (!entry.linkedContactId) missing.push('לא מקושר לאיש קשר');
   if (!entry.phone) missing.push('חסר טלפון');
-  if (!(entry.roles || []).length) missing.push('חסר תפקיד');
-  if (!(entry.departments || []).length) missing.push('חסרה מחלקה');
+  if (!safeProfileRoles(entry).length) missing.push('חסר תפקיד');
+  if (!safeProfileDepartments(entry).length) missing.push('חסרה מחלקה');
   return missing;
 }
 
@@ -250,8 +266,8 @@ function isFullProfile(entry: AdminUserSummary): boolean {
   return (entry.is_consented || entry.termsAccepted) &&
     Boolean(entry.linkedContactId) &&
     Boolean(entry.phone) &&
-    Boolean((entry.roles || []).length) &&
-    Boolean((entry.departments || []).length);
+    Boolean(safeProfileRoles(entry).length) &&
+    Boolean(safeProfileDepartments(entry).length);
 }
 
 function PresenceBadges({ user }: { user: AdminUserSummary }) {
@@ -477,8 +493,8 @@ export default function AdminPage() {
         method: 'POST',
         body: JSON.stringify({
           ...editModal,
-          department: editModal.departments[0] || '',
-          role: editModal.roles[0] || '',
+          department: stringArray(editModal.departments)[0] || '',
+          role: stringArray(editModal.roles)[0] || '',
           forceContactId: editModal.forceContactId || undefined,
         }),
       });
@@ -733,7 +749,7 @@ export default function AdminPage() {
     const term = search.trim().toLowerCase();
     const filtered = term
       ? overview.users.filter((entry) =>
-          [entry.displayName, entry.email, entry.phone || '', entry.role, entry.department, ...(entry.roles || []), ...(entry.departments || []), entry.city || '', roleLabel(entry.siteRole), ...entry.linkedUids]
+          [entry.displayName, entry.email, entry.phone || '', entry.role, entry.department, ...safeProfileRoles(entry), ...safeProfileDepartments(entry), entry.city || '', roleLabel(entry.siteRole), ...entry.linkedUids]
             .join(' ')
             .toLowerCase()
             .includes(term),
@@ -749,7 +765,7 @@ export default function AdminPage() {
       } else if (userSort.key === 'email') {
         result = a.email.localeCompare(b.email, 'en');
       } else if (userSort.key === 'role') {
-        result = `${(a.roles || []).join(' ')} ${(a.departments || []).join(' ')}`.localeCompare(`${(b.roles || []).join(' ')} ${(b.departments || []).join(' ')}`, 'he');
+        result = `${safeProfileRoles(a).join(' ')} ${safeProfileDepartments(a).join(' ')}`.localeCompare(`${safeProfileRoles(b).join(' ')} ${safeProfileDepartments(b).join(' ')}`, 'he');
       } else if (userSort.key === 'status') {
         result = statusRank(a) - statusRank(b);
       } else if (userSort.key === 'lastSeen') {
@@ -1016,16 +1032,17 @@ export default function AdminPage() {
                             )}
                             <button
                               onClick={() => {
+                                const fields = safeProfileFields(entry);
                                 setContactSearchTerm('');
                                 setShowContactSearch(false);
                                 setEditModal({
                                   uid: entry.uid,
                                   displayName: entry.displayName ?? '',
                                   phone: entry.phone ?? '',
-                                  department: entry.department ?? '',
-                                  departments: entry.departments ?? (entry.department ? [entry.department] : []),
-                                  role: entry.role ?? '',
-                                  roles: entry.roles ?? (entry.role ? [entry.role] : []),
+                                  department: fields.department,
+                                  departments: fields.departments,
+                                  role: fields.role,
+                                  roles: fields.roles,
                                   forceContactId: '',
                                   linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
                                 });
@@ -1045,8 +1062,8 @@ export default function AdminPage() {
                         <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
                       </td>
                       <td className="hidden px-4 py-3 lg:table-cell">
-                        <p className="text-white">{(entry.roles || []).join(', ') || '—'}</p>
-                        <p className="text-xs text-gray-500">{(entry.departments || []).join(', ') || '—'}</p>
+                        <p className="text-white">{safeProfileRoles(entry).join(', ') || '—'}</p>
+                        <p className="text-xs text-gray-500">{safeProfileDepartments(entry).join(', ') || '—'}</p>
                       </td>
                       <td className="px-4 py-3">
                         <PresenceBadge user={entry} />
@@ -1160,7 +1177,7 @@ export default function AdminPage() {
                   <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
                     <div>
                       <p className="text-sm text-white">{entry.displayName || entry.email}</p>
-                      <p className="text-xs text-gray-500">{(entry.roles || []).join(', ') || (entry.departments || []).join(', ') || 'ללא תפקיד'}</p>
+                      <p className="text-xs text-gray-500">{safeProfileRoles(entry).join(', ') || safeProfileDepartments(entry).join(', ') || 'ללא תפקיד'}</p>
                     </div>
                     <span className="text-xs text-green-300">פעיל</span>
                   </div>
@@ -1591,12 +1608,15 @@ export default function AdminPage() {
               מחלקות
               <select
                 multiple
-                value={editModal.departments}
-                onChange={(e) => setEditModal((m) => m && { ...m, departments: selectedOptionValues(e.currentTarget.selectedOptions), department: selectedOptionValues(e.currentTarget.selectedOptions)[0] || '' })}
+                value={stringArray(editModal.departments)}
+                onChange={(e) => {
+                  const departments = selectedOptionValues(e.currentTarget.selectedOptions);
+                  setEditModal((m) => m && { ...m, departments, department: departments[0] || '' });
+                }}
                 className="min-h-28 rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               >
-                {DIRECTORY_DEPARTMENTS.map((d) => (
+                {INDUSTRY_DEPARTMENT_OPTIONS.map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
@@ -1605,13 +1625,16 @@ export default function AdminPage() {
               תפקידים
               <select
                 multiple
-                value={editModal.roles}
-                onChange={(e) => setEditModal((m) => m && { ...m, roles: selectedOptionValues(e.currentTarget.selectedOptions), role: selectedOptionValues(e.currentTarget.selectedOptions)[0] || '' })}
+                value={stringArray(editModal.roles)}
+                onChange={(e) => {
+                  const roles = selectedOptionValues(e.currentTarget.selectedOptions);
+                  setEditModal((m) => m && { ...m, roles, role: roles[0] || '' });
+                }}
                 dir="rtl"
                 className="min-h-28 rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               >
-                {Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...editModal.roles].filter(Boolean))).map((role) => (
+                {roleOptionsForEditor(editModal.roles).map((role) => (
                   <option key={role} value={role}>{role}</option>
                 ))}
               </select>

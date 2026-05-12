@@ -3,7 +3,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-import { departments, type Contact } from '@/data/contacts';
+import { type Contact } from '@/data/contacts';
+import { INDUSTRY_DEPARTMENTS, INDUSTRY_ROLE_OPTIONS, getRolesForDepartment } from '@/constants/departments';
 import {
   normalizeDisplayRoleLabel,
 } from '@/lib/contactsUtils';
@@ -241,26 +242,31 @@ function DirectoryContent() {
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contactsList.forEach((contact) => {
-      const contactDepartments = getContactDepartments(contact);
-      const matchDept = departmentFilters.length === 0 || departmentFilters.some((department) => contactDepartments.includes(department));
-      if (!matchDept) return;
       getContactRoles(contact).forEach((role) => {
         if (!role) return;
         counts[role] = (counts[role] || 0) + 1;
       });
     });
     return counts;
-  }, [contactsList, departmentFilters]);
+  }, [contactsList]);
 
-  const roleOptions = useMemo(
-    () => Object.entries(roleCounts)
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he')),
-    [roleCounts],
+  const selectedDepartment = departmentFilters[0] || '';
+  const selectedRole = roleFilters[0] || '';
+
+  const roleOptions = useMemo<[string, number][]>(
+    () => {
+      const canonicalRoles = selectedDepartment
+        ? getRolesForDepartment(selectedDepartment)
+        : INDUSTRY_ROLE_OPTIONS;
+
+      return canonicalRoles.map((role) => [role, roleCounts[role] || 0]);
+    },
+    [roleCounts, selectedDepartment],
   );
 
   const departmentOptions = useMemo(
-    () => departments.filter((dept) => (deptCounts[dept.label] || 0) > 0 || departmentFilters.includes(dept.label)),
-    [deptCounts, departmentFilters],
+    () => INDUSTRY_DEPARTMENTS,
+    [],
   );
 
   const visibleDepartmentOptions = useMemo(
@@ -274,8 +280,6 @@ function DirectoryContent() {
   );
 
   const hasActiveFilters = Boolean(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter);
-  const selectedDepartment = departmentFilters[0] || '';
-  const selectedRole = roleFilters[0] || '';
   const filterCardActiveStyle = {
     background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 48%, #2563eb 100%)',
     borderColor: 'rgba(255,255,255,0.34)',
@@ -294,6 +298,7 @@ function DirectoryContent() {
 
   const selectDepartmentFilter = (department: string) => {
     setDepartmentFilters((current) => current[0] === department ? [] : [department]);
+    setRoleFilters([]);
     setDrawerSearch('');
     setActiveDrawer(null);
   };
@@ -866,7 +871,7 @@ function DirectoryContent() {
                     className="w-full rounded-xl border py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/20"
                     style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
                     dir="rtl"
-                    autoFocus
+                    autoFocus={false}
                   />
                   {drawerSearch && (
                     <button
@@ -899,10 +904,7 @@ function DirectoryContent() {
                             style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
                           >
                             <Building2 className="h-4 w-4 shrink-0 text-purple-300" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{dept.label}</span>
-                            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                              {deptCounts[dept.label] || 0}
-                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{`${dept.label} (${deptCounts[dept.label] || 0})`}</span>
                             {selected && <Check className="h-4 w-4 shrink-0 text-purple-300" />}
                           </button>
                         );
@@ -926,10 +928,7 @@ function DirectoryContent() {
                           style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
                         >
                           <Wrench className="h-4 w-4 shrink-0 text-cyan-300" />
-                          <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{role}</span>
-                          <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                            {count}
-                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{`${role} (${count})`}</span>
                           {selected && <Check className="h-4 w-4 shrink-0 text-cyan-300" />}
                         </button>
                       );
