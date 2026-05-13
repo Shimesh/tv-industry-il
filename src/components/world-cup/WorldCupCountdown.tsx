@@ -50,7 +50,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       onClick={() => router.push('/world-cup')}
       whileHover={{ y: -1 }}
       whileTap={{ scale: 0.97 }}
-      className={`group flex max-w-[min(48vw,168px)] shrink items-center gap-1 rounded-xl border text-right shadow-lg transition-all sm:max-w-none sm:gap-2 ${compact ? 'px-1 py-1 sm:px-2 sm:py-1.5' : 'px-2 py-1.5'}`}
+      className={`group flex shrink-0 items-center rounded-xl border text-right shadow-lg transition-all ${compact ? 'max-w-[min(48vw,168px)] gap-1 px-1 py-1 sm:max-w-none sm:gap-2 sm:px-2 sm:py-1.5' : 'w-full max-w-fit gap-2 px-3 py-2 sm:px-4'}`}
       style={{
         borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 42%, transparent)',
         background: 'linear-gradient(135deg, color-mix(in srgb, var(--wc-deep-blue, #002046) 92%, transparent), color-mix(in srgb, var(--wc-stadium-green, #138a36) 28%, transparent))',

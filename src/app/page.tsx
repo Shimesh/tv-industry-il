@@ -16,6 +16,7 @@ import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
 import HomeInfoWidget from '@/components/home/HomeInfoWidget';
+import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBroadcasts } from '@/hooks/useBroadcasts';
 
@@ -97,6 +98,9 @@ export default function HomePage() {
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
+              <div className="mt-4 flex justify-start">
+                <WorldCupCountdown />
+              </div>
               <p className="mt-3 text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>

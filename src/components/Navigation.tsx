@@ -10,7 +10,6 @@ import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
-import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
 import {
   Tv,
   Users,
@@ -218,7 +217,6 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center gap-2">
-            <WorldCupCountdown compact />
             {user && <NotificationBell />}
 
             <div className="relative hidden md:block" ref={themeMenuRef}>
