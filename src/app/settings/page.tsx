@@ -7,10 +7,18 @@ import { useRouter } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
+import { type QuickMenuPosition, useQuickMenuPosition } from '@/hooks/useQuickMenuPosition';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
-  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera
+  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera, LayoutGrid
 } from 'lucide-react';
+
+const menuPositionOptions: Array<{ value: QuickMenuPosition; label: string; description: string }> = [
+  { value: 'right', label: 'ימין', description: 'נפתח מהצד הימני' },
+  { value: 'left', label: 'שמאל', description: 'נפתח מהצד השמאלי' },
+  { value: 'top', label: 'למעלה', description: 'נפתח מלמעלה' },
+  { value: 'bottom', label: 'למטה', description: 'נפתח מלמטה' },
+];
 
 export default function SettingsPage() {
   return (
@@ -23,6 +31,7 @@ export default function SettingsPage() {
 function SettingsContent() {
   const { profile, logout, updateUserProfile, deleteDirectoryProfile } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { position: menuPosition, setPosition: setMenuPosition } = useQuickMenuPosition();
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
   const [soundEnabled, setSoundEnabled] = useState(profile?.soundEnabled !== false);
@@ -247,6 +256,29 @@ function SettingsContent() {
           </div>
         </SettingsSection>
 
+        <SettingsSection icon={<LayoutGrid className="w-4 h-4" />} title="מיקום תפריט מהיר">
+          <div className="grid grid-cols-2 gap-2">
+            {menuPositionOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setMenuPosition(option.value)}
+                className={`rounded-xl px-3 py-3 text-right transition-all active:scale-[0.95] ${
+                  menuPosition === option.value
+                    ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]/40'
+                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
+                }`}
+                style={menuPosition !== option.value ? { background: 'var(--theme-bg)' } : undefined}
+              >
+                <span className="flex items-center gap-2 text-sm font-black">
+                  {menuPosition === option.value && <CheckCircle className="h-3.5 w-3.5" />}
+                  {option.label}
+                </span>
+                <span className="mt-1 block text-xs leading-snug opacity-70">{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </SettingsSection>
+
         {/* Notifications */}
         <SettingsSection icon={<Bell className="w-4 h-4" />} title="התראות">
           <div className="space-y-3">
@@ -378,7 +410,7 @@ function SettingsContent() {
         {/* App Info */}
         <div className="text-center py-4">
           <p className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
-            TV Industry IL v1.8.6
+            TV Industry IL v2.0.1
           </p>
         </div>
       </div>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from './providers';
 import Navigation from '@/components/Navigation';
+import QuickMenuRoot from '@/components/QuickMenuRoot';
 import Footer from '@/components/Footer';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -72,6 +73,7 @@ export default function RootLayout({
           <Providers>
             <ScrollToTop />
             <Navigation />
+            <QuickMenuRoot />
             <main
               className="flex-1"
               style={{ paddingTop: 'var(--app-header-offset)', paddingBottom: 'var(--safe-area-bottom)' }}

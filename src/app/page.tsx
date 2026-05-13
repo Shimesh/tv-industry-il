@@ -6,18 +6,8 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   Calendar,
-  CalendarDays,
-  Clock,
-  MessageCircle,
-  Newspaper,
-  Radio,
-  SlidersHorizontal,
   Sparkles,
   TrendingUp,
-  Users,
-  UserRoundCog,
-  Wrench,
-  Building2,
 } from 'lucide-react';
 
 import WeeklyCalendarWidget from '@/components/WeeklyCalendarWidget';
@@ -25,8 +15,8 @@ import LiveNewsTicker from '@/components/home/LiveNewsTicker';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
+import HomeInfoWidget from '@/components/home/HomeInfoWidget';
 import { useAuth } from '@/contexts/AuthContext';
-import { channels } from '@/data/channels';
 import { useBroadcasts } from '@/hooks/useBroadcasts';
 
 interface RssNewsItem {
@@ -39,30 +29,6 @@ interface RssNewsItem {
   imageUrl?: string;
   imageSource?: string;
   isSourceLogoFallback?: boolean;
-}
-
-function LiveClock() {
-  const [now, setNow] = useState<Date | null>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  if (!now) return <div className="h-4" />;
-
-  return (
-    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-      <Clock className="w-3.5 h-3.5 opacity-60" />
-      <span className="font-mono font-medium" dir="ltr">
-        {now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-      </span>
-      <span className="opacity-30">|</span>
-      <span className="opacity-70">
-        {now.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-      </span>
-    </div>
-  );
 }
 
 function getGreeting(): string {
@@ -117,22 +83,11 @@ export default function HomePage() {
     };
   }, []);
 
-  const controlHubCards = [
-    { id: 'live', icon: Radio, label: 'שידורים חיים', value: `${channels.length} ערוצים`, href: '/live', accent: '#ef4444' },
-    { id: 'news', icon: Newspaper, label: 'חדשות', value: liveNews.length > 0 ? `${liveNews.length} כותרות` : 'מתעדכן עכשיו', href: '/news', accent: '#38bdf8' },
-    { id: 'calendar', icon: CalendarDays, label: 'יומן אישי', value: 'הפקות ולו״ז', href: '/calendar', accent: '#60a5fa' },
-    { id: 'teams', icon: Users, label: 'צוותים', value: 'ניהול צוותים', href: '/teams', accent: '#22c55e' },
-    { id: 'studios', icon: Building2, label: 'אולפנים', value: 'מפת אולפנים', href: '/studios', accent: '#a855f7' },
-    { id: 'directory', icon: UserRoundCog, label: 'אלפון מקצועי', value: '203 אנשי מקצוע', href: '/directory', accent: '#f59e0b' },
-    { id: 'chat', icon: MessageCircle, label: 'צ׳אט', value: 'שיחות תעשייה', href: '/chat', accent: '#ec4899' },
-    { id: 'toolbox', icon: Wrench, label: 'ארגז כלים', value: 'כלי הפקה', href: '/toolbox', accent: '#14b8a6' },
-  ];
-
   return (
     <div className="min-h-screen">
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
-          <div className="space-y-7">
+          <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
@@ -146,57 +101,8 @@ export default function HomePage() {
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
-
-            <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/[0.45] p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl" dir="rtl">
-              <div className="mb-3 flex items-center justify-between gap-3 px-1">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-cyan-200 shadow-lg shadow-cyan-500/10">
-                    <SlidersHorizontal className="h-[18px] w-[18px]" />
-                  </span>
-                  <div className="text-right">
-                    <p className="text-xs font-bold uppercase tracking-wide text-white/50">Control Hub</p>
-                    <p className="text-sm font-black text-white">מרכז שליטה</p>
-                  </div>
-                </div>
-                <LiveClock />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {controlHubCards.map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <Link
-                      key={card.id}
-                      href={card.href}
-                      className="group relative isolate min-h-[122px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-4 text-right shadow-lg shadow-black/15 backdrop-blur-xl transition duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.1] hover:shadow-xl active:translate-y-0 active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
-                      style={{ boxShadow: `0 16px 42px rgba(0, 0, 0, 0.18), 0 0 0 1px ${card.accent}00` }}
-                    >
-                      <div
-                        className="pointer-events-none absolute inset-0 opacity-0 blur-xl transition duration-200 group-hover:opacity-40 group-focus-visible:opacity-40"
-                        style={{ background: `radial-gradient(circle at 82% 16%, ${card.accent}88, transparent 42%)` }}
-                      />
-                      <div className="relative flex h-full flex-col items-start justify-between gap-5">
-                        <div className="flex w-full items-start justify-between gap-3">
-                          <div className="min-w-0 text-right">
-                            <div className="text-[15px] font-black leading-tight text-white">{card.label}</div>
-                            <div className="mt-1 text-xs font-semibold leading-snug text-white/60">{card.value}</div>
-                          </div>
-                          <span
-                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 transition duration-200 group-hover:scale-105"
-                            style={{ color: card.accent }}
-                          >
-                            <Icon className="h-6 w-6" />
-                          </span>
-                        </div>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white/50 transition group-hover:text-white/75">
-                          פתיחה מהירה
-                          <ArrowLeft className="h-3.5 w-3.5" />
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+            <div className="w-full lg:max-w-sm">
+              <HomeInfoWidget />
             </div>
           </div>
         </div>
