@@ -11,6 +11,7 @@ interface VideoPlayerProps {
   onNext: () => void;
   onPrev: () => void;
   currentProgram?: string;
+  initialMuted?: boolean;
 }
 
 const KAN11_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8';
@@ -56,13 +57,13 @@ function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string |
   }).catch(() => undefined);
 }
 
-export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }: VideoPlayerProps) {
+export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, initialMuted = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const loggedKeshetStartRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(80);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(initialMuted);
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,6 +74,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
 
   const isKeshetMobile = channel.id === 'keshet12' && isMobileBrowser();
+  const shouldStartMuted = isKeshetMobile || initialMuted;
 
   useEffect(() => {
     if (!isKeshetMobile) return;
@@ -119,8 +121,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
     setDynamicEmbedUrl(null);
     setError(null);
     setNeedsUserGesture(false);
-    setIsMuted(false);
-  }, [channel.id]);
+    setIsMuted(initialMuted);
+  }, [channel.id, initialMuted]);
 
   // Fetch stream URL at runtime for channels with dynamicStream flag
   useEffect(() => {
@@ -223,7 +225,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
         video.setAttribute('autoplay', '');
         video.setAttribute('playsinline', '');
         video.setAttribute('webkit-playsinline', '');
-        if (isKeshetMobile) {
+        if (shouldStartMuted) {
           video.muted = true;
           video.defaultMuted = true;
           video.volume = 0;
@@ -244,9 +246,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
           });
           hlsInstance.loadSource(hlsUrl);
           hlsInstance.attachMedia(video);
-          video.muted = isKeshetMobile;
-          video.defaultMuted = isKeshetMobile;
-          video.volume = isKeshetMobile ? 0 : 1;
+          video.muted = shouldStartMuted;
+          video.defaultMuted = shouldStartMuted;
+          video.volume = shouldStartMuted ? 0 : 1;
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             video.play().then(() => {
               setIsPlaying(true);
@@ -327,7 +329,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram }:
       video.removeEventListener('waiting', handleWaiting);
       hlsInstance?.destroy();
     };
-  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile]);
+  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile, shouldStartMuted]);
 
   // Sync volume and muted state to the video element
   // Note: React's `muted` JSX prop is broken (known React bug) — must use ref imperatively

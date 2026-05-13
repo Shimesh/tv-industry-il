@@ -15,19 +15,19 @@ function getDiff() {
   return { days, hours, minutes };
 }
 
-function Digit({ value, label }: { value: number; label: string }) {
+function Digit({ value, label, compact = false }: { value: number; label: string; compact?: boolean }) {
   return (
     <div className="flex min-w-9 flex-col items-center rounded-lg border px-1.5 py-1 leading-none" style={{ borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 36%, transparent)', background: 'color-mix(in srgb, var(--wc-deep-blue, #002046) 72%, transparent)' }}>
       <motion.span
         key={value}
         initial={{ y: -8, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-xs font-black tabular-nums text-[var(--wc-gold,#D4AF37)]"
+        className={`${compact ? 'text-[10px]' : 'text-xs'} font-black tabular-nums text-[var(--wc-gold,#D4AF37)]`}
         dir="ltr"
       >
         {String(value).padStart(2, '0')}
       </motion.span>
-      <span className="mt-0.5 text-[8px] font-bold text-white/58">{label}</span>
+      <span className={`${compact ? 'text-[7px]' : 'text-[8px]'} mt-0.5 font-bold text-white/58`}>{label}</span>
     </div>
   );
 }
@@ -50,7 +50,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       onClick={() => router.push('/world-cup')}
       whileHover={{ y: -1 }}
       whileTap={{ scale: 0.97 }}
-      className={`group hidden items-center gap-2 rounded-xl border px-2 py-1.5 text-right shadow-lg transition-all md:flex ${compact ? 'scale-95' : ''}`}
+      className={`group flex max-w-[min(48vw,168px)] shrink items-center gap-1 rounded-xl border text-right shadow-lg transition-all sm:max-w-none sm:gap-2 ${compact ? 'px-1 py-1 sm:px-2 sm:py-1.5' : 'px-2 py-1.5'}`}
       style={{
         borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 42%, transparent)',
         background: 'linear-gradient(135deg, color-mix(in srgb, var(--wc-deep-blue, #002046) 92%, transparent), color-mix(in srgb, var(--wc-stadium-green, #138a36) 28%, transparent))',
@@ -61,7 +61,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       <motion.span
         animate={{ scale: activeMatch ? [1, 1.12, 1] : [1, 1.05, 1] }}
         transition={{ duration: activeMatch ? 1 : 2.5, repeat: Infinity }}
-        className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--wc-gold,#D4AF37)] text-[#002046]"
+        className={`${compact ? 'h-7 w-7' : 'h-8 w-8'} flex shrink-0 items-center justify-center rounded-lg bg-[var(--wc-gold,#D4AF37)] text-[#002046]`}
       >
         <Trophy className="h-4 w-4" />
       </motion.span>
@@ -70,9 +70,9 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         <span className="text-[9px] text-white/55">כניסה מהירה למרכז המשחקים</span>
       </span>
       <span className="flex gap-1" dir="rtl">
-        <Digit value={diff.days} label="ימים" />
-        <Digit value={diff.hours} label="ש׳" />
-        <Digit value={diff.minutes} label="ד׳" />
+        <Digit value={diff.days} label="ימים" compact={compact} />
+        <Digit value={diff.hours} label="ש׳" compact={compact} />
+        <Digit value={diff.minutes} label="ד׳" compact={compact} />
       </span>
     </motion.button>
   );

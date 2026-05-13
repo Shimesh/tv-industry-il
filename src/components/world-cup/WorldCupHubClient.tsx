@@ -227,6 +227,30 @@ function WeatherPill({ venueId }: { venueId: string }) {
   );
 }
 
+function stadiumPlaceholderDataUrl(venue: WorldCupVenue) {
+  const label = `${venue.nameHe} - ${venue.cityHe}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#002046"/><stop offset=".55" stop-color="#07552b"/><stop offset="1" stop-color="#002046"/></linearGradient><radialGradient id="light" cx="50%" cy="30%" r="65%"><stop stop-color="rgba(212,175,55,.45)"/><stop offset="1" stop-color="rgba(212,175,55,0)"/></radialGradient></defs><rect width="1200" height="675" fill="url(#g)"/><rect width="1200" height="675" fill="url(#light)"/><ellipse cx="600" cy="475" rx="410" ry="95" fill="rgba(0,0,0,.34)"/><path d="M170 392c112-132 748-132 860 0v80H170z" fill="rgba(255,255,255,.13)" stroke="#D4AF37" stroke-width="5"/><path d="M265 400c82-74 588-74 670 0" fill="none" stroke="rgba(255,255,255,.48)" stroke-width="14" stroke-linecap="round"/><rect x="360" y="430" width="480" height="150" rx="70" fill="#138a36" stroke="rgba(255,255,255,.45)" stroke-width="4"/><path d="M600 430v150M440 505h320" stroke="rgba(255,255,255,.55)" stroke-width="4"/><circle cx="600" cy="505" r="42" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="4"/><text x="600" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="62" font-weight="900" fill="#D4AF37">World Cup 2026</text><text x="600" y="255" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="700" fill="white">${label}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function VenueImage({ venue }: { venue: WorldCupVenue }) {
+  const fallback = useMemo(() => stadiumPlaceholderDataUrl(venue), [venue]);
+  const [src, setSrc] = useState(venue.imageUrl || fallback);
+
+  useEffect(() => {
+    setSrc(venue.imageUrl || fallback);
+  }, [fallback, venue.imageUrl]);
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+      loading="lazy"
+      onError={() => setSrc(fallback)}
+    />
+  );
+}
 function VenuesGrid({ venues }: { venues: WorldCupVenue[] }) {
   return (
     <Card className="overflow-hidden">
@@ -238,7 +262,7 @@ function VenuesGrid({ venues }: { venues: WorldCupVenue[] }) {
         {venues.map((venue) => (
           <article key={venue.id} className="group overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
             <div className="relative h-36 overflow-hidden">
-              <img src={venue.imageUrl} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+              <VenueImage venue={venue} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
               <div className="absolute bottom-2 right-2 left-2 flex items-center justify-between gap-2">
                 <WeatherPill venueId={venue.id} />
@@ -396,7 +420,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
         <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
             <Card className="overflow-hidden p-3">
-              <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} />
+              <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
             </Card>
             <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} />
           </div>
