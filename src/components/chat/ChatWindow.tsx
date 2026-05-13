@@ -206,7 +206,6 @@ export default function ChatWindow({
   }, [messages, typingUsers, pendingCount]);
 
   useEffect(() => {
-    inputRef.current?.focus();
     setReplyTo(null);
     setText('');
     setShowEmoji(false);

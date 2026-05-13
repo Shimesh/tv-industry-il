@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { MouseEvent } from 'react';
 import {
   CalendarDays,
+  Home,
   Megaphone,
   MessageCircle,
   Radio,
@@ -17,6 +19,7 @@ import {
 import { type QuickMenuPosition, useQuickMenuPosition } from '@/hooks/useQuickMenuPosition';
 
 const mainLinks = [
+  { href: '/', label: 'דף הבית', icon: Home, accent: '#a78bfa' },
   { href: '/calendar', label: 'יומן אישי', icon: CalendarDays, accent: '#60a5fa' },
   { href: '/directory', label: 'אלפון', icon: UserRoundCog, accent: '#f59e0b' },
   { href: '/live', label: 'שידור חי', icon: Radio, accent: '#ef4444' },
@@ -77,11 +80,24 @@ export default function QuickMenuDrawer({ open, onClose }: QuickMenuDrawerProps)
       (link.href === '/toolbox' && pathname === '/tools') ||
       (link.href === '/board' && pathname === '/news');
 
+    const handleNavigate = (event: MouseEvent<HTMLAnchorElement>) => {
+      onClose();
+
+      if (typeof window === 'undefined') return;
+
+      window.dispatchEvent(new Event('app:navigation-start'));
+
+      if (pathname === '/chat' && link.href !== pathname) {
+        event.preventDefault();
+        window.location.href = link.href;
+      }
+    };
+
     return (
       <Link
         key={link.href}
         href={link.href}
-        onClick={onClose}
+        onClick={handleNavigate}
         className={`group relative isolate flex min-h-[52px] items-center gap-3 overflow-hidden rounded-2xl border px-3 py-2 text-right shadow-lg shadow-black/15 transition duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.12] active:scale-[0.95] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
           isActive ? 'border-white/25 bg-white/[0.13]' : 'border-white/10 bg-white/[0.07]'
         }`}
