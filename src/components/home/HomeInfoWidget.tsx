@@ -213,7 +213,7 @@ export default function HomeInfoWidget() {
   return (
     <div
       dir="rtl"
-      className={`relative isolate overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
+      className={`relative isolate flex h-[148px] items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
         heatwave
           ? 'border-orange-300/35 bg-orange-950/35 shadow-orange-500/20'
           : 'border-white/10 bg-slate-950/[0.42] shadow-black/25'
@@ -228,7 +228,7 @@ export default function HomeInfoWidget() {
       />
       {heatwave ? <span className="pointer-events-none absolute inset-4 rounded-[1.25rem] border border-orange-300/20 animate-ping" /> : null}
 
-      <div className="relative flex items-center justify-between gap-5">
+      <div className="relative flex w-full items-center justify-between gap-5">
         <div className="text-right">
           <p className="text-xs font-black uppercase tracking-wide text-white/45">Live Info</p>
           <div className="mt-1 flex items-end gap-2">

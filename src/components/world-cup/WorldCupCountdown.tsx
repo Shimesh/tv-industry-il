@@ -12,25 +12,32 @@ function getDiff() {
   const days = Math.floor(diffMs / 86_400_000);
   const hours = Math.floor((diffMs % 86_400_000) / 3_600_000);
   const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
-  return { days, hours, minutes };
+  const seconds = Math.floor((diffMs % 60_000) / 1000);
+  return { days, hours, minutes, seconds };
 }
 
 function Digit({ value, label, compact = false }: { value: number; label: string; compact?: boolean }) {
   return (
     <div
-      className={`flex flex-col items-center rounded-lg border leading-none ${compact ? 'min-w-7 px-1 py-0.5' : 'min-w-9 px-1.5 py-1'}`}
-      style={{ borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 36%, transparent)', background: 'color-mix(in srgb, var(--wc-deep-blue, #002046) 72%, transparent)' }}
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl border leading-none ${
+        compact ? 'px-1 py-1' : 'px-1.5 py-2'
+      }`}
+      style={{
+        borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 34%, transparent)',
+        background: 'color-mix(in srgb, var(--wc-deep-blue, #002046) 62%, transparent)',
+      }}
     >
       <motion.span
         key={value}
-        initial={{ y: -8, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className={`${compact ? 'text-[10px]' : 'text-xs'} font-black tabular-nums text-[var(--wc-gold,#D4AF37)]`}
+        initial={{ scale: 0.92, opacity: 0.55 }}
+        animate={{ scale: label === 'שניות' ? [1, 1.09, 1] : 1, opacity: 1 }}
+        transition={{ duration: label === 'שניות' ? 0.45 : 0.22 }}
+        className={`${compact ? 'text-sm' : 'text-2xl sm:text-3xl'} font-black leading-none tabular-nums text-[var(--wc-gold,#D4AF37)] drop-shadow-[0_0_12px_rgba(212,175,55,.32)]`}
         dir="ltr"
       >
         {String(value).padStart(2, '0')}
       </motion.span>
-      <span className={`${compact ? 'text-[7px]' : 'text-[8px]'} mt-0.5 font-bold text-white/58`}>{label}</span>
+      <span className={`${compact ? 'text-[8px]' : 'mt-1 text-[11px] sm:text-xs'} font-black leading-none text-white/86`}>{label}</span>
     </div>
   );
 }
@@ -41,7 +48,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   const [diff, setDiff] = useState(() => getDiff());
 
   useEffect(() => {
-    const interval = window.setInterval(() => setDiff(getDiff()), 30_000);
+    const interval = window.setInterval(() => setDiff(getDiff()), 1000);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -52,30 +59,41 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       type="button"
       onClick={() => router.push('/world-cup')}
       whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.97 }}
-      className={`group flex shrink-0 items-center rounded-xl border text-right shadow-lg transition-all ${compact ? 'max-w-[min(48vw,168px)] gap-1 px-1 py-1 sm:max-w-none sm:gap-2 sm:px-2 sm:py-1.5' : 'w-full justify-between gap-2 px-3 py-2 sm:px-4'}`}
+      whileTap={{ scale: 0.985 }}
+      className={`group relative isolate flex shrink-0 overflow-hidden rounded-[1.5rem] border text-right shadow-2xl shadow-black/25 backdrop-blur-2xl transition ${
+        compact
+          ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 px-2 py-2 sm:max-w-none'
+          : 'h-[148px] w-full flex-col justify-between gap-3 p-4'
+      }`}
       style={{
-        borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 42%, transparent)',
-        background: 'linear-gradient(135deg, color-mix(in srgb, var(--wc-deep-blue, #002046) 92%, transparent), color-mix(in srgb, var(--wc-stadium-green, #138a36) 28%, transparent))',
-        boxShadow: activeMatch ? '0 0 28px var(--wc-gold-glow, rgba(212,175,55,.34))' : '0 10px 28px rgba(0,0,0,.20)',
+        borderColor: activeMatch ? 'color-mix(in srgb, var(--wc-gold, #D4AF37) 45%, transparent)' : 'rgba(255,255,255,.10)',
+        background: 'rgba(2, 6, 23, .42)',
+        boxShadow: activeMatch ? '0 0 28px var(--wc-gold-glow, rgba(212,175,55,.34)), 0 24px 64px rgba(0,0,0,.25)' : undefined,
       }}
       title="מרכז מונדיאל 2026"
     >
-      <motion.span
-        animate={{ scale: activeMatch ? [1, 1.12, 1] : [1, 1.05, 1] }}
-        transition={{ duration: activeMatch ? 1 : 2.5, repeat: Infinity }}
-        className={`${compact ? 'h-7 w-7' : 'h-8 w-8'} flex shrink-0 items-center justify-center rounded-lg bg-[var(--wc-gold,#D4AF37)] text-[#002046]`}
-      >
-        <Trophy className="h-4 w-4" />
-      </motion.span>
-      <span className="hidden flex-col lg:flex">
-        <span className="text-[10px] font-black text-white">{label}</span>
-        <span className="text-[9px] text-white/55">כניסה מהירה למרכז המשחקים</span>
+      <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(212,175,55,0.20),transparent_42%)]" />
+      <span className={`${compact ? 'items-center' : 'items-start'} relative flex w-full justify-between gap-3`}>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={`${compact ? 'h-8 w-8' : 'h-11 w-11'} relative flex shrink-0 items-center justify-center rounded-full bg-[var(--wc-gold,#D4AF37)] text-[#002046]`}>
+            <Trophy className={compact ? 'h-4 w-4' : 'h-5 w-5'} />
+            <span className="absolute -left-0.5 -top-0.5 flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500 ring-2 ring-[#002046]" />
+            </span>
+          </span>
+          <span className={compact ? 'hidden' : 'min-w-0 text-right'}>
+            <span className="block text-xs font-black uppercase tracking-wide text-white/45">World Cup</span>
+            <span className="block text-base font-black leading-tight text-white">{label}</span>
+          </span>
+        </span>
+        {!compact && <span className="shrink-0 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37]">פעיל</span>}
       </span>
-      <span className="flex gap-1" dir="rtl">
+      <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-2'}`} dir="rtl">
         <Digit value={diff.days} label="ימים" compact={compact} />
-        <Digit value={diff.hours} label="ש׳" compact={compact} />
-        <Digit value={diff.minutes} label="ד׳" compact={compact} />
+        <Digit value={diff.hours} label="שעות" compact={compact} />
+        <Digit value={diff.minutes} label="דקות" compact={compact} />
+        <Digit value={diff.seconds} label="שניות" compact={compact} />
       </span>
     </motion.button>
   );
