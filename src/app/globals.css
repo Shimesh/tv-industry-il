@@ -489,6 +489,25 @@ body.accessibility-high-contrast .gradient-text-warm {
   animation: badge-pulse 2s ease-in-out infinite;
 }
 
+/* Quick Menu floating action button */
+@keyframes quickMenuFabFloat {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+.quick-menu-fab-float {
+  animation: quickMenuFabFloat 3.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.quick-menu-fab-float:active {
+  animation-play-state: paused;
+}
+
 /* Page transition */
 @keyframes pageIn {
   from { opacity: 0; transform: translateY(8px); }
