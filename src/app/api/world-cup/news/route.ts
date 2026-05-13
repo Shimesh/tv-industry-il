@@ -56,7 +56,7 @@ async function fetchSource(source: (typeof RSS_SOURCES)[number]) {
     const response = await fetch(source.url, {
       headers: {
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
-        'User-Agent': 'TVIndustryIL-WorldCup/2.1.1',
+        'User-Agent': 'TVIndustryIL-WorldCup/2.1.2',
       },
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(9000),

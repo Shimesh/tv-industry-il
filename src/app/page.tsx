@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -98,14 +98,12 @@ export default function HomePage() {
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
-              <div className="mt-4 flex justify-start">
-                <WorldCupCountdown />
-              </div>
               <p className="mt-3 text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
-            <div className="w-full lg:max-w-sm">
+            <div className="flex w-full flex-col gap-3 lg:max-w-sm">
+              <WorldCupCountdown />
               <HomeInfoWidget />
             </div>
           </div>
