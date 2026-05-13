@@ -6,6 +6,7 @@ import { LayoutGrid } from 'lucide-react';
 
 import QuickMenuDrawer from '@/components/QuickMenuDrawer';
 import { type QuickMenuPosition, useQuickMenuPosition } from '@/hooks/useQuickMenuPosition';
+import { useWorldCup } from '@/contexts/WorldCupContext';
 
 export const QUICK_MENU_OPEN_EVENT = 'tv-quick-menu-open';
 
@@ -25,6 +26,7 @@ const EDGE_MARGIN = 20;
 const DRAG_THRESHOLD = 5;
 
 export default function QuickMenuRoot() {
+  const { isWorldCupMode } = useWorldCup();
   const [open, setOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fabPosition, setFabPosition] = useState<FabPosition>({ x: EDGE_MARGIN, y: EDGE_MARGIN });
@@ -228,9 +230,15 @@ export default function QuickMenuRoot() {
           onClick={handleFabClick}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
-          className={`group relative flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border border-white/15 bg-slate-950/55 text-[var(--theme-accent)] shadow-[0_18px_45px_rgba(0,0,0,0.38),0_0_28px_var(--theme-accent-glow)] backdrop-blur-2xl transition-all hover:-translate-y-1 hover:border-[var(--theme-accent)]/40 hover:bg-white/10 hover:shadow-[0_22px_52px_rgba(0,0,0,0.44),0_0_34px_var(--theme-accent-glow)] active:scale-[0.90] ${
+          className={`group relative flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border bg-slate-950/55 text-[var(--theme-accent)] shadow-[0_18px_45px_rgba(0,0,0,0.38),0_0_28px_var(--theme-accent-glow)] backdrop-blur-2xl transition-all hover:-translate-y-1 hover:border-[var(--theme-accent)]/40 hover:bg-white/10 hover:shadow-[0_22px_52px_rgba(0,0,0,0.44),0_0_34px_var(--theme-accent-glow)] active:scale-[0.90] ${
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
           }`}
+          style={{
+            borderColor: isWorldCupMode ? 'var(--wc-gold)' : 'rgba(255,255,255,.15)',
+            boxShadow: isWorldCupMode
+              ? '0 18px 45px rgba(0,0,0,.38), 0 0 34px var(--wc-gold-glow), inset 0 0 0 1px var(--wc-gold)'
+              : undefined,
+          }}
           aria-label="פתיחת תפריט מהיר"
           title="תפריט מהיר"
         >

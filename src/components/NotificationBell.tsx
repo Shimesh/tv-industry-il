@@ -17,6 +17,7 @@ import {
   Upload,
   UserCheck,
   Users,
+  Trophy,
 } from 'lucide-react';
 
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -29,6 +30,8 @@ const typeIcons: Record<string, typeof Bell> = {
   general: Info,
   bug_report: Bug,
   user_pending_approval: UserCheck,
+  world_cup_goal_alert: Trophy,
+  world_cup_match_start: Trophy,
 };
 
 const typeColors: Record<string, string> = {
@@ -39,6 +42,8 @@ const typeColors: Record<string, string> = {
   general: 'var(--theme-text-secondary)',
   bug_report: '#f59e0b',
   user_pending_approval: '#f59e0b',
+  world_cup_goal_alert: '#D4AF37',
+  world_cup_match_start: '#138a36',
 };
 
 function formatNotificationDate(value: number) {

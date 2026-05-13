@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Radio,
   Settings,
+  Trophy,
   UserRound,
   UserRoundCog,
   Wrench,
@@ -26,6 +27,7 @@ const mainLinks = [
   { href: '/board', label: 'לוח מודעות', icon: Megaphone, accent: '#38bdf8' },
   { href: '/chat', label: "צ'אט", icon: MessageCircle, accent: '#ec4899' },
   { href: '/toolbox', label: 'כלים', icon: Wrench, accent: '#14b8a6' },
+  { href: '/world-cup', label: 'מונדיאל', icon: Trophy, accent: '#D4AF37' },
 ] as const;
 
 const bottomLinks = [

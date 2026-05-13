@@ -53,6 +53,7 @@ type PageViewPanelState = {
 };
 
 const NOTIFICATION_LINK_OPTIONS = [
+  { label: 'מונדיאל 2026', value: '/world-cup' },
   { label: 'שידור חי', value: '/schedule#live' },
   { label: 'לוח שידורים', value: '/schedule' },
   { label: 'יומן הפקות', value: '/productions' },
@@ -64,6 +65,8 @@ const NOTIFICATION_LINK_OPTIONS = [
   { label: 'הגדרות', value: '/settings' },
   { label: 'ללא קישור', value: '' },
 ];
+
+const APP_VERSION = '2.1.0';
 
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
@@ -863,6 +866,9 @@ export default function AdminPage() {
               <ShieldCheck className="h-7 w-7 text-yellow-400" />
               <h1 className="text-3xl font-bold">לוח ניהול</h1>
               <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-xs font-bold text-yellow-300" dir="ltr">
+                v{APP_VERSION}
+              </span>
             </div>
             <p className="text-sm text-gray-400">
               מקור אמת שרתי • עודכן {formatRelativeTime(overview.generatedAt)}

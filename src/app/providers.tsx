@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { WorldCupProvider } from '@/contexts/WorldCupContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppConfigProvider } from '@/contexts/AppConfigContext';
 import { AppDataProvider } from '@/contexts/AppDataContext';
@@ -106,6 +107,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!mounted) {
     return (
       <ThemeProvider>
+        <WorldCupProvider>
         <AuthProvider>
           <AppConfigProvider>
             <AppDataProvider>
@@ -115,12 +117,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
             </AppDataProvider>
           </AppConfigProvider>
         </AuthProvider>
+        </WorldCupProvider>
       </ThemeProvider>
     );
   }
 
   return (
     <ThemeProvider>
+      <WorldCupProvider>
       <AuthProvider>
         <AppConfigProvider>
           {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally */}
@@ -148,6 +152,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           </AppDataProvider>
         </AppConfigProvider>
       </AuthProvider>
+      </WorldCupProvider>
     </ThemeProvider>
   );
 }

@@ -23,6 +23,7 @@ type SendFcmPushParams = {
   title: string;
   body: string;
   linkUrl?: string;
+  type?: string;
 };
 
 function uniqueStrings(values: unknown[]): string[] {
@@ -61,6 +62,7 @@ export async function sendFcmPush(params: SendFcmPushParams) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
   const linkUrl = cleanInternalLink(params.linkUrl) || '/';
   const link = `${appUrl}${linkUrl}`;
+  const tag = params.type?.startsWith('world_cup_') ? params.type : 'tv-industry-push';
 
   const chunkSize = 500;
   for (let i = 0; i < tokens.length; i += chunkSize) {
@@ -72,6 +74,7 @@ export async function sendFcmPush(params: SendFcmPushParams) {
         body: params.body,
         link,
         linkUrl,
+        type: params.type || 'general',
       },
       webpush: {
         headers: { Urgency: 'high' },
@@ -81,9 +84,9 @@ export async function sendFcmPush(params: SendFcmPushParams) {
           body: params.body,
           icon: '/icons/icon-192x192.png',
           badge: '/icons/icon-72x72.png',
-          tag: 'tv-industry-pending-user',
+          tag,
           renotify: true,
-          data: { link },
+          data: { link, type: params.type || 'general' },
         },
       },
     });

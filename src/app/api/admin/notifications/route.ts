@@ -25,6 +25,11 @@ function cleanInternalLink(value: unknown): string | undefined {
   return trimmed.slice(0, 300);
 }
 
+function cleanNotificationType(value: unknown): string {
+  if (value === 'world_cup_goal_alert' || value === 'world_cup_match_start') return value;
+  return 'general';
+}
+
 export async function POST(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
   if (authUser instanceof NextResponse) {
@@ -42,6 +47,7 @@ export async function POST(request: NextRequest) {
     const targetUserId = cleanText(body.targetUserId, 160);
     const linkUrl = cleanInternalLink(body.linkUrl);
     const sendPush = body.sendPush === true;
+    const notificationType = cleanNotificationType(body.type);
 
     if (!title || !message) {
       return NextResponse.json({ error: 'Missing notification title or message' }, { status: 400 });
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest) {
           title,
           message,
           linkUrl,
-          type: 'general',
+          type: notificationType,
           source: 'admin',
           createdBy: authUser.uid,
         }),
@@ -103,7 +109,7 @@ export async function POST(request: NextRequest) {
     );
 
     if (sendPush && fcmTokens.length > 0) {
-      await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl });
+      await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl, type: notificationType });
     }
 
     await recordRouteMetric({ route: '/api/admin/notifications', ok: true, statusCode: 200 });

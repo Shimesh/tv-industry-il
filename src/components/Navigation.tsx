@@ -7,8 +7,10 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
+import { useWorldCup } from '@/contexts/WorldCupContext';
 import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
+import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
 import {
   Tv,
   Users,
@@ -28,6 +30,7 @@ import {
   Clapperboard,
   Shield,
   UsersRound,
+  Trophy,
 } from 'lucide-react';
 import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
@@ -41,6 +44,7 @@ const navLinks = [
   { href: '/news', label: 'חדשות', icon: Newspaper },
   { href: '/tools', label: 'כלים', icon: Wrench },
   { href: '/admin', label: 'ניהול', icon: Shield, auth: true, adminOnly: true },
+  { href: '/world-cup', label: 'מונדיאל', icon: Trophy },
 ];
 
 function emitNavigationStart() {
@@ -53,6 +57,7 @@ export default function Navigation() {
   const router = useRouter();
   const { user, profile, loading } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { isWorldCupMode } = useWorldCup();
   const totalUnread = useGlobalUnread();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -141,7 +146,8 @@ export default function Navigation() {
       className="fixed right-0 left-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell"
       style={{
         background: 'var(--theme-nav-bg)',
-        borderColor: 'var(--theme-border)',
+        borderColor: isWorldCupMode ? 'var(--wc-gold)' : 'var(--theme-border)',
+        boxShadow: isWorldCupMode ? '0 0 34px var(--wc-gold-glow), inset 0 -1px 0 var(--wc-gold)' : undefined,
         minHeight: 'var(--app-header-offset)',
         paddingTop: 'var(--safe-area-top)',
       }}
@@ -212,6 +218,7 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center gap-2">
+            <WorldCupCountdown compact />
             {user && <NotificationBell />}
 
             <div className="relative hidden md:block" ref={themeMenuRef}>
