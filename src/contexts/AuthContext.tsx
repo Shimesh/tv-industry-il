@@ -22,6 +22,7 @@ export interface UserProfile {
   displayName: string;
   email: string;
   photoURL: string | null;
+  customPhotoURL?: string | null;
   department: string;
   departments: string[];
   role: string;
@@ -177,9 +178,12 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     email: typeof raw.email === 'string' && raw.email.trim()
       ? raw.email
       : firebaseUser.email || fallback.email,
-    photoURL: typeof raw.photoURL === 'string'
-      ? raw.photoURL
-      : firebaseUser.photoURL || null,
+    customPhotoURL: typeof raw.customPhotoURL === 'string' ? raw.customPhotoURL : null,
+    photoURL: typeof raw.customPhotoURL === 'string'
+      ? raw.customPhotoURL
+      : typeof raw.photoURL === 'string'
+        ? raw.photoURL
+        : firebaseUser.photoURL || null,
     department: professional.department,
     departments: professional.departments,
     role: professional.role,

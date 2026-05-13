@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { Contact } from '@/data/contacts';
 import type { ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
+import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 
 type Props = {
   contact: Contact;
@@ -77,6 +78,10 @@ function initials(contact: Contact): string {
   const first = contact.firstName?.trim()?.[0] || '';
   const last = contact.lastName?.trim()?.[0] || '';
   return `${first}${last}` || fullName(contact)[0] || 'TV';
+}
+
+function diceBearAvatarUrl(seed: string): string {
+  return `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0f172a,1e40af,facc15&shapeColor=38bdf8,facc15,2563eb`;
 }
 
 function formatWhatsApp(phone?: string): string {
@@ -153,7 +158,10 @@ export default function ProCardModal({
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
   const shareCardRef = useRef<HTMLDivElement>(null);
   const name = fullName(contact);
-  const avatarUrl = typeof contact.photoURL === 'string' ? contact.photoURL : '';
+  const avatarUrl = typeof contact.customPhotoURL === 'string' && contact.customPhotoURL
+    ? contact.customPhotoURL
+    : typeof contact.photoURL === 'string' ? contact.photoURL : '';
+  const fallbackAvatarUrl = diceBearAvatarUrl(`${contact.id || name}-${name}`);
   const gradientClass = deptColors[primaryDepartment] || 'from-blue-500 to-cyan-500';
   const groupedCredits = useMemo(() => groupCredits(history.productionCredits), [history.productionCredits]);
   const verified = isCurrentUser || contact.source === 'user-profile' || Boolean(contact.profileId);
@@ -276,13 +284,18 @@ export default function ProCardModal({
                   <div className="relative">
                     <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-amber-300 via-sky-400 to-blue-700 opacity-80 blur-md" />
                     <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-2 border-amber-200/70 bg-slate-800 text-4xl font-black text-white shadow-2xl sm:h-32 sm:w-32">
-                      {avatarUrl ? (
-                        <img src={avatarUrl} alt={name} className="h-full w-full object-cover" crossOrigin="anonymous" />
-                      ) : (
-                        <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientClass}`}>
-                          {initials(contact)}
-                        </div>
-                      )}
+                      <img
+                        src={avatarUrl || fallbackAvatarUrl}
+                        alt={name}
+                        className={`h-full w-full object-cover ${avatarUrl ? '' : 'animate-[pulse_4s_ease-in-out_infinite]'}`}
+                        crossOrigin="anonymous"
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className={`absolute inset-0 -z-10 flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientClass}`}>
+                        {initials(contact)}
+                      </div>
                     </div>
                     {verified && (
                       <div className="absolute bottom-1 right-1 rounded-full border-2 border-slate-950 bg-sky-400 p-1 text-white">
@@ -290,6 +303,13 @@ export default function ProCardModal({
                       </div>
                     )}
                   </div>
+                  {isCurrentUser && (
+                    <ProfilePhotoUploadButton
+                      className="absolute -bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-slate-950/90 px-3 py-1 text-[11px] font-bold text-white/85 shadow-lg backdrop-blur transition hover:bg-white/15"
+                    >
+                      החלף תמונה
+                    </ProfilePhotoUploadButton>
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1 text-center sm:text-right">

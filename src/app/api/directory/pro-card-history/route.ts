@@ -3,7 +3,7 @@ import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
 import type { ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
-import { listDocuments } from '@/lib/server/firestoreAdminRest';
+import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
 
@@ -27,6 +27,7 @@ type RawPost = {
   authorName?: string;
   createdAt?: string | number;
 };
+type FlexibleHistoryDoc = Record<string, unknown> & { id?: string };
 
 function cleanString(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -42,6 +43,85 @@ function asDateValue(value: unknown): string {
   if (typeof value === 'string' && value) return value.slice(0, 10);
   if (typeof value === 'number') return new Date(value).toISOString().slice(0, 10);
   return new Date().toISOString().slice(0, 10);
+}
+
+function stringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => cleanString(item)).filter(Boolean);
+  const single = cleanString(value);
+  return single ? [single] : [];
+}
+
+function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: Set<string>): boolean {
+  const uidCandidates = [
+    doc.uid,
+    doc.userId,
+    doc.authorId,
+    doc.ownerId,
+    doc.profileUid,
+    doc.createdBy,
+    doc.assignedUid,
+    ...stringArray(doc.uids),
+    ...stringArray(doc.userIds),
+    ...stringArray(doc.participantUids),
+    ...stringArray(doc.assignedUids),
+  ].map(cleanString).filter(Boolean);
+
+  if (uidCandidates.some((uid) => userIds.has(uid))) return true;
+
+  const emailCandidates = [
+    doc.email,
+    doc.userEmail,
+    doc.authorEmail,
+    doc.ownerEmail,
+    doc.profileEmail,
+    ...stringArray(doc.emails),
+    ...stringArray(doc.userEmails),
+    ...stringArray(doc.participantEmails),
+    ...stringArray(doc.assignedEmails),
+  ].map((value) => cleanString(value).toLocaleLowerCase()).filter(Boolean);
+
+  if (emailCandidates.some((email) => emails.has(email))) return true;
+
+  const crew = Array.isArray(doc.crew) ? doc.crew : Array.isArray(doc.crew_list) ? doc.crew_list : [];
+  return crew.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const record = entry as Record<string, unknown>;
+    const uid = cleanString(record.uid || record.userId || record.profileUid);
+    const email = cleanString(record.email || record.userEmail).toLocaleLowerCase();
+    return Boolean((uid && userIds.has(uid)) || (email && emails.has(email)));
+  });
+}
+
+function roleFromFlexibleDoc(doc: FlexibleHistoryDoc): string {
+  return cleanString(doc.role || doc.profession || doc.roleDetail || doc.position || doc.category) || 'קרדיט';
+}
+
+function titleFromFlexibleDoc(doc: FlexibleHistoryDoc): string {
+  return cleanString(doc.productionName || doc.title || doc.name || doc.eventTitle || doc.projectName) || 'הפקה';
+}
+
+function dateFromFlexibleDoc(doc: FlexibleHistoryDoc): string {
+  return asDateValue(doc.date || doc.startDate || doc.startAt || doc.eventDate || doc.createdAt);
+}
+
+function creditFromFlexibleDoc(doc: FlexibleHistoryDoc, source: 'calendar' | 'work-boards'): ProCardProductionCredit {
+  const productionName = titleFromFlexibleDoc(doc);
+  const date = dateFromFlexibleDoc(doc);
+  const channelId = cleanString(doc.channelId) || inferChannelIdFromTitle(productionName, cleanString(doc.channel || doc.network || doc.studio));
+  const isMajor = doc.isMajor === true || doc.majorProduction === true || isMajorProductionTitle(productionName);
+
+  return {
+    id: `${source}-${cleanString(doc.id) || productionName}-${date}`,
+    productionName,
+    date,
+    year: date.slice(0, 4),
+    studio: cleanString(doc.studio || doc.location || doc.channel || doc.network),
+    role: roleFromFlexibleDoc(doc),
+    channelId: channelId || null,
+    channelName: cleanString(doc.channelName || doc.channel || doc.network) || getChannelName(channelId || null),
+    isMajor,
+    media: resolveProCardMedia(productionName, channelId || null),
+  };
 }
 
 function matchingCrewEntry(
@@ -60,7 +140,7 @@ function dedupeCredits(credits: ProCardProductionCredit[]): ProCardProductionCre
   const seen = new Set<string>();
   const result: ProCardProductionCredit[] = [];
   for (const credit of credits) {
-    const key = `${credit.id}:${credit.role}`;
+    const key = `${credit.productionName}:${credit.date}:${credit.role}:${credit.channelName}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(credit);
@@ -95,7 +175,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const snapshot = await loadContactsSnapshot();
-    const contact = snapshot.contacts.find((entry) => String(entry.id || '') === contactId);
+    const userDoc = await getDocument<RawUser & { email?: string; phone?: string; photoURL?: string | null; customPhotoURL?: string | null }>(`users/${authUser.uid}`).catch(() => null);
+    const contact = snapshot.contacts.find((entry) => String(entry.id || '') === contactId)
+      || (contactId === authUser.uid && userDoc ? {
+        id: authUser.uid,
+        firstName: cleanString(userDoc.displayName || authUser.displayName).split(/\s+/)[0] || '',
+        lastName: cleanString(userDoc.displayName || authUser.displayName).split(/\s+/).slice(1).join(' '),
+        email: cleanString(userDoc.email || authUser.email),
+        phone: cleanString(userDoc.phone),
+        photoURL: cleanString(userDoc.photoURL || authUser.photoURL || ''),
+        customPhotoURL: cleanString(userDoc.customPhotoURL || ''),
+      } : null);
     if (!contact || contact.hiddenFromDirectory === true) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
     }
@@ -104,10 +194,23 @@ export async function GET(request: NextRequest) {
     const normalizedContactName = normalizeName(fullName);
     const contactPhone = normalizePhone(cleanString(contact.normalizedPhone) || cleanString(contact.phone));
     const linkedUserIds = await loadLinkedUserIds(contact, normalizedContactName);
+    linkedUserIds.add(authUser.uid);
+    const userEmails = new Set<string>(
+      [
+        cleanString(contact.email),
+        cleanString(userDoc?.email),
+        cleanString(authUser.email),
+      ].map((email) => email.toLocaleLowerCase()).filter(Boolean),
+    );
 
-    const globalProductions = await listDocuments<GlobalProductionDoc>('global_productions').catch(() => []);
+    const [globalProductions, calendarDocs, workBoardDocs] = await Promise.all([
+      listDocuments<GlobalProductionDoc>('global_productions').catch(() => []),
+      listDocuments<FlexibleHistoryDoc>('calendar').catch(() => []),
+      listDocuments<FlexibleHistoryDoc>('work-boards').catch(() => []),
+    ]);
     const productionCredits = dedupeCredits(
-      globalProductions.flatMap((production): ProCardProductionCredit[] => {
+      [
+        ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
         const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, normalizedContactName);
         if (!crewEntry) return [];
 
@@ -131,7 +234,14 @@ export async function GET(request: NextRequest) {
           isMajor,
           media: resolveProCardMedia(production.name || '', channelId),
         }];
-      }),
+        }),
+        ...calendarDocs
+          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails))
+          .map((doc) => creditFromFlexibleDoc(doc, 'calendar')),
+        ...workBoardDocs
+          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails))
+          .map((doc) => creditFromFlexibleDoc(doc, 'work-boards')),
+      ],
     ).sort((a, b) => b.date.localeCompare(a.date));
 
     const posts = await listDocuments<RawPost>('posts').catch(() => []);

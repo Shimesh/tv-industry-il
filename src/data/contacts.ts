@@ -6,6 +6,8 @@ export interface Contact {
   firstName?: string;
   lastName?: string;
   email?: string;
+  photoURL?: string;
+  customPhotoURL?: string;
   is_consented?: boolean;
   hiddenFromDirectory?: boolean;
   removedAt?: string;

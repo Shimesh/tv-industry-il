@@ -51,7 +51,7 @@ export default function ProfilePhotoUploadButton({
       const storageRef = ref(storage, `avatars/${profile.uid}/${Date.now()}_${safeFileName(file.name)}`);
       await uploadBytes(storageRef, file, { contentType: file.type });
       const photoURL = await getDownloadURL(storageRef);
-      await updateUserProfile({ photoURL });
+      await updateUserProfile({ photoURL, customPhotoURL: photoURL });
       await refreshUserProfile();
       onSuccess?.();
     } catch {

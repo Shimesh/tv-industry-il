@@ -19,6 +19,7 @@ export type SessionProfile = {
   displayName: string;
   email: string;
   photoURL: string | null;
+  customPhotoURL?: string | null;
   department: string;
   departments: string[];
   role: string;
@@ -174,6 +175,7 @@ export async function finalizeUserOnboardingProfile(
       displayName,
       email,
       photoURL: authUser.photoURL || null,
+      customPhotoURL: null,
       department: professional.department,
       departments: professional.departments,
       role: professional.role,
@@ -248,6 +250,7 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     displayName: authUser.displayName || 'משתמש חדש',
     email: authUser.email || '',
     photoURL: authUser.photoURL || null,
+    customPhotoURL: null,
     department: '',
     departments: [],
     role: '',
@@ -290,7 +293,12 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
       ? authUser.displayName || fallback.displayName
       : asString(raw.displayName, fallback.displayName),
     email: asString(raw.email, authUser.email || fallback.email),
-    photoURL: typeof raw.photoURL === 'string' ? raw.photoURL : authUser.photoURL || null,
+    customPhotoURL: typeof raw.customPhotoURL === 'string' ? raw.customPhotoURL : null,
+    photoURL: typeof raw.customPhotoURL === 'string'
+      ? raw.customPhotoURL
+      : typeof raw.photoURL === 'string'
+        ? raw.photoURL
+        : authUser.photoURL || null,
     department: professional.department,
     departments: professional.departments,
     role: professional.role,

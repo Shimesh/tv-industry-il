@@ -18,6 +18,8 @@ type ContactRecord = {
   status?: string;
   isOnline?: boolean;
   is_consented?: boolean;
+  photoURL?: string | null;
+  customPhotoURL?: string | null;
 };
 
 function mapStatusToAvailability(status: unknown): 'available' | 'unavailable' {
@@ -86,6 +88,16 @@ async function syncLinkedContactFields(userUid: string, patch: Record<string, un
 
   if ('isOnline' in patch) {
     contactPatch.isOnline = patch.isOnline === true;
+  }
+
+  const nextPhoto = typeof patch.customPhotoURL === 'string'
+    ? patch.customPhotoURL
+    : typeof patch.photoURL === 'string'
+      ? patch.photoURL
+      : null;
+  if (nextPhoto) {
+    contactPatch.photoURL = nextPhoto;
+    contactPatch.customPhotoURL = nextPhoto;
   }
 
   if ('departments' in patch || 'roles' in patch || 'department' in patch || 'role' in patch) {
@@ -165,6 +177,7 @@ export async function PATCH(request: NextRequest) {
       'soundEnabled',
       'showPhone',
       'photoURL',
+      'customPhotoURL',
       'linkedContactId',
       'onboardingComplete',
       'crewName',

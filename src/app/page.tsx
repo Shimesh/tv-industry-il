@@ -16,6 +16,7 @@ import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
 import HomeInfoWidget from '@/components/home/HomeInfoWidget';
+import PersonalProCardWidget from '@/components/home/PersonalProCardWidget';
 import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBroadcasts } from '@/hooks/useBroadcasts';
@@ -103,6 +104,7 @@ export default function HomePage() {
               </p>
             </div>
             <div className="flex w-full flex-col gap-3 lg:max-w-sm">
+              <PersonalProCardWidget />
               <WorldCupCountdown />
               <HomeInfoWidget />
             </div>

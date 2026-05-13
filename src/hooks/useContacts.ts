@@ -86,7 +86,10 @@ export function useContacts(): ContactsHookResult {
             firstName: String(contact.firstName || ''),
             lastName: String(contact.lastName || ''),
             email: typeof contact.email === 'string' ? contact.email : undefined,
-            photoURL: typeof contact.photoURL === 'string' ? contact.photoURL : undefined,
+            customPhotoURL: typeof contact.customPhotoURL === 'string' ? contact.customPhotoURL : undefined,
+            photoURL: typeof contact.customPhotoURL === 'string'
+              ? contact.customPhotoURL
+              : typeof contact.photoURL === 'string' ? contact.photoURL : undefined,
             is_consented: contact.is_consented === true,
             department: professional.department,
             departments: professional.departments,
