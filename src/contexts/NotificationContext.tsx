@@ -20,7 +20,7 @@ type ProductionReminderData = {
 
 export interface AppNotification {
   id: string;
-  type: 'production_reminder' | 'crew_assignment' | 'status_change' | 'file_upload' | 'general' | 'job_match' | 'availability_reminder' | 'new_message' | 'event_reminder' | 'team_invite' | 'team_schedule_update' | 'team_member_joined' | 'team_member_left' | 'team_role_changed' | 'bug_report';
+  type: 'production_reminder' | 'crew_assignment' | 'status_change' | 'file_upload' | 'general' | 'job_match' | 'availability_reminder' | 'new_message' | 'event_reminder' | 'team_invite' | 'team_schedule_update' | 'team_member_joined' | 'team_member_left' | 'team_role_changed' | 'bug_report' | 'user_pending_approval';
   title: string;
   message: string;
   productionId?: string;

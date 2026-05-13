@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
-import { createDocument, getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
-import { getFirebaseAdminMessaging } from '@/lib/server/firebaseAdmin';
+import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
+import { createUserNotification, sendFcmPush } from '@/lib/server/notifications';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
@@ -23,62 +23,6 @@ function cleanInternalLink(value: unknown): string | undefined {
   if (!trimmed) return undefined;
   if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return undefined;
   return trimmed.slice(0, 300);
-}
-
-async function createUserNotification(params: {
-  userId: string;
-  title: string;
-  message: string;
-  linkUrl?: string;
-  createdBy: string;
-}) {
-  await createDocument('notifications', {
-    userId: params.userId,
-    recipientUid: params.userId,
-    type: 'general',
-    title: params.title,
-    message: params.message,
-    linkUrl: params.linkUrl || null,
-    source: 'admin',
-    createdBy: params.createdBy,
-    read: false,
-    createdAt: Date.now(),
-  });
-}
-
-async function sendFcmPush(params: {
-  tokens: string[];
-  title: string;
-  body: string;
-  linkUrl?: string;
-}) {
-  const { tokens, title, body, linkUrl } = params;
-  if (tokens.length === 0) return;
-
-  const messaging = getFirebaseAdminMessaging();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
-  const link = `${appUrl}${linkUrl ?? '/'}`;
-
-  // FCM sendEachForMulticast limit is 500 tokens per call
-  const chunkSize = 500;
-  for (let i = 0; i < tokens.length; i += chunkSize) {
-    await messaging.sendEachForMulticast({
-      tokens: tokens.slice(i, i + chunkSize),
-      notification: { title, body },
-      webpush: {
-        headers: { Urgency: 'high' },
-        fcmOptions: { link },
-        notification: {
-          title,
-          body,
-          icon: '/icons/icon-192x192.png',
-          badge: '/icons/badge-72x72.png',
-          tag: 'tv-industry-push',
-          renotify: true,
-        },
-      },
-    });
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -151,6 +95,8 @@ export async function POST(request: NextRequest) {
           title,
           message,
           linkUrl,
+          type: 'general',
+          source: 'admin',
           createdBy: authUser.uid,
         }),
       ),

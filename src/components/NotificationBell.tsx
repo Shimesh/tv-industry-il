@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  UserCheck,
   Users,
 } from 'lucide-react';
 
@@ -27,6 +28,7 @@ const typeIcons: Record<string, typeof Bell> = {
   status_change: RefreshCw,
   general: Info,
   bug_report: Bug,
+  user_pending_approval: UserCheck,
 };
 
 const typeColors: Record<string, string> = {
@@ -36,6 +38,7 @@ const typeColors: Record<string, string> = {
   status_change: '#a855f7',
   general: 'var(--theme-text-secondary)',
   bug_report: '#f59e0b',
+  user_pending_approval: '#f59e0b',
 };
 
 function formatNotificationDate(value: number) {

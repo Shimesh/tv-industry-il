@@ -30,6 +30,7 @@ type ManagedUser = {
   lastSeen: string | null;
   createdAt: string | null;
   isPrimaryAdmin: boolean;
+  hasDisplayName?: boolean;
 };
 
 type ConfirmAction =
@@ -58,6 +59,7 @@ function formatRelative(value: string | null): string {
 
 export default function AdminUsersPage() {
   const { user, loading: authLoading } = useAuth();
+  const [focusedUid, setFocusedUid] = useState('');
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUid, setBusyUid] = useState<string | null>(null);
@@ -129,6 +131,17 @@ export default function AdminUsersPage() {
       return matchesStatus && matchesSearch;
     });
   }, [search, statusFilter, users]);
+
+  useEffect(() => {
+    const uid = new URLSearchParams(window.location.search).get('uid') || '';
+    if (uid) setFocusedUid(uid);
+  }, []);
+
+  useEffect(() => {
+    if (!focusedUid || loading) return;
+    const target = document.getElementById(`managed-user-${focusedUid}`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusedUid, loading, filteredUsers.length]);
 
   async function updateApprovalStatus(target: ManagedUser, approvalStatus: 'active' | 'blocked') {
     setBusyUid(target.uid);
@@ -228,7 +241,13 @@ export default function AdminUsersPage() {
             {pendingUsers.length === 0 ? (
               <p className="p-5 text-sm text-gray-400">אין כרגע בקשות שממתינות לאישור.</p>
             ) : pendingUsers.map((entry) => (
-              <div key={entry.uid} className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+              <div
+                key={entry.uid}
+                id={entry.approvalStatus === 'pending' ? `managed-user-${entry.uid}` : undefined}
+                className={`flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between ${
+                  focusedUid === entry.uid ? 'bg-amber-500/10 ring-1 ring-amber-300/40' : ''
+                }`}
+              >
                 <UserIdentity user={entry} />
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -300,7 +319,13 @@ export default function AdminUsersPage() {
               </thead>
               <tbody className="divide-y divide-gray-800/70">
                 {filteredUsers.map((entry) => (
-                  <tr key={entry.uid} className="align-middle hover:bg-gray-800/30">
+                  <tr
+                    key={entry.uid}
+                    id={entry.approvalStatus === 'pending' ? undefined : `managed-user-${entry.uid}`}
+                    className={`align-middle hover:bg-gray-800/30 ${
+                      focusedUid === entry.uid ? 'bg-amber-500/10 ring-1 ring-inset ring-amber-300/40' : ''
+                    }`}
+                  >
                     <td className="px-5 py-4">
                       <UserIdentity user={entry} compact />
                     </td>
@@ -414,6 +439,10 @@ export default function AdminUsersPage() {
 }
 
 function UserIdentity({ user, compact = false }: { user: ManagedUser; compact?: boolean }) {
+  const label = user.displayName || user.email || user.uid;
+  const initial = label.charAt(0) || '?';
+  const showEmailLine = Boolean(user.email && (user.hasDisplayName || user.displayName !== user.email));
+
   return (
     <div className="flex min-w-0 items-center gap-3">
       {user.photoURL ? (
@@ -421,18 +450,21 @@ function UserIdentity({ user, compact = false }: { user: ManagedUser; compact?: 
         <img src={user.photoURL} alt="" className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} rounded-full object-cover`} />
       ) : (
         <div className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} flex shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-bold`}>
-          {user.displayName.charAt(0) || '?'}
+          {initial}
         </div>
       )}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className="truncate font-semibold text-white">{user.displayName}</p>
+          <p className="truncate font-semibold text-white" dir={user.hasDisplayName ? 'rtl' : 'ltr'}>{label}</p>
           {user.isPrimaryAdmin ? (
             <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-200">
               מנהל ראשי
             </span>
           ) : null}
         </div>
+        {showEmailLine ? (
+          <p className="truncate text-xs font-medium text-gray-300" dir="ltr">{user.email}</p>
+        ) : null}
         <p className="truncate text-xs text-gray-500" dir="ltr">{user.uid}</p>
       </div>
     </div>

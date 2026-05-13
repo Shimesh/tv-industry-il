@@ -392,7 +392,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, name: string, department: string, role: string) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
-    setProfile({
+
+    const token = await result.user.getIdToken();
+    const response = await fetch('/api/me/onboarding', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: name,
+        department,
+        role,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({})) as { profile?: UserProfile; error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to finalize onboarding');
+    }
+
+    setProfile(payload.profile || {
       ...defaultProfile(result.user),
       displayName: name,
       email,
@@ -401,8 +421,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       roles: role ? [role] : [],
     });
-    setProfileReady(false);
-    setProfileSource('fallback');
+    setProfileReady(Boolean(payload.profile));
+    setProfileSource(payload.profile ? 'server' : 'fallback');
   };
 
   const signInWithGoogle = async () => {

@@ -3,9 +3,16 @@ import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestor
 import { isPrimaryAdminUid } from '@/lib/server/primaryAdmin';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
+import { notifyAdminsOfPendingUser } from '@/lib/server/notifications';
 
 type RawUserProfile = Record<string, unknown>;
 type RawContact = Record<string, unknown>;
+
+export type OnboardingProfileInput = {
+  displayName?: string;
+  department?: string;
+  role?: string;
+};
 
 export type SessionProfile = {
   uid: string;
@@ -59,6 +66,18 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function cleanString(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function normalizeEmail(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function emailPrefix(email: string): string {
+  return email.split('@')[0]?.trim() || '';
+}
+
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -72,6 +91,148 @@ function isBrokenOrEmptyName(value: unknown): boolean {
 
 function asStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.map((entry) => String(entry)) : undefined;
+}
+
+function contactDisplayName(contact: RawContact | null): string {
+  if (!contact) return '';
+  const explicit = cleanString(contact.displayName || contact.name || contact.fullName || contact.crewName);
+  if (explicit) return explicit;
+  return `${cleanString(contact.firstName)} ${cleanString(contact.lastName)}`.trim();
+}
+
+async function findContactByEmail(email: string): Promise<RawContact | null> {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const contacts = await listDocuments<RawContact>('contacts').catch(() => []);
+  return contacts.find((contact) => {
+    const candidates = [
+      contact.email,
+      contact.normalizedEmail,
+      contact.emailAddress,
+      contact.mail,
+    ].map(normalizeEmail);
+    return candidates.includes(normalizedEmail);
+  }) || null;
+}
+
+function firstNonEmpty(...values: unknown[]): string {
+  for (const value of values) {
+    const cleaned = cleanString(value);
+    if (cleaned) return cleaned;
+  }
+  return '';
+}
+
+function missingProfessionalFields(raw: RawUserProfile | null): boolean {
+  const professional = normalizeProfessionalFields(raw || {});
+  return !professional.department && professional.departments.length === 0 && !professional.role && professional.roles.length === 0;
+}
+
+export async function finalizeUserOnboardingProfile(
+  authUser: VerifiedAuthUser,
+  input: OnboardingProfileInput = {},
+): Promise<{ profile: SessionProfile; created: boolean; linkedContactId: string | number | null }> {
+  const existing = await getDocument<RawUserProfile>(`users/${authUser.uid}`);
+  const created = !existing;
+  const now = new Date().toISOString();
+  const email = normalizeEmail(authUser.email);
+  const matchedContact = email ? await findContactByEmail(email) : null;
+  const contactName = contactDisplayName(matchedContact);
+  const requestedDisplayName = firstNonEmpty(input.displayName, authUser.displayName);
+  const displayName = firstNonEmpty(
+    requestedDisplayName,
+    contactName,
+    emailPrefix(email),
+    'משתמש חדש',
+  );
+  const requestedProfessional = normalizeProfessionalFields({
+    department: input.department,
+    role: input.role,
+  });
+  const contactProfessional = normalizeProfessionalFields(matchedContact || {});
+  const professional = requestedProfessional.department || requestedProfessional.role
+    ? requestedProfessional
+    : contactProfessional;
+  const linkedContactId = matchedContact?.id
+    ? String(matchedContact.id)
+    : typeof existing?.linkedContactId === 'string' && existing.linkedContactId.trim()
+      ? existing.linkedContactId.trim()
+      : typeof existing?.linkedContactId === 'number'
+        ? existing.linkedContactId
+        : null;
+
+  const patch: Record<string, string | boolean | number | null | string[]> = {
+    updatedAt: now,
+    lastSeen: now,
+    isOnline: true,
+  };
+
+  if (created) {
+    Object.assign(patch, {
+      uid: authUser.uid,
+      displayName,
+      email,
+      photoURL: authUser.photoURL || null,
+      department: professional.department,
+      departments: professional.departments,
+      role: professional.role,
+      roles: professional.roles,
+      phone: authUser.phoneNumber || '',
+      is_consented: false,
+      skills: [],
+      bio: '',
+      status: 'available',
+      approvalStatus: isPrimaryAdminUid(authUser.uid) ? 'active' : 'pending',
+      isOnline: true,
+      onboardingComplete: false,
+      theme: 'dark',
+      createdAt: now,
+    });
+  } else {
+    if (!cleanString(existing.email) && email) patch.email = email;
+    if (isBrokenOrEmptyName(existing.displayName)) patch.displayName = displayName;
+    if (!cleanString(existing.photoURL) && authUser.photoURL) patch.photoURL = authUser.photoURL;
+    if (!cleanString(existing.phone) && authUser.phoneNumber) patch.phone = authUser.phoneNumber;
+    if (!existing.approvalStatus) patch.approvalStatus = isPrimaryAdminUid(authUser.uid) ? 'active' : 'pending';
+    if (typeof existing.is_consented !== 'boolean') patch.is_consented = false;
+    if (!existing.createdAt) patch.createdAt = now;
+    if (missingProfessionalFields(existing) && (professional.department || professional.role)) {
+      patch.department = professional.department;
+      patch.departments = professional.departments;
+      patch.role = professional.role;
+      patch.roles = professional.roles;
+    }
+  }
+
+  if (linkedContactId !== null && !existing?.linkedContactId) {
+    patch.linkedContactId = linkedContactId;
+    if (created && contactName && !requestedDisplayName) {
+      patch.displayName = contactName;
+    }
+    if (missingProfessionalFields(created ? patch : existing) && (contactProfessional.department || contactProfessional.role)) {
+      patch.department = contactProfessional.department;
+      patch.departments = contactProfessional.departments;
+      patch.role = contactProfessional.role;
+      patch.roles = contactProfessional.roles;
+    }
+  }
+
+  await patchDocument(`users/${authUser.uid}`, patch);
+
+  if (created && patch.approvalStatus === 'pending') {
+    await notifyAdminsOfPendingUser({
+      uid: authUser.uid,
+      displayLabel: firstNonEmpty(patch.displayName, email, authUser.uid),
+    });
+  }
+
+  const fresh = await getDocument<RawUserProfile>(`users/${authUser.uid}`);
+  return {
+    profile: normalizeProfile(fresh || { ...existing, ...patch }, authUser),
+    created,
+    linkedContactId,
+  };
 }
 
 function parseAllowlist(): string[] {
@@ -169,6 +330,10 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
   repaired: boolean;
 }> {
   const existing = await getDocument<RawUserProfile>(`users/${authUser.uid}`);
+  if (!existing) {
+    const { profile } = await finalizeUserOnboardingProfile(authUser);
+    return { profile, repaired: true };
+  }
   let profile = normalizeProfile(existing, authUser);
   let repaired = false;
 
@@ -177,12 +342,7 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
     lastSeen: new Date().toISOString(),
   };
 
-  if (!existing) {
-    Object.assign(patch, buildDefaultSessionProfile(authUser), {
-      createdAt: new Date().toISOString(),
-    });
-    repaired = true;
-  } else if (!existing.approvalStatus) {
+  if (!existing.approvalStatus) {
     patch.approvalStatus = 'active';
     profile = { ...profile, approvalStatus: 'active' };
     repaired = true;

@@ -37,10 +37,32 @@ export type AdminManagedUser = {
   lastSeen: string | null;
   createdAt: string | null;
   isPrimaryAdmin: boolean;
+  hasDisplayName: boolean;
 };
 
 function cleanString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function isBrokenOrEmptyName(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /[\u05f3\uFFFD]/.test(trimmed);
+}
+
+function displayInfoFor(user: RawUser): { label: string; hasDisplayName: boolean } {
+  const displayName = cleanString(user.displayName);
+  if (!isBrokenOrEmptyName(displayName)) {
+    return { label: displayName, hasDisplayName: true };
+  }
+
+  const email = cleanString(user.email);
+  if (email) {
+    return { label: email, hasDisplayName: false };
+  }
+
+  return { label: displayNameFor(user), hasDisplayName: false };
 }
 
 function displayNameFor(user: RawUser): string {
@@ -50,9 +72,10 @@ function displayNameFor(user: RawUser): string {
 function toManagedUser(user: RawUser, primaryAdminUid: string): AdminManagedUser {
   const isPrimaryAdmin = user.id === primaryAdminUid;
   const professional = normalizeProfessionalFields(user as Record<string, unknown>);
+  const display = displayInfoFor(user);
   return {
     uid: user.id,
-    displayName: displayNameFor(user),
+    displayName: display.label,
     email: cleanString(user.email),
     department: professional.department,
     departments: professional.departments,
@@ -67,6 +90,7 @@ function toManagedUser(user: RawUser, primaryAdminUid: string): AdminManagedUser
     lastSeen: cleanString(user.lastSeen) || null,
     createdAt: cleanString(user.createdAt) || null,
     isPrimaryAdmin,
+    hasDisplayName: display.hasDisplayName,
   };
 }
 
