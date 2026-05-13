@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Briefcase,
+  Camera,
   CheckCircle2,
   Clapperboard,
   Clock,
@@ -246,7 +247,7 @@ export default function ProCardModal({
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="relative max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/15 bg-slate-950 shadow-2xl"
+          className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/15 bg-slate-950 shadow-2xl"
           style={{ boxShadow: '0 30px 120px rgba(0,0,0,0.64), 0 0 70px rgba(59,130,246,0.16)' }}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
@@ -274,7 +275,7 @@ export default function ProCardModal({
             <X className="h-5 w-5" />
           </button>
 
-          <div className="relative z-10 max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <div className="relative z-10 min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <div
               ref={shareCardRef}
               className="overflow-hidden rounded-3xl border border-white/12 bg-slate-950/88 p-5 text-white shadow-2xl backdrop-blur-xl sm:p-7"
@@ -297,19 +298,18 @@ export default function ProCardModal({
                         {initials(contact)}
                       </div>
                     </div>
-                    {verified && (
+                    {isCurrentUser ? (
+                      <ProfilePhotoUploadButton
+                        className="absolute bottom-1 right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-white shadow-lg transition hover:bg-slate-600"
+                      >
+                        <Camera className="h-4 w-4" />
+                      </ProfilePhotoUploadButton>
+                    ) : verified && (
                       <div className="absolute bottom-1 right-1 rounded-full border-2 border-slate-950 bg-sky-400 p-1 text-white">
                         <CheckCircle2 className="h-5 w-5" />
                       </div>
                     )}
                   </div>
-                  {isCurrentUser && (
-                    <ProfilePhotoUploadButton
-                      className="absolute -bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-slate-950/90 px-3 py-1 text-[11px] font-bold text-white/85 shadow-lg backdrop-blur transition hover:bg-white/15"
-                    >
-                      החלף תמונה
-                    </ProfilePhotoUploadButton>
-                  )}
                 </div>
 
                 <div className="min-w-0 flex-1 text-center sm:text-right">
@@ -477,11 +477,13 @@ export default function ProCardModal({
               )}
 
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.2.0
+                TV Industry IL · Pro Card v2.2.2
               </div>
             </div>
+          </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="relative z-10 shrink-0 border-t border-white/10 px-4 pb-4 pt-3 sm:px-6 sm:pb-5">
+            <div className="grid gap-2 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => void shareCard()}

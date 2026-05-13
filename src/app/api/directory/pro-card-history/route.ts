@@ -51,7 +51,7 @@ function stringArray(value: unknown): string[] {
   return single ? [single] : [];
 }
 
-function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: Set<string>): boolean {
+function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: Set<string>, displayNames: Set<string>): boolean {
   const uidCandidates = [
     doc.uid,
     doc.userId,
@@ -82,13 +82,25 @@ function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: S
 
   if (emailCandidates.some((email) => emails.has(email))) return true;
 
-  const crew = Array.isArray(doc.crew) ? doc.crew : Array.isArray(doc.crew_list) ? doc.crew_list : [];
-  return crew.some((entry) => {
-    if (!entry || typeof entry !== 'object') return false;
+  const allPersonnel = [
+    ...(Array.isArray(doc.crew) ? doc.crew : []),
+    ...(Array.isArray(doc.crew_list) ? doc.crew_list : []),
+    ...(Array.isArray(doc.personnel) ? doc.personnel : []),
+    ...(Array.isArray(doc.team) ? doc.team : []),
+  ];
+  return allPersonnel.some((entry) => {
+    if (!entry) return false;
+    if (typeof entry === 'string') return displayNames.has(normalizeName(entry));
+    if (typeof entry !== 'object') return false;
     const record = entry as Record<string, unknown>;
     const uid = cleanString(record.uid || record.userId || record.profileUid);
     const email = cleanString(record.email || record.userEmail).toLocaleLowerCase();
-    return Boolean((uid && userIds.has(uid)) || (email && emails.has(email)));
+    const name = normalizeName(cleanString(record.name || record.displayName || record.fullName || ''));
+    return Boolean(
+      (uid && userIds.has(uid)) ||
+      (email && emails.has(email)) ||
+      (name && displayNames.has(name)),
+    );
   });
 }
 
@@ -137,12 +149,14 @@ function matchingCrewEntry(
 }
 
 function dedupeCredits(credits: ProCardProductionCredit[]): ProCardProductionCredit[] {
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
   const result: ProCardProductionCredit[] = [];
   for (const credit of credits) {
     const key = `${credit.productionName}:${credit.date}:${credit.role}:${credit.channelName}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seenIds.has(credit.id) || seenKeys.has(key)) continue;
+    seenIds.add(credit.id);
+    seenKeys.add(key);
     result.push(credit);
   }
   return result;
@@ -203,6 +217,8 @@ export async function GET(request: NextRequest) {
       ].map((email) => email.toLocaleLowerCase()).filter(Boolean),
     );
 
+    const displayNames = new Set<string>([normalizedContactName].filter(Boolean));
+
     const [globalProductions, calendarDocs, workBoardDocs] = await Promise.all([
       listDocuments<GlobalProductionDoc>('global_productions').catch(() => []),
       listDocuments<FlexibleHistoryDoc>('calendar').catch(() => []),
@@ -236,10 +252,10 @@ export async function GET(request: NextRequest) {
         }];
         }),
         ...calendarDocs
-          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails))
+          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
           .map((doc) => creditFromFlexibleDoc(doc, 'calendar')),
         ...workBoardDocs
-          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails))
+          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
           .map((doc) => creditFromFlexibleDoc(doc, 'work-boards')),
       ],
     ).sort((a, b) => b.date.localeCompare(a.date));
