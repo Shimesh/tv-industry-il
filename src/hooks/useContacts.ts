@@ -76,6 +76,9 @@ export function useContacts(): ContactsHookResult {
           total?: number;
         };
 
+        const contactFullName = (contact: Contact) =>
+          `${contact.firstName || ''} ${contact.lastName || ''}`.replace(/\s+/g, ' ').trim();
+
         const authoritativeContacts = (payload.contacts || []).map((contact) => {
           const professional = normalizeProfessionalFields(contact);
           return {
@@ -83,6 +86,7 @@ export function useContacts(): ContactsHookResult {
             firstName: String(contact.firstName || ''),
             lastName: String(contact.lastName || ''),
             email: typeof contact.email === 'string' ? contact.email : undefined,
+            photoURL: typeof contact.photoURL === 'string' ? contact.photoURL : undefined,
             is_consented: contact.is_consented === true,
             department: professional.department,
             departments: professional.departments,
@@ -95,8 +99,13 @@ export function useContacts(): ContactsHookResult {
             source: typeof contact.source === 'string' ? contact.source : undefined,
             openToWork: contact.openToWork === true,
             skills: Array.isArray(contact.skills) ? contact.skills.map((item) => String(item)) : undefined,
+            credits: Array.isArray(contact.credits) ? contact.credits.map((item) => String(item)) : undefined,
+            city: typeof contact.city === 'string' ? contact.city : null,
+            yearsOfExperience: typeof contact.yearsOfExperience === 'number' ? contact.yearsOfExperience : null,
+            gear: Array.isArray(contact.gear) ? contact.gear.map((item) => String(item)) : null,
+            profileId: typeof contact.profileId === 'string' ? contact.profileId : undefined,
           };
-        });
+        }).sort((a, b) => contactFullName(a).localeCompare(contactFullName(b), 'he'));
 
         if (authoritativeContacts.length > 0) {
           setContacts(authoritativeContacts);

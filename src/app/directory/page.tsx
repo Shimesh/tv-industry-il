@@ -13,6 +13,7 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench, CircleDot, Building2, Check } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 import AuthGuard from '@/components/AuthGuard';
+import ProCardModal from '@/components/directory/ProCardModal';
 
 const deptColors: Record<string, string> = {
   'צילום': 'from-blue-500 to-blue-600',
@@ -115,6 +116,16 @@ function getPrimaryDepartment(contact: Contact) {
   return getContactDepartments(contact)[0] || '';
 }
 
+function getContactFullName(contact: Contact) {
+  return `${contact.firstName || ''} ${contact.lastName || ''}`.replace(/\s+/g, ' ').trim();
+}
+
+type LegacyModalContact = Contact & {
+  skills: string[];
+  credits: string[];
+  gear: string[];
+};
+
 function getRoleSearchText(role: string) {
   const normalizedRole = normalizeDisplayRoleLabel(role);
   const aliases: Record<string, string[]> = {
@@ -202,7 +213,7 @@ function DirectoryContent() {
       const bIsMe = isCurrentUser(b);
       if (aIsMe && !bIsMe) return -1;
       if (!aIsMe && bIsMe) return 1;
-      return 0;
+      return getContactFullName(a).localeCompare(getContactFullName(b), 'he');
     });
   }, [filtered, isCurrentUser]);
 
@@ -588,17 +599,22 @@ function DirectoryContent() {
                         y: -4,
                         transition: { duration: 0.2 },
                       }}
-                      className={`rounded-2xl border p-5 cursor-pointer transition-all duration-300 relative group ${
+                      className={`rounded-2xl border p-5 cursor-pointer transition-all duration-300 relative group overflow-hidden backdrop-blur-xl ${
                         isMeCard ? 'ring-2 ring-[var(--theme-accent)]' : ''
                       } hover:shadow-xl ${deptGlowColors[primaryDepartment] || 'hover:shadow-gray-500/10'}`}
                       style={{
-                        background: isMeCard ? 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-card))' : 'var(--theme-bg-card)',
-                        borderColor: isMeCard ? 'var(--theme-accent)' : 'var(--theme-border)',
+                        background: isMeCard
+                          ? 'linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 14%, rgba(15,23,42,0.72)), rgba(15,23,42,0.58))'
+                          : 'linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))',
+                        borderColor: isMeCard ? 'rgba(250,204,21,0.55)' : 'rgba(96,165,250,0.24)',
+                        boxShadow: isMeCard
+                          ? '0 18px 42px rgba(250,204,21,0.12), inset 0 1px 0 rgba(255,255,255,0.10)'
+                          : '0 18px 42px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
                       }}
                     >
                       {/* Subtle hover glow overlay */}
-                      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                        style={{ background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.04), transparent 70%)' }} />
+                      <div className="absolute inset-0 rounded-2xl opacity-70 transition-opacity duration-500 pointer-events-none group-hover:opacity-100"
+                        style={{ background: 'radial-gradient(circle at 15% 0%, rgba(250,204,21,0.12), transparent 36%), radial-gradient(circle at 85% 12%, rgba(56,189,248,0.16), transparent 34%)' }} />
 
                       {isMeCard && (
                         <motion.div
@@ -615,10 +631,14 @@ function DirectoryContent() {
                         {/* Gradient avatar with glow */}
                         <div className="relative">
                           <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
-                          <div className={`relative w-13 h-13 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
+                          <div className={`relative h-14 w-14 overflow-hidden rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
                             isMeCard ? 'ring-2 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg-card)]' : ''
                           }`}>
-                            {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
+                            {typeof contact.photoURL === 'string' && contact.photoURL ? (
+                              <img src={contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
+                            ) : (
+                              (contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')
+                            )}
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -695,8 +715,11 @@ function DirectoryContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              className="rounded-2xl border overflow-hidden transition-colors"
-              style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+              className="overflow-hidden rounded-2xl border backdrop-blur-xl transition-colors"
+              style={{
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))',
+                borderColor: 'rgba(96,165,250,0.20)',
+              }}
             >
               <AnimatePresence>
                 {sortedFiltered.map((contact, i) => {
@@ -720,8 +743,12 @@ function DirectoryContent() {
                       style={i > 0 ? { borderTop: '1px solid var(--theme-border)' } : undefined}
                     >
                       {isMeRow && <Star className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />}
-                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
-                        {(contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')}
+                      <div className={`h-10 w-10 overflow-hidden rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
+                        {typeof contact.photoURL === 'string' && contact.photoURL ? (
+                          <img src={contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
+                        ) : (
+                          (contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')
+                        )}
                       </div>
                       <div className="flex-1 min-w-0 flex items-center gap-1.5">
                         <span className="font-medium text-sm" style={{ color: isMeRow ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
@@ -947,6 +974,24 @@ function DirectoryContent() {
       {/* Contact Detail Modal - Glass Morphism Dark */}
       <AnimatePresence>
         {selectedContact && (
+          <ProCardModal
+            contact={selectedContact}
+            isCurrentUser={isCurrentUser(selectedContact)}
+            canShowContactInfo={canShowContactInfo(selectedContact)}
+            roles={getContactRoles(selectedContact)}
+            departments={getContactDepartments(selectedContact)}
+            primaryDepartment={getPrimaryDepartment(selectedContact)}
+            deptColors={deptColors}
+            deptBadgeColors={deptBadgeColors}
+            removalHref={getRemovalRequestMailto(selectedContact)}
+            onClose={() => setSelectedContact(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Legacy modal kept unreachable during the v2.2.0 transition. */}
+      <AnimatePresence>
+        {false && selectedContact && ((selectedContact: LegacyModalContact) => (
           <motion.div
             variants={modalOverlayVariants}
             initial="hidden"
@@ -1237,7 +1282,7 @@ function DirectoryContent() {
               </div>
             </motion.div>
           </motion.div>
-        )}
+        ))(selectedContact as LegacyModalContact)}
       </AnimatePresence>
     </div>
   );
