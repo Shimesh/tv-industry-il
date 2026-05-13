@@ -26,12 +26,10 @@ import {
   Settings,
   CheckCircle,
   Clapperboard,
-  LayoutGrid,
   Shield,
   UsersRound,
 } from 'lucide-react';
 import { useGlobalUnread } from '@/hooks/useGlobalUnread';
-import { openQuickMenu } from '@/components/QuickMenuRoot';
 
 const navLinks = [
   { href: '/', label: 'בית', icon: Tv },
@@ -214,25 +212,6 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                  navigator.vibrate(12);
-                }
-                openQuickMenu();
-                setMobileOpen(false);
-                setUserMenuOpen(false);
-                setThemeMenuOpen(false);
-              }}
-              className="group relative flex h-10 w-10 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] shadow-lg shadow-[var(--theme-accent-glow)] transition-all hover:border-[var(--theme-accent)]/40 hover:bg-[var(--theme-accent-glow)] hover:shadow-[0_0_28px_var(--theme-accent-glow)] active:scale-[0.95]"
-              aria-label="פתיחת תפריט מהיר"
-              title="תפריט מהיר"
-            >
-              <span className="absolute inset-0 rounded-2xl opacity-0 transition-opacity group-hover:opacity-100" style={{ boxShadow: '0 0 24px var(--theme-accent-glow)' }} />
-              <LayoutGrid className="relative h-5 w-5" />
-            </button>
-
             {user && <NotificationBell />}
 
             <div className="relative hidden md:block" ref={themeMenuRef}>

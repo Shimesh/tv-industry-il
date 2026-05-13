@@ -410,7 +410,7 @@ function SettingsContent() {
         {/* App Info */}
         <div className="text-center py-4">
           <p className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
-            TV Industry IL v2.0.1
+            TV Industry IL v2.0.0
           </p>
         </div>
       </div>
