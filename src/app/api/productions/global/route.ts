@@ -10,6 +10,7 @@ import { toGlobalProduction, fromGlobalProduction, type GlobalProductionDoc } fr
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
+import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
       }
     }),
   );
+
+  if (count > 0) {
+    void syncContactsFromSavedProductions(true).catch((err) =>
+      console.error('[api/productions/global] background sync error:', err),
+    );
+  }
 
   return NextResponse.json({ success: true, count, errors });
 }

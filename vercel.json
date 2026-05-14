@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/contacts-discovery",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
