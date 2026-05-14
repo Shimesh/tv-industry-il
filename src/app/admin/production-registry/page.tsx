@@ -26,7 +26,11 @@ export default function ProductionRegistryPage() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ added: number; failed: number; skipped: number; logos?: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    added: number; failed: number; skipped: number; logos?: number;
+    scanned?: { global_productions: number; personal_productions: number };
+    searchedFields?: readonly string[];
+  } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -94,7 +98,7 @@ export default function ProductionRegistryPage() {
     setSyncResult(null);
     setSyncError(null);
     try {
-      const data = await fetchWithAuth<{ added: number; failed: number; skipped: number; logos: number }>(
+      const data = await fetchWithAuth<{ added: number; failed: number; skipped: number; logos: number; scanned: { global_productions: number; personal_productions: number }; searchedFields: string[] }>(
         '/api/admin/production-registry/sync',
         { method: 'POST' },
       );
@@ -141,7 +145,7 @@ export default function ProductionRegistryPage() {
             <div className="text-sm">
               <p className="font-bold text-sky-200">סנכרון אוטומטי מהיומן</p>
               <p className="mt-0.5 text-xs opacity-60">
-                מחלץ כותרות מיומן ולוח עבודה · מפצל לפי + ו-/ · מחפש לוגואים בוויקיפדיה ו-DuckDuckGo
+                סורק global_productions + הפקות אישיות · מפצל לפי + ו-/ · מחפש לוגואים בוויקיפדיה ו-DuckDuckGo
               </p>
             </div>
             <button
@@ -163,18 +167,28 @@ export default function ProductionRegistryPage() {
 
           {syncResult && !syncError && (
             <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${syncResult.added > 0 ? 'bg-green-500/10 border border-green-400/20' : 'bg-white/5 border border-white/10'}`}>
-              {syncResult.added > 0 ? (
-                <span className="font-bold text-green-300">✓ נוספו {syncResult.added} הפקות חדשות לקטלוג</span>
-              ) : (
-                <span className="opacity-60">הקטלוג מעודכן — לא נמצאו הפקות חדשות</span>
+              <div>
+                {syncResult.added > 0 ? (
+                  <span className="font-bold text-green-300">✓ נוספו {syncResult.added} הפקות חדשות לקטלוג</span>
+                ) : (
+                  <span className="opacity-60">הקטלוג מעודכן — לא נמצאו הפקות חדשות</span>
+                )}
+                {(syncResult.logos ?? 0) > 0 && (
+                  <span className="mr-2 opacity-60">· {syncResult.logos} עם לוגו</span>
+                )}
+                {syncResult.failed > 0 && (
+                  <span className="mr-2 text-orange-300">· {syncResult.failed} לא נשמרו</span>
+                )}
+                <span className="mr-2 opacity-40">· {syncResult.skipped} קיימות</span>
+              </div>
+              {syncResult.scanned && (
+                <div className="mt-1 opacity-40" dir="ltr">
+                  Scanned: global_productions={syncResult.scanned.global_productions} personal={syncResult.scanned.personal_productions}
+                  {syncResult.searchedFields && (
+                    <> · Fields: {syncResult.searchedFields.join(', ')}</>
+                  )}
+                </div>
               )}
-              {(syncResult.logos ?? 0) > 0 && (
-                <span className="mr-2 opacity-60">· {syncResult.logos} עם לוגו</span>
-              )}
-              {syncResult.failed > 0 && (
-                <span className="mr-2 text-orange-300">· {syncResult.failed} לא נשמרו</span>
-              )}
-              <span className="mr-2 opacity-40">· {syncResult.skipped} קיימות</span>
             </div>
           )}
         </div>
