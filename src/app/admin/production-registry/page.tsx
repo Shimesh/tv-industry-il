@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Edit2, Film, Loader2, Plus, Save, Star, Trash2, X } from 'lucide-react';
+import { ArrowRight, Edit2, Film, Loader2, Plus, RefreshCw, Save, Star, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ProductionRegistryEntry } from '@/lib/proCardTypes';
 
@@ -25,6 +25,8 @@ export default function ProductionRegistryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ added: number; failed: number; skipped: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
@@ -86,6 +88,24 @@ export default function ProductionRegistryPage() {
     }
   }
 
+  async function handleSync() {
+    setSyncing(true);
+    setSyncResult(null);
+    setError(null);
+    try {
+      const data = await fetchWithAuth<{ added: number; failed: number; skipped: number }>(
+        '/api/admin/production-registry/sync',
+        { method: 'POST' },
+      );
+      setSyncResult(data);
+      await load();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function handleDelete(id: string) {
     setBusy(true);
     setError(null);
@@ -113,6 +133,33 @@ export default function ProductionRegistryPage() {
             <Film className="h-5 w-5 text-sky-300" />
             קטלוג הפקות
           </h1>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm">
+              <p className="font-bold text-sky-200">סנכרון אוטומטי מהיומן</p>
+              <p className="mt-0.5 text-xs opacity-60">מסנן כותרות מהיומן ולוח העבודה, מפצל לפי +, ומחפש לוגואים בוויקיפדיה העברית</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleSync()}
+              disabled={syncing}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-400 disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? 'מסנכרן...' : 'סנכרן הפקות מהיומן'}
+            </button>
+          </div>
+          {syncResult && (
+            <div className="mt-2 text-xs">
+              {syncResult.added > 0
+                ? <span className="text-green-300">נוספו {syncResult.added} הפקות חדשות</span>
+                : <span className="opacity-60">לא נמצאו הפקות חדשות</span>}
+              {syncResult.failed > 0 && <span className="ml-2 text-orange-300"> · {syncResult.failed} נכשלו</span>}
+              <span className="opacity-40"> · {syncResult.skipped} קיימות</span>
+            </div>
+          )}
         </div>
 
         {error && (
