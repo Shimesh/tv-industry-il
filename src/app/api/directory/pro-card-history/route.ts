@@ -174,12 +174,12 @@ function creditFromFlexibleDoc(doc: FlexibleHistoryDoc, source: 'calendar' | 'wo
 function matchingCrewEntry(
   crew: GlobalProductionCrewEntry[],
   contactPhone: string | null,
-  normalizedContactName: string,
+  displayNames: Set<string>,
 ): GlobalProductionCrewEntry | null {
   return crew.find((entry) => {
     const entryPhone = normalizePhone(entry.normalizedPhone || entry.phone_number || '');
     if (contactPhone && entryPhone && entryPhone === contactPhone) return true;
-    return Boolean(normalizedContactName && normalizeName(entry.name || '') === normalizedContactName);
+    return nameMatchesFuzzy(entry.name || '', displayNames);
   }) || null;
 }
 
@@ -293,6 +293,8 @@ export async function GET(request: NextRequest) {
     );
 
     const displayNames = new Set<string>([normalizedContactName].filter(Boolean));
+    const firstName = normalizeName((fullName || '').split(/\s+/)[0] || '');
+    if (firstName && firstName.length >= 2) displayNames.add(firstName);
 
     console.log('[pro-card-history] searching for', {
       contactId,
@@ -316,7 +318,7 @@ export async function GET(request: NextRequest) {
 
     const rawCredits: ProCardProductionCredit[] = [
       ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
-        const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, normalizedContactName);
+        const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, displayNames);
         if (!crewEntry) return [];
 
         const date = asDateValue(production.date);
