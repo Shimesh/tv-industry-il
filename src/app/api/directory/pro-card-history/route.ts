@@ -87,11 +87,24 @@ function nameIsNearMiss(entryName: string, displayNames: Set<string>): boolean {
   return false;
 }
 
+// Broader fallback: any token from displayNames (≥3 chars) appears as substring of the entry name
+function nameContainsToken(entryName: string, displayNames: Set<string>): boolean {
+  if (!entryName) return false;
+  const normalized = normalizeName(entryName.replace(/[-–—]/g, ' '));
+  if (!normalized) return false;
+  for (const dn of displayNames) {
+    const tokens = dn.split(/\s+/).filter((w) => w.length >= 3);
+    if (tokens.some((tok) => normalized.includes(tok) || tok.includes(normalized))) return true;
+  }
+  return false;
+}
+
 function docMatchesUser(
   doc: FlexibleHistoryDoc,
   userIds: Set<string>,
   emails: Set<string>,
   displayNames: Set<string>,
+  phones?: Set<string>,
 ): boolean {
   const uidCandidates = [
     doc.uid,
@@ -138,16 +151,20 @@ function docMatchesUser(
 
   const matched = allPersonnel.some((entry) => {
     if (!entry) return false;
-    if (typeof entry === 'string') return nameMatchesFuzzy(entry, displayNames);
+    if (typeof entry === 'string') {
+      return nameMatchesFuzzy(entry, displayNames) || nameContainsToken(entry, displayNames);
+    }
     if (typeof entry !== 'object') return false;
     const record = entry as Record<string, unknown>;
     const uid = cleanString(record.uid || record.userId || record.profileUid);
     const email = cleanString(record.email || record.userEmail).toLocaleLowerCase();
+    const entryPhone = normalizePhone(cleanString(record.phone || record.phone_number || record.normalizedPhone));
     const rawName = cleanString(record.name || record.displayName || record.fullName || '');
     return Boolean(
       (uid && userIds.has(uid)) ||
       (email && emails.has(email)) ||
-      (rawName && nameMatchesFuzzy(rawName, displayNames)),
+      (entryPhone && phones?.has(entryPhone)) ||
+      (rawName && (nameMatchesFuzzy(rawName, displayNames) || nameContainsToken(rawName, displayNames))),
     );
   });
 
@@ -195,11 +212,15 @@ function matchingCrewEntry(
   contactPhone: string | null,
   displayNames: Set<string>,
 ): GlobalProductionCrewEntry | null {
-  return crew.find((entry) => {
+  // Pass 1: exact phone or full fuzzy name match
+  const exact = crew.find((entry) => {
     const entryPhone = normalizePhone(entry.normalizedPhone || entry.phone_number || '');
     if (contactPhone && entryPhone && entryPhone === contactPhone) return true;
     return nameMatchesFuzzy(entry.name || '', displayNames);
-  }) || null;
+  });
+  if (exact) return exact;
+  // Pass 2: substring token match (broader — e.g. "ירון" in "ירון כהן")
+  return crew.find((entry) => nameContainsToken(entry.name || '', displayNames)) || null;
 }
 
 // Deduplicate by id/key, then merge multiple shifts of the same show into one entry
@@ -318,6 +339,10 @@ export async function GET(request: NextRequest) {
     if (firstName && firstName.length >= 2) displayNames.add(firstName);
     if (lastName && lastName.length >= 2 && lastName !== firstName) displayNames.add(lastName);
 
+    const userPhones = new Set<string>(
+      [contactPhone, normalizePhone(cleanString(userDoc?.phone))].filter(Boolean) as string[],
+    );
+
     console.log('[pro-card-history] searching for', {
       contactId,
       fullName,
@@ -379,10 +404,10 @@ export async function GET(request: NextRequest) {
         }];
       }),
       ...calendarDocs
-        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
+        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames, userPhones))
         .map((doc) => creditFromFlexibleDoc(doc, 'calendar')),
       ...workBoardDocs
-        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
+        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames, userPhones))
         .map((doc) => creditFromFlexibleDoc(doc, 'work-boards')),
     ];
 

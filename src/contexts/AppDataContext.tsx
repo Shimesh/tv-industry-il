@@ -33,7 +33,7 @@ const AppDataContext = createContext<AppDataContextType>({
 });
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { bootstrapContactsTotal } = useAuth();
+  const { bootstrapContactsTotal, profile } = useAuth();
   const {
     contacts,
     loading,
@@ -45,18 +45,32 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ensureFromCrew,
   } = useContacts();
 
+  // Merge the current user's profile photo into their contact entry in real-time.
+  // This ensures photo updates appear immediately without a full contacts refetch.
+  const contactsWithPhoto = useMemo<Contact[]>(() => {
+    if (!contacts.length || !profile) return contacts;
+    const profilePhoto = profile.customPhotoURL || profile.photoURL;
+    if (!profilePhoto) return contacts;
+    return contacts.map((c) => {
+      const isMe = (profile.linkedContactId && String(c.id) === String(profile.linkedContactId))
+        || (`${c.firstName || ''} ${c.lastName || ''}`.trim() === profile.displayName);
+      if (!isMe) return c;
+      return { ...c, customPhotoURL: profile.customPhotoURL || c.customPhotoURL, photoURL: profilePhoto };
+    });
+  }, [contacts, profile]);
+
   const value = useMemo<AppDataContextType>(() => ({
-    contacts,
+    contacts: contactsWithPhoto,
     contactsReady: ready,
     contactsLoading: loading,
     contactsServerConfirmed: serverConfirmed,
     contactsSource: source,
     contactsError: error,
-    totalCount: total ?? bootstrapContactsTotal ?? contacts.length,
-    availableCount: contacts.filter((contact) => contact.availability === 'available').length,
-    openToWorkCount: contacts.filter((contact) => contact.openToWork === true).length,
+    totalCount: total ?? bootstrapContactsTotal ?? contactsWithPhoto.length,
+    availableCount: contactsWithPhoto.filter((contact) => contact.availability === 'available').length,
+    openToWorkCount: contactsWithPhoto.filter((contact) => contact.openToWork === true).length,
     ensureFromCrew,
-  }), [contacts, loading, ready, serverConfirmed, source, error, ensureFromCrew, total, bootstrapContactsTotal]);
+  }), [contactsWithPhoto, loading, ready, serverConfirmed, source, error, ensureFromCrew, total, bootstrapContactsTotal]);
 
   return (
     <AppDataContext.Provider value={value}>
