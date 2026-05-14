@@ -140,3 +140,15 @@ export type AdminOverview = {
     jobs: JobStatusMetric[];
   };
 };
+
+export type ContactDiscovery = {
+  id: string;
+  name: string;
+  phone: string | null;
+  role: string;
+  sourceBoard: string;
+  sourceBoardName: string | null;
+  contactId: string;
+  createdAt: string;
+  discoveryDate: string;
+};
