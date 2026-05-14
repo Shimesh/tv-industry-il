@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Edit2, Film, Loader2, Plus, RefreshCw, Save, Star, Trash2, X } from 'lucide-react';
+import { Archive, ArrowRight, Edit2, Film, Loader2, Plus, RefreshCw, Save, Star, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ProductionRegistryEntry } from '@/lib/proCardTypes';
 
@@ -15,6 +15,88 @@ type FormState = {
 };
 
 const emptyForm: FormState = { name: '', logoUrl: '', channel: '', description: '', isMajor: false };
+
+function EntryList({
+  entries, deleteConfirm, busy, archived,
+  onEdit, onArchive, onDeleteConfirm, onDelete,
+}: {
+  entries: ProductionRegistryEntry[];
+  deleteConfirm: string | null;
+  busy: boolean;
+  archived?: boolean;
+  onEdit: (e: ProductionRegistryEntry) => void;
+  onArchive: (e: ProductionRegistryEntry) => void;
+  onDeleteConfirm: (id: string | null) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {entries.map((entry) => (
+        <div key={entry.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${archived ? 'border-white/5 bg-white/[0.02] opacity-60' : 'border-white/10 bg-white/[0.04]'}`}>
+          {entry.logoUrl && entry.logoUrl !== 'none' ? (
+            <img src={entry.logoUrl} alt={entry.name} className="h-10 w-10 rounded-lg object-contain bg-white/10" />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-300">
+              <Film className="h-5 w-5" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold">{entry.name}</span>
+              {entry.isMajor && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                  <Star className="h-3 w-3" /> מרכזית
+                </span>
+              )}
+              {entry.isArchived && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] text-slate-400">
+                  <Archive className="h-3 w-3" /> מוסתר
+                </span>
+              )}
+            </div>
+            {entry.channel && <div className="text-xs opacity-50">{entry.channel}</div>}
+          </div>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => onArchive(entry)}
+              disabled={busy}
+              className={`rounded-lg p-2 opacity-60 transition hover:opacity-100 ${entry.isArchived ? 'text-sky-300 hover:bg-sky-500/10' : 'hover:bg-white/10'}`}
+              aria-label={entry.isArchived ? 'הצג' : 'הסתר'}
+              title={entry.isArchived ? 'הצג מחדש' : 'הסתר מהקטלוג'}
+            >
+              <Archive className="h-4 w-4" />
+            </button>
+            {deleteConfirm === entry.id ? (
+              <>
+                <button type="button" onClick={() => onDelete(entry.id)} disabled={busy}
+                  className="rounded-lg bg-red-500/20 px-2 py-1 text-xs font-bold text-red-200 transition hover:bg-red-500/30">
+                  מחק
+                </button>
+                <button type="button" onClick={() => onDeleteConfirm(null)}
+                  className="rounded-lg px-2 py-1 text-xs opacity-60 hover:opacity-100">
+                  ביטול
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => onEdit(entry)}
+                  className="rounded-lg p-2 opacity-60 transition hover:bg-white/10 hover:opacity-100" aria-label="ערוך">
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => onDeleteConfirm(entry.id)}
+                  className="rounded-lg p-2 text-red-300 opacity-60 transition hover:bg-red-500/10 hover:opacity-100" aria-label="מחק">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ProductionRegistryPage() {
   const { user } = useAuth();
@@ -137,6 +219,21 @@ export default function ProductionRegistryPage() {
     } finally {
       setSyncing(false);
       setSyncPhase('idle');
+    }
+  }
+
+  async function handleArchive(entry: ProductionRegistryEntry) {
+    setBusy(true);
+    try {
+      await fetchWithAuth(`/api/admin/production-registry/${entry.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isArchived: !entry.isArchived }),
+      });
+      await load();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -302,7 +399,12 @@ export default function ProductionRegistryPage() {
         )}
 
         <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm opacity-60">{entries.length} הפקות ברשימה</span>
+          <span className="text-sm opacity-60">
+            {entries.filter((e) => !e.isArchived).length} הפקות פעילות
+            {entries.filter((e) => e.isArchived).length > 0 && (
+              <span className="opacity-50"> · {entries.filter((e) => e.isArchived).length} מוסתרות</span>
+            )}
+          </span>
           <button
             type="button"
             onClick={startAdd}
@@ -322,71 +424,36 @@ export default function ProductionRegistryPage() {
             אין הפקות בקטלוג עדיין
           </div>
         ) : (
-          <div className="space-y-2">
-            {entries.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                {entry.logoUrl && entry.logoUrl !== 'none' ? (
-                  <img src={entry.logoUrl} alt={entry.name} className="h-10 w-10 rounded-lg object-contain bg-white/10" />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-300">
-                    <Film className="h-5 w-5" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold">{entry.name}</span>
-                    {entry.isMajor && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-200">
-                        <Star className="h-3 w-3" />
-                        מרכזית
-                      </span>
-                    )}
-                  </div>
-                  {entry.channel && <div className="text-xs opacity-50">{entry.channel}</div>}
+          <>
+            <EntryList
+              entries={entries.filter((e) => !e.isArchived)}
+              deleteConfirm={deleteConfirm}
+              busy={busy}
+              onEdit={startEdit}
+              onArchive={(e) => void handleArchive(e)}
+              onDeleteConfirm={setDeleteConfirm}
+              onDelete={(id) => void handleDelete(id)}
+            />
+            {entries.some((e) => e.isArchived) && (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-xs opacity-40 hover:opacity-70">
+                  הפקות מוסתרות ({entries.filter((e) => e.isArchived).length})
+                </summary>
+                <div className="mt-2">
+                  <EntryList
+                    entries={entries.filter((e) => e.isArchived)}
+                    deleteConfirm={deleteConfirm}
+                    busy={busy}
+                    onEdit={startEdit}
+                    onArchive={(e) => void handleArchive(e)}
+                    onDeleteConfirm={setDeleteConfirm}
+                    onDelete={(id) => void handleDelete(id)}
+                    archived
+                  />
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  {deleteConfirm === entry.id ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete(entry.id)}
-                        disabled={busy}
-                        className="rounded-lg bg-red-500/20 px-2 py-1 text-xs font-bold text-red-200 transition hover:bg-red-500/30"
-                      >
-                        מחק
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirm(null)}
-                        className="rounded-lg px-2 py-1 text-xs opacity-60 hover:opacity-100"
-                      >
-                        ביטול
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(entry)}
-                        className="rounded-lg p-2 opacity-60 transition hover:bg-white/10 hover:opacity-100"
-                        aria-label="ערוך"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirm(entry.id)}
-                        className="rounded-lg p-2 text-red-300 opacity-60 transition hover:bg-red-500/10 hover:opacity-100"
-                        aria-label="מחק"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              </details>
+            )}
+          </>
         )}
       </div>
     </div>

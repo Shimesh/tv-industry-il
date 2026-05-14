@@ -5,6 +5,13 @@ export type ProductionRegistryEntry = {
   channel: string;
   description?: string;
   isMajor: boolean;
+  isArchived?: boolean;
+};
+
+export type NearMiss = {
+  productionName: string;
+  date: string;
+  crewSample: string[];
 };
 
 export type ProCardMedia = {
@@ -45,4 +52,5 @@ export type ProCardBoardActivity = {
 export type ProCardHistoryResponse = {
   productionCredits: ProCardProductionCredit[];
   boardActivity: ProCardBoardActivity[];
+  nearMisses?: NearMiss[];
 };

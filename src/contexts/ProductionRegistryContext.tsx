@@ -38,7 +38,7 @@ export function ProductionRegistryProvider({ children }: { children: React.React
       });
       if (res.ok) {
         const data = await res.json() as { entries: ProductionRegistryEntry[] };
-        setRegistry(data.entries ?? []);
+        setRegistry((data.entries ?? []).filter((e) => !e.isArchived));
       }
     } catch {
       // non-admin users get 403; silently ignore
