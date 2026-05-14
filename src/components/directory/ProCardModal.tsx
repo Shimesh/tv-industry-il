@@ -491,7 +491,7 @@ export default function ProCardModal({
               )}
 
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.2.3
+                TV Industry IL · Pro Card v2.2.4
               </div>
             </div>
           </div>
