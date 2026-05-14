@@ -34,7 +34,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
+import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { INDUSTRY_DEPARTMENT_OPTIONS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 import { normalizeProfessionalFields, stringArray } from '@/lib/professionalFields';
 
@@ -434,6 +434,8 @@ export default function AdminPage() {
     loading: false,
     error: null,
   });
+  const [discoveries, setDiscoveries] = useState<ContactDiscovery[]>([]);
+  const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
   const draftDirtyRef = useRef(false);
 
   const isAdmin = profile?.siteRole === 'admin';
@@ -623,6 +625,23 @@ export default function AdminPage() {
       .then((data) => { if (Array.isArray(data.contacts)) setAvailableContacts(data.contacts); })
       .catch(() => undefined);
   }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (!user || profile?.siteRole !== 'admin') return;
+    setDiscoveriesLoading(true);
+    const today = new Date().toISOString().slice(0, 10);
+    user.getIdToken().then((token) =>
+      fetch(`/api/admin/contact-discoveries?date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data: { discoveries?: ContactDiscovery[] }) => {
+          setDiscoveries(data.discoveries ?? []);
+        })
+        .catch(() => {})
+        .finally(() => setDiscoveriesLoading(false)),
+    );
+  }, [user, profile?.siteRole]);
 
   async function claimAdmin() {
     setClaimingAdmin(true);
@@ -937,6 +956,36 @@ export default function AdminPage() {
           <StatCard icon={Crown} label="מנהלים" value={overview.stats.admins} color="bg-yellow-500/20 text-yellow-400" />
           <StatCard icon={AlertTriangle} label="נוכחות מיושנת" value={overview.stats.stalePresence} color="bg-orange-500/20 text-orange-400" />
         </div>
+
+        {/* גילויים חדשים */}
+        <section className="w-full rounded-2xl border p-5 space-y-3" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }} dir="rtl">
+          <div className="flex items-center gap-2">
+            <Contact2 className="w-5 h-5 text-emerald-400" />
+            <h2 className="font-bold text-[var(--theme-text)]">גילויים חדשים היום</h2>
+            {!discoveriesLoading && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
+                {discoveries.length}
+              </span>
+            )}
+            {discoveriesLoading && <span className="text-xs text-[var(--theme-text-secondary)]">טוען...</span>}
+          </div>
+          {discoveries.length === 0 && !discoveriesLoading && (
+            <p className="text-sm text-[var(--theme-text-secondary)]">אין גילויים חדשים היום.</p>
+          )}
+          {discoveries.length > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {discoveries.map((d) => (
+                <div key={d.id} className="flex items-center justify-between text-sm border-b border-[var(--theme-border)] pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <span className="font-medium text-[var(--theme-text)]">{d.name}</span>
+                    <span className="text-[var(--theme-text-secondary)] mr-2">— {d.role || 'ללא תפקיד'}</span>
+                  </div>
+                  <span className="text-xs text-emerald-400 shrink-0">{d.sourceBoardName ?? d.sourceBoard}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
           <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 xl:col-span-3">
