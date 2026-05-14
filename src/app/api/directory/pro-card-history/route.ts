@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
-import type { ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
+import type { ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -51,7 +51,29 @@ function stringArray(value: unknown): string[] {
   return single ? [single] : [];
 }
 
-function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: Set<string>, displayNames: Set<string>): boolean {
+// Fuzzy word-based match: "ירון" matches "ירון אורבך" (whole-word prefix)
+function nameMatchesFuzzy(entryName: string, displayNames: Set<string>): boolean {
+  const normalized = normalizeName(entryName);
+  if (!normalized || normalized.length < 2) return false;
+  const entryWords = normalized.split(/\s+/);
+  for (const dn of displayNames) {
+    if (!dn || dn.length < 2) continue;
+    if (normalized === dn) return true;
+    const searchWords = dn.split(/\s+/);
+    // All words of the search name must appear in the entry
+    if (searchWords.every((sw) => entryWords.some((ew) => ew === sw || ew.startsWith(sw)))) return true;
+    // Or the entire entry is a prefix of the search name (e.g. entry "ירון" matches search "ירון אורבך")
+    if (entryWords.every((ew) => searchWords.some((sw) => sw === ew || sw.startsWith(ew)))) return true;
+  }
+  return false;
+}
+
+function docMatchesUser(
+  doc: FlexibleHistoryDoc,
+  userIds: Set<string>,
+  emails: Set<string>,
+  displayNames: Set<string>,
+): boolean {
   const uidCandidates = [
     doc.uid,
     doc.userId,
@@ -66,7 +88,10 @@ function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: S
     ...stringArray(doc.assignedUids),
   ].map(cleanString).filter(Boolean);
 
-  if (uidCandidates.some((uid) => userIds.has(uid))) return true;
+  if (uidCandidates.some((uid) => userIds.has(uid))) {
+    console.log('[pro-card-history] uid match on doc', doc.id);
+    return true;
+  }
 
   const emailCandidates = [
     doc.email,
@@ -80,7 +105,10 @@ function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: S
     ...stringArray(doc.assignedEmails),
   ].map((value) => cleanString(value).toLocaleLowerCase()).filter(Boolean);
 
-  if (emailCandidates.some((email) => emails.has(email))) return true;
+  if (emailCandidates.some((email) => emails.has(email))) {
+    console.log('[pro-card-history] email match on doc', doc.id);
+    return true;
+  }
 
   const allPersonnel = [
     ...(Array.isArray(doc.crew) ? doc.crew : []),
@@ -88,20 +116,24 @@ function docMatchesUser(doc: FlexibleHistoryDoc, userIds: Set<string>, emails: S
     ...(Array.isArray(doc.personnel) ? doc.personnel : []),
     ...(Array.isArray(doc.team) ? doc.team : []),
   ];
-  return allPersonnel.some((entry) => {
+
+  const matched = allPersonnel.some((entry) => {
     if (!entry) return false;
-    if (typeof entry === 'string') return displayNames.has(normalizeName(entry));
+    if (typeof entry === 'string') return nameMatchesFuzzy(entry, displayNames);
     if (typeof entry !== 'object') return false;
     const record = entry as Record<string, unknown>;
     const uid = cleanString(record.uid || record.userId || record.profileUid);
     const email = cleanString(record.email || record.userEmail).toLocaleLowerCase();
-    const name = normalizeName(cleanString(record.name || record.displayName || record.fullName || ''));
+    const rawName = cleanString(record.name || record.displayName || record.fullName || '');
     return Boolean(
       (uid && userIds.has(uid)) ||
       (email && emails.has(email)) ||
-      (name && displayNames.has(name)),
+      (rawName && nameMatchesFuzzy(rawName, displayNames)),
     );
   });
+
+  if (matched) console.log('[pro-card-history] personnel match on doc', doc.id);
+  return matched;
 }
 
 function roleFromFlexibleDoc(doc: FlexibleHistoryDoc): string {
@@ -126,6 +158,8 @@ function creditFromFlexibleDoc(doc: FlexibleHistoryDoc, source: 'calendar' | 'wo
     id: `${source}-${cleanString(doc.id) || productionName}-${date}`,
     productionName,
     date,
+    dateFrom: date,
+    dateTo: date,
     year: date.slice(0, 4),
     studio: cleanString(doc.studio || doc.location || doc.channel || doc.network),
     role: roleFromFlexibleDoc(doc),
@@ -133,6 +167,7 @@ function creditFromFlexibleDoc(doc: FlexibleHistoryDoc, source: 'calendar' | 'wo
     channelName: cleanString(doc.channelName || doc.channel || doc.network) || getChannelName(channelId || null),
     isMajor,
     media: resolveProCardMedia(productionName, channelId || null),
+    shiftCount: 1,
   };
 }
 
@@ -148,18 +183,58 @@ function matchingCrewEntry(
   }) || null;
 }
 
-function dedupeCredits(credits: ProCardProductionCredit[]): ProCardProductionCredit[] {
+// Deduplicate by id/key, then merge multiple shifts of the same show into one entry
+function mergeAndDedupeCredits(credits: ProCardProductionCredit[]): ProCardProductionCredit[] {
+  // Step 1: dedup exact duplicates by id + composite key
   const seenIds = new Set<string>();
   const seenKeys = new Set<string>();
-  const result: ProCardProductionCredit[] = [];
+  const deduped: ProCardProductionCredit[] = [];
   for (const credit of credits) {
     const key = `${credit.productionName}:${credit.date}:${credit.role}:${credit.channelName}`;
     if (seenIds.has(credit.id) || seenKeys.has(key)) continue;
     seenIds.add(credit.id);
     seenKeys.add(key);
-    result.push(credit);
+    deduped.push(credit);
   }
-  return result;
+
+  // Step 2: merge multiple shifts on the same show (same productionName + role) into one entry
+  const groups = new Map<string, ProCardProductionCredit[]>();
+  for (const credit of deduped) {
+    const groupKey = `${normalizeName(credit.productionName)}::${normalizeName(credit.role)}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey)!.push(credit);
+  }
+
+  return Array.from(groups.values()).map((group) => {
+    if (group.length === 1) return { ...group[0], dateFrom: group[0].date, dateTo: group[0].date, shiftCount: 1 };
+    const sorted = [...group].sort((a, b) => a.date.localeCompare(b.date));
+    const mostRecent = sorted[sorted.length - 1];
+    return {
+      ...mostRecent,
+      id: sorted[0].id,
+      dateFrom: sorted[0].date,
+      dateTo: mostRecent.date,
+      date: mostRecent.date,
+      year: mostRecent.year,
+      shiftCount: group.length,
+    };
+  });
+}
+
+function applyRegistryOverrides(
+  credits: ProCardProductionCredit[],
+  registry: Map<string, ProductionRegistryEntry>,
+): ProCardProductionCredit[] {
+  return credits.map((credit) => {
+    const entry = registry.get(normalizeName(credit.productionName));
+    if (!entry) return credit;
+    return {
+      ...credit,
+      logoUrl: entry.logoUrl || credit.logoUrl,
+      channelName: entry.channel || credit.channelName,
+      isMajor: credit.isMajor || entry.isMajor,
+    };
+  });
 }
 
 async function loadLinkedUserIds(contact: RawContact, normalizedContactName: string): Promise<Set<string>> {
@@ -219,14 +294,28 @@ export async function GET(request: NextRequest) {
 
     const displayNames = new Set<string>([normalizedContactName].filter(Boolean));
 
-    const [globalProductions, calendarDocs, workBoardDocs] = await Promise.all([
+    console.log('[pro-card-history] searching for', {
+      contactId,
+      fullName,
+      normalizedContactName,
+      linkedUserIds: [...linkedUserIds],
+      emails: [...userEmails],
+    });
+
+    const [globalProductions, calendarDocs, workBoardDocs, registryDocs] = await Promise.all([
       listDocuments<GlobalProductionDoc>('global_productions').catch(() => []),
       listDocuments<FlexibleHistoryDoc>('calendar').catch(() => []),
       listDocuments<FlexibleHistoryDoc>('work-boards').catch(() => []),
+      listDocuments<ProductionRegistryEntry>('production-registry').catch(() => []),
     ]);
-    const productionCredits = dedupeCredits(
-      [
-        ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
+
+    const registry = new Map<string, ProductionRegistryEntry>();
+    for (const entry of registryDocs) {
+      registry.set(normalizeName(entry.name || ''), entry);
+    }
+
+    const rawCredits: ProCardProductionCredit[] = [
+      ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
         const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, normalizedContactName);
         if (!crewEntry) return [];
 
@@ -242,6 +331,8 @@ export async function GET(request: NextRequest) {
           id: production.id || `${production.name}-${date}-${role}`,
           productionName: production.name || 'הפקה',
           date,
+          dateFrom: date,
+          dateTo: date,
           year,
           studio: production.studio || '',
           role,
@@ -249,16 +340,23 @@ export async function GET(request: NextRequest) {
           channelName: getChannelName(channelId),
           isMajor,
           media: resolveProCardMedia(production.name || '', channelId),
+          shiftCount: 1,
         }];
-        }),
-        ...calendarDocs
-          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
-          .map((doc) => creditFromFlexibleDoc(doc, 'calendar')),
-        ...workBoardDocs
-          .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
-          .map((doc) => creditFromFlexibleDoc(doc, 'work-boards')),
-      ],
-    ).sort((a, b) => b.date.localeCompare(a.date));
+      }),
+      ...calendarDocs
+        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
+        .map((doc) => creditFromFlexibleDoc(doc, 'calendar')),
+      ...workBoardDocs
+        .filter((doc) => docMatchesUser(doc, linkedUserIds, userEmails, displayNames))
+        .map((doc) => creditFromFlexibleDoc(doc, 'work-boards')),
+    ];
+
+    const productionCredits = applyRegistryOverrides(
+      mergeAndDedupeCredits(rawCredits).sort((a, b) => b.date.localeCompare(a.date)),
+      registry,
+    );
+
+    console.log('[pro-card-history] found', productionCredits.length, 'production credits for', fullName);
 
     const posts = await listDocuments<RawPost>('posts').catch(() => []);
     const boardActivity: ProCardBoardActivity[] = posts

@@ -1,3 +1,12 @@
+export type ProductionRegistryEntry = {
+  id: string;
+  name: string;
+  logoUrl: string;
+  channel: string;
+  description?: string;
+  isMajor: boolean;
+};
+
 export type ProCardMedia = {
   kind: 'production' | 'channel' | 'fallback';
   label: string;
@@ -11,6 +20,8 @@ export type ProCardProductionCredit = {
   id: string;
   productionName: string;
   date: string;
+  dateFrom: string;
+  dateTo: string;
   year: string;
   studio: string;
   role: string;
@@ -18,6 +29,8 @@ export type ProCardProductionCredit = {
   channelName: string;
   isMajor: boolean;
   media: ProCardMedia;
+  shiftCount: number;
+  logoUrl?: string;
 };
 
 export type ProCardBoardActivity = {

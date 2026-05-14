@@ -120,6 +120,14 @@ function formatDate(date: string): string {
 }
 
 function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
+  if (credit.logoUrl) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
+        <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" crossOrigin="anonymous" />
+      </div>
+    );
+  }
+
   if (credit.media.kind === 'fallback') {
     return (
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700/70 text-slate-200">
@@ -440,7 +448,13 @@ export default function ProCardModal({
                                       <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
                                         <span>{credit.role}</span>
                                         {credit.studio && <span>{credit.studio}</span>}
-                                        <span dir="ltr">{formatDate(credit.date)}</span>
+                                        {credit.shiftCount > 1 ? (
+                                          <span dir="ltr" className="text-sky-300/80">
+                                            {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} – {formatDate(credit.dateTo)}
+                                          </span>
+                                        ) : (
+                                          <span dir="ltr">{formatDate(credit.date)}</span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -477,7 +491,7 @@ export default function ProCardModal({
               )}
 
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.2.2
+                TV Industry IL · Pro Card v2.2.3
               </div>
             </div>
           </div>
