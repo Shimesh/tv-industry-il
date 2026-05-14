@@ -133,6 +133,7 @@ export default function QuickMenuDrawer({ open, onClose }: QuickMenuDrawerProps)
 
   return (
     <div
+      data-quick-drawer-root="true"
       className={`fixed inset-0 z-[9999] h-screen transition ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
       aria-hidden={!open}
     >

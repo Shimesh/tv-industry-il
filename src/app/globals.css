@@ -236,6 +236,12 @@ body.accessibility-high-contrast [data-a11y-panel] {
   background-color: #000000 !important;
 }
 
+/* QuickMenuDrawer root — this transparent wrapper must NOT get a black background;
+   it has no background itself and the div rule would turn it into a black fullscreen overlay */
+body.accessibility-high-contrast [data-quick-drawer-root] {
+  background-color: transparent !important;
+}
+
 .app-safe-top {
   padding-top: var(--safe-area-top);
 }
