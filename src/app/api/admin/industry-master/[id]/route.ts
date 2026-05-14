@@ -16,7 +16,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (typeof body.logoUrl === 'string') updates.logoUrl = body.logoUrl.trim();
   if (typeof body.network === 'string') updates.network = body.network.trim();
   if (typeof body.genre === 'string') updates.genre = body.genre.trim();
+  if (typeof body.productionCompany === 'string') updates.productionCompany = body.productionCompany.trim();
   if (typeof body.wikiUrl === 'string') updates.wikiUrl = body.wikiUrl.trim();
+  // Allow admin to manually clear a needs_review flag after verification
+  if (typeof body.wikiTitleMatch === 'string') updates.wikiTitleMatch = body.wikiTitleMatch.trim();
 
   await patchDocument(`industry_master/${id}`, updates);
   return NextResponse.json({ ok: true });

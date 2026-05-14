@@ -3,9 +3,14 @@
 //   1. action=query&list=search  → find the best-matching page title
 //   2. action=parse&prop=wikitext → get raw infobox markup to extract fields
 //   3. action=query&prop=pageimages → get logo thumbnail URL
+// Title Match Verification: compares the Wikipedia page title to the requested show name.
+// If similarity < 70%, the result is flagged as 'needs_review' and the logo is withheld.
+
+import { stringSimilarity, stripProductionSuffixes } from '@/lib/productionNameNormalization';
 
 const WIKI_BASE = 'https://he.wikipedia.org/w/api.php';
-const UA = 'TVIndustryIL/2.4.0 (industry-master sync)';
+const UA = 'TVIndustryIL/2.4.5 (industry-master sync)';
+const TITLE_MATCH_THRESHOLD = 0.70;
 
 async function searchWikiPage(name: string): Promise<{ title: string; pageUrl: string } | null> {
   try {
@@ -96,16 +101,27 @@ export type WikiInfoboxResult = {
   logoUrl: string;
   network: string;
   genre: string;
+  productionCompany: string;
   wikiUrl: string;
+  /** 'ok' = title matched ≥70%, 'needs_review' = weak match — logo withheld */
+  wikiTitleMatch: 'ok' | 'needs_review' | '';
 };
 
 export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxResult> {
   const page = await searchWikiPage(showName);
-  if (!page) return { logoUrl: '', network: '', genre: '', wikiUrl: '' };
+  if (!page) return { logoUrl: '', network: '', genre: '', productionCompany: '', wikiUrl: '', wikiTitleMatch: '' };
 
-  const [wikitext, logoUrl] = await Promise.all([
+  // --- Title Match Verification ---
+  // Compare canonical (suffix-stripped) show name to the Wikipedia page title found.
+  const canonicalName = stripProductionSuffixes(showName);
+  const similarity = stringSimilarity(canonicalName, page.title);
+  const titleMatches = similarity >= TITLE_MATCH_THRESHOLD;
+  const wikiTitleMatch: 'ok' | 'needs_review' = titleMatches ? 'ok' : 'needs_review';
+
+  const [wikitext, rawLogoUrl] = await Promise.all([
     fetchWikiText(page.title),
-    fetchWikiLogoUrl(page.title),
+    // Only fetch logo if the title matched well enough
+    titleMatches ? fetchWikiLogoUrl(page.title) : Promise.resolve(''),
   ]);
 
   const network = extractInfoboxField(wikitext, 'רשת שידור');
@@ -114,6 +130,15 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
     extractInfoboxField(wikitext, "ז'אנר") ||
     extractInfoboxField(wikitext, 'ז׳אנר') ||
     extractInfoboxField(wikitext, 'סוג');
+  // Extract production company (multiple field name variants)
+  const productionCompany =
+    extractInfoboxField(wikitext, 'חברת הפקה') ||
+    extractInfoboxField(wikitext, 'הפקה') ||
+    extractInfoboxField(wikitext, 'מפיק') ||
+    extractInfoboxField(wikitext, 'מפיקים');
 
-  return { logoUrl, network, genre, wikiUrl: page.pageUrl };
+  // Only use logo if title matched; otherwise leave blank so admin can fix manually
+  const logoUrl = titleMatches ? rawLogoUrl : '';
+
+  return { logoUrl, network, genre, productionCompany, wikiUrl: page.pageUrl, wikiTitleMatch };
 }

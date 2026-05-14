@@ -3,6 +3,7 @@ import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
 import type { IndustryMasterEntry, NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
+import { stripProductionSuffixes } from '@/lib/productionNameNormalization';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -267,11 +268,18 @@ function applyRegistryOverrides(
   master: Map<string, IndustryMasterEntry>,
 ): ProCardProductionCredit[] {
   return credits.map((credit) => {
-    const key = normalizeName(credit.productionName);
-    const reg = registry.get(key);
-    const mst = master.get(key);
+    // Strip operational suffixes so "ארץ נהדרת - טסטים" resolves to "ארץ נהדרת" master entry
+    const canonicalName = stripProductionSuffixes(credit.productionName);
+    const key = normalizeName(canonicalName);
+    const rawKey = normalizeName(credit.productionName);
+    const reg = registry.get(key) ?? registry.get(rawKey);
+    const mst = master.get(key) ?? master.get(rawKey);
     // industry_master takes priority over production-registry for logo and network
-    const logoUrl = (mst?.logoUrl && mst.logoUrl !== 'none' ? mst.logoUrl : null)
+    // Only use logo if it passed title verification (wikiTitleMatch !== 'needs_review')
+    const masterLogo = (mst?.logoUrl && mst.logoUrl !== 'none' && mst.wikiTitleMatch !== 'needs_review')
+      ? mst.logoUrl
+      : null;
+    const logoUrl = masterLogo
       ?? (reg?.logoUrl && reg.logoUrl !== 'none' ? reg.logoUrl : null)
       ?? credit.logoUrl;
     const channelName = mst?.network || reg?.channel || credit.channelName;
@@ -367,9 +375,16 @@ export async function GET(request: NextRequest) {
       registry.set(normalizeName(entry.name || ''), entry);
     }
 
+    // Build masterMap with suffix-stripped canonical names as keys.
+    // This ensures "ארץ נהדרת - טסטים" credits resolve to the "ארץ נהדרת" master entry.
     const masterMap = new Map<string, IndustryMasterEntry>();
     for (const entry of masterDocs) {
-      masterMap.set(normalizeName(entry.showName || ''), entry);
+      const canonical = stripProductionSuffixes(entry.showName || '');
+      masterMap.set(normalizeName(canonical), entry);
+      // Also index by the raw stored name in case it was already stored without suffix
+      if (canonical !== entry.showName) {
+        masterMap.set(normalizeName(entry.showName || ''), entry);
+      }
     }
 
     const isDebug = request.nextUrl.searchParams.get('debug') === '1';

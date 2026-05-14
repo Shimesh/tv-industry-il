@@ -1,6 +1,8 @@
 // Phase 2: batch-enriches industry_master entries with Wikipedia infobox data.
 // Processes BATCH_SIZE entries per call. The admin page loops until remaining === 0.
 // wikiUrl 'none' sentinel = tried Wikipedia, page not found → skip on re-runs.
+// Title Match Verification: sets wikiTitleMatch='needs_review' and withholds logo
+// when the Wikipedia page title is <70% similar to the show name.
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
 import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
@@ -28,22 +30,30 @@ export async function POST(request: NextRequest) {
   }
 
   let enriched = 0;
+  let needsReview = 0;
   for (const entry of pending) {
     const info = await fetchWikiInfobox(entry.showName);
     const update: Record<string, string> = {
       wikiUrl: info.wikiUrl || 'none',
+      wikiTitleMatch: info.wikiTitleMatch,
       lastUpdated: new Date().toISOString(),
     };
     if (info.network) update.network = info.network;
     if (info.genre) update.genre = info.genre;
-    if (info.logoUrl && !entry.logoUrl) update.logoUrl = info.logoUrl;
+    if (info.productionCompany) update.productionCompany = info.productionCompany;
+    // Only apply logo if title matched well (wikiTitleMatch === 'ok') and entry has no logo yet
+    if (info.logoUrl && !entry.logoUrl && info.wikiTitleMatch === 'ok') {
+      update.logoUrl = info.logoUrl;
+    }
     await patchDocument(`industry_master/${entry.id}`, update);
     if (info.network || info.logoUrl) enriched++;
+    if (info.wikiTitleMatch === 'needs_review') needsReview++;
   }
 
   return NextResponse.json({
     processed: pending.length,
     enriched,
+    needsReview,
     remaining: Math.max(0, totalPending - pending.length),
   });
 }

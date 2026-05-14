@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
     logoUrl: body.logoUrl ?? '',
     network: body.network ?? '',
     genre: body.genre ?? '',
+    productionCompany: body.productionCompany ?? '',
     wikiUrl: body.wikiUrl ?? '',
+    wikiTitleMatch: '',
     lastUpdated: new Date().toISOString(),
   };
   const fields: Record<string, string> = {
@@ -36,7 +38,9 @@ export async function POST(request: NextRequest) {
     logoUrl: entry.logoUrl,
     network: entry.network,
     genre: entry.genre,
+    productionCompany: entry.productionCompany,
     wikiUrl: entry.wikiUrl,
+    wikiTitleMatch: '',
     lastUpdated: entry.lastUpdated,
   };
   await patchDocument(`industry_master/${id}`, fields);

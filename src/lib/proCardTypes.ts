@@ -58,9 +58,11 @@ export type ProCardHistoryResponse = {
 export type IndustryMasterEntry = {
   id: string;
   showName: string;
-  logoUrl: string;      // '' = not fetched, 'none' = tried and not found
-  network: string;      // e.g. 'קשת 12', 'רשת 13'
-  genre: string;        // e.g. 'דרמה', 'ריאליטי'
-  wikiUrl: string;      // full Hebrew Wikipedia URL, '' = not fetched, 'none' = not found
-  lastUpdated: string;  // ISO timestamp
+  logoUrl: string;           // '' = not fetched, 'none' = tried and not found
+  network: string;           // e.g. 'קשת 12', 'רשת 13'
+  genre: string;             // e.g. 'דרמה', 'ריאליטי'
+  productionCompany: string; // e.g. 'דורון טוכמאיר הפקות'
+  wikiUrl: string;           // full Hebrew Wikipedia URL, '' = not fetched, 'none' = not found
+  wikiTitleMatch?: string;   // 'ok' | 'needs_review' | '' — title similarity result
+  lastUpdated: string;       // ISO timestamp
 };

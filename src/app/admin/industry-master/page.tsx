@@ -11,10 +11,11 @@ type FormState = {
   logoUrl: string;
   network: string;
   genre: string;
+  productionCompany: string;
   wikiUrl: string;
 };
 
-const emptyForm: FormState = { showName: '', logoUrl: '', network: '', genre: '', wikiUrl: '' };
+const emptyForm: FormState = { showName: '', logoUrl: '', network: '', genre: '', productionCompany: '', wikiUrl: '' };
 
 export default function IndustryMasterPage() {
   const { user } = useAuth();
@@ -30,7 +31,7 @@ export default function IndustryMasterPage() {
 
   // Seed sync state
   const [seeding, setSeeding] = useState(false);
-  const [seedResult, setSeedResult] = useState<{ added: number; total: number } | null>(null);
+  const [seedResult, setSeedResult] = useState<{ added: number; total: number; skippedNoise: number; merged: number } | null>(null);
 
   // Wikipedia batch sync state
   const [wikiSyncing, setWikiSyncing] = useState(false);
@@ -67,11 +68,11 @@ export default function IndustryMasterPage() {
     setSeedResult(null);
     setError(null);
     try {
-      const result = await fetchWithAuth<{ added: number; total: number; existing: number }>(
+      const result = await fetchWithAuth<{ added: number; total: number; existing: number; skippedNoise: number; merged: number }>(
         '/api/admin/industry-master/sync',
         { method: 'POST' },
       );
-      setSeedResult({ added: result.added, total: result.total });
+      setSeedResult({ added: result.added, total: result.total, skippedNoise: result.skippedNoise ?? 0, merged: result.merged ?? 0 });
       await load();
     } catch (err) {
       setError(String(err));
@@ -117,6 +118,7 @@ export default function IndustryMasterPage() {
       logoUrl: entry.logoUrl === 'none' ? '' : entry.logoUrl,
       network: entry.network,
       genre: entry.genre,
+      productionCompany: entry.productionCompany ?? '',
       wikiUrl: entry.wikiUrl === 'none' ? '' : entry.wikiUrl,
     });
     setShowForm(true);
@@ -205,6 +207,13 @@ export default function IndustryMasterPage() {
               {seedResult.added > 0
                 ? <span className="font-bold text-green-300">✓ נוספו {seedResult.added} הפקות חדשות מתוך {seedResult.total}</span>
                 : <span className="opacity-60">כל {seedResult.total} ההפקות כבר קיימות</span>}
+              {(seedResult.skippedNoise > 0 || seedResult.merged > 0) && (
+                <span className="mr-2 opacity-50">
+                  · {seedResult.skippedNoise > 0 && `${seedResult.skippedNoise} סוננו (רעש/אנשים)`}
+                  {seedResult.skippedNoise > 0 && seedResult.merged > 0 && ' · '}
+                  {seedResult.merged > 0 && `${seedResult.merged} מוזגו`}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -273,6 +282,15 @@ export default function IndustryMasterPage() {
                   onChange={(e) => setForm((f) => ({ ...f, genre: e.target.value }))}
                   className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
                   placeholder="למשל: דרמה"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold opacity-60">חברת הפקה</label>
+                <input
+                  value={form.productionCompany}
+                  onChange={(e) => setForm((f) => ({ ...f, productionCompany: e.target.value }))}
+                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
+                  placeholder="למשל: דורון טוכמאיר הפקות"
                 />
               </div>
               <div>
@@ -375,18 +393,28 @@ export default function IndustryMasterPage() {
                         {entry.genre}
                       </span>
                     )}
+                    {entry.wikiTitleMatch === 'needs_review' && (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300" title="לוגו לא הוצג — כותרת ויקיפדיה לא תאמה בדיוק">
+                        ⚠ אימות ידני
+                      </span>
+                    )}
                   </div>
-                  {entry.wikiUrl && entry.wikiUrl !== 'none' && (
-                    <a
-                      href={entry.wikiUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-0.5 flex items-center gap-1 text-xs text-violet-300 opacity-60 hover:opacity-100"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      ויקיפדיה
-                    </a>
-                  )}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-3">
+                    {entry.productionCompany && (
+                      <span className="text-xs opacity-50">{entry.productionCompany}</span>
+                    )}
+                    {entry.wikiUrl && entry.wikiUrl !== 'none' && (
+                      <a
+                        href={entry.wikiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-violet-300 opacity-60 hover:opacity-100"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        ויקיפדיה
+                      </a>
+                    )}
+                  </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   {deleteConfirm === entry.id ? (
