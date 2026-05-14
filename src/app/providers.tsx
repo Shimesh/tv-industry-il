@@ -11,6 +11,7 @@ import { AppDataProvider } from '@/contexts/AppDataContext';
 import { CallProvider } from '@/contexts/CallContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { ProductionRegistryProvider } from '@/contexts/ProductionRegistryContext';
 import IncomingCall from '@/components/call/IncomingCall';
 import CallScreen from '@/components/call/CallScreen';
 import ConsentGate, { useConsentGateState } from '@/components/ConsentGate';
@@ -131,6 +132,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <AppDataProvider>
             <NotificationProvider>
               <ToastProvider>
+                <ProductionRegistryProvider>
                 <FCMForegroundListener />
                 <PushBanner />
                 <CallProvider>
@@ -147,6 +149,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     </OnboardingWrapper>
                   </AccountApprovalGate>
                 </CallProvider>
+              </ProductionRegistryProvider>
               </ToastProvider>
             </NotificationProvider>
           </AppDataProvider>
