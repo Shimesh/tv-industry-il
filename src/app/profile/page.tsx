@@ -72,7 +72,7 @@ export default function ProfilePage() {
 }
 
 function ProfileContent() {
-  const { profile, updateUserProfile, logout } = useAuth();
+  const { user, profile, updateUserProfile, logout } = useAuth();
   const { contacts: contactsList } = useAppData();
   const { showToast } = useToast();
   const router = useRouter();
@@ -81,6 +81,8 @@ function ProfileContent() {
   const [showSaved, setShowSaved] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [syncState, setSyncState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [syncResult, setSyncResult] = useState<{ count: number; nearMisses: number } | null>(null);
 
   const [form, setForm] = useState({
     displayName: profile?.displayName || '',
@@ -199,6 +201,24 @@ function ProfileContent() {
       showToast('שגיאה בלתי צפויה בהפעלת התראות.', 'error');
     } finally {
       setPushLoading(false);
+    }
+  };
+
+  const handleForceResync = async () => {
+    if (!user) return;
+    setSyncState('loading');
+    setSyncResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/directory/pro-card-history?contactId=${user.uid}&debug=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('failed');
+      const data = await res.json() as { productionCredits: unknown[]; nearMisses?: unknown[] };
+      setSyncResult({ count: data.productionCredits.length, nearMisses: data.nearMisses?.length ?? 0 });
+      setSyncState('done');
+    } catch {
+      setSyncState('error');
     }
   };
 
@@ -472,6 +492,22 @@ function ProfileContent() {
                 <button onClick={() => router.push('/settings')}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] transition-all">
                   <Shield className="w-4 h-4" /><span className="font-medium">פרטיות ואבטחה</span>
+                </button>
+                <button
+                  onClick={() => void handleForceResync()}
+                  disabled={syncState === 'loading'}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sky-300 hover:bg-sky-500/10 transition-all disabled:opacity-50"
+                >
+                  {syncState === 'loading'
+                    ? <div className="w-4 h-4 border-2 border-sky-300/30 border-t-sky-300 rounded-full animate-spin" />
+                    : <Search className="w-4 h-4" />}
+                  <span className="font-medium">
+                    {syncState === 'done' && syncResult
+                      ? `כרטיס מקצועי: ${syncResult.count} קרדיטים`
+                      : syncState === 'error'
+                        ? 'שגיאה — נסה שוב'
+                        : 'סנכרן כרטיס מקצועי'}
+                  </span>
                 </button>
                 <button onClick={logout}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all">

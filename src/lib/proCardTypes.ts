@@ -54,3 +54,13 @@ export type ProCardHistoryResponse = {
   boardActivity: ProCardBoardActivity[];
   nearMisses?: NearMiss[];
 };
+
+export type IndustryMasterEntry = {
+  id: string;
+  showName: string;
+  logoUrl: string;      // '' = not fetched, 'none' = tried and not found
+  network: string;      // e.g. 'קשת 12', 'רשת 13'
+  genre: string;        // e.g. 'דרמה', 'ריאליטי'
+  wikiUrl: string;      // full Hebrew Wikipedia URL, '' = not fetched, 'none' = not found
+  lastUpdated: string;  // ISO timestamp
+};

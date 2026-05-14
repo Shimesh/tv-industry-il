@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
-import type { NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
+import type { IndustryMasterEntry, NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -264,16 +264,19 @@ function mergeAndDedupeCredits(credits: ProCardProductionCredit[]): ProCardProdu
 function applyRegistryOverrides(
   credits: ProCardProductionCredit[],
   registry: Map<string, ProductionRegistryEntry>,
+  master: Map<string, IndustryMasterEntry>,
 ): ProCardProductionCredit[] {
   return credits.map((credit) => {
-    const entry = registry.get(normalizeName(credit.productionName));
-    if (!entry) return credit;
-    return {
-      ...credit,
-      logoUrl: entry.logoUrl || credit.logoUrl,
-      channelName: entry.channel || credit.channelName,
-      isMajor: credit.isMajor || entry.isMajor,
-    };
+    const key = normalizeName(credit.productionName);
+    const reg = registry.get(key);
+    const mst = master.get(key);
+    // industry_master takes priority over production-registry for logo and network
+    const logoUrl = (mst?.logoUrl && mst.logoUrl !== 'none' ? mst.logoUrl : null)
+      ?? (reg?.logoUrl && reg.logoUrl !== 'none' ? reg.logoUrl : null)
+      ?? credit.logoUrl;
+    const channelName = mst?.network || reg?.channel || credit.channelName;
+    const isMajor = credit.isMajor || Boolean(reg?.isMajor);
+    return { ...credit, logoUrl, channelName, isMajor };
   });
 }
 
@@ -351,16 +354,22 @@ export async function GET(request: NextRequest) {
       emails: [...userEmails],
     });
 
-    const [globalProductions, calendarDocs, workBoardDocs, registryDocs] = await Promise.all([
+    const [globalProductions, calendarDocs, workBoardDocs, registryDocs, masterDocs] = await Promise.all([
       listDocuments<GlobalProductionDoc>('global_productions').catch(() => []),
       listDocuments<FlexibleHistoryDoc>('calendar').catch(() => []),
       listDocuments<FlexibleHistoryDoc>('work-boards').catch(() => []),
       listDocuments<ProductionRegistryEntry>('production-registry').catch(() => []),
+      listDocuments<IndustryMasterEntry>('industry_master').catch(() => []),
     ]);
 
     const registry = new Map<string, ProductionRegistryEntry>();
     for (const entry of registryDocs) {
       registry.set(normalizeName(entry.name || ''), entry);
+    }
+
+    const masterMap = new Map<string, IndustryMasterEntry>();
+    for (const entry of masterDocs) {
+      masterMap.set(normalizeName(entry.showName || ''), entry);
     }
 
     const isDebug = request.nextUrl.searchParams.get('debug') === '1';
@@ -414,6 +423,7 @@ export async function GET(request: NextRequest) {
     const productionCredits = applyRegistryOverrides(
       mergeAndDedupeCredits(rawCredits).sort((a, b) => b.date.localeCompare(a.date)),
       registry,
+      masterMap,
     );
 
     console.log('[pro-card-history] found', productionCredits.length, 'production credits for', fullName);
