@@ -33,7 +33,16 @@ export async function POST(request: NextRequest) {
       wikiUrl: '',
       lastUpdated: new Date().toISOString(),
     };
-    await patchDocument(`industry_master/${id}`, entry as unknown as Record<string, unknown>);
+    const fields: Record<string, string> = {
+      id: entry.id,
+      showName: entry.showName,
+      logoUrl: entry.logoUrl,
+      network: entry.network,
+      genre: entry.genre,
+      wikiUrl: entry.wikiUrl,
+      lastUpdated: entry.lastUpdated,
+    };
+    await patchDocument(`industry_master/${id}`, fields);
     added++;
   }
 

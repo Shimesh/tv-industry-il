@@ -30,14 +30,14 @@ export async function POST(request: NextRequest) {
   let enriched = 0;
   for (const entry of pending) {
     const info = await fetchWikiInfobox(entry.showName);
-    const update: Partial<IndustryMasterEntry> = {
+    const update: Record<string, string> = {
       wikiUrl: info.wikiUrl || 'none',
       lastUpdated: new Date().toISOString(),
     };
     if (info.network) update.network = info.network;
     if (info.genre) update.genre = info.genre;
     if (info.logoUrl && !entry.logoUrl) update.logoUrl = info.logoUrl;
-    await patchDocument(`industry_master/${entry.id}`, update as Record<string, unknown>);
+    await patchDocument(`industry_master/${entry.id}`, update);
     if (info.network || info.logoUrl) enriched++;
   }
 
