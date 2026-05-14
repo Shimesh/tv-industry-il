@@ -7,6 +7,7 @@ interface UserAvatarProps {
   photoURL?: string | null;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   isOnline?: boolean;
+  isGhost?: boolean;
   className?: string;
 }
 
@@ -24,7 +25,14 @@ const dotSizeMap = {
   xl: 'w-5 h-5 border-2',
 };
 
-export default function UserAvatar({ name, photoURL, size = 'md', isOnline, className = '' }: UserAvatarProps) {
+const ghostIconSizeMap = {
+  sm: 'w-4 h-4',
+  md: 'w-5 h-5',
+  lg: 'w-7 h-7',
+  xl: 'w-10 h-10',
+};
+
+export default function UserAvatar({ name, photoURL, size = 'md', isOnline, isGhost, className = '' }: UserAvatarProps) {
   const [failedPhotoURL, setFailedPhotoURL] = useState<string | null>(null);
   const imageSrc = photoURL && failedPhotoURL !== photoURL ? photoURL : undefined;
   const initials = name
@@ -57,6 +65,17 @@ export default function UserAvatar({ name, photoURL, size = 'md', isOnline, clas
           referrerPolicy="no-referrer"
           onError={() => setFailedPhotoURL(imageSrc)}
         />
+      ) : isGhost ? (
+        <div className={`${sizeMap[size]} rounded-full bg-slate-700/80 flex items-center justify-center ring-2 ring-slate-500/40 animate-pulse`}>
+          <svg
+            className={`${ghostIconSizeMap[size]} text-slate-400`}
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 2C8.13 2 5 5.13 5 9v.5L3.11 12.38A1 1 0 0 0 4 14h1v2a1 1 0 0 0 1 1h1v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2h1a1 1 0 0 0 1-1v-2h1a1 1 0 0 0 .89-1.62L19 9.5V9c0-3.87-3.13-7-7-7z" />
+          </svg>
+        </div>
       ) : (
         <div className={`${sizeMap[size]} rounded-full bg-gradient-to-br ${colors[colorIdx]} flex items-center justify-center font-bold text-white`}>
           {initials}

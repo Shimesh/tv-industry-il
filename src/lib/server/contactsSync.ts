@@ -7,7 +7,7 @@ import {
   normalizeRole,
 } from '@/lib/crewNormalization';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
-import { getDocument, listDocuments, runQuery } from '@/lib/server/firestoreAdminRest';
+import { createDocument, getDocument, listDocuments, runQuery } from '@/lib/server/firestoreAdminRest';
 import { getFirebaseAdminFirestore } from '@/lib/server/firebaseAdmin';
 import { getDepartmentForRole, normalizeRoleToCanonical, normalizeRolesToCanonical } from '@/constants/departments';
 
@@ -159,6 +159,10 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function ghostSeed(name: string): number {
+  return name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 8;
+}
+
 function isLegacyDepartment(value: string | undefined): boolean {
   return ['אולפן', 'קונטרול', 'כללי'].includes(String(value || ''));
 }
@@ -240,6 +244,36 @@ class SafeFirestoreBatchWriter {
     }
     this.batches = [];
   }
+}
+
+async function writeDiscoveries(
+  entries: Array<{
+    name: string;
+    phone: string | null;
+    role: string;
+    sources: string[];
+    contactId: string;
+  }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+  const today = new Date().toISOString().slice(0, 10);
+  await Promise.allSettled(
+    entries.map((entry) => {
+      const sourceBoard = entry.sources[0] || 'schedule';
+      const sourceBoardName =
+        sourceBoard === 'global_productions' ? 'הפקות גלובלי' : 'לוח הפקה';
+      return createDocument('contact_discoveries', {
+        name: entry.name,
+        phone: entry.phone ?? null,
+        role: entry.role,
+        sourceBoard,
+        sourceBoardName,
+        contactId: entry.contactId,
+        createdAt: new Date().toISOString(),
+        discoveryDate: today,
+      });
+    }),
+  );
 }
 
 async function cleanupDuplicateContacts(
@@ -397,6 +431,7 @@ function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandid
   const mergedPhone = isHiddenFromDirectory ? null : existing?.phone || candidate.normalizedPhone;
   const mergedRoleFields = mergeRoleFields(existing as Record<string, unknown> | null, [candidate.role]);
   const createdAt = existing ? undefined : nowIso();
+  const ghostFields = existing ? {} : { isGhost: true, ghostAvatarSeed: ghostSeed(candidate.normalizedName) };
   const department = existing?.department && !isLegacyDepartment(existing.department)
     ? mergedRoleFields.department || existing.department
     : mergedRoleFields.department || candidate.department;
@@ -424,6 +459,7 @@ function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandid
     sources,
     updatedAt: nowIso(),
     ...(createdAt ? { createdAt } : {}),
+    ...ghostFields,
   };
 }
 
@@ -557,6 +593,13 @@ export async function syncContactsFromProductions(
   let recoveredRoles = 0;
   let usersToUpdate = 0;
   const sampleMissing: Array<{ name: string; phone: string | null; role: string }> = [];
+  const discoveryQueue: Array<{
+    name: string;
+    phone: string | null;
+    role: string;
+    sources: string[];
+    contactId: string;
+  }> = [];
   const sampleRecoveredRoles: Array<{ name: string; phone: string | null; addedRoles: string[] }> = [];
   const touchedUsers = new Set<string>();
 
@@ -605,6 +648,15 @@ export async function syncContactsFromProductions(
         byNameWithPhone.set(candidate.normalizedName, createdRecord);
       } else {
         byNameWithoutPhone.set(candidate.normalizedName, createdRecord);
+      }
+      if (applyChanges) {
+        discoveryQueue.push({
+          name: candidate.normalizedName,
+          phone: candidate.normalizedPhone,
+          role: candidate.role,
+          sources: candidate.sources,
+          contactId: docId,
+        });
       }
     } else if (contactNeedsUpdate(existing, merged)) {
       updated++;
@@ -676,6 +728,10 @@ export async function syncContactsFromProductions(
   }
 
   await writer?.commit();
+
+  if (applyChanges && discoveryQueue.length > 0) {
+    await writeDiscoveries(discoveryQueue);
+  }
 
   return {
     currentContacts,
