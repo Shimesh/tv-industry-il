@@ -634,8 +634,8 @@ function DirectoryContent() {
                           <div className={`relative h-14 w-14 overflow-hidden rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg transition-transform duration-300 group-hover:scale-105 ${
                             isMeCard ? 'ring-2 ring-[var(--theme-accent)] ring-offset-2 ring-offset-[var(--theme-bg-card)]' : ''
                           }`}>
-                            {typeof contact.photoURL === 'string' && contact.photoURL ? (
-                              <img src={contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
+                            {(contact.customPhotoURL || contact.photoURL) ? (
+                              <img src={contact.customPhotoURL || contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
                             ) : (
                               (contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')
                             )}
@@ -744,8 +744,8 @@ function DirectoryContent() {
                     >
                       {isMeRow && <Star className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />}
                       <div className={`h-10 w-10 overflow-hidden rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md`}>
-                        {typeof contact.photoURL === 'string' && contact.photoURL ? (
-                          <img src={contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
+                        {(contact.customPhotoURL || contact.photoURL) ? (
+                          <img src={contact.customPhotoURL || contact.photoURL} alt={`${contact.firstName || ''} ${contact.lastName || ''}`} className="h-full w-full object-cover" />
                         ) : (
                           (contact.firstName?.[0] || '') + (contact.lastName?.[0] || '')
                         )}
