@@ -26,10 +26,11 @@ export default function ProductionRegistryPage() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncPhase, setSyncPhase] = useState<'idle' | 'names' | 'logos'>('idle');
+  const [syncProgress, setSyncProgress] = useState<{ logosFound: number; logosProcessed: number; logosTotal: number } | null>(null);
   const [syncResult, setSyncResult] = useState<{
-    added: number; failed: number; skipped: number; logos?: number;
+    added: number; skipped: number;
     scanned?: { global_productions: number; personal_productions: number };
-    searchedFields?: readonly string[];
   } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -97,17 +98,45 @@ export default function ProductionRegistryPage() {
     setSyncing(true);
     setSyncResult(null);
     setSyncError(null);
+    setSyncProgress(null);
+
     try {
-      const data = await fetchWithAuth<{ added: number; failed: number; skipped: number; logos: number; scanned: { global_productions: number; personal_productions: number }; searchedFields: string[] }>(
-        '/api/admin/production-registry/sync',
-        { method: 'POST' },
-      );
-      setSyncResult(data);
+      // Phase 1: scan names (fast, no web requests)
+      setSyncPhase('names');
+      const phase1 = await fetchWithAuth<{
+        added: number; skipped: number; pendingLogos: number;
+        scanned: { global_productions: number; personal_productions: number };
+      }>('/api/admin/production-registry/sync', { method: 'POST' });
+
+      setSyncResult({ added: phase1.added, skipped: phase1.skipped, scanned: phase1.scanned });
+      await load();
+
+      if (phase1.pendingLogos === 0) return;
+
+      // Phase 2: fetch logos in batches of 5, loop until no more pending
+      setSyncPhase('logos');
+      let remaining = phase1.pendingLogos;
+      let logosFound = 0;
+      const logosTotal = phase1.pendingLogos;
+
+      while (remaining > 0) {
+        setSyncProgress({ logosFound, logosProcessed: logosTotal - remaining, logosTotal });
+        const batch = await fetchWithAuth<{ processed: number; found: number; remaining: number }>(
+          '/api/admin/production-registry/sync/logos',
+          { method: 'POST' },
+        );
+        logosFound += batch.found;
+        remaining = batch.remaining;
+        if (batch.processed === 0) break; // safety: no progress, stop
+      }
+
+      setSyncProgress({ logosFound, logosProcessed: logosTotal, logosTotal });
       await load();
     } catch (err) {
       setSyncError(String(err));
     } finally {
       setSyncing(false);
+      setSyncPhase('idle');
     }
   }
 
@@ -155,7 +184,11 @@ export default function ProductionRegistryPage() {
               className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-400 disabled:opacity-50"
             >
               {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {syncing ? 'מסנכרן...' : 'סנכרן הפקות מהיומן'}
+              {syncing && syncPhase === 'names' && 'סורק שמות...'}
+              {syncing && syncPhase === 'logos' && syncProgress
+                ? `מביא לוגואים (${syncProgress.logosProcessed}/${syncProgress.logosTotal})...`
+                : syncing && syncPhase === 'logos' ? 'מביא לוגואים...' : null}
+              {!syncing && 'סנכרן הפקות מהיומן'}
             </button>
           </div>
 
@@ -167,26 +200,20 @@ export default function ProductionRegistryPage() {
 
           {syncResult && !syncError && (
             <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${syncResult.added > 0 ? 'bg-green-500/10 border border-green-400/20' : 'bg-white/5 border border-white/10'}`}>
-              <div>
+              <div className="flex flex-wrap gap-x-3">
                 {syncResult.added > 0 ? (
-                  <span className="font-bold text-green-300">✓ נוספו {syncResult.added} הפקות חדשות לקטלוג</span>
+                  <span className="font-bold text-green-300">✓ נוספו {syncResult.added} הפקות חדשות</span>
                 ) : (
-                  <span className="opacity-60">הקטלוג מעודכן — לא נמצאו הפקות חדשות</span>
+                  <span className="opacity-60">אין הפקות חדשות</span>
                 )}
-                {(syncResult.logos ?? 0) > 0 && (
-                  <span className="mr-2 opacity-60">· {syncResult.logos} עם לוגו</span>
+                {syncProgress && (
+                  <span className="opacity-60">· {syncProgress.logosFound} לוגואים נמצאו</span>
                 )}
-                {syncResult.failed > 0 && (
-                  <span className="mr-2 text-orange-300">· {syncResult.failed} לא נשמרו</span>
-                )}
-                <span className="mr-2 opacity-40">· {syncResult.skipped} קיימות</span>
+                <span className="opacity-40">· {syncResult.skipped} קיימות</span>
               </div>
               {syncResult.scanned && (
                 <div className="mt-1 opacity-40" dir="ltr">
-                  Scanned: global_productions={syncResult.scanned.global_productions} personal={syncResult.scanned.personal_productions}
-                  {syncResult.searchedFields && (
-                    <> · Fields: {syncResult.searchedFields.join(', ')}</>
-                  )}
+                  Scanned: global={syncResult.scanned.global_productions} personal={syncResult.scanned.personal_productions}
                 </div>
               )}
             </div>
@@ -298,7 +325,7 @@ export default function ProductionRegistryPage() {
           <div className="space-y-2">
             {entries.map((entry) => (
               <div key={entry.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                {entry.logoUrl ? (
+                {entry.logoUrl && entry.logoUrl !== 'none' ? (
                   <img src={entry.logoUrl} alt={entry.name} className="h-10 w-10 rounded-lg object-contain bg-white/10" />
                 ) : (
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-300">

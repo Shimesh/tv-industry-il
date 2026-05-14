@@ -120,7 +120,7 @@ function formatDate(date: string): string {
 }
 
 function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
-  if (credit.logoUrl) {
+  if (credit.logoUrl && credit.logoUrl !== 'none') {
     return (
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
         <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" crossOrigin="anonymous" />
@@ -491,7 +491,7 @@ export default function ProCardModal({
               )}
 
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.2.7
+                TV Industry IL · Pro Card v2.2.8
               </div>
             </div>
           </div>
