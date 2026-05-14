@@ -185,8 +185,9 @@ body.accessibility-high-contrast :where(header, nav, main, footer, section, arti
 }
 
 body.accessibility-high-contrast :where(a, button, input, select, textarea, summary, [role="button"]) {
-  border-color: #ffff00 !important;
+  border: 2px solid #ffff00 !important;
   color: #ffff00 !important;
+  outline-offset: 2px;
 }
 
 body.accessibility-high-contrast :where(button, input, select, textarea, summary, [role="button"]) {
@@ -207,6 +208,32 @@ body.accessibility-high-contrast .gradient-text-warm {
   background: none !important;
   -webkit-text-fill-color: #ffff00 !important;
   color: #ffff00 !important;
+}
+
+/* Region separators — distinguish nav/main/footer on a uniform black canvas */
+body.accessibility-high-contrast :where(header, main, footer) {
+  outline: 1px solid rgba(255, 255, 255, 0.25);
+  outline-offset: -1px;
+}
+
+/* Images — add border so they stand out against black */
+body.accessibility-high-contrast img {
+  border: 2px solid #ffff00 !important;
+  opacity: 0.9 !important;
+}
+
+/* AccessibilityWidget FAB — must always be visible; higher specificity beats :where() */
+body.accessibility-high-contrast [data-a11y-fab] {
+  background-color: #000000 !important;
+  color: #ffff00 !important;
+  border: 3px solid #ffff00 !important;
+  box-shadow: 0 0 0 3px #000000, 0 0 0 5px #ffffff !important;
+}
+
+/* AccessibilityWidget panel — white border so it's distinguishable */
+body.accessibility-high-contrast [data-a11y-panel] {
+  border: 2px solid #ffffff !important;
+  background-color: #000000 !important;
 }
 
 .app-safe-top {

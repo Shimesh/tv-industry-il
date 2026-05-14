@@ -38,6 +38,7 @@ const defaultSettings: AccessibilitySettings = {
 export default function AccessibilityWidget() {
   const [open, setOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [resetConfirmed, setResetConfirmed] = useState(false);
   const [settings, setSettings] = useState<AccessibilitySettings>(defaultSettings);
   const [position, setPosition] = useState<WidgetPosition>({ x: EDGE_MARGIN, y: EDGE_MARGIN });
   const [menuSize, setMenuSize] = useState<MenuSize>({
@@ -48,6 +49,7 @@ export default function AccessibilityWidget() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const justDraggedRef = useRef(false);
+  const fabTapsRef = useRef<number[]>([]);
   const settingsStorageReadyRef = useRef(false);
   const positionStorageReadyRef = useRef(false);
   const dragRef = useRef({
@@ -208,9 +210,31 @@ export default function AccessibilityWidget() {
     setIsDragging(false);
   };
 
+  const emergencyReset = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(POSITION_STORAGE_KEY);
+      localStorage.removeItem('tv-industry-theme');
+    } catch { /* ignore */ }
+    document.body.classList.remove('accessibility-high-contrast', 'accessibility-stop-animations');
+    document.documentElement.classList.remove('accessibility-large-text');
+    setSettings(defaultSettings);
+    setOpen(false);
+    setResetConfirmed(true);
+    setTimeout(() => setResetConfirmed(false), 3000);
+  };
+
   const handleFabClick = () => {
     if (justDraggedRef.current) {
       justDraggedRef.current = false;
+      return;
+    }
+
+    const now = Date.now();
+    fabTapsRef.current = [...fabTapsRef.current, now].filter(t => now - t < 3000);
+    if (fabTapsRef.current.length >= 5) {
+      fabTapsRef.current = [];
+      emergencyReset();
       return;
     }
 
@@ -281,10 +305,36 @@ export default function AccessibilityWidget() {
         height: FAB_SIZE,
       }}
     >
+      {resetConfirmed && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: '5rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1a1a1a',
+            color: '#ffffff',
+            border: '2px solid #00c853',
+            borderRadius: '0.75rem',
+            padding: '0.75rem 1.25rem',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            zIndex: 9999,
+            whiteSpace: 'nowrap',
+            direction: 'rtl',
+          }}
+        >
+          הגדרות תצוגה אופסו למצב ברירת מחדל
+        </div>
+      )}
+
       {open && (
         <section
           ref={menuRef}
           id={panelId}
+          data-a11y-panel="true"
           aria-label="הגדרות נגישות"
           className="fixed w-72 overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] text-[var(--theme-text)] shadow-2xl max-[360px]:w-[calc(100vw-2rem)]"
           style={menuStyle}
@@ -336,6 +386,7 @@ export default function AccessibilityWidget() {
 
       <button
         type="button"
+        data-a11y-fab="true"
         onClick={handleFabClick}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}

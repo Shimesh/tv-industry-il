@@ -102,6 +102,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('reset_theme') || url.searchParams.has('reset')) {
+        localStorage.removeItem('tv-industry-il-accessibility');
+        localStorage.removeItem('tv-industry-il-accessibility-position');
+        localStorage.removeItem('tv-industry-theme');
+        document.body.classList.remove('accessibility-high-contrast', 'accessibility-stop-animations');
+        document.documentElement.classList.remove('accessibility-large-text');
+        url.searchParams.delete('reset_theme');
+        url.searchParams.delete('reset');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // Before hydration completes, render children without any client-only UI providers
   // (ToastProvider renders a fixed <div> that causes server/client HTML mismatch).
   // ThemeProvider and AuthProvider are pure context — no DOM output — so they are safe.
