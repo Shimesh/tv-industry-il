@@ -191,5 +191,10 @@ service cloud.firestore {
         allow read, write: if isAuth();
       }
     }
+
+    match /industry_master/{docId} {
+      allow read: if isAuth();
+      allow write: if false; // all writes go through server-side admin API
+    }
   }
 }
