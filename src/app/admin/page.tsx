@@ -12,6 +12,7 @@ import {
   BarChart3,
   CheckCircle,
   ChevronDown,
+  Clapperboard,
   Contact2,
   Crown,
   FileText,
@@ -916,6 +917,13 @@ export default function AdminPage() {
               כלי סנכרון
               <ArrowLeft className="h-4 w-4" />
             </Link>
+            <Link
+              href="/admin/production-registry"
+              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
+            >
+              קטלוג הפקות גלובלי
+              <Clapperboard className="h-4 w-4" />
+            </Link>
           </div>
         </div>
 
@@ -1383,6 +1391,13 @@ export default function AdminPage() {
                   >
                     מרכז סנכרון
                     <ArrowLeft className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href="/admin/production-registry"
+                    className="flex w-full items-center justify-between rounded-xl bg-gray-800 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-700"
+                  >
+                    קטלוג הפקות גלובלי
+                    <Clapperboard className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
