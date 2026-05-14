@@ -18,6 +18,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (typeof body.channel === 'string') updates.channel = body.channel.trim();
   if (typeof body.description === 'string') updates.description = body.description.trim();
   if (typeof body.isMajor === 'boolean') updates.isMajor = body.isMajor;
+  if (typeof body.isArchived === 'boolean') updates.isArchived = body.isArchived;
 
   await patchDocument(`production-registry/${id}`, updates);
   return NextResponse.json({ ok: true });

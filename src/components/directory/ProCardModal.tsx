@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Briefcase,
+  Bug,
   Camera,
   CheckCircle2,
   Clapperboard,
@@ -23,7 +24,8 @@ import {
   X,
 } from 'lucide-react';
 import type { Contact } from '@/data/contacts';
-import type { ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
+import type { NearMiss, ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
+import { useAuth } from '@/contexts/AuthContext';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 
 type Props = {
@@ -162,9 +164,14 @@ export default function ProCardModal({
   removalHref,
   onClose,
 }: Props) {
+  const { profile } = useAuth();
+  const isAdmin = profile?.siteRole === 'admin';
   const [history, setHistory] = useState<ProCardHistoryResponse>({ productionCredits: [], boardActivity: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+  const [debugMode, setDebugMode] = useState(false);
+  const [nearMisses, setNearMisses] = useState<NearMiss[]>([]);
+  const [debugLoading, setDebugLoading] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
   const name = fullName(contact);
   const avatarUrl = typeof contact.customPhotoURL === 'string' && contact.customPhotoURL
@@ -206,6 +213,27 @@ export default function ProCardModal({
       cancelled = true;
     };
   }, [contact.id]);
+
+  useEffect(() => {
+    if (!debugMode || !isAdmin) return;
+    let cancelled = false;
+    async function loadDebug() {
+      setDebugLoading(true);
+      try {
+        const response = await fetch(`/api/directory/pro-card-history?contactId=${encodeURIComponent(String(contact.id))}&debug=1`, {
+          cache: 'no-store',
+        });
+        const data = response.ok ? (await response.json()) as ProCardHistoryResponse : null;
+        if (!cancelled) setNearMisses(data?.nearMisses ?? []);
+      } catch {
+        if (!cancelled) setNearMisses([]);
+      } finally {
+        if (!cancelled) setDebugLoading(false);
+      }
+    }
+    void loadDebug();
+    return () => { cancelled = true; };
+  }, [debugMode, isAdmin, contact.id]);
 
   async function shareCard() {
     if (!shareCardRef.current || shareState === 'rendering') return;
@@ -410,11 +438,23 @@ export default function ProCardModal({
                     <Film className="h-4 w-4 text-sky-200" />
                     היסטוריית הפקות
                   </h3>
-                  {history.productionCredits.length > 0 && (
-                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/70">
-                      {history.productionCredits.length} קרדיטים
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {history.productionCredits.length > 0 && (
+                      <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/70">
+                        {history.productionCredits.length} קרדיטים
+                      </span>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDebugMode((prev) => !prev)}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition ${debugMode ? 'bg-orange-400/20 text-orange-200' : 'bg-white/8 text-white/40 hover:text-white/70'}`}
+                      >
+                        <Bug className="h-3 w-3" />
+                        Debug
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {historyLoading ? (
@@ -490,8 +530,36 @@ export default function ProCardModal({
                 </section>
               )}
 
+              {debugMode && isAdmin && (
+                <section className="mt-4 rounded-2xl border border-orange-400/25 bg-orange-400/[0.06] p-4">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-orange-200">
+                    <Bug className="h-4 w-4" />
+                    Near Misses (Debug)
+                  </h3>
+                  {debugLoading ? (
+                    <div className="h-12 animate-pulse rounded-xl bg-white/8" />
+                  ) : nearMisses.length === 0 ? (
+                    <p className="text-xs text-white/45">אין near-misses — אין הפקות שכמעט התאימו.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {nearMisses.map((miss, i) => (
+                        <div key={i} className="rounded-xl bg-white/[0.05] p-3 text-xs">
+                          <div className="font-bold text-orange-100">{miss.productionName}</div>
+                          <div className="mt-1 text-white/50" dir="ltr">{miss.date}</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {miss.crewSample.map((name, j) => (
+                              <span key={j} className="rounded bg-white/8 px-1.5 py-0.5 text-white/60">{name}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.2.8
+                TV Industry IL · Pro Card v2.2.9
               </div>
             </div>
           </div>

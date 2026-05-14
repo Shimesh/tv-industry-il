@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
-import type { ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
+import type { NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -51,19 +51,38 @@ function stringArray(value: unknown): string[] {
   return single ? [single] : [];
 }
 
-// Fuzzy word-based match: "ירון" matches "ירון אורבך" (whole-word prefix)
+// Fuzzy word-based match — handles:
+// • word-order independence: "אורבך ירון" matches "ירון אורבך"
+// • abbreviations: "ירון א." matches "ירון אורבך" (sw.startsWith(ew))
+// • dashes as word separators: "ירון-אורבך" → "ירון אורבך"
+// • partial single-word: entry "ירון" or "אורבך" alone matches full name
 function nameMatchesFuzzy(entryName: string, displayNames: Set<string>): boolean {
-  const normalized = normalizeName(entryName);
+  if (!entryName) return false;
+  // Treat dashes as word separators before normalizing
+  const normalized = normalizeName(entryName.replace(/[-–—]/g, ' '));
   if (!normalized || normalized.length < 2) return false;
-  const entryWords = normalized.split(/\s+/);
+  const entryWords = normalized.split(/\s+/).filter(Boolean);
   for (const dn of displayNames) {
     if (!dn || dn.length < 2) continue;
     if (normalized === dn) return true;
-    const searchWords = dn.split(/\s+/);
-    // All words of the search name must appear in the entry
-    if (searchWords.every((sw) => entryWords.some((ew) => ew === sw || ew.startsWith(sw)))) return true;
-    // Or the entire entry is a prefix of the search name (e.g. entry "ירון" matches search "ירון אורבך")
-    if (entryWords.every((ew) => searchWords.some((sw) => sw === ew || sw.startsWith(ew)))) return true;
+    const searchWords = dn.split(/\s+/).filter(Boolean);
+    // All search words found in entry (handles abbreviation: "א" matches "אורבך")
+    if (searchWords.every((sw) => entryWords.some((ew) => ew === sw || ew.startsWith(sw) || sw.startsWith(ew)))) return true;
+    // All entry words found in search (handles single-token entries like "ירון" or "אורבך")
+    if (entryWords.every((ew) => searchWords.some((sw) => sw === ew || sw.startsWith(ew) || ew.startsWith(sw)))) return true;
+  }
+  return false;
+}
+
+// Near-miss: entry name shares at least one token's first character with displayNames (weak signal only)
+function nameIsNearMiss(entryName: string, displayNames: Set<string>): boolean {
+  if (!entryName) return false;
+  const normalized = normalizeName(entryName.replace(/[-–—]/g, ' '));
+  if (!normalized) return false;
+  const entryWords = normalized.split(/\s+/).filter((w) => w.length >= 2);
+  for (const dn of displayNames) {
+    const searchWords = dn.split(/\s+/).filter((w) => w.length >= 2);
+    if (searchWords.some((sw) => entryWords.some((ew) => ew[0] === sw[0]))) return true;
   }
   return false;
 }
@@ -293,8 +312,11 @@ export async function GET(request: NextRequest) {
     );
 
     const displayNames = new Set<string>([normalizedContactName].filter(Boolean));
-    const firstName = normalizeName((fullName || '').split(/\s+/)[0] || '');
+    const nameParts = (fullName || '').split(/\s+/).filter(Boolean);
+    const firstName = normalizeName(nameParts[0] || '');
+    const lastName = normalizeName(nameParts[nameParts.length - 1] || '');
     if (firstName && firstName.length >= 2) displayNames.add(firstName);
+    if (lastName && lastName.length >= 2 && lastName !== firstName) displayNames.add(lastName);
 
     console.log('[pro-card-history] searching for', {
       contactId,
@@ -316,10 +338,21 @@ export async function GET(request: NextRequest) {
       registry.set(normalizeName(entry.name || ''), entry);
     }
 
+    const isDebug = request.nextUrl.searchParams.get('debug') === '1';
+    const nearMisses: NearMiss[] = [];
+
     const rawCredits: ProCardProductionCredit[] = [
       ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
         const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, displayNames);
-        if (!crewEntry) return [];
+        if (!crewEntry) {
+          if (isDebug) {
+            const crewNames = (production.crew_list || []).map((e) => e.name).filter(Boolean);
+            if (crewNames.some((n) => nameIsNearMiss(n, displayNames))) {
+              nearMisses.push({ productionName: production.name || '', date: asDateValue(production.date), crewSample: crewNames.slice(0, 6) });
+            }
+          }
+          return [];
+        }
 
         const date = asDateValue(production.date);
         const year = date.slice(0, 4);
@@ -386,6 +419,7 @@ export async function GET(request: NextRequest) {
     const response: ProCardHistoryResponse = {
       productionCredits,
       boardActivity,
+      ...(isDebug ? { nearMisses } : {}),
     };
 
     return NextResponse.json(response);
