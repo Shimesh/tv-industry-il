@@ -21,26 +21,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'showName required' }, { status: 400 });
   }
   const id = `im_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const canonicalName = (body.masterName ?? body.showName ?? '').trim() || body.showName!.trim();
   const entry: IndustryMasterEntry = {
     id,
-    showName: body.showName.trim(),
+    masterName: canonicalName,
+    showName: canonicalName,
     logoUrl: body.logoUrl ?? '',
     network: body.network ?? '',
-    genre: body.genre ?? '',
+    genre: '',
     productionCompany: body.productionCompany ?? '',
-    wikiUrl: body.wikiUrl ?? '',
+    wikiUrl: '',
     wikiTitleMatch: '',
+    isVerified: false,
+    variations: [],
     lastUpdated: new Date().toISOString(),
   };
-  const fields: Record<string, string> = {
+  const fields: Record<string, string | boolean | string[]> = {
     id: entry.id,
-    showName: entry.showName,
+    masterName: canonicalName,
+    showName: canonicalName,
     logoUrl: entry.logoUrl,
     network: entry.network,
-    genre: entry.genre,
+    genre: '',
     productionCompany: entry.productionCompany,
-    wikiUrl: entry.wikiUrl,
+    wikiUrl: '',
     wikiTitleMatch: '',
+    isVerified: false,
+    variations: [],
     lastUpdated: entry.lastUpdated,
   };
   await patchDocument(`industry_master/${id}`, fields);
