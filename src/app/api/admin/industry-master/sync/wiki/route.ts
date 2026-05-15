@@ -1,4 +1,4 @@
-// Phase 2: batch-enriches industry_master entries with Wikipedia infobox data.
+// Batch Wikipedia enrichment for industry_master entries.
 // Processes BATCH_SIZE entries per call. The admin page loops until remaining === 0.
 // wikiUrl 'none' sentinel = tried Wikipedia, page not found → skip on re-runs.
 // Title Match Verification: sets wikiTitleMatch='needs_review' and withholds logo
@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const allEntries = await listDocuments<IndustryMasterEntry>('industry_master').catch(() => []);
-  // Skip entries that already have network data or were already attempted (wikiUrl === 'none')
-  const needsWiki = allEntries.filter((e) => !e.network && e.wikiUrl !== 'none');
+  // Skip entries already verified, already attempted (wikiUrl === 'none'), or already enriched
+  const needsWiki = allEntries.filter((e) => !e.isVerified && !e.network && e.wikiUrl !== 'none');
   const pending = needsWiki.slice(0, BATCH_SIZE);
   const totalPending = needsWiki.length;
 
@@ -32,17 +32,20 @@ export async function POST(request: NextRequest) {
   let enriched = 0;
   let needsReview = 0;
   for (const entry of pending) {
-    const info = await fetchWikiInfobox(entry.showName);
-    const update: Record<string, string> = {
+    const searchName = entry.masterName ?? entry.showName;
+    const info = await fetchWikiInfobox(searchName);
+    const isVerified = info.wikiTitleMatch === 'ok';
+    const update: Record<string, string | boolean> = {
       wikiUrl: info.wikiUrl || 'none',
       wikiTitleMatch: info.wikiTitleMatch,
+      isVerified,
       lastUpdated: new Date().toISOString(),
     };
     if (info.network) update.network = info.network;
     if (info.genre) update.genre = info.genre;
     if (info.productionCompany) update.productionCompany = info.productionCompany;
-    // Only apply logo if title matched well (wikiTitleMatch === 'ok') and entry has no logo yet
-    if (info.logoUrl && !entry.logoUrl && info.wikiTitleMatch === 'ok') {
+    // Only apply logo if title matched well and entry has no logo yet
+    if (info.logoUrl && !entry.logoUrl && isVerified) {
       update.logoUrl = info.logoUrl;
     }
     await patchDocument(`industry_master/${entry.id}`, update);

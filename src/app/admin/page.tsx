@@ -12,7 +12,6 @@ import {
   BarChart3,
   CheckCircle,
   ChevronDown,
-  Clapperboard,
   Contact2,
   Crown,
   Database,
@@ -938,17 +937,10 @@ export default function AdminPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <Link
-              href="/admin/production-registry"
-              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
-            >
-              קטלוג הפקות גלובלי
-              <Clapperboard className="h-4 w-4" />
-            </Link>
-            <Link
               href="/admin/industry-master"
               className="flex items-center gap-2 rounded-xl bg-violet-900/50 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-800/60"
             >
-              ספריית תעשייה
+              מנהל הפקות מאוחד
               <Database className="h-4 w-4" />
             </Link>
           </div>
@@ -1450,17 +1442,10 @@ export default function AdminPage() {
                     <ArrowLeft className="h-4 w-4" />
                   </Link>
                   <Link
-                    href="/admin/production-registry"
-                    className="flex w-full items-center justify-between rounded-xl bg-gray-800 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-700"
-                  >
-                    קטלוג הפקות גלובלי
-                    <Clapperboard className="h-4 w-4" />
-                  </Link>
-                  <Link
                     href="/admin/industry-master"
                     className="flex w-full items-center justify-between rounded-xl bg-violet-900/50 px-4 py-2 text-sm text-violet-200 transition-colors hover:bg-violet-800/60"
                   >
-                    ספריית תעשייה
+                    מנהל הפקות מאוחד
                     <Database className="h-4 w-4" />
                   </Link>
                 </div>

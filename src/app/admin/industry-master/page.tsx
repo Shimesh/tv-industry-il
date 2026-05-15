@@ -1,451 +1,564 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ArrowRight, Database, Edit2, ExternalLink, Film, Loader2, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import type { IndustryMasterEntry } from '@/lib/proCardTypes';
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Globe,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 
-type FormState = {
-  showName: string;
-  logoUrl: string;
-  network: string;
-  genre: string;
+type ToastState = { type: 'ok' | 'err'; msg: string } | null;
+
+type AddModalState = {
+  open: boolean;
+  masterName: string;
+  channel: string;
   productionCompany: string;
-  wikiUrl: string;
+  logoUrl: string;
+  saving: boolean;
 };
 
-const emptyForm: FormState = { showName: '', logoUrl: '', network: '', genre: '', productionCompany: '', wikiUrl: '' };
+const EMPTY_ADD: AddModalState = {
+  open: false,
+  masterName: '',
+  channel: '',
+  productionCompany: '',
+  logoUrl: '',
+  saving: false,
+};
 
-export default function IndustryMasterPage() {
-  const { user } = useAuth();
+export default function UnifiedIndustryMasterPage() {
+  const { user, profile } = useAuth();
+  const router = useRouter();
+
   const [entries, setEntries] = useState<IndustryMasterEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<ToastState>(null);
+  const [wikiLoadingId, setWikiLoadingId] = useState<string | null>(null);
+  const [syncingSource, setSyncingSource] = useState(false);
+  const [bulkWikiRunning, setBulkWikiRunning] = useState(false);
+  const [bulkWikiProgress, setBulkWikiProgress] = useState<{ processed: number; remaining: number } | null>(null);
+  const [addModal, setAddModal] = useState<AddModalState>(EMPTY_ADD);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const bulkAbortRef = useRef(false);
 
-  // Seed sync state
-  const [seeding, setSeeding] = useState(false);
-  const [seedResult, setSeedResult] = useState<{ added: number; total: number; skippedNoise: number; merged: number } | null>(null);
+  const showToast = (type: 'ok' | 'err', msg: string) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
+  };
 
-  // Wikipedia batch sync state
-  const [wikiSyncing, setWikiSyncing] = useState(false);
-  const [wikiProgress, setWikiProgress] = useState<{ processed: number; enriched: number; remaining: number } | null>(null);
-
-  async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
-    if (!user) throw new Error('יש להתחבר תחילה');
-    const token = await user.getIdToken();
-    const res = await fetch(path, {
-      ...init,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json() as Promise<T>;
-  }
-
-  async function load() {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const data = await fetchWithAuth<IndustryMasterEntry[]>('/api/admin/industry-master');
-      setEntries(data.sort((a, b) => a.showName.localeCompare(b.showName, 'he')));
-    } catch (err) {
-      setError(String(err));
+      const res = await fetch('/api/admin/industry-master', { cache: 'no-store' });
+      if (!res.ok) throw new Error('שגיאה בטעינה');
+      const data: IndustryMasterEntry[] = await res.json();
+      setEntries(data.sort((a, b) => (a.masterName ?? a.showName).localeCompare(b.masterName ?? b.showName, 'he')));
+    } catch {
+      showToast('err', 'שגיאה בטעינת נתונים');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { void load(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleSeed() {
-    setSeeding(true);
-    setSeedResult(null);
-    setError(null);
-    try {
-      const result = await fetchWithAuth<{ added: number; total: number; existing: number; skippedNoise: number; merged: number }>(
-        '/api/admin/industry-master/sync',
-        { method: 'POST' },
-      );
-      setSeedResult({ added: result.added, total: result.total, skippedNoise: result.skippedNoise ?? 0, merged: result.merged ?? 0 });
-      await load();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setSeeding(false);
+  useEffect(() => {
+    if (!user || profile?.siteRole !== 'admin') {
+      router.replace('/');
+      return;
     }
-  }
+    loadEntries();
+  }, [user, profile, router, loadEntries]);
 
-  async function handleWikiSync() {
-    setWikiSyncing(true);
-    setWikiProgress({ processed: 0, enriched: 0, remaining: Infinity });
-    setError(null);
-    let totalEnriched = 0;
-    try {
-      while (true) {
-        const batch = await fetchWithAuth<{ processed: number; enriched: number; remaining: number }>(
-          '/api/admin/industry-master/sync/wiki',
-          { method: 'POST' },
-        );
-        totalEnriched += batch.enriched;
-        setWikiProgress({ processed: batch.processed, enriched: totalEnriched, remaining: batch.remaining });
-        if (batch.remaining === 0 || batch.processed === 0) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      await load();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setWikiSyncing(false);
-    }
-  }
-
-  function startAdd() {
-    setEditingId(null);
-    setForm(emptyForm);
-    setShowForm(true);
-  }
-
-  function startEdit(entry: IndustryMasterEntry) {
-    setEditingId(entry.id);
-    setForm({
-      showName: entry.showName,
-      logoUrl: entry.logoUrl === 'none' ? '' : entry.logoUrl,
-      network: entry.network,
-      genre: entry.genre,
-      productionCompany: entry.productionCompany ?? '',
-      wikiUrl: entry.wikiUrl === 'none' ? '' : entry.wikiUrl,
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    setShowForm(true);
-  }
+  };
 
-  async function handleSave() {
-    if (!form.showName.trim()) return;
-    setBusy(true);
-    setError(null);
+  const handleSyncSource = async () => {
+    setSyncingSource(true);
     try {
-      if (editingId) {
-        await fetchWithAuth(`/api/admin/industry-master/${editingId}`, { method: 'PATCH', body: JSON.stringify(form) });
-      } else {
-        await fetchWithAuth('/api/admin/industry-master', { method: 'POST', body: JSON.stringify(form) });
+      const res = await fetch('/api/admin/industry-master/sync', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'שגיאה');
+      showToast('ok', `סנכרון הושלם: ${data.added ?? 0} חדשים, ${data.updated ?? 0} עודכנו, ${data.totalScanned ?? 0} נסרקו`);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה בסנכרון');
+    } finally {
+      setSyncingSource(false);
+    }
+  };
+
+  const handleWikiSingle = async (entry: IndustryMasterEntry) => {
+    setWikiLoadingId(entry.id);
+    try {
+      const res = await fetch(`/api/admin/industry-master/${entry.id}/wiki`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'שגיאה');
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...data } : e)));
+      showToast('ok', `עודכן: ${data.network ? `ערוץ: ${data.network}` : 'לא נמצא בוויקיפדיה'}`);
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה בוויקיפדיה');
+    } finally {
+      setWikiLoadingId(null);
+    }
+  };
+
+  const handleBulkWiki = async () => {
+    setBulkWikiRunning(true);
+    bulkAbortRef.current = false;
+    setBulkWikiProgress({ processed: 0, remaining: Infinity });
+    let totalProcessed = 0;
+    try {
+      while (!bulkAbortRef.current) {
+        const res = await fetch('/api/admin/industry-master/sync/wiki', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'שגיאה');
+        totalProcessed += data.processed ?? 0;
+        setBulkWikiProgress({ processed: totalProcessed, remaining: data.remaining ?? 0 });
+        if (data.remaining === 0 || data.processed === 0) break;
       }
-      setShowForm(false);
-      setForm(emptyForm);
-      setEditingId(null);
-      await load();
-    } catch (err) {
-      setError(String(err));
+      showToast('ok', `ויקיפדיה הושלמה: ${totalProcessed} רשומות עודכנו`);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה בוויקיפדיה');
     } finally {
-      setBusy(false);
+      setBulkWikiRunning(false);
+      setBulkWikiProgress(null);
     }
-  }
+  };
 
-  async function handleDelete(id: string) {
-    setBusy(true);
-    setError(null);
+  const handleAddSave = async () => {
+    const name = addModal.masterName.trim();
+    if (!name) return;
+    setAddModal((prev) => ({ ...prev, saving: true }));
     try {
-      await fetchWithAuth(`/api/admin/industry-master/${id}`, { method: 'DELETE' });
-      setDeleteConfirm(null);
-      await load();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
+      const body: Partial<IndustryMasterEntry> = {
+        masterName: name,
+        showName: name,
+        network: addModal.channel.trim(),
+        productionCompany: addModal.productionCompany.trim(),
+        logoUrl: addModal.logoUrl.trim(),
+        genre: '',
+        wikiUrl: '',
+        variations: [],
+        lastUpdated: new Date().toISOString(),
+      };
+      const res = await fetch('/api/admin/industry-master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('שגיאה בשמירה');
+      showToast('ok', 'רשומה נוספה');
+      setAddModal(EMPTY_ADD);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה');
+      setAddModal((prev) => ({ ...prev, saving: false }));
     }
-  }
+  };
 
-  const filtered = query
-    ? entries.filter((e) =>
-        e.showName.toLowerCase().includes(query.toLowerCase()) ||
-        e.network.toLowerCase().includes(query.toLowerCase()),
-      )
-    : entries;
+  const handleDelete = async (entry: IndustryMasterEntry) => {
+    if (!confirm(`למחוק את "${entry.masterName ?? entry.showName}"?`)) return;
+    setDeletingId(entry.id);
+    try {
+      const res = await fetch(`/api/admin/industry-master/${entry.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('שגיאה במחיקה');
+      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      showToast('ok', 'נמחק');
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
-  const wikiPending = entries.filter((e) => !e.network && e.wikiUrl !== 'none').length;
+  const filtered = entries.filter((e) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    const name = (e.masterName ?? e.showName).toLowerCase();
+    return (
+      name.includes(q) ||
+      (e.network ?? '').toLowerCase().includes(q) ||
+      (e.productionCompany ?? '').toLowerCase().includes(q) ||
+      (e.variations ?? []).some((v) => v.toLowerCase().includes(q))
+    );
+  });
+
+  const totalVerified = entries.filter((e) => e.isVerified).length;
+  const totalPendingWiki = entries.filter((e) => !e.isVerified && e.wikiUrl !== 'none').length;
+
+  if (!user || profile?.siteRole !== 'admin') return null;
 
   return (
-    <div className="min-h-screen p-4 sm:p-6" dir="rtl" style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)' }}>
-      <div className="mx-auto max-w-3xl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8" dir="rtl">
+      <div className="max-w-7xl mx-auto px-4">
 
         {/* Header */}
-        <div className="mb-6 flex items-center gap-3">
-          <Link href="/admin" className="flex items-center gap-1 text-sm opacity-60 hover:opacity-100">
-            <ArrowRight className="h-4 w-4" />
-            אדמין
-          </Link>
-          <span className="opacity-30">/</span>
-          <h1 className="flex items-center gap-2 text-xl font-black">
-            <Database className="h-5 w-5 text-violet-300" />
-            ספריית תעשייה מרכזית
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-indigo-600" />
+            מנהל הפקות מאוחד
           </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            מאגר מרכזי של שמות הפקות ומיפוי לכרטיסי פרו
+          </p>
         </div>
 
-        {/* Seed sync card */}
-        <div className="mb-4 rounded-2xl border border-violet-500/20 bg-violet-500/[0.07] px-4 py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm">
-              <p className="font-bold text-violet-200">שלב 1 — סנכרן מקטלוג ההפקות</p>
-              <p className="mt-0.5 text-xs opacity-60">מייבא את 326 ההפקות מ-production-registry לספרייה המרכזית</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleSeed()}
-              disabled={seeding}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-400 disabled:opacity-50"
-            >
-              {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {seeding ? 'מסנכרן...' : 'סנכרן מהרג׳יסטרי'}
-            </button>
+        {/* Stats bar */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{entries.length}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">סה&quot;כ הפקות מאסטר</div>
           </div>
-          {seedResult && (
-            <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${seedResult.added > 0 ? 'bg-green-500/10 border border-green-400/20' : 'bg-white/5 border border-white/10'}`}>
-              {seedResult.added > 0
-                ? <span className="font-bold text-green-300">✓ נוספו {seedResult.added} הפקות חדשות מתוך {seedResult.total}</span>
-                : <span className="opacity-60">כל {seedResult.total} ההפקות כבר קיימות</span>}
-              {(seedResult.skippedNoise > 0 || seedResult.merged > 0) && (
-                <span className="mr-2 opacity-50">
-                  · {seedResult.skippedNoise > 0 && `${seedResult.skippedNoise} סוננו (רעש/אנשים)`}
-                  {seedResult.skippedNoise > 0 && seedResult.merged > 0 && ' · '}
-                  {seedResult.merged > 0 && `${seedResult.merged} מוזגו`}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Wikipedia sync card */}
-        <div className="mb-5 rounded-2xl border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm">
-              <p className="font-bold text-sky-200">שלב 2 — הוסף נתוני ויקיפדיה</p>
-              <p className="mt-0.5 text-xs opacity-60">
-                מביא רשת שידור, ז׳אנר ולוגו מהאינפובוקס העברי · {wikiPending} ממתינות
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleWikiSync()}
-              disabled={wikiSyncing || wikiPending === 0}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-400 disabled:opacity-50"
-            >
-              {wikiSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {wikiSyncing && wikiProgress
-                ? `ממשיך (נשארו ${wikiProgress.remaining})...`
-                : 'הוסף נתוני ויקיפדיה'}
-            </button>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
+            <div className="text-2xl font-bold text-green-600">{totalVerified}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">מאומתות ויקיפדיה</div>
           </div>
-          {wikiProgress && wikiProgress.remaining !== Infinity && (
-            <div className="mt-2 rounded-lg border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-xs">
-              {wikiProgress.remaining === 0
-                ? <span className="font-bold text-green-300">✓ הסתיים · {wikiProgress.enriched} הפקות הועשרו</span>
-                : <span className="opacity-70">עובד... {wikiProgress.enriched} הועשרו · {wikiProgress.remaining} נשארו</span>}
-            </div>
-          )}
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
+            <div className="text-2xl font-bold text-amber-500">{totalPendingWiki}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">ממתינות לוויקיפדיה</div>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>
+        {/* Action bar */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-4 flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              className="w-full pr-9 pl-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="חיפוש לפי שם, ערוץ, גרסאות..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <button
+            onClick={handleSyncSource}
+            disabled={syncingSource}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-60"
+          >
+            {syncingSource ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            סנכרן מקורות
+          </button>
+
+          <button
+            onClick={() => setAddModal({ ...EMPTY_ADD, open: true })}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+          >
+            <Plus className="w-4 h-4" />
+            הוסף ידנית
+          </button>
+
+          <button
+            onClick={bulkWikiRunning ? () => { bulkAbortRef.current = true; } : handleBulkWiki}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg ${
+              bulkWikiRunning
+                ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+          >
+            {bulkWikiRunning ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />עצור ({bulkWikiProgress?.remaining === Infinity ? '?' : bulkWikiProgress?.remaining} נותרו)</>
+            ) : (
+              <><Globe className="w-4 h-4" />הוסף ויקיפדיה לכולם</>
+            )}
+          </button>
+
+          <button
+            onClick={loadEntries}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* Bulk wiki progress */}
+        {bulkWikiRunning && bulkWikiProgress && (
+          <div className="mb-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-4 py-2 text-sm text-purple-700 dark:text-purple-300 flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            עיבוד ויקיפדיה: {bulkWikiProgress.processed} הושלמו,{' '}
+            {bulkWikiProgress.remaining === Infinity ? '...' : bulkWikiProgress.remaining} נותרו
+          </div>
         )}
 
-        {/* Edit form */}
-        {showForm && (
-          <div className="mb-6 rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-            <h2 className="mb-4 text-base font-black">{editingId ? 'עריכת תוכנית' : 'תוכנית חדשה'}</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
+        {/* Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16 text-gray-400 text-sm">
+              {search ? 'לא נמצאו תוצאות לחיפוש' : 'אין נתונים — לחץ "סנכרן מקורות" להתחלה'}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                <tr>
+                  <th className="w-8 px-3 py-3" />
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">לוגו</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">שם מאסטר</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">ערוץ</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">חברת הפקה</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">סטטוס</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300">גרסאות</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">פעולות</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {filtered.map((entry) => {
+                  const masterName = entry.masterName ?? entry.showName;
+                  const isExp = expanded.has(entry.id);
+                  const hasVariations = (entry.variations ?? []).length > 0;
+
+                  return (
+                    <>
+                      <tr
+                        key={entry.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        {/* Expand toggle */}
+                        <td className="px-3 py-3">
+                          {hasVariations && (
+                            <button
+                              onClick={() => toggleExpand(entry.id)}
+                              className="text-gray-400 hover:text-indigo-600 transition-colors"
+                            >
+                              {isExp ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Logo */}
+                        <td className="px-4 py-3">
+                          {entry.logoUrl && entry.logoUrl !== 'none' ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.logoUrl}
+                              alt={masterName}
+                              className="w-10 h-10 object-contain rounded"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs">
+                              —
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Master name */}
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white max-w-48">
+                          <div className="truncate">{masterName}</div>
+                        </td>
+
+                        {/* Channel */}
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-32">
+                          <div className="truncate">{entry.network || '—'}</div>
+                        </td>
+
+                        {/* Production company */}
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-40">
+                          <div className="truncate">{entry.productionCompany || '—'}</div>
+                        </td>
+
+                        {/* Status badge */}
+                        <td className="px-4 py-3">
+                          {entry.isVerified ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                              <CheckCircle2 className="w-3 h-3" />
+                              מאומת
+                            </span>
+                          ) : entry.wikiTitleMatch === 'needs_review' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                              <Clock className="w-3 h-3" />
+                              לבדיקה
+                            </span>
+                          ) : entry.wikiUrl === 'none' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 dark:bg-gray-700">
+                              לא נמצא
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-500 dark:bg-blue-900/20">
+                              טרם נבדק
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Variations count */}
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-center">
+                          {hasVariations ? (
+                            <span
+                              className="cursor-pointer text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
+                              onClick={() => toggleExpand(entry.id)}
+                            >
+                              {entry.variations!.length}
+                            </span>
+                          ) : '—'}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleWikiSingle(entry)}
+                              disabled={wikiLoadingId === entry.id}
+                              title="חפש בוויקיפדיה"
+                              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 disabled:opacity-50"
+                            >
+                              {wikiLoadingId === entry.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Globe className="w-3 h-3" />
+                              )}
+                              ויקיפדיה
+                            </button>
+                            <button
+                              onClick={() => handleDelete(entry)}
+                              disabled={deletingId === entry.id}
+                              title="מחק"
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                            >
+                              {deletingId === entry.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expanded variations row */}
+                      {isExp && hasVariations && (
+                        <tr key={`${entry.id}-var`} className="bg-indigo-50/40 dark:bg-indigo-900/10">
+                          <td />
+                          <td colSpan={7} className="px-4 py-3">
+                            <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
+                              גרסאות מקוריות ({entry.variations!.length})
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {entry.variations!.map((v) => (
+                                <span
+                                  key={v}
+                                  className="px-2 py-0.5 rounded-full bg-white dark:bg-gray-700 border border-indigo-200 dark:border-indigo-800 text-xs text-gray-700 dark:text-gray-300"
+                                >
+                                  {v}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="mt-3 text-xs text-gray-400 text-left">
+          {filtered.length} מתוך {entries.length} רשומות
+        </div>
+      </div>
+
+      {/* Add manually modal */}
+      {addModal.open && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6" dir="rtl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">הוספה ידנית</h2>
+              <button onClick={() => setAddModal(EMPTY_ADD)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-bold opacity-60">שם התוכנית *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">שם מאסטר *</label>
                 <input
-                  value={form.showName}
-                  onChange={(e) => setForm((f) => ({ ...f, showName: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
-                  placeholder="למשל: גלית ואילנית"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  value={addModal.masterName}
+                  onChange={(e) => setAddModal((prev) => ({ ...prev, masterName: e.target.value }))}
+                  placeholder="לדוגמה: ארץ נהדרת"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold opacity-60">רשת שידור</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ערוץ</label>
                 <input
-                  value={form.network}
-                  onChange={(e) => setForm((f) => ({ ...f, network: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
-                  placeholder="למשל: קשת 12"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  value={addModal.channel}
+                  onChange={(e) => setAddModal((prev) => ({ ...prev, channel: e.target.value }))}
+                  placeholder="לדוגמה: קשת 12"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold opacity-60">ז׳אנר</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">חברת הפקה</label>
                 <input
-                  value={form.genre}
-                  onChange={(e) => setForm((f) => ({ ...f, genre: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
-                  placeholder="למשל: דרמה"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  value={addModal.productionCompany}
+                  onChange={(e) => setAddModal((prev) => ({ ...prev, productionCompany: e.target.value }))}
+                  placeholder="לדוגמה: דורון טוכמאיר הפקות"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold opacity-60">חברת הפקה</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">כתובת לוגו</label>
                 <input
-                  value={form.productionCompany}
-                  onChange={(e) => setForm((f) => ({ ...f, productionCompany: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
-                  placeholder="למשל: דורון טוכמאיר הפקות"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-bold opacity-60">URL לוגו</label>
-                <input
-                  value={form.logoUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  value={addModal.logoUrl}
+                  onChange={(e) => setAddModal((prev) => ({ ...prev, logoUrl: e.target.value }))}
                   placeholder="https://..."
-                  dir="ltr"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-bold opacity-60">קישור ויקיפדיה</label>
-                <input
-                  value={form.wikiUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, wikiUrl: e.target.value }))}
-                  className="w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm text-white placeholder-white/30"
-                  placeholder="https://he.wikipedia.org/wiki/..."
-                  dir="ltr"
                 />
               </div>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="flex gap-3 mt-6">
               <button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={busy || !form.showName.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-400 disabled:opacity-50"
+                onClick={handleAddSave}
+                disabled={!addModal.masterName.trim() || addModal.saving}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {addModal.saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 שמור
               </button>
               <button
-                type="button"
-                onClick={() => { setShowForm(false); setForm(emptyForm); setEditingId(null); }}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-bold opacity-70 transition hover:opacity-100"
+                onClick={() => setAddModal(EMPTY_ADD)}
+                className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
               >
-                <X className="h-4 w-4" />
                 ביטול
               </button>
             </div>
           </div>
-        )}
-
-        {/* Controls */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-40" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pr-9 pl-3 text-sm placeholder-white/30"
-              placeholder="חפש לפי שם או רשת..."
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs opacity-50">{filtered.length} תוכניות</span>
-            <button
-              type="button"
-              onClick={startAdd}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold transition hover:bg-white/15"
-            >
-              <Plus className="h-4 w-4" />
-              הוסף ידנית
-            </button>
-          </div>
         </div>
+      )}
 
-        {/* Entry list */}
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((n) => <div key={n} className="h-16 animate-pulse rounded-xl bg-white/8" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-sm opacity-50">
-            {query ? 'לא נמצאו תוצאות לחיפוש' : 'אין תוכניות בספרייה עדיין — לחץ "סנכרן מהרג׳יסטרי" להתחיל'}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filtered.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                {entry.logoUrl && entry.logoUrl !== 'none' ? (
-                  <img src={entry.logoUrl} alt={entry.showName} className="h-10 w-10 shrink-0 rounded-lg object-contain bg-white/10" />
-                ) : (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-700 text-slate-300">
-                    <Film className="h-5 w-5" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold">{entry.showName}</span>
-                    {entry.network && (
-                      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-medium text-sky-300">
-                        {entry.network}
-                      </span>
-                    )}
-                    {entry.genre && (
-                      <span className="rounded-full bg-white/8 px-2 py-0.5 text-[11px] opacity-60">
-                        {entry.genre}
-                      </span>
-                    )}
-                    {entry.wikiTitleMatch === 'needs_review' && (
-                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300" title="לוגו לא הוצג — כותרת ויקיפדיה לא תאמה בדיוק">
-                        ⚠ אימות ידני
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-3">
-                    {entry.productionCompany && (
-                      <span className="text-xs opacity-50">{entry.productionCompany}</span>
-                    )}
-                    {entry.wikiUrl && entry.wikiUrl !== 'none' && (
-                      <a
-                        href={entry.wikiUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-violet-300 opacity-60 hover:opacity-100"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        ויקיפדיה
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  {deleteConfirm === entry.id ? (
-                    <>
-                      <button type="button" onClick={() => void handleDelete(entry.id)} disabled={busy}
-                        className="rounded-lg bg-red-500/20 px-2 py-1 text-xs font-bold text-red-200 transition hover:bg-red-500/30">
-                        מחק
-                      </button>
-                      <button type="button" onClick={() => setDeleteConfirm(null)}
-                        className="rounded-lg px-2 py-1 text-xs opacity-60 hover:opacity-100">
-                        ביטול
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" onClick={() => startEdit(entry)}
-                        className="rounded-lg p-2 opacity-60 transition hover:bg-white/10 hover:opacity-100" aria-label="ערוך">
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => setDeleteConfirm(entry.id)}
-                        className="rounded-lg p-2 text-red-300 opacity-60 transition hover:bg-red-500/10 hover:opacity-100" aria-label="מחק">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium ${
+          toast.type === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

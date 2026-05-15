@@ -58,11 +58,14 @@ export type ProCardHistoryResponse = {
 export type IndustryMasterEntry = {
   id: string;
   showName: string;
-  logoUrl: string;           // '' = not fetched, 'none' = tried and not found
-  network: string;           // e.g. 'קשת 12', 'רשת 13'
-  genre: string;             // e.g. 'דרמה', 'ריאליטי'
-  productionCompany: string; // e.g. 'דורון טוכמאיר הפקות'
-  wikiUrl: string;           // full Hebrew Wikipedia URL, '' = not fetched, 'none' = not found
-  wikiTitleMatch?: string;   // 'ok' | 'needs_review' | '' — title similarity result
-  lastUpdated: string;       // ISO timestamp
+  masterName?: string;        // canonical display name; falls back to showName
+  variations?: string[];      // raw title strings that resolve to this master
+  logoUrl: string;            // '' = not fetched, 'none' = tried and not found
+  network: string;            // e.g. 'קשת 12', 'רשת 13'
+  genre: string;              // e.g. 'דרמה', 'ריאליטי'
+  productionCompany: string;  // e.g. 'דורון טוכמאיר הפקות'
+  wikiUrl: string;            // full Hebrew Wikipedia URL, '' = not fetched, 'none' = not found
+  wikiTitleMatch?: string;    // 'ok' | 'needs_review' | '' — title similarity result
+  isVerified?: boolean;       // true when wikiTitleMatch === 'ok'
+  lastUpdated: string;        // ISO timestamp
 };

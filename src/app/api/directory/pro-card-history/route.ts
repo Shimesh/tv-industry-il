@@ -375,15 +375,19 @@ export async function GET(request: NextRequest) {
       registry.set(normalizeName(entry.name || ''), entry);
     }
 
-    // Build masterMap with suffix-stripped canonical names as keys.
-    // This ensures "ארץ נהדרת - טסטים" credits resolve to the "ארץ נהדרת" master entry.
+    // Build masterMap keyed by all known names: masterName, showName (suffix-stripped),
+    // and every stored variation. This lets raw titles like "ארץ נהדרת - טסטים" resolve
+    // directly via their variation key without relying solely on suffix stripping.
     const masterMap = new Map<string, IndustryMasterEntry>();
     for (const entry of masterDocs) {
-      const canonical = stripProductionSuffixes(entry.showName || '');
+      const displayName = entry.masterName ?? entry.showName ?? '';
+      const canonical = stripProductionSuffixes(displayName);
       masterMap.set(normalizeName(canonical), entry);
-      // Also index by the raw stored name in case it was already stored without suffix
-      if (canonical !== entry.showName) {
-        masterMap.set(normalizeName(entry.showName || ''), entry);
+      if (canonical !== displayName) {
+        masterMap.set(normalizeName(displayName), entry);
+      }
+      for (const v of (entry.variations ?? [])) {
+        if (v) masterMap.set(normalizeName(v), entry);
       }
     }
 
