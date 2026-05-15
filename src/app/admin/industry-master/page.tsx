@@ -210,42 +210,52 @@ export default function UnifiedIndustryMasterPage() {
   if (!user || profile?.siteRole !== 'admin') return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8" dir="rtl">
+    <div className="min-h-screen py-8" dir="rtl">
       <div className="max-w-7xl mx-auto px-4">
 
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-indigo-600" />
+          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--theme-text)' }}>
+            <BookOpen className="w-6 h-6" style={{ color: 'var(--theme-accent)' }} />
             מנהל הפקות מאוחד
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm mt-1" style={{ color: 'var(--theme-text-secondary)' }}>
             מאגר מרכזי של שמות הפקות ומיפוי לכרטיסי פרו
           </p>
         </div>
 
         {/* Stats bar */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{entries.length}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">סה&quot;כ הפקות מאסטר</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
-            <div className="text-2xl font-bold text-green-600">{totalVerified}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">מאומתות ויקיפדיה</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 text-center">
-            <div className="text-2xl font-bold text-amber-500">{totalPendingWiki}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">ממתינות לוויקיפדיה</div>
-          </div>
+          {[
+            { value: entries.length, label: 'סה"כ הפקות מאסטר', color: 'var(--theme-text)' },
+            { value: totalVerified, label: 'מאומתות ויקיפדיה', color: 'var(--theme-success)' },
+            { value: totalPendingWiki, label: 'ממתינות לוויקיפדיה', color: 'var(--theme-warning)' },
+          ].map(({ value, label, color }) => (
+            <div
+              key={label}
+              className="rounded-xl p-4 border text-center"
+              style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+            >
+              <div className="text-2xl font-bold" style={{ color }}>{value}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--theme-text-secondary)' }}>{label}</div>
+            </div>
+          ))}
         </div>
 
         {/* Action bar */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-4 flex flex-wrap gap-3 items-center">
+        <div
+          className="rounded-xl border p-4 mb-4 flex flex-wrap gap-3 items-center"
+          style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+        >
           <div className="relative flex-1 min-w-48">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
             <input
-              className="w-full pr-9 pl-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+              className="w-full pr-9 pl-3 py-2 text-sm rounded-lg border"
+              style={{
+                background: 'var(--theme-bg-secondary)',
+                borderColor: 'var(--theme-border)',
+                color: 'var(--theme-text)',
+              }}
               placeholder="חיפוש לפי שם, ערוץ, גרסאות..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -255,7 +265,8 @@ export default function UnifiedIndustryMasterPage() {
           <button
             onClick={handleSyncSource}
             disabled={syncingSource}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-60"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60"
+            style={{ background: 'var(--theme-accent)' }}
           >
             {syncingSource ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             סנכרן מקורות
@@ -263,7 +274,8 @@ export default function UnifiedIndustryMasterPage() {
 
           <button
             onClick={() => setAddModal({ ...EMPTY_ADD, open: true })}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg"
+            style={{ background: 'var(--theme-accent-secondary)', color: '#fff' }}
           >
             <Plus className="w-4 h-4" />
             הוסף ידנית
@@ -271,11 +283,11 @@ export default function UnifiedIndustryMasterPage() {
 
           <button
             onClick={bulkWikiRunning ? () => { bulkAbortRef.current = true; } : handleBulkWiki}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg ${
-              bulkWikiRunning
-                ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400'
-                : 'bg-purple-600 hover:bg-purple-700 text-white'
-            }`}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border"
+            style={bulkWikiRunning
+              ? { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: 'var(--theme-danger)' }
+              : { background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.3)', color: '#c4b5fd' }
+            }
           >
             {bulkWikiRunning ? (
               <><Loader2 className="w-4 h-4 animate-spin" />עצור ({bulkWikiProgress?.remaining === Infinity ? '?' : bulkWikiProgress?.remaining} נותרו)</>
@@ -287,7 +299,8 @@ export default function UnifiedIndustryMasterPage() {
           <button
             onClick={loadEntries}
             disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border"
+            style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -295,7 +308,10 @@ export default function UnifiedIndustryMasterPage() {
 
         {/* Bulk wiki progress */}
         {bulkWikiRunning && bulkWikiProgress && (
-          <div className="mb-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-4 py-2 text-sm text-purple-700 dark:text-purple-300 flex items-center gap-2">
+          <div
+            className="mb-4 rounded-lg px-4 py-2 text-sm flex items-center gap-2 border"
+            style={{ background: 'rgba(139,92,246,0.1)', borderColor: 'rgba(139,92,246,0.25)', color: '#c4b5fd' }}
+          >
             <Loader2 className="w-4 h-4 animate-spin" />
             עיבוד ויקיפדיה: {bulkWikiProgress.processed} הושלמו,{' '}
             {bulkWikiProgress.remaining === Infinity ? '...' : bulkWikiProgress.remaining} נותרו
@@ -303,47 +319,55 @@ export default function UnifiedIndustryMasterPage() {
         )}
 
         {/* Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+        >
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-gray-400">
+            <div className="flex items-center justify-center py-16" style={{ color: 'var(--theme-text-secondary)' }}>
               <Loader2 className="w-8 h-8 animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 text-sm">
+            <div className="text-center py-16 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
               {search ? 'לא נמצאו תוצאות לחיפוש' : 'אין נתונים — לחץ "סנכרן מקורות" להתחלה'}
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+              <thead style={{ background: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
                 <tr>
                   <th className="w-8 px-3 py-3" />
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">לוגו</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">שם מאסטר</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">ערוץ</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">חברת הפקה</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">סטטוס</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300">גרסאות</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">פעולות</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>לוגו</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>שם מאסטר</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>ערוץ</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>חברת הפקה</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>סטטוס</th>
+                  <th className="px-4 py-3 text-center font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>גרסאות</th>
+                  <th className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>פעולות</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filtered.map((entry) => {
+              <tbody>
+                {filtered.map((entry, idx) => {
                   const masterName = entry.masterName ?? entry.showName;
                   const isExp = expanded.has(entry.id);
                   const hasVariations = (entry.variations ?? []).length > 0;
+                  const rowBorder = idx < filtered.length - 1 ? { borderBottom: '1px solid var(--theme-border)' } : {};
 
                   return (
                     <>
                       <tr
                         key={entry.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        className="transition-colors"
+                        style={rowBorder}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--theme-bg-secondary)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
                       >
                         {/* Expand toggle */}
                         <td className="px-3 py-3">
                           {hasVariations && (
                             <button
                               onClick={() => toggleExpand(entry.id)}
-                              className="text-gray-400 hover:text-indigo-600 transition-colors"
+                              style={{ color: 'var(--theme-text-secondary)' }}
+                              className="hover:opacity-80 transition-opacity"
                             >
                               {isExp ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
@@ -361,60 +385,76 @@ export default function UnifiedIndustryMasterPage() {
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs">
+                            <div
+                              className="w-10 h-10 rounded flex items-center justify-center text-xs"
+                              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+                            >
                               —
                             </div>
                           )}
                         </td>
 
                         {/* Master name */}
-                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white max-w-48">
+                        <td className="px-4 py-3 font-medium max-w-48" style={{ color: 'var(--theme-text)' }}>
                           <div className="truncate">{masterName}</div>
                         </td>
 
                         {/* Channel */}
-                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-32">
+                        <td className="px-4 py-3 max-w-32" style={{ color: 'var(--theme-text-secondary)' }}>
                           <div className="truncate">{entry.network || '—'}</div>
                         </td>
 
                         {/* Production company */}
-                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-40">
+                        <td className="px-4 py-3 max-w-40" style={{ color: 'var(--theme-text-secondary)' }}>
                           <div className="truncate">{entry.productionCompany || '—'}</div>
                         </td>
 
                         {/* Status badge */}
                         <td className="px-4 py-3">
                           {entry.isVerified ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
+                              style={{ background: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)', color: 'var(--theme-success)' }}
+                            >
                               <CheckCircle2 className="w-3 h-3" />
                               מאומת
                             </span>
                           ) : entry.wikiTitleMatch === 'needs_review' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
+                              style={{ background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.3)', color: 'var(--theme-warning)' }}
+                            >
                               <Clock className="w-3 h-3" />
                               לבדיקה
                             </span>
                           ) : entry.wikiUrl === 'none' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 dark:bg-gray-700">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border"
+                              style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}
+                            >
                               לא נמצא
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-500 dark:bg-blue-900/20">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border"
+                              style={{ background: 'rgba(56,189,248,0.08)', borderColor: 'rgba(56,189,248,0.25)', color: 'var(--theme-info)' }}
+                            >
                               טרם נבדק
                             </span>
                           )}
                         </td>
 
                         {/* Variations count */}
-                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-center">
+                        <td className="px-4 py-3 text-center">
                           {hasVariations ? (
                             <span
-                              className="cursor-pointer text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
+                              className="cursor-pointer font-medium hover:underline"
+                              style={{ color: 'var(--theme-accent)' }}
                               onClick={() => toggleExpand(entry.id)}
                             >
                               {entry.variations!.length}
                             </span>
-                          ) : '—'}
+                          ) : <span style={{ color: 'var(--theme-text-secondary)' }}>—</span>}
                         </td>
 
                         {/* Actions */}
@@ -424,7 +464,8 @@ export default function UnifiedIndustryMasterPage() {
                               onClick={() => handleWikiSingle(entry)}
                               disabled={wikiLoadingId === entry.id}
                               title="חפש בוויקיפדיה"
-                              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 disabled:opacity-50"
+                              className="flex items-center gap-1 px-2 py-1 text-xs rounded border disabled:opacity-50"
+                              style={{ background: 'rgba(139,92,246,0.1)', borderColor: 'rgba(139,92,246,0.25)', color: '#c4b5fd' }}
                             >
                               {wikiLoadingId === entry.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -437,7 +478,8 @@ export default function UnifiedIndustryMasterPage() {
                               onClick={() => handleDelete(entry)}
                               disabled={deletingId === entry.id}
                               title="מחק"
-                              className="p-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                              className="p-1 transition-opacity disabled:opacity-50 hover:opacity-60"
+                              style={{ color: 'var(--theme-text-secondary)' }}
                             >
                               {deletingId === entry.id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -451,17 +493,25 @@ export default function UnifiedIndustryMasterPage() {
 
                       {/* Expanded variations row */}
                       {isExp && hasVariations && (
-                        <tr key={`${entry.id}-var`} className="bg-indigo-50/40 dark:bg-indigo-900/10">
+                        <tr
+                          key={`${entry.id}-var`}
+                          style={{ background: 'rgba(139,92,246,0.05)', borderBottom: '1px solid var(--theme-border)' }}
+                        >
                           <td />
                           <td colSpan={7} className="px-4 py-3">
-                            <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
+                            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--theme-accent)' }}>
                               גרסאות מקוריות ({entry.variations!.length})
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {entry.variations!.map((v) => (
                                 <span
                                   key={v}
-                                  className="px-2 py-0.5 rounded-full bg-white dark:bg-gray-700 border border-indigo-200 dark:border-indigo-800 text-xs text-gray-700 dark:text-gray-300"
+                                  className="px-2 py-0.5 rounded-full text-xs border"
+                                  style={{
+                                    background: 'var(--theme-bg-secondary)',
+                                    borderColor: 'var(--theme-border)',
+                                    color: 'var(--theme-text-secondary)',
+                                  }}
                                 >
                                   {v}
                                 </span>
@@ -478,71 +528,59 @@ export default function UnifiedIndustryMasterPage() {
           )}
         </div>
 
-        <div className="mt-3 text-xs text-gray-400 text-left">
+        <div className="mt-3 text-xs text-left" style={{ color: 'var(--theme-text-secondary)' }}>
           {filtered.length} מתוך {entries.length} רשומות
         </div>
       </div>
 
       {/* Add manually modal */}
       {addModal.open && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6" dir="rtl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-md p-6 border" dir="rtl"
+            style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">הוספה ידנית</h2>
-              <button onClick={() => setAddModal(EMPTY_ADD)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-lg font-bold" style={{ color: 'var(--theme-text)' }}>הוספה ידנית</h2>
+              <button onClick={() => setAddModal(EMPTY_ADD)} style={{ color: 'var(--theme-text-secondary)' }} className="hover:opacity-60">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">שם מאסטר *</label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                  value={addModal.masterName}
-                  onChange={(e) => setAddModal((prev) => ({ ...prev, masterName: e.target.value }))}
-                  placeholder="לדוגמה: ארץ נהדרת"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ערוץ</label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                  value={addModal.channel}
-                  onChange={(e) => setAddModal((prev) => ({ ...prev, channel: e.target.value }))}
-                  placeholder="לדוגמה: קשת 12"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">חברת הפקה</label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                  value={addModal.productionCompany}
-                  onChange={(e) => setAddModal((prev) => ({ ...prev, productionCompany: e.target.value }))}
-                  placeholder="לדוגמה: דורון טוכמאיר הפקות"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">כתובת לוגו</label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                  value={addModal.logoUrl}
-                  onChange={(e) => setAddModal((prev) => ({ ...prev, logoUrl: e.target.value }))}
-                  placeholder="https://..."
-                />
-              </div>
+              {[
+                { label: 'שם מאסטר *', key: 'masterName', placeholder: 'לדוגמה: ארץ נהדרת' },
+                { label: 'ערוץ', key: 'channel', placeholder: 'לדוגמה: קשת 12' },
+                { label: 'חברת הפקה', key: 'productionCompany', placeholder: 'לדוגמה: דורון טוכמאיר הפקות' },
+                { label: 'כתובת לוגו', key: 'logoUrl', placeholder: 'https://...' },
+              ].map(({ label, key, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--theme-text-secondary)' }}>{label}</label>
+                  <input
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    style={{
+                      background: 'var(--theme-bg-secondary)',
+                      borderColor: 'var(--theme-border)',
+                      color: 'var(--theme-text)',
+                    }}
+                    value={addModal[key as keyof AddModalState] as string}
+                    onChange={(e) => setAddModal((prev) => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
             </div>
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleAddSave}
                 disabled={!addModal.masterName.trim() || addModal.saving}
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 text-white"
+                style={{ background: 'var(--theme-accent-secondary)' }}
               >
                 {addModal.saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 שמור
               </button>
               <button
                 onClick={() => setAddModal(EMPTY_ADD)}
-                className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
+                className="flex-1 py-2 rounded-lg text-sm font-medium border"
+                style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}
               >
                 ביטול
               </button>
@@ -553,9 +591,10 @@ export default function UnifiedIndustryMasterPage() {
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium ${
-          toast.type === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-        }`}>
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium text-white"
+          style={{ background: toast.type === 'ok' ? 'var(--theme-success)' : 'var(--theme-danger)' }}
+        >
           {toast.msg}
         </div>
       )}
