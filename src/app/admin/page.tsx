@@ -775,11 +775,26 @@ export default function AdminPage() {
     if (!window.confirm('להעתיק את כל ההפקות ל-global_productions? (לצורך Pro Cards)')) return;
     setMigratingGlobal(true);
     try {
-      const dryResult = await fetchWithAuth<{ unique?: number; filtered?: number }>(
+      const dryResult = await fetchWithAuth<{
+        unique?: number; filtered?: number; total?: number;
+        existingGlobalCount?: number; message?: string;
+        sampleNames?: string[];
+      }>(
         '/api/admin/migrate-global-productions',
         { method: 'POST', body: JSON.stringify({ dryRun: true }) },
       );
-      if (!window.confirm(`נמצאו ${dryResult.unique || 0} הפקות ייחודיות. להמשיך?`)) {
+
+      const details = [
+        `סה"כ מסמכים: ${dryResult.total || 0}`,
+        `עם צוות: ${dryResult.filtered || 0}`,
+        `ייחודיות: ${dryResult.unique || 0}`,
+        `כבר ב-global: ${dryResult.existingGlobalCount || 0}`,
+      ].join('\n');
+
+      const samples = (dryResult.sampleNames || []).slice(0, 5).join('\n  ');
+      const samplesStr = samples ? `\n\nדוגמאות:\n  ${samples}` : '';
+
+      if (!window.confirm(`${details}${samplesStr}\n\nלהמשיך?`)) {
         setMigratingGlobal(false);
         return;
       }
