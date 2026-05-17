@@ -1025,58 +1025,35 @@ export default function AdminPage() {
               </span>
             </div>
           </div>
-          {/* Primary action: full sync */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Actions — 2-col grid on mobile, flex-wrap on desktop */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
             <button
               onClick={() => void runFullSync()}
               disabled={fullSyncRunning || runningSync}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-5 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
             >
               {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               {fullSyncStep || 'סנכרון מלא'}
             </button>
-            <button
-              onClick={() => void loadOverview(true)}
-              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-700"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              רענון
+            <button onClick={() => void loadOverview(true)} className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-200 hover:bg-gray-700">
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> רענון
             </button>
-          </div>
-
-          {/* Secondary actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowAddContact(!showAddContact)}
-              className="flex items-center gap-1.5 rounded-lg bg-green-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-green-600"
-            >
-              <Contact2 className="h-3.5 w-3.5" />
-              + איש קשר
+            <button onClick={() => void testProCard()} disabled={testingProCard} className="flex items-center justify-center gap-1.5 rounded-xl bg-sky-700/80 px-3 py-2 text-xs font-semibold hover:bg-sky-600 disabled:opacity-60">
+              <Search className="h-3.5 w-3.5" /> {testingProCard ? 'בודק...' : 'בדוק Pro Card'}
             </button>
-            <button
-              onClick={() => void runDirectorsImport()}
-              disabled={fullSyncRunning}
-              className="flex items-center gap-1.5 rounded-lg bg-rose-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-rose-600 disabled:opacity-60"
-            >
-              <Clapperboard className="h-3.5 w-3.5" />
-              ייבוא במאים
+            <button onClick={() => setShowAddContact(!showAddContact)} className="flex items-center justify-center gap-1.5 rounded-xl bg-green-700/80 px-3 py-2 text-xs font-semibold hover:bg-green-600">
+              <Contact2 className="h-3.5 w-3.5" /> + איש קשר
             </button>
-            <button
-              onClick={() => void testProCard()}
-              disabled={testingProCard}
-              className="flex items-center gap-1.5 rounded-lg bg-sky-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-sky-600 disabled:opacity-60"
-            >
-              <Search className="h-3.5 w-3.5" />
-              {testingProCard ? 'בודק...' : 'בדוק Pro Card'}
+            <button onClick={() => void runDirectorsImport()} disabled={fullSyncRunning} className="flex items-center justify-center gap-1.5 rounded-xl bg-rose-700/80 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60">
+              <Clapperboard className="h-3.5 w-3.5" /> ייבוא במאים
             </button>
-            <span className="mx-1 h-4 w-px bg-gray-700" />
-            <Link href="/admin/users" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+            <Link href="/admin/users" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
               <Users className="h-3.5 w-3.5" /> משתמשים
             </Link>
-            <Link href="/admin/industry-master" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+            <Link href="/admin/industry-master" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
               <Database className="h-3.5 w-3.5" /> מנהל הפקות
             </Link>
-            <Link href="/admin/sync" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+            <Link href="/admin/sync" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
               <Settings className="h-3.5 w-3.5" /> כלי סנכרון
             </Link>
           </div>
