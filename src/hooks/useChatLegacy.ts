@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import {
@@ -26,6 +26,7 @@ export interface ChatRoom {
     senderId: string;
     senderName: string;
     timestamp: number;
+    kind?: string;
   };
   unreadCount: number;
   lastRead: Record<string, number>;
@@ -66,6 +67,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   // Cache: chatId → decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
+  const prevActiveChatRef = useRef<string | null>(null);
 
   const displayName = profile?.displayName || user?.displayName || 'משתמש';
   const displayPhoto = profile?.photoURL || user?.photoURL || null;
@@ -138,6 +140,19 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }
   }, []);
 
+  // Clear typing indicator on previous chat when switching
+  useEffect(() => {
+    const prev = prevActiveChatRef.current;
+    if (prev && prev !== activeChat && user) {
+      setDoc(doc(db, 'chats', prev, 'typing', user.uid), {
+        isTyping: false,
+        name: displayName,
+        timestamp: serverTimestamp(),
+      }).catch(() => {});
+    }
+    prevActiveChatRef.current = activeChat;
+  }, [activeChat, user, displayName]);
+
   // Subscribe to chats
   useEffect(() => {
     if (!user) return;
@@ -162,6 +177,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
             senderId: lastMsg.senderId || '',
             senderName: lastMsg.senderName || '',
             timestamp: lastMsg.timestamp instanceof Timestamp ? lastMsg.timestamp.toMillis() : (lastMsg.timestamp || 0),
+            kind: lastMsg.kind || undefined,
           } : undefined,
           unreadCount: data.unreadCount?.[user.uid] || 0,
           lastRead: data.lastRead || {},
@@ -266,6 +282,23 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           });
         });
         batch.commit().catch(() => {});
+      }
+
+      // Batch-mark readBy for messages we're viewing
+      const toRead = msgs.filter(m =>
+        m.senderId !== user.uid &&
+        m.type !== 'system' &&
+        !m.readBy[user.uid] &&
+        m.createdAt > oneDayAgo
+      );
+      if (toRead.length > 0) {
+        const readBatch = writeBatch(db);
+        toRead.forEach(m => {
+          readBatch.update(doc(db, 'chats', activeChat, 'messages', m.id), {
+            [`readBy.${user.uid}`]: now,
+          });
+        });
+        readBatch.commit().catch(() => {});
       }
     });
     return () => unsubscribe();
@@ -398,6 +431,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           senderName: displayName,
           senderId: user.uid,
           timestamp: serverTimestamp(),
+          kind: type,
         },
         ...unreadUpdates,
       });
@@ -587,13 +621,35 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }).catch(() => {});
   }, [activeChat, user, displayName]);
 
-  const activeChatData = chats.find(c => c.id === activeChat) || null;
+  const usersByUid = useMemo(() => new Map(allUsers.map(u => [u.uid, u])), [allUsers]);
+
+  const enrichMembersInfo = useCallback((chat: ChatRoom): ChatRoom => {
+    if (!usersByUid.size) return chat;
+    let changed = false;
+    const enriched = chat.membersInfo.map(member => {
+      if (!member.uid) return member;
+      const current = usersByUid.get(member.uid);
+      if (!current) return member;
+      const newName = current.displayName || member.displayName;
+      const newPhoto = current.photoURL ?? member.photoURL;
+      if (newName === member.displayName && newPhoto === member.photoURL) return member;
+      changed = true;
+      return { ...member, displayName: newName, photoURL: newPhoto };
+    });
+    return changed ? { ...chat, membersInfo: enriched } : chat;
+  }, [usersByUid]);
+
+  const enrichedChats = useMemo(() => chats.map(enrichMembersInfo), [chats, enrichMembersInfo]);
+  const activeChatData = useMemo(() => {
+    const chat = enrichedChats.find(c => c.id === activeChat);
+    return chat || null;
+  }, [enrichedChats, activeChat]);
   const onlineUsers = allUsers.filter(u => u.isOnline && u.uid !== user?.uid);
 
   const messages = [...olderMessages, ...liveMessages];
 
   return {
-    chats,
+    chats: enrichedChats,
     activeChat,
     activeChatData,
     messages,

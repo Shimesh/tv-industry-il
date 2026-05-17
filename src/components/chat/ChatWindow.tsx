@@ -137,7 +137,7 @@ export default function ChatWindow({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevScrollHeightRef = useRef(0);
-  const isAtBottomRef = useRef(false);
+  const isAtBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -213,7 +213,7 @@ export default function ChatWindow({
     setShowSearch(false);
     setSearchQuery('');
     prevScrollHeightRef.current = 0;
-    isAtBottomRef.current = false;
+    isAtBottomRef.current = true;
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
