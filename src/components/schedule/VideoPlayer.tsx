@@ -189,8 +189,13 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
     const handleNativeVideoError = () => {
       logStreamError('Native video error', getVideoErrorDetails());
       if (!tryNextSource()) {
-        setError('השידור אינו זמין כרגע. נסו לרענן או לפתוח באתר הערוץ.');
-        setLoading(false);
+        if (stream?.embedUrl) {
+          setDynamicStreamUrl(null);
+          setLoading(false);
+        } else {
+          setError('השידור אינו זמין כרגע. נסו לרענן או לפתוח באתר הערוץ.');
+          setLoading(false);
+        }
       }
     };
 
@@ -283,8 +288,15 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
                 return;
               }
               if (tryNextSource()) return;
-              setError('שגיאה בטעינת השידור. נסו לרענן או לפתוח באתר הערוץ.');
-              setLoading(false);
+              hlsInstance?.destroy();
+              hlsInstance = null;
+              if (stream?.embedUrl) {
+                setDynamicStreamUrl(null);
+                setLoading(false);
+              } else {
+                setError('שגיאה בטעינת השידור. נסו לרענן או לפתוח באתר הערוץ.');
+                setLoading(false);
+              }
             }
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
