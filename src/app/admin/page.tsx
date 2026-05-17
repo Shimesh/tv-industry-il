@@ -403,6 +403,9 @@ export default function AdminPage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
   const [importingDirectors, setImportingDirectors] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', phone: '', role: '' });
   const [sendingNotification, setSendingNotification] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -740,6 +743,33 @@ export default function AdminPage() {
     }
   }
 
+  async function addSingleContact() {
+    if (!newContact.name.trim() || !newContact.phone.trim()) {
+      showToast('err', 'יש למלא שם וטלפון');
+      return;
+    }
+    setAddingContact(true);
+    try {
+      const result = await fetchWithAuth<{ created?: number; updated?: number; skipped?: number }>(
+        '/api/admin/contacts/import',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            records: [{ name: newContact.name.trim(), phone: newContact.phone.trim(), role: newContact.role.trim() || 'לא צוין' }],
+          }),
+        },
+      );
+      showToast('ok', `${result.created ? 'נוצר' : result.updated ? 'עודכן' : 'כבר קיים'}: ${newContact.name}`);
+      setNewContact({ name: '', phone: '', role: '' });
+      setShowAddContact(false);
+      await loadOverview(true);
+    } catch (addError) {
+      showToast('err', addError instanceof Error ? addError.message : 'שגיאה בהוספת איש קשר');
+    } finally {
+      setAddingContact(false);
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -952,6 +982,13 @@ export default function AdminPage() {
               {importingDirectors ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
               ייבוא במאים
             </button>
+            <button
+              onClick={() => setShowAddContact(!showAddContact)}
+              className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-green-700"
+            >
+              <Contact2 className="h-4 w-4" />
+              + איש קשר
+            </button>
             <Link
               href="/admin/users"
               className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
@@ -975,6 +1012,60 @@ export default function AdminPage() {
             </Link>
           </div>
         </div>
+
+        {showAddContact && (
+          <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4">
+            <h3 className="mb-3 text-sm font-bold text-green-400">הוספת איש קשר חדש</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[140px]">
+                <label className="mb-1 block text-xs text-gray-400">שם מלא *</label>
+                <input
+                  type="text"
+                  value={newContact.name}
+                  onChange={e => setNewContact(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="ישראל ישראלי"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                  dir="rtl"
+                />
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <label className="mb-1 block text-xs text-gray-400">טלפון *</label>
+                <input
+                  type="tel"
+                  value={newContact.phone}
+                  onChange={e => setNewContact(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="054-1234567"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                  dir="ltr"
+                />
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <label className="mb-1 block text-xs text-gray-400">תפקיד</label>
+                <input
+                  type="text"
+                  value={newContact.role}
+                  onChange={e => setNewContact(prev => ({ ...prev, role: e.target.value }))}
+                  placeholder="צלם, במאי, טכנאי..."
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                  dir="rtl"
+                />
+              </div>
+              <button
+                onClick={() => void addSingleContact()}
+                disabled={addingContact}
+                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-60"
+              >
+                {addingContact ? 'מוסיף...' : 'הוסף'}
+              </button>
+              <button
+                onClick={() => { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '' }); }}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-600"
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
