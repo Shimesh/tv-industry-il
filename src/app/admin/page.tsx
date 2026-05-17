@@ -407,6 +407,8 @@ export default function AdminPage() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', phone: '', role: '' });
+  const [proCardDebug, setProCardDebug] = useState<Record<string, unknown> | null>(null);
+  const [testingProCard, setTestingProCard] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -816,6 +818,25 @@ export default function AdminPage() {
     }
   }
 
+  async function testProCard() {
+    setTestingProCard(true);
+    setProCardDebug(null);
+    try {
+      const contactId = profile?.linkedContactId || profile?.uid || user?.uid || 'me';
+      const result = await fetchWithAuth<Record<string, unknown>>(
+        `/api/directory/pro-card-history?contactId=${encodeURIComponent(String(contactId))}&debug=1`,
+      );
+      setProCardDebug(result);
+      const credits = Array.isArray(result.productionCredits) ? result.productionCredits.length : 0;
+      showToast(credits > 0 ? 'ok' : 'err', `Pro Card: ${credits} הפקות נמצאו`);
+    } catch (err) {
+      setProCardDebug({ error: err instanceof Error ? err.message : String(err) });
+      showToast('err', err instanceof Error ? err.message : 'שגיאה בבדיקה');
+    } finally {
+      setTestingProCard(false);
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -1040,6 +1061,14 @@ export default function AdminPage() {
               <Clapperboard className="h-3.5 w-3.5" />
               ייבוא במאים
             </button>
+            <button
+              onClick={() => void testProCard()}
+              disabled={testingProCard}
+              className="flex items-center gap-1.5 rounded-lg bg-sky-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-sky-600 disabled:opacity-60"
+            >
+              <Search className="h-3.5 w-3.5" />
+              {testingProCard ? 'בודק...' : 'בדוק Pro Card'}
+            </button>
             <span className="mx-1 h-4 w-px bg-gray-700" />
             <Link href="/admin/users" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
               <Users className="h-3.5 w-3.5" /> משתמשים
@@ -1052,6 +1081,18 @@ export default function AdminPage() {
             </Link>
           </div>
         </div>
+
+        {proCardDebug && (
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/5 p-4" dir="ltr">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-sky-400">Pro Card Debug</h3>
+              <button onClick={() => setProCardDebug(null)} className="text-xs text-gray-400 hover:text-white">✕</button>
+            </div>
+            <pre className="max-h-64 overflow-auto rounded-lg bg-black/40 p-3 text-xs text-gray-300 whitespace-pre-wrap">
+              {JSON.stringify(proCardDebug, null, 2)}
+            </pre>
+          </div>
+        )}
 
         {showAddContact && (
           <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4">
