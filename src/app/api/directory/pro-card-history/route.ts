@@ -317,16 +317,26 @@ export async function GET(request: NextRequest) {
   try {
     const snapshot = await loadContactsSnapshot();
     const userDoc = await getDocument<RawUser & { email?: string; phone?: string; photoURL?: string | null; customPhotoURL?: string | null }>(`users/${authUser.uid}`).catch(() => null);
+
+    const buildContactFromUser = () => ({
+      id: contactId,
+      firstName: cleanString(userDoc?.displayName || authUser.displayName).split(/\s+/)[0] || '',
+      lastName: cleanString(userDoc?.displayName || authUser.displayName).split(/\s+/).slice(1).join(' '),
+      email: cleanString(userDoc?.email || authUser.email),
+      phone: cleanString(userDoc?.phone),
+      photoURL: cleanString(userDoc?.photoURL || authUser.photoURL || ''),
+      customPhotoURL: cleanString(userDoc?.customPhotoURL || ''),
+    });
+
+    // Look up contact in snapshot; fall back to authenticated user's profile if:
+    // - contactId matches the user's UID, OR
+    // - contactId matches the user's linkedContactId (user viewing their own Pro Card via linked ID)
+    const isOwnCard = contactId === authUser.uid
+      || contactId === String(userDoc?.linkedContactId ?? '')
+      || contactId === String(userDoc?.profileId ?? '');
+
     const contact = snapshot.contacts.find((entry) => String(entry.id || '') === contactId)
-      || (contactId === authUser.uid && userDoc ? {
-        id: authUser.uid,
-        firstName: cleanString(userDoc.displayName || authUser.displayName).split(/\s+/)[0] || '',
-        lastName: cleanString(userDoc.displayName || authUser.displayName).split(/\s+/).slice(1).join(' '),
-        email: cleanString(userDoc.email || authUser.email),
-        phone: cleanString(userDoc.phone),
-        photoURL: cleanString(userDoc.photoURL || authUser.photoURL || ''),
-        customPhotoURL: cleanString(userDoc.customPhotoURL || ''),
-      } : null);
+      || (isOwnCard && userDoc ? buildContactFromUser() : null);
     if (!contact || contact.hiddenFromDirectory === true) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
     }
