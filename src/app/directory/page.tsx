@@ -167,6 +167,7 @@ function DirectoryContent() {
   const [openToWorkFilter, setOpenToWorkFilter] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<'departments' | 'roles' | null>(null);
   const [drawerSearch, setDrawerSearch] = useState('');
+  const [displayLimit, setDisplayLimit] = useState(60);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const normalizedSearch = search.trim().toLocaleLowerCase('he');
   const normalizedDrawerSearch = drawerSearch.trim().toLocaleLowerCase('he');
@@ -290,6 +291,9 @@ function DirectoryContent() {
     [roleOptions, normalizedDrawerSearch],
   );
 
+  const displayedContacts = sortedFiltered.slice(0, displayLimit);
+  const hasMore = sortedFiltered.length > displayLimit;
+
   const hasActiveFilters = Boolean(search || departmentFilters.length > 0 || roleFilters.length > 0 || availFilter || openToWorkFilter);
   const filterCardActiveStyle = {
     background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 48%, #2563eb 100%)',
@@ -305,6 +309,7 @@ function DirectoryContent() {
     setRoleFilters([]);
     setAvailFilter('');
     setOpenToWorkFilter(false);
+    setDisplayLimit(60);
   };
 
   const selectDepartmentFilter = (department: string) => {
@@ -312,12 +317,14 @@ function DirectoryContent() {
     setRoleFilters([]);
     setDrawerSearch('');
     setActiveDrawer(null);
+    setDisplayLimit(60);
   };
 
   const selectRoleFilter = (role: string) => {
     setRoleFilters((current) => current[0] === role ? [] : [role]);
     setDrawerSearch('');
     setActiveDrawer(null);
+    setDisplayLimit(60);
   };
 
   const openFilterDrawer = (drawer: 'departments' | 'roles') => {
@@ -410,7 +417,7 @@ function DirectoryContent() {
       </section>
 
       {/* Search & Filters */}
-      <section className="sticky z-30 border-b backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--theme-bg) 85%, transparent)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }} dir="rtl">
+      <section className="sticky z-30 border-b backdrop-blur-xl" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }} dir="rtl">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="space-y-3">
             <div className="relative group">
@@ -422,7 +429,7 @@ function DirectoryContent() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-xl border py-2.5 pl-10 pr-10 text-sm transition-all duration-300 placeholder:text-gray-500 focus:border-purple-500/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                style={{ background: 'color-mix(in srgb, var(--theme-bg-secondary) 70%, transparent)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+                style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
                 dir="rtl"
               />
               {search.length > 0 && (
@@ -579,7 +586,7 @@ function DirectoryContent() {
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
             >
               <AnimatePresence>
-                {sortedFiltered.map((contact, i) => {
+                {displayedContacts.map((contact, i) => {
                   const isMeCard = isCurrentUser(contact);
                   const showContactInfo = canShowContactInfo(contact);
                   const contactRoles = getContactRoles(contact);
@@ -593,7 +600,6 @@ function DirectoryContent() {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      layout
                       onClick={() => setSelectedContact(contact)}
                       whileHover={{
                         y: -4,
@@ -604,7 +610,7 @@ function DirectoryContent() {
                       } hover:shadow-xl ${deptGlowColors[primaryDepartment] || 'hover:shadow-gray-500/10'}`}
                       style={{
                         background: isMeCard
-                          ? 'linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 14%, rgba(15,23,42,0.72)), rgba(15,23,42,0.58))'
+                          ? 'linear-gradient(145deg, rgba(250,204,21,0.14), rgba(15,23,42,0.58))'
                           : 'linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))',
                         borderColor: isMeCard ? 'rgba(250,204,21,0.55)' : 'rgba(96,165,250,0.24)',
                         boxShadow: isMeCard
@@ -722,7 +728,7 @@ function DirectoryContent() {
               }}
             >
               <AnimatePresence>
-                {sortedFiltered.map((contact, i) => {
+                {displayedContacts.map((contact, i) => {
                   const isMeRow = isCurrentUser(contact);
                   const showContactInfo = canShowContactInfo(contact);
                   const contactRoles = getContactRoles(contact);
@@ -736,7 +742,6 @@ function DirectoryContent() {
                       initial="hidden"
                       animate="visible"
                       exit="exit"
-                      layout
                       onClick={() => setSelectedContact(contact)}
                       whileHover={{ backgroundColor: 'rgba(139,92,246,0.04)' }}
                       className={`flex items-center gap-4 px-5 py-3.5 cursor-pointer transition-colors ${isMeRow ? 'bg-[var(--theme-accent-glow)]' : ''}`}
@@ -802,6 +807,19 @@ function DirectoryContent() {
           )}
         </AnimatePresence>
 
+        {hasMore && (
+          <div className="flex justify-center mt-6">
+            <button
+              type="button"
+              onClick={() => setDisplayLimit((prev) => prev + 60)}
+              className="rounded-xl border px-6 py-3 text-sm font-bold transition-all hover:bg-purple-500/10 hover:border-purple-400/40"
+              style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            >
+              הצג עוד ({sortedFiltered.length - displayLimit} נוספים)
+            </button>
+          </div>
+        )}
+
         {filtered.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -847,7 +865,7 @@ function DirectoryContent() {
               className="w-full overflow-hidden rounded-t-3xl border-t shadow-2xl"
               style={{
                 maxHeight: '75vh',
-                background: 'linear-gradient(145deg, color-mix(in srgb, var(--theme-bg-card) 94%, white 6%), var(--theme-bg))',
+                background: 'linear-gradient(145deg, var(--theme-bg-card), var(--theme-bg))',
                 borderColor: 'var(--theme-border)',
                 boxShadow: '0 -24px 60px rgba(0,0,0,0.45)',
               }}
@@ -928,7 +946,7 @@ function DirectoryContent() {
                             className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-right transition ${
                               selected ? 'border-purple-400/60 bg-purple-500/15' : 'hover:border-purple-400/40 hover:bg-white/[0.03]'
                             }`}
-                            style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
+                            style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}
                           >
                             <Building2 className="h-4 w-4 shrink-0 text-purple-300" />
                             <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{`${dept.label} (${deptCounts[dept.label] || 0})`}</span>
@@ -952,7 +970,7 @@ function DirectoryContent() {
                           className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-right transition ${
                             selected ? 'border-cyan-400/60 bg-cyan-500/15' : 'hover:border-cyan-400/40 hover:bg-white/[0.03]'
                           }`}
-                          style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-bg-card) 78%, transparent)' }}
+                          style={selected ? undefined : { borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}
                         >
                           <Wrench className="h-4 w-4 shrink-0 text-cyan-300" />
                           <span className="min-w-0 flex-1 truncate text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{`${role} (${count})`}</span>
@@ -1008,8 +1026,8 @@ function DirectoryContent() {
               className="relative rounded-3xl max-w-md w-full overflow-hidden"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'linear-gradient(145deg, color-mix(in srgb, var(--theme-bg) 90%, rgba(139,92,246,0.1)), var(--theme-bg))',
-                border: '1px solid color-mix(in srgb, var(--theme-border) 60%, rgba(139,92,246,0.2))',
+                background: 'linear-gradient(145deg, var(--theme-bg), var(--theme-bg))',
+                border: '1px solid var(--theme-border)',
                 boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.08)',
               }}
             >
