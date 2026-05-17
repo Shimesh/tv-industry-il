@@ -406,6 +406,7 @@ export default function AdminPage() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', phone: '', role: '' });
+  const [migratingGlobal, setMigratingGlobal] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -770,6 +771,31 @@ export default function AdminPage() {
     }
   }
 
+  async function runGlobalProductionsMigration() {
+    if (!window.confirm('להעתיק את כל ההפקות ל-global_productions? (לצורך Pro Cards)')) return;
+    setMigratingGlobal(true);
+    try {
+      const dryResult = await fetchWithAuth<{ unique?: number; filtered?: number }>(
+        '/api/admin/migrate-global-productions',
+        { method: 'POST', body: JSON.stringify({ dryRun: true }) },
+      );
+      if (!window.confirm(`נמצאו ${dryResult.unique || 0} הפקות ייחודיות. להמשיך?`)) {
+        setMigratingGlobal(false);
+        return;
+      }
+      const result = await fetchWithAuth<{ written?: number; skipped?: number; errors?: string[] }>(
+        '/api/admin/migrate-global-productions',
+        { method: 'POST', body: JSON.stringify({ dryRun: false }) },
+      );
+      showToast('ok', `מיגרציה הושלמה: ${result.written || 0} נכתבו, ${result.skipped || 0} דולגו`);
+      await loadOverview(true);
+    } catch (migError) {
+      showToast('err', migError instanceof Error ? migError.message : 'שגיאה במיגרציה');
+    } finally {
+      setMigratingGlobal(false);
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -988,6 +1014,14 @@ export default function AdminPage() {
             >
               <Contact2 className="h-4 w-4" />
               + איש קשר
+            </button>
+            <button
+              onClick={() => void runGlobalProductionsMigration()}
+              disabled={migratingGlobal}
+              className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-amber-700 disabled:opacity-60"
+            >
+              {migratingGlobal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              מיגרציה Pro Cards
             </button>
             <Link
               href="/admin/users"
