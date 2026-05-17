@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   const userPhones = new Set<string>();
   for (const u of users) {
     const p = normalizePhone(u.normalizedPhone as string ?? u.phone as string);
-    if (p) userPhones.set(p);
+    if (p) userPhones.add(p);
   }
 
   const results: Array<{ name: string; phone: string; action: 'created' | 'updated' | 'skipped'; reason?: string }> = [];
