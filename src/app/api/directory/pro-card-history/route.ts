@@ -361,6 +361,7 @@ export async function GET(request: NextRequest) {
       normalizedContactName,
       linkedUserIds: [...linkedUserIds],
       emails: [...userEmails],
+      phones: [...userPhones],
     });
 
     const [globalProductions, calendarDocs, workBoardDocs, registryDocs, masterDocs] = await Promise.all([
@@ -475,10 +476,28 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => b.date.localeCompare(a.date));
 
+    const debugInfo = isDebug ? {
+      nearMisses,
+      _debug: {
+        contactId,
+        fullName,
+        normalizedContactName,
+        contactPhone: contactPhone || null,
+        displayNames: [...displayNames],
+        linkedUserIds: [...linkedUserIds],
+        userPhones: [...userPhones],
+        globalProductionsCount: globalProductions.length,
+        calendarDocsCount: calendarDocs.length,
+        workBoardDocsCount: workBoardDocs.length,
+        sampleUploaders: [...new Set(globalProductions.slice(0, 50).map(p => p.lastUpdatedBy))].slice(0, 5),
+        sampleCrewNames: globalProductions.slice(0, 3).flatMap(p => (p.crew_list || []).slice(0, 3).map(c => c.name)),
+      },
+    } : {};
+
     const response: ProCardHistoryResponse = {
       productionCredits,
       boardActivity,
-      ...(isDebug ? { nearMisses } : {}),
+      ...debugInfo,
     };
 
     return NextResponse.json(response);
