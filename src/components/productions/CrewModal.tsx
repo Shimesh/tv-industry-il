@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
+import { Clapperboard, Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { classifyContactRole, normalizeContactName } from '@/lib/contactsUtils';
@@ -300,6 +300,13 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     }
     return counts;
   }, [taggedCrew]);
+
+  const DIRECTOR_ROLES = ['במאי', 'במאית', 'במאי/ת', 'בימוי', 'director'];
+  const directors = useMemo(() =>
+    taggedCrew.filter(m =>
+      DIRECTOR_ROLES.some(r => m.role?.includes(r) || m.roleDetail?.includes(r))
+    ),
+  [taggedCrew]);
 
   const filteredCrew = useMemo(() => {
     if (activeDepartment === 'הכל') return sortedCrew;
@@ -660,6 +667,55 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pb-5 space-y-2 scrollbar-thin">
+            {directors.length > 0 && activeDepartment === 'הכל' && (
+              <div
+                className="rounded-2xl p-3 mb-3"
+                style={{
+                  background: 'rgba(244, 63, 94, 0.08)',
+                  border: '1px solid rgba(244, 63, 94, 0.2)',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Clapperboard className="w-4 h-4" style={{ color: '#fda4af' }} />
+                  <span className="text-xs font-bold" style={{ color: '#fda4af' }}>
+                    {directors.length === 1 ? 'במאי/ת' : 'במאים'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {directors.map((director, idx) => (
+                    <div key={`director-hero-${director.name}-${idx}`} className="flex items-center gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-full bg-gradient-to-br ${getGradient(director.name)} flex items-center justify-center text-white font-bold text-xs shadow-lg`}
+                      >
+                        {getInitials(director.name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold text-sm text-white/90 truncate block">
+                          {director.name}
+                        </span>
+                        {director.roleDetail && director.roleDetail !== director.role && (
+                          <span className="text-[11px] text-white/40">{director.roleDetail}</span>
+                        )}
+                      </div>
+                      {director.phone ? (
+                        <a
+                          href={`tel:${director.phone}`}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
+                          style={{
+                            background: 'rgba(34, 197, 94, 0.12)',
+                            color: '#6ee7b7',
+                            border: '1px solid rgba(34, 197, 94, 0.2)',
+                          }}
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span dir="ltr">{director.phone}</span>
+                        </a>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {renderCrewList()}
           </div>
 

@@ -1,7 +1,16 @@
 'use client';
 
-import { Production } from '@/lib/productionDiff';
-import { Users, Clock, Info, MapPin } from 'lucide-react';
+import { Production, CrewMember } from '@/lib/productionDiff';
+import { Users, Clock, Info, MapPin, Clapperboard } from 'lucide-react';
+
+const DIRECTOR_ROLES = ['במאי', 'במאית', 'במאי/ת', 'בימוי', 'director'];
+
+function getDirectorNames(crew: CrewMember[]): string[] {
+  return crew
+    .filter(c => DIRECTOR_ROLES.some(r => c.role?.includes(r) || c.roleDetail?.includes(r)))
+    .map(c => c.name)
+    .filter(Boolean);
+}
 
 // Quick crew dedup by normalized name
 function getUniqueCrewCount(crew: Production['crew']): number {
@@ -35,6 +44,7 @@ export default function ProductionBlock({
   onInfoClick,
 }: ProductionBlockProps) {
   const isCancelled = production.status === 'cancelled';
+  const directors = getDirectorNames(production.crew);
 
   // Highlighted = current user's shift → solid amber, bold
   // Muted = other productions → dark gray
@@ -65,6 +75,15 @@ export default function ProductionBlock({
           >
             {production.name}
           </h4>
+
+          {directors.length > 0 && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <Clapperboard className="w-3 h-3 flex-shrink-0" style={{ color: isHighlighted ? '#92400e' : '#fda4af' }} />
+              <span className="text-xs truncate" style={{ color: isHighlighted ? '#92400e' : '#fda4af' }}>
+                {directors.join(', ')}
+              </span>
+            </div>
+          )}
 
           {/* Studio */}
           {production.studio && (
