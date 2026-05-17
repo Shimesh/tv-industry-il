@@ -318,7 +318,7 @@ export async function GET(request: NextRequest) {
     const snapshot = await loadContactsSnapshot();
     const userDoc = await getDocument<RawUser & { email?: string; phone?: string; photoURL?: string | null; customPhotoURL?: string | null }>(`users/${authUser.uid}`).catch(() => null);
 
-    const buildContactFromUser = () => ({
+    const buildContactFromUser = (): RawContact => ({
       id: contactId,
       firstName: cleanString(userDoc?.displayName || authUser.displayName).split(/\s+/)[0] || '',
       lastName: cleanString(userDoc?.displayName || authUser.displayName).split(/\s+/).slice(1).join(' '),
@@ -326,6 +326,7 @@ export async function GET(request: NextRequest) {
       phone: cleanString(userDoc?.phone),
       photoURL: cleanString(userDoc?.photoURL || authUser.photoURL || ''),
       customPhotoURL: cleanString(userDoc?.customPhotoURL || ''),
+      hiddenFromDirectory: false,
     });
 
     // Look up contact in snapshot; fall back to authenticated user's profile if:
