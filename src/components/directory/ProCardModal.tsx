@@ -124,7 +124,7 @@ function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
   if (credit.logoUrl && credit.logoUrl !== 'none') {
     return (
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
-        <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" crossOrigin="anonymous" />
+        <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" referrerPolicy="no-referrer" />
       </div>
     );
   }
@@ -167,6 +167,7 @@ export default function ProCardModal({
   const [history, setHistory] = useState<ProCardHistoryResponse>({ productionCredits: [], boardActivity: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+  const [photoToast, setPhotoToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   const name = fullName(contact);
   const avatarUrl = typeof contact.customPhotoURL === 'string' && contact.customPhotoURL
@@ -288,6 +289,14 @@ export default function ProCardModal({
             <X className="h-5 w-5" />
           </button>
 
+          {photoToast && (
+            <div className={`absolute top-4 right-4 z-30 rounded-xl px-4 py-2 text-sm font-bold shadow-lg ${
+              photoToast.type === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'
+            }`}>
+              {photoToast.message}
+            </div>
+          )}
+
           <div className="relative z-10 min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <div
               ref={shareCardRef}
@@ -302,7 +311,7 @@ export default function ProCardModal({
                         src={avatarUrl || fallbackAvatarUrl}
                         alt={name}
                         className={`h-full w-full object-cover ${avatarUrl ? '' : 'animate-[pulse_4s_ease-in-out_infinite]'}`}
-                        crossOrigin="anonymous"
+                        referrerPolicy="no-referrer"
                         onError={(event) => {
                           event.currentTarget.style.display = 'none';
                         }}
@@ -314,6 +323,14 @@ export default function ProCardModal({
                     {isCurrentUser ? (
                       <ProfilePhotoUploadButton
                         className="absolute bottom-1 right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-white shadow-lg transition hover:bg-slate-600"
+                        onSuccess={() => {
+                          setPhotoToast({ message: 'התמונה עודכנה בהצלחה', type: 'success' });
+                          setTimeout(() => setPhotoToast(null), 3000);
+                        }}
+                        onError={(msg) => {
+                          setPhotoToast({ message: msg, type: 'error' });
+                          setTimeout(() => setPhotoToast(null), 4000);
+                        }}
                       >
                         <Camera className="h-4 w-4" />
                       </ProfilePhotoUploadButton>
