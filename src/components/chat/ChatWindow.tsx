@@ -246,7 +246,7 @@ export default function ChatWindow({
     const reply = replyTo
       ? { messageId: replyTo.id, text: getReplyPreviewText(replyTo), senderName: replyTo.senderName }
       : null;
-    await onSendMessage(text.trim(), 'text', undefined, reply);
+    const textToSend = text.trim();
     setText('');
     setReplyTo(null);
     setShowEmoji(false);
@@ -256,6 +256,7 @@ export default function ChatWindow({
       typingTimeoutRef.current = null;
     }
     if (inputRef.current) inputRef.current.style.height = 'auto';
+    await onSendMessage(textToSend, 'text', undefined, reply);
   }, [onSendMessage, onSetTyping, replyTo, text]);
 
   const handleFileUpload = useCallback(async (file: File) => {
