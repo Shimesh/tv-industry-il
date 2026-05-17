@@ -20,6 +20,7 @@ type CrewBucket = string;
 type ActiveDepartment = CrewBucket | 'הכל';
 
 const DEPARTMENT_ORDER: CrewBucket[] = ['אולפן', 'קונטרול', 'הפקה', 'פוסט', 'בימוי וניתוב', 'צילום', 'סאונד', 'תאורה', 'טכני', 'ארט ותפאורה', 'ביוטי', 'מבצעים'];
+const DIRECTOR_ROLES = ['במאי', 'במאית', 'במאי/ת', 'בימוי', 'director'];
 
 const DEPARTMENT_COLORS: Record<CrewBucket, { bg: string; text: string; border: string; pill: string; pillActive: string }> = {
   אולפן: {
@@ -301,7 +302,6 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     return counts;
   }, [taggedCrew]);
 
-  const DIRECTOR_ROLES = ['במאי', 'במאית', 'במאי/ת', 'בימוי', 'director'];
   const directors = useMemo(() =>
     taggedCrew.filter(m =>
       DIRECTOR_ROLES.some(r => m.role?.includes(r) || m.roleDetail?.includes(r))
