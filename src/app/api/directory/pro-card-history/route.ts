@@ -394,10 +394,14 @@ export async function GET(request: NextRequest) {
     const isDebug = request.nextUrl.searchParams.get('debug') === '1';
     const nearMisses: NearMiss[] = [];
 
+    console.log('[pro-card-history] global_productions count:', globalProductions.length);
+
     const rawCredits: ProCardProductionCredit[] = [
       ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
         const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, displayNames);
-        if (!crewEntry) {
+        const isUploader = Boolean(production.lastUpdatedBy && linkedUserIds.has(production.lastUpdatedBy));
+
+        if (!crewEntry && !isUploader) {
           if (isDebug) {
             const crewNames = (production.crew_list || []).map((e) => e.name).filter(Boolean);
             if (crewNames.some((n) => nameIsNearMiss(n, displayNames))) {
@@ -410,7 +414,7 @@ export async function GET(request: NextRequest) {
         const date = asDateValue(production.date);
         const year = date.slice(0, 4);
         const channelId = inferChannelIdFromTitle(production.name || '', production.studio || '');
-        const role = cleanString(crewEntry.profession) || 'קרדיט';
+        const role = crewEntry ? (cleanString(crewEntry.profession) || 'קרדיט') : 'מעלה לוח';
         const isMajor = Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).isMajor)
           || Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).majorProduction)
           || isMajorProductionTitle(production.name || '');

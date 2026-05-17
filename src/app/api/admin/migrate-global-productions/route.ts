@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
-import { runQuery, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { runQuery, patchDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 
 // GlobalProductionDoc is fully JSON-serializable; cast satisfies FirestorePrimitive at runtime
 function writeDoc(path: string, data: Record<string, unknown>): Promise<void> {
@@ -71,14 +71,24 @@ export async function POST(request: NextRequest) {
 
     const unique = Array.from(byId.values());
 
+    // Also check what's already in global_productions
+    const existingGlobal = await listDocuments<Record<string, unknown>>('global_productions').catch(() => []);
+
     if (dryRun) {
+      const samplePaths = allDocs.slice(0, 5).map((d) => String(d._path || ''));
+      const sampleNames = unique.slice(0, 10).map((d) => `${d.name} (${d.date})`);
+      const sampleExisting = existingGlobal.slice(0, 5).map((d) => String(d.name || d.id || ''));
       return NextResponse.json({
         success: true,
         dryRun: true,
         total: allDocs.length,
         filtered: filtered.length,
         unique: unique.length,
-        message: 'Dry run complete — no writes performed',
+        existingGlobalCount: existingGlobal.length,
+        samplePaths,
+        sampleNames,
+        sampleExisting,
+        message: `Dry run: ${allDocs.length} total docs, ${filtered.length} with crew, ${unique.length} unique. Already ${existingGlobal.length} in global_productions.`,
       });
     }
 
