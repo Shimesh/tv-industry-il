@@ -12,6 +12,7 @@ import {
   BarChart3,
   CheckCircle,
   ChevronDown,
+  Clapperboard,
   Contact2,
   Crown,
   Database,
@@ -401,6 +402,7 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
+  const [importingDirectors, setImportingDirectors] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -718,6 +720,26 @@ export default function AdminPage() {
     }
   }
 
+  async function runDirectorsImport() {
+    if (!window.confirm('לייבא את רשימת הבמאים לאלפון?')) return;
+    setImportingDirectors(true);
+    try {
+      const result = await fetchWithAuth<{ created?: number; updated?: number; skipped?: number }>(
+        '/api/admin/contacts/import',
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      showToast(
+        'ok',
+        `ייבוא הושלם: ${result.created || 0} נוצרו, ${result.updated || 0} עודכנו, ${result.skipped || 0} דולגו`,
+      );
+      await loadOverview(true);
+    } catch (importError) {
+      showToast('err', importError instanceof Error ? importError.message : 'שגיאה בייבוא במאים');
+    } finally {
+      setImportingDirectors(false);
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -921,6 +943,14 @@ export default function AdminPage() {
             >
               {runningSync ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
               סנכרון אנשי קשר
+            </button>
+            <button
+              onClick={() => void runDirectorsImport()}
+              disabled={importingDirectors}
+              className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-rose-700 disabled:opacity-60"
+            >
+              {importingDirectors ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
+              ייבוא במאים
             </button>
             <Link
               href="/admin/users"
