@@ -17,10 +17,12 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim() ?? '',
 };
 
-// Always initialize — Firebase SDK is safe to import on both server and client.
-// getApps().length guard prevents duplicate initialization on hot reloads.
+const isBuildTime = !firebaseConfig.apiKey && typeof window === 'undefined';
+
 const isNewApp = getApps().length === 0;
-const app: FirebaseApp = isNewApp ? initializeApp(firebaseConfig) : getApp();
+const app: FirebaseApp = isNewApp
+  ? initializeApp(isBuildTime ? { ...firebaseConfig, apiKey: 'build-placeholder' } : firebaseConfig)
+  : getApp();
 
 // persistentLocalCache uses IndexedDB which is browser-only.
 // On the server or subsequent inits, fall back to getFirestore (returns existing instance).
