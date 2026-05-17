@@ -25,6 +25,7 @@ import {
 import type { Contact } from '@/data/contacts';
 import type { ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
+import { useAuth } from '@/contexts/AuthContext';
 
 type Props = {
   contact: Contact;
@@ -162,6 +163,7 @@ export default function ProCardModal({
   removalHref,
   onClose,
 }: Props) {
+  const { user } = useAuth();
   const [history, setHistory] = useState<ProCardHistoryResponse>({ productionCredits: [], boardActivity: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
@@ -188,7 +190,10 @@ export default function ProCardModal({
     async function loadHistory() {
       setHistoryLoading(true);
       try {
+        const token = await user?.getIdToken();
+        if (!token || cancelled) { setHistoryLoading(false); return; }
         const response = await fetch(`/api/directory/pro-card-history?contactId=${encodeURIComponent(String(contact.id))}`, {
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
         const data = response.ok
@@ -205,7 +210,7 @@ export default function ProCardModal({
     return () => {
       cancelled = true;
     };
-  }, [contact.id]);
+  }, [contact.id, user]);
 
   async function shareCard() {
     if (!shareCardRef.current || shareState === 'rendering') return;

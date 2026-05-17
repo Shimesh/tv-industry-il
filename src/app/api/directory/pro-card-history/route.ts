@@ -10,6 +10,7 @@ import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globa
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 type RawContact = Record<string, unknown>;
 type RawUser = {

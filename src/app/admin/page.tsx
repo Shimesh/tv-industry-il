@@ -402,11 +402,11 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
-  const [importingDirectors, setImportingDirectors] = useState(false);
+  const [fullSyncRunning, setFullSyncRunning] = useState(false);
+  const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', phone: '', role: '' });
-  const [migratingGlobal, setMigratingGlobal] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
@@ -724,23 +724,46 @@ export default function AdminPage() {
     }
   }
 
-  async function runDirectorsImport() {
-    if (!window.confirm('לייבא את רשימת הבמאים לאלפון?')) return;
-    setImportingDirectors(true);
+  async function runFullSync() {
+    if (!window.confirm('להריץ סנכרון מלא?\n\nשלב 1: מיגרציית הפקות → global_productions\nשלב 2: סנכרון אנשי קשר מלוחות עבודה\n\nתהליך זה יעדכן את ה-Pro Cards ואת רשימת אנשי הקשר.')) return;
+    setFullSyncRunning(true);
+    const results: string[] = [];
     try {
-      const result = await fetchWithAuth<{ created?: number; updated?: number; skipped?: number }>(
-        '/api/admin/contacts/import',
-        { method: 'POST', body: JSON.stringify({}) },
+      setFullSyncStep('בודק הפקות...');
+      const dryResult = await fetchWithAuth<{
+        unique?: number; total?: number; existingGlobalCount?: number;
+      }>(
+        '/api/admin/migrate-global-productions',
+        { method: 'POST', body: JSON.stringify({ dryRun: true }) },
       );
-      showToast(
-        'ok',
-        `ייבוא הושלם: ${result.created || 0} נוצרו, ${result.updated || 0} עודכנו, ${result.skipped || 0} דולגו`,
+
+      const newProductions = (dryResult.unique || 0) - (dryResult.existingGlobalCount || 0);
+      if (newProductions > 0 || (dryResult.unique || 0) > 0) {
+        setFullSyncStep(`מעתיק ${dryResult.unique || 0} הפקות...`);
+        const migResult = await fetchWithAuth<{ written?: number; skipped?: number; errors?: string[] }>(
+          '/api/admin/migrate-global-productions',
+          { method: 'POST', body: JSON.stringify({ dryRun: false }) },
+        );
+        results.push(`הפקות: ${migResult.written || 0} נכתבו`);
+        if ((migResult.errors?.length || 0) > 0) results.push(`שגיאות: ${migResult.errors!.length}`);
+      } else {
+        results.push('הפקות: כבר מעודכן');
+      }
+
+      setFullSyncStep('מסנכרן אנשי קשר...');
+      const syncResult = await fetchWithAuth<{ created?: number; updated?: number; deletedDuplicates?: number }>(
+        '/api/admin/contacts-sync',
+        { method: 'POST' },
       );
+      results.push(`אנשי קשר: ${syncResult.created || 0} חדשים, ${syncResult.updated || 0} עודכנו`);
+
+      showToast('ok', results.join(' | '));
       await loadOverview(true);
-    } catch (importError) {
-      showToast('err', importError instanceof Error ? importError.message : 'שגיאה בייבוא במאים');
+    } catch (err) {
+      showToast('err', err instanceof Error ? err.message : 'שגיאה בסנכרון');
     } finally {
-      setImportingDirectors(false);
+      setFullSyncRunning(false);
+      setFullSyncStep('');
     }
   }
 
@@ -771,43 +794,25 @@ export default function AdminPage() {
     }
   }
 
-  async function runGlobalProductionsMigration() {
-    if (!window.confirm('להעתיק את כל ההפקות ל-global_productions? (לצורך Pro Cards)')) return;
-    setMigratingGlobal(true);
+  async function runDirectorsImport() {
+    if (!window.confirm('לייבא את רשימת הבמאים לאלפון?')) return;
+    setFullSyncRunning(true);
+    setFullSyncStep('מייבא במאים...');
     try {
-      const dryResult = await fetchWithAuth<{
-        unique?: number; filtered?: number; total?: number;
-        existingGlobalCount?: number; message?: string;
-        sampleNames?: string[];
-      }>(
-        '/api/admin/migrate-global-productions',
-        { method: 'POST', body: JSON.stringify({ dryRun: true }) },
+      const result = await fetchWithAuth<{ created?: number; updated?: number; skipped?: number }>(
+        '/api/admin/contacts/import',
+        { method: 'POST', body: JSON.stringify({}) },
       );
-
-      const details = [
-        `סה"כ מסמכים: ${dryResult.total || 0}`,
-        `עם צוות: ${dryResult.filtered || 0}`,
-        `ייחודיות: ${dryResult.unique || 0}`,
-        `כבר ב-global: ${dryResult.existingGlobalCount || 0}`,
-      ].join('\n');
-
-      const samples = (dryResult.sampleNames || []).slice(0, 5).join('\n  ');
-      const samplesStr = samples ? `\n\nדוגמאות:\n  ${samples}` : '';
-
-      if (!window.confirm(`${details}${samplesStr}\n\nלהמשיך?`)) {
-        setMigratingGlobal(false);
-        return;
-      }
-      const result = await fetchWithAuth<{ written?: number; skipped?: number; errors?: string[] }>(
-        '/api/admin/migrate-global-productions',
-        { method: 'POST', body: JSON.stringify({ dryRun: false }) },
+      showToast(
+        'ok',
+        `ייבוא הושלם: ${result.created || 0} נוצרו, ${result.updated || 0} עודכנו, ${result.skipped || 0} דולגו`,
       );
-      showToast('ok', `מיגרציה הושלמה: ${result.written || 0} נכתבו, ${result.skipped || 0} דולגו`);
       await loadOverview(true);
-    } catch (migError) {
-      showToast('err', migError instanceof Error ? migError.message : 'שגיאה במיגרציה');
+    } catch (importError) {
+      showToast('err', importError instanceof Error ? importError.message : 'שגיאה בייבוא במאים');
     } finally {
-      setMigratingGlobal(false);
+      setFullSyncRunning(false);
+      setFullSyncStep('');
     }
   }
 
@@ -951,7 +956,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-950 pb-16 text-white" dir="rtl">
       {toast ? (
         <div
-          className={`fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-medium shadow-xl ${
+          className={`fixed left-1/2 top-20 z-[9999] flex -translate-x-1/2 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-medium shadow-xl ${
             toast.type === 'ok'
               ? 'border border-green-500/40 bg-green-900/95 text-green-300'
               : 'border border-red-500/40 bg-red-900/95 text-red-300'
@@ -999,7 +1004,16 @@ export default function AdminPage() {
               </span>
             </div>
           </div>
+          {/* Primary action: full sync */}
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => void runFullSync()}
+              disabled={fullSyncRunning || runningSync}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-5 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
+            >
+              {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              {fullSyncStep || 'סנכרון מלא'}
+            </button>
             <button
               onClick={() => void loadOverview(true)}
               className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-700"
@@ -1007,57 +1021,34 @@ export default function AdminPage() {
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               רענון
             </button>
-            <button
-              onClick={() => void runContactsSync()}
-              disabled={runningSync}
-              className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-purple-700 disabled:opacity-60"
-            >
-              {runningSync ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-              סנכרון אנשי קשר
-            </button>
-            <button
-              onClick={() => void runDirectorsImport()}
-              disabled={importingDirectors}
-              className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-rose-700 disabled:opacity-60"
-            >
-              {importingDirectors ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
-              ייבוא במאים
-            </button>
+          </div>
+
+          {/* Secondary actions */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowAddContact(!showAddContact)}
-              className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-green-700"
+              className="flex items-center gap-1.5 rounded-lg bg-green-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-green-600"
             >
-              <Contact2 className="h-4 w-4" />
+              <Contact2 className="h-3.5 w-3.5" />
               + איש קשר
             </button>
             <button
-              onClick={() => void runGlobalProductionsMigration()}
-              disabled={migratingGlobal}
-              className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-amber-700 disabled:opacity-60"
+              onClick={() => void runDirectorsImport()}
+              disabled={fullSyncRunning}
+              className="flex items-center gap-1.5 rounded-lg bg-rose-600/80 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-rose-600 disabled:opacity-60"
             >
-              {migratingGlobal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-              מיגרציה Pro Cards
+              <Clapperboard className="h-3.5 w-3.5" />
+              ייבוא במאים
             </button>
-            <Link
-              href="/admin/users"
-              className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
-            >
-              ניהול משתמשים
-              <Users className="h-4 w-4" />
+            <span className="mx-1 h-4 w-px bg-gray-700" />
+            <Link href="/admin/users" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+              <Users className="h-3.5 w-3.5" /> משתמשים
             </Link>
-            <Link
-              href="/admin/sync"
-              className="flex items-center gap-2 rounded-xl bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
-            >
-              כלי סנכרון
-              <ArrowLeft className="h-4 w-4" />
+            <Link href="/admin/industry-master" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+              <Database className="h-3.5 w-3.5" /> מנהל הפקות
             </Link>
-            <Link
-              href="/admin/industry-master"
-              className="flex items-center gap-2 rounded-xl bg-violet-900/50 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-800/60"
-            >
-              מנהל הפקות מאוחד
-              <Database className="h-4 w-4" />
+            <Link href="/admin/sync" className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700">
+              <Settings className="h-3.5 w-3.5" /> כלי סנכרון
             </Link>
           </div>
         </div>
@@ -1591,11 +1582,11 @@ export default function AdminPage() {
                 </div>
                 <div className="space-y-2">
                   <button
-                    onClick={() => void runContactsSync()}
-                    disabled={runningSync}
-                    className="w-full rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-60"
+                    onClick={() => void runFullSync()}
+                    disabled={fullSyncRunning || runningSync}
+                    className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
                   >
-                    {runningSync ? 'מריץ סנכרון...' : 'סנכרון אנשי קשר עכשיו'}
+                    {fullSyncRunning ? (fullSyncStep || 'מריץ...') : 'סנכרון מלא (הפקות + אנשי קשר)'}
                   </button>
                   <Link
                     href="/directory"
@@ -1605,18 +1596,11 @@ export default function AdminPage() {
                     <ArrowLeft className="h-4 w-4" />
                   </Link>
                   <Link
-                    href="/admin/sync"
+                    href="/admin/industry-master"
                     className="flex w-full items-center justify-between rounded-xl bg-gray-800 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-700"
                   >
-                    מרכז סנכרון
-                    <ArrowLeft className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href="/admin/industry-master"
-                    className="flex w-full items-center justify-between rounded-xl bg-violet-900/50 px-4 py-2 text-sm text-violet-200 transition-colors hover:bg-violet-800/60"
-                  >
                     מנהל הפקות מאוחד
-                    <Database className="h-4 w-4" />
+                    <ArrowLeft className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
