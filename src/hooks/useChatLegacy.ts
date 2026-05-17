@@ -343,11 +343,24 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     let fileURL = null;
     let fileSize = null;
-    const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
-    const chatData = chatDoc?.data();
-    const chatMembers = Array.isArray(chatData?.members) ? chatData.members as string[] : [];
-    if (!chatDoc?.exists() || !chatMembers.includes(user.uid)) {
-      throw new Error('אין לך הרשאה לשלוח הודעה בשיחה הזו');
+
+    // Use cached chat data when available to avoid blocking on Firestore read
+    const cachedChat = chats.find(c => c.id === activeChat);
+    let chatMembers: string[];
+    let encryptedKeys: Record<string, string> | undefined;
+
+    if (cachedChat) {
+      chatMembers = cachedChat.members;
+      const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
+      encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
+    } else {
+      const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
+      const chatData = chatDoc?.data();
+      chatMembers = Array.isArray(chatData?.members) ? chatData.members as string[] : [];
+      encryptedKeys = chatData?.encryptedKeys as Record<string, string> | undefined;
+      if (!chatDoc?.exists() || !chatMembers.includes(user.uid)) {
+        throw new Error('אין לך הרשאה לשלוח הודעה בשיחה הזו');
+      }
     }
 
     if (file && type !== 'text') {
@@ -387,14 +400,11 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       : `📎 ${file?.name || 'קובץ'}`;
 
     let messageText = type === 'text' ? text : (type === 'voice' || type === 'video' ? '' : file?.name || text);
-    {
-      const encryptedKeys = chatData?.encryptedKeys as Record<string, string> | undefined;
-      if (encryptedKeys) {
-        const chatKey = await getChatKey(activeChat, encryptedKeys);
-        if (chatKey && messageText) {
-          const encrypted = await encryptMessage(messageText, chatKey);
-          if (encrypted) messageText = encrypted;
-        }
+    if (encryptedKeys) {
+      const chatKey = await getChatKey(activeChat, encryptedKeys);
+      if (chatKey && messageText) {
+        const encrypted = await encryptMessage(messageText, chatKey);
+        if (encrypted) messageText = encrypted;
       }
     }
 
@@ -445,7 +455,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       console.error('Send message error:', err);
       throw err;
     }
-  }, [user, activeChat, displayName, displayPhoto, getChatKey]);
+  }, [user, activeChat, chats, displayName, displayPhoto, getChatKey]);
 
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!activeChat || !user) return;
