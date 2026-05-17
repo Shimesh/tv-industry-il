@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     const id = `manual-${normalizedPh ?? normalizedN.replace(/\s+/g, '-')}-${Date.now()}`;
     const identityKey = normalizedPh ? `${normalizedN}::${normalizedPh}` : normalizedN;
 
-    await createDocument(`contacts/${id}`, {
+    await createDocument('contacts', {
       id,
       firstName,
       lastName,
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       ghostAvatarSeed: ghostAvatarSeed(normalizedN),
       createdAt: nowIso(),
       updatedAt: nowIso(),
-    });
+    }, id);
 
     results.push({ name: record.name, phone: record.phone, action: 'created' });
   }
