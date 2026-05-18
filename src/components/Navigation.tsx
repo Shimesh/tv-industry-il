@@ -151,7 +151,7 @@ export default function Navigation() {
           event.preventDefault();
           navigateFromNav(link.href);
         }}
-        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
+        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 shrink-0 whitespace-nowrap px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
           isActive
             ? 'text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
@@ -182,7 +182,7 @@ export default function Navigation() {
         event.preventDefault();
         navigateFromNav(adminNavLink.href);
       }}
-      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
+      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 shrink-0 whitespace-nowrap px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
         adminIsActive
           ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
           : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
@@ -226,7 +226,7 @@ export default function Navigation() {
             <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text 2xl:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 xl:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0 overflow-hidden xl:flex">
             {filteredLinks.map((link) => renderNavLink(link))}
             {showAdminLink ? (
               <>
