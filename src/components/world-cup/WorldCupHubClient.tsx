@@ -648,7 +648,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
       <MobileSectionTabs value={activeSection} onChange={handleSectionChange} />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
             <Card className="overflow-hidden p-3">
               <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
