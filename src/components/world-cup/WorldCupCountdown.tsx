@@ -89,7 +89,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         </span>
         {!compact && <span className="shrink-0 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37]">פעיל</span>}
       </span>
-      <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-2'}`} dir="rtl">
+      <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-2'}`} dir="ltr">
         <Digit value={diff.days} label="ימים" compact={compact} />
         <Digit value={diff.hours} label="שעות" compact={compact} />
         <Digit value={diff.minutes} label="דקות" compact={compact} />
