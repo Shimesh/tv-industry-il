@@ -56,6 +56,7 @@ export interface UserProfile {
   showPhone?: boolean;
   encryptionPublicKey?: string;
   crewName?: string;
+  lastSeen?: number | null;
 }
 
 type ProfileSource = 'server' | 'cache' | 'fallback';

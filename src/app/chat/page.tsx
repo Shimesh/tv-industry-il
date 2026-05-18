@@ -497,6 +497,7 @@ function ChatContent() {
             loadingMore={loadingMore}
             onLoadMore={loadMoreMessages}
             onlineUsers={onlineUsers}
+            allUsers={allUsers}
           />
         ) : (
           <ChatEmptyState

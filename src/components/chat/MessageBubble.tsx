@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Check,
   CheckCheck,
@@ -192,6 +193,7 @@ export default function MessageBubble({
   onRetry,
   onDismissOptimistic,
 }: MessageBubbleProps) {
+  const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
   const isPending = isOwn && message.localState === 'sending';
   const isFailed = isOwn && message.localState === 'failed';
@@ -247,7 +249,10 @@ export default function MessageBubble({
       onMouseLeave={() => setShowMenu(false)}
     >
       {!isOwn && isGroup && showSender && (
-        <div className="shrink-0 ml-1.5 mt-auto mb-1">
+        <div
+          className="shrink-0 ml-1.5 mt-auto mb-1 cursor-pointer"
+          onClick={() => message.senderId !== 'system' && router.push(`/profile/${message.senderId}`)}
+        >
           {message.senderPhoto ? (
             <img src={message.senderPhoto} alt="" className="w-[28px] h-[28px] rounded-full object-cover" />
           ) : (
@@ -272,8 +277,9 @@ export default function MessageBubble({
         >
           {showSender && !isOwn && isGroup && (
             <p
-              className="text-[12.5px] font-medium mb-[2px]"
+              className="text-[12.5px] font-medium mb-[2px] cursor-pointer hover:underline"
               style={{ color: nameColor(message.senderName) }}
+              onClick={() => message.senderId !== 'system' && router.push(`/profile/${message.senderId}`)}
             >
               {message.senderName}
             </p>

@@ -16,6 +16,7 @@ import {
   Lock,
   Video as VideoIcon,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import MessageBubble from './MessageBubble';
 import ChatConnectionBanner from './ChatConnectionBanner';
 import type { ChatRoom } from '@/hooks/useChat';
@@ -56,6 +57,7 @@ interface ChatWindowProps {
   loadingMore?: boolean;
   onLoadMore?: () => void;
   onlineUsers?: UserProfile[];
+  allUsers?: UserProfile[];
 }
 
 const EMOJI_LIST = [
@@ -105,6 +107,17 @@ function formatRecordingDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function formatLastSeen(timestamp: number | null | undefined): string {
+  if (!timestamp) return '';
+  const now = Date.now();
+  const diff = now - timestamp;
+  if (diff < 60_000) return 'נראה/ת עכשיו';
+  if (diff < 3600_000) return `נראה/ת לפני ${Math.floor(diff / 60_000)} דקות`;
+  if (diff < 86400_000) return `נראה/ת לפני ${Math.floor(diff / 3600_000)} שעות`;
+  const date = new Date(timestamp);
+  return `נראה/ת ${date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })} ${date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 export default function ChatWindow({
   chat,
   messages,
@@ -124,6 +137,7 @@ export default function ChatWindow({
   loadingMore = false,
   onLoadMore,
   onlineUsers = [],
+  allUsers = [],
 }: ChatWindowProps) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatUiMessage | null>(null);
@@ -143,6 +157,7 @@ export default function ChatWindow({
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const router = useRouter();
   const { callState, startCall, signalingMode } = useCall();
   const {
     isRecording,
@@ -160,6 +175,9 @@ export default function ChatWindow({
   const isGroup = chat.type !== 'private';
   const otherMember = chat.type === 'private'
     ? chat.membersInfo.find((m) => m.uid && m.uid !== currentUserId)
+    : null;
+  const otherUserProfile = otherMember?.uid
+    ? allUsers.find(u => u.uid === otherMember.uid) ?? null
     : null;
   const canCall = !!otherMember?.uid && callState.status === 'idle';
 
@@ -340,8 +358,15 @@ export default function ChatWindow({
           const isOtherOnline = !isGroup && otherMember?.uid
             ? onlineUsers.some(u => u.uid === otherMember.uid)
             : false;
+          const profileUid = !isGroup ? otherMember?.uid : null;
+          const handleProfileClick = profileUid
+            ? () => router.push(`/profile/${profileUid}`)
+            : undefined;
           return (
-            <div className="relative shrink-0">
+            <div
+              className={`relative shrink-0 ${handleProfileClick ? 'cursor-pointer' : ''}`}
+              onClick={handleProfileClick}
+            >
               {chatPhoto ? (
                 <img src={chatPhoto} alt="" className="w-10 h-10 rounded-full object-cover" />
               ) : (
@@ -353,13 +378,16 @@ export default function ChatWindow({
                 </div>
               )}
               {isOtherOnline && (
-                <span className="absolute bottom-0 left-0 h-[11px] w-[11px] rounded-full border-2 bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg-secondary)' }} />
+                <span className="absolute bottom-0 right-0 h-[11px] w-[11px] rounded-full border-2 bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg-secondary)' }} />
               )}
             </div>
           );
         })()}
 
-        <div className="flex-1 min-w-0">
+        <div
+          className={`flex-1 min-w-0 ${!isGroup && otherMember?.uid ? 'cursor-pointer' : ''}`}
+          onClick={!isGroup && otherMember?.uid ? () => router.push(`/profile/${otherMember.uid}`) : undefined}
+        >
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-[15px] font-medium text-[var(--theme-text)]">{chatName}</h3>
             <span title="צ׳אט מוגן">
@@ -371,8 +399,12 @@ export default function ChatWindow({
               <span className="text-[var(--theme-accent)]">{typingUsers.join(', ')} מקליד/ה...</span>
             ) : isGroup ? (
               `${chat.members.length} משתתפים`
+            ) : onlineUsers.some(u => u.uid === otherMember?.uid) ? (
+              <span className="text-[var(--theme-success)]">מחובר/ת</span>
+            ) : otherUserProfile?.lastSeen ? (
+              formatLastSeen(otherUserProfile.lastSeen)
             ) : (
-              'לחצו כאן לפרטי איש הקשר'
+              'לחצו לפרופיל'
             )}
           </p>
         </div>
