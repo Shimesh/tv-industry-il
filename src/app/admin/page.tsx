@@ -68,7 +68,7 @@ const NOTIFICATION_LINK_OPTIONS = [
   { label: 'ללא קישור', value: '' },
 ];
 
-const APP_VERSION = '2.1.3';
+const APP_VERSION = '2.6.0';
 
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
