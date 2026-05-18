@@ -75,7 +75,7 @@ export default function RootLayout({
             <Navigation />
             <QuickMenuRoot />
             <main
-              className="flex-1"
+              className="flex-1 overflow-x-hidden"
               style={{ paddingTop: 'var(--app-header-offset)', paddingBottom: 'var(--safe-area-bottom)' }}
             >
               <ErrorBoundary>{children}</ErrorBoundary>
