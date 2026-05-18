@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Trophy } from 'lucide-react';
+import { ChevronLeft, Trophy } from 'lucide-react';
 import { WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 
@@ -58,9 +58,9 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
     <motion.button
       type="button"
       onClick={() => router.push('/world-cup')}
-      whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.985 }}
-      className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden rounded-[1.5rem] border text-right shadow-[0_22px_60px_rgba(212,175,55,0.16),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition duration-200 hover:border-[#D4AF37]/45 hover:shadow-[0_28px_72px_rgba(212,175,55,0.25),inset_0_1px_0_rgba(255,255,255,0.12)] ${
+      whileHover={{ y: -3, scale: 1.015 }}
+      whileTap={{ scale: 0.97, y: 0 }}
+      className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden rounded-[1.5rem] border text-right backdrop-blur-2xl transition-all duration-200 hover:border-[#D4AF37]/60 ${
         compact
           ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 px-2 py-2 sm:max-w-none'
           : 'h-[148px] w-full max-w-full flex-col justify-between gap-3 p-4'
@@ -68,11 +68,14 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       style={{
         borderColor: activeMatch ? 'color-mix(in srgb, var(--wc-gold, #D4AF37) 45%, transparent)' : 'rgba(255,255,255,.10)',
         background: 'rgba(2, 6, 23, .42)',
-        boxShadow: activeMatch ? '0 0 28px var(--wc-gold-glow, rgba(212,175,55,.34)), 0 24px 64px rgba(0,0,0,.25)' : undefined,
+        boxShadow: activeMatch
+          ? '0 0 28px var(--wc-gold-glow, rgba(212,175,55,.34)), 0 24px 64px rgba(0,0,0,.25)'
+          : '0 14px 40px rgba(212,175,55,0.12), inset 0 1px 0 rgba(255,255,255,0.08)',
       }}
       title="מרכז מונדיאל 2026"
     >
       <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(212,175,55,0.20),transparent_42%)]" />
+      <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
       <span className={`${compact ? 'items-center' : 'items-start'} relative flex w-full justify-between gap-3`}>
         <span className="flex min-w-0 items-center gap-2">
           <span className={`${compact ? 'h-8 w-8' : 'h-11 w-11'} relative flex shrink-0 items-center justify-center rounded-full bg-[var(--wc-gold,#D4AF37)] text-[#002046]`}>
@@ -87,7 +90,12 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
             <span className="block text-base font-black leading-tight text-white">{label}</span>
           </span>
         </span>
-        {!compact && <span className="shrink-0 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37]">פעיל</span>}
+        {!compact && (
+          <span className="shrink-0 flex items-center gap-1 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37] transition-all duration-200 group-hover:bg-[#D4AF37]/20 group-hover:border-[#D4AF37]/50">
+            כניסה
+            <ChevronLeft className="h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
+          </span>
+        )}
       </span>
       <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-2'}`} dir="ltr">
         <Digit value={diff.days} label="ימים" compact={compact} />
