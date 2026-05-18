@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       recordRouteMetric({ route: '/api/admin/ratings-sync', ok: true, statusCode: 200 }),
       recordJobMetric({
         job: 'ratings-scrape',
-        ok: true,
+        ok: !result.cachedFallback,
         message: result.cachedFallback
           ? 'מקור המדרוג לא נגיש כרגע מ-Vercel; הנתונים השמורים האחרונים נשארו פעילים'
           : 'סנכרון ידני של נתוני הרייטינג הושלם בהצלחה',

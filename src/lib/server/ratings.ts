@@ -12,7 +12,7 @@ const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
-const MIDRUG_TIMEOUT_MS = 40_000;
+const MIDRUG_TIMEOUT_MS = 12_000;
 const MIDRUG_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.6.0; +https://tv-industry-il.vercel.app)',
   Accept: 'text/html,application/xhtml+xml,*/*',
@@ -74,7 +74,7 @@ async function sleep(ms: number): Promise<void> {
 
 async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Promise<string> {
   const errors: string[] = [];
-  const backoffs = [0, 2000, 4000];
+  const backoffs = [0, 2000];
 
   for (let attempt = 0; attempt < backoffs.length; attempt++) {
     if (backoffs[attempt]) await sleep(backoffs[attempt]);
