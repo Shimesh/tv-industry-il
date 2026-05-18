@@ -89,9 +89,9 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       <header className="app-hero">
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
-          <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-3xl">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-7">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+            <div className="max-w-3xl pt-1 lg:pt-4">
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 מרכז העבודה של תעשיית הטלוויזיה
@@ -104,12 +104,12 @@ export default function HomePage() {
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
-            <div className="flex w-full flex-col gap-3 lg:max-w-sm">
+            <aside className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-sm lg:grid-cols-1">
               <RatingsWidget />
               <PersonalProCardWidget />
               <WorldCupCountdown />
               <HomeInfoWidget />
-            </div>
+            </aside>
           </div>
         </div>
       </header>

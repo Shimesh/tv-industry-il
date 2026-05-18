@@ -151,7 +151,7 @@ export default function Navigation() {
           event.preventDefault();
           navigateFromNav(link.href);
         }}
-        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2.5 text-xs xl:px-3 xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
+        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
           isActive
             ? 'text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
@@ -182,7 +182,7 @@ export default function Navigation() {
         event.preventDefault();
         navigateFromNav(adminNavLink.href);
       }}
-      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2.5 text-xs xl:px-3 xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
+      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
         adminIsActive
           ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
           : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
@@ -223,10 +223,10 @@ export default function Navigation() {
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-teal-400 shadow-lg shadow-purple-500/20 transition-all group-hover:shadow-purple-500/35">
               <Tv className="h-5 w-5 text-white" />
             </div>
-            <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text sm:block">TV Industry IL</span>
+            <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text 2xl:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 xl:flex">
             {filteredLinks.map((link) => renderNavLink(link))}
             {showAdminLink ? (
               <>
@@ -291,10 +291,10 @@ export default function Navigation() {
                     size="sm"
                     isOnline={effectiveProfile?.isOnline !== false}
                   />
-                  <span className="hidden max-w-[100px] truncate text-sm font-bold text-[var(--theme-text)] sm:block">
+                  <span className="hidden max-w-[100px] truncate text-sm font-bold text-[var(--theme-text)] 2xl:block">
                     {effectiveProfile?.displayName || user?.displayName || 'משתמש'}
                   </span>
-                  <ChevronDown className={`hidden h-4 w-4 text-[var(--theme-text-secondary)] transition-transform sm:block ${userMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`hidden h-4 w-4 text-[var(--theme-text-secondary)] transition-transform 2xl:block ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {userMenuOpen && user ? (
@@ -352,7 +352,7 @@ export default function Navigation() {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] lg:hidden"
+              className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] xl:hidden"
               aria-label="פתיחת תפריט"
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -362,7 +362,7 @@ export default function Navigation() {
       </div>
 
       {mobileOpen ? (
-        <div className="border-t backdrop-blur-xl lg:hidden" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-nav-bg)' }}>
+        <div className="border-t backdrop-blur-xl xl:hidden" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-nav-bg)' }}>
           <div className="space-y-1 px-4 py-3">
             {filteredLinks.map((link) => renderNavLink(link, true))}
 

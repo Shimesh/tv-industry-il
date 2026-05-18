@@ -20,7 +20,7 @@ type FabPosition = {
   y: number;
 };
 
-const FAB_POSITION_STORAGE_KEY = 'tv-industry-il-quick-menu-fab-position';
+const FAB_POSITION_STORAGE_KEY = 'tv-industry-il-quick-menu-fab-position-v2';
 const FAB_SIZE = 56;
 const EDGE_MARGIN = 20;
 const DRAG_THRESHOLD = 5;
@@ -257,7 +257,8 @@ function clampFabPosition(x: number, y: number): FabPosition {
   if (typeof window === 'undefined') return { x, y };
 
   const minX = EDGE_MARGIN;
-  const minY = EDGE_MARGIN;
+  const headerOffset = readCssPixelValue('--app-header-offset');
+  const minY = headerOffset + EDGE_MARGIN;
   const maxX = Math.max(EDGE_MARGIN, window.innerWidth - FAB_SIZE - EDGE_MARGIN);
   const maxY = Math.max(EDGE_MARGIN, window.innerHeight - FAB_SIZE - EDGE_MARGIN);
 
@@ -271,19 +272,19 @@ function getDefaultFabPosition(position: QuickMenuPosition): FabPosition {
   if (typeof window === 'undefined') return { x: EDGE_MARGIN, y: EDGE_MARGIN };
 
   const centerX = (window.innerWidth - FAB_SIZE) / 2;
-  const centerY = (window.innerHeight - FAB_SIZE) / 2;
+  const lowerY = window.innerHeight - FAB_SIZE - 96;
   const headerOffset = readCssPixelValue('--app-header-offset');
 
   switch (position) {
     case 'left':
-      return clampFabPosition(EDGE_MARGIN, centerY);
+      return clampFabPosition(EDGE_MARGIN, lowerY);
     case 'top':
       return clampFabPosition(centerX, headerOffset + EDGE_MARGIN);
     case 'bottom':
       return clampFabPosition(centerX, window.innerHeight - FAB_SIZE - EDGE_MARGIN);
     case 'right':
     default:
-      return clampFabPosition(window.innerWidth - FAB_SIZE - EDGE_MARGIN, centerY);
+      return clampFabPosition(window.innerWidth - FAB_SIZE - EDGE_MARGIN, lowerY);
   }
 }
 

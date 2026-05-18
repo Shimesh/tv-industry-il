@@ -81,7 +81,7 @@ export default function RatingsWidget() {
           {rows.map((row) => (
             <div key={`${mode}-${row.rank}-${row.showName}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-2.5">
               <div className="w-5 shrink-0 text-center text-sm font-black text-purple-200" dir="ltr">{row.rank}</div>
-              <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} compact />
+              <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} channel={row.channel} compact />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-white">{row.canonicalShowName || row.showName}</p>
                 <p className="truncate text-xs text-purple-100/60">{row.channel}</p>
@@ -108,4 +108,3 @@ export default function RatingsWidget() {
     </section>
   );
 }
-

@@ -45,7 +45,7 @@ function RatingsTable({ rows }: { rows: RatingRow[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} />
+                    <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} channel={row.channel} />
                     <div className="min-w-0">
                       <div className="font-bold text-white">{row.canonicalShowName || row.showName}</div>
                       {row.canonicalShowName && row.canonicalShowName !== row.showName ? (
@@ -169,4 +169,3 @@ export default function RatingsPage() {
     </main>
   );
 }
-
