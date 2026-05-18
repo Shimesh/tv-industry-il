@@ -87,7 +87,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-hidden">
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-7">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
