@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { type QuickMenuPosition, useQuickMenuPosition } from '@/hooks/useQuickMenuPosition';
 
 const mainLinks = [
   { href: '/', label: 'דף הבית', icon: Home, accent: '#a78bfa' },
@@ -43,34 +42,6 @@ const bottomLinks = [
 
 const adminLink = { href: '/admin', label: 'ניהול', icon: Shield, accent: '#facc15' } as const;
 
-const panelPlacement: Record<QuickMenuPosition, string> = {
-  right: 'right-0 top-0 h-screen w-[min(390px,calc(100vw-1.5rem))] rounded-l-[1.75rem]',
-  left: 'left-0 top-0 h-screen w-[min(390px,calc(100vw-1.5rem))] rounded-r-[1.75rem]',
-  top: 'left-0 right-0 top-0 h-screen rounded-b-[1.75rem]',
-  bottom: 'bottom-0 left-0 right-0 h-screen rounded-t-[1.75rem]',
-};
-
-const openTransform: Record<QuickMenuPosition, string> = {
-  right: 'translate-x-0',
-  left: 'translate-x-0',
-  top: 'translate-y-0',
-  bottom: 'translate-y-0',
-};
-
-const closedTransform: Record<QuickMenuPosition, string> = {
-  right: 'translate-x-full',
-  left: '-translate-x-full',
-  top: '-translate-y-full',
-  bottom: 'translate-y-full',
-};
-
-const contentGrid: Record<QuickMenuPosition, string> = {
-  right: 'grid-cols-1',
-  left: 'grid-cols-1',
-  top: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-  bottom: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-};
-
 type QuickMenuDrawerProps = {
   open: boolean;
   onClose: () => void;
@@ -80,9 +51,7 @@ type QuickMenuLink = (typeof mainLinks)[number] | (typeof bottomLinks)[number] |
 
 export default function QuickMenuDrawer({ open, onClose }: QuickMenuDrawerProps) {
   const pathname = usePathname();
-  const { position } = useQuickMenuPosition();
   const { user, profile } = useAuth();
-  const isVertical = position === 'right' || position === 'left';
   const isAdmin = profile?.siteRole === 'admin';
   const hasAuth = Boolean(user);
   const visibleMainLinks = mainLinks.filter((link) => !('auth' in link) || !link.auth || hasAuth);
@@ -151,13 +120,13 @@ export default function QuickMenuDrawer({ open, onClose }: QuickMenuDrawerProps)
         role="dialog"
         aria-modal="true"
         aria-label="תפריט מהיר"
-        className={`fixed z-[9999] ${panelPlacement[position]} overflow-hidden border border-white/15 bg-slate-950/80 shadow-2xl shadow-black/45 backdrop-blur-2xl transition-transform duration-300 ease-in-out ${
-          open ? openTransform[position] : closedTransform[position]
+        className={`fixed right-0 top-0 z-[9999] h-screen w-[min(390px,calc(100vw-1.5rem))] overflow-hidden rounded-l-[1.75rem] border border-white/15 bg-slate-950/80 shadow-2xl shadow-black/45 backdrop-blur-2xl transition-transform duration-300 ease-in-out ${
+          open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_12%,rgba(56,189,248,0.22),transparent_32%),radial-gradient(circle_at_18%_82%,rgba(224,122,95,0.20),transparent_38%)]" />
 
-        <div className={`relative flex h-full min-h-0 flex-col ${isVertical ? '' : 'mx-auto max-w-7xl'}`}>
+        <div className="relative flex h-full min-h-0 flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <div className="text-right">
               <p className="text-xs font-black uppercase tracking-wide text-white/45">Quick Menu</p>
@@ -174,14 +143,14 @@ export default function QuickMenuDrawer({ open, onClose }: QuickMenuDrawerProps)
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-            <div className={`grid ${contentGrid[position]} gap-2`}>
+            <div className="grid grid-cols-1 gap-2">
               {visibleMainLinks.map((link, index) => renderLink(link, index))}
             </div>
 
             <div className="flex-grow" />
 
             {visibleBottomLinks.length > 0 ? (
-              <div className={`mt-3 grid ${contentGrid[position]} gap-2 border-t border-white/10 pt-3`}>
+              <div className="mt-3 grid grid-cols-1 gap-2 border-t border-white/10 pt-3">
                 {visibleBottomLinks.map((link, index) => renderLink(link, visibleMainLinks.length + index, true))}
               </div>
             ) : null}
