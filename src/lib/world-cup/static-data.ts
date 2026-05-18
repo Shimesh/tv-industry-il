@@ -15,7 +15,7 @@ export const teams: Record<string, WorldCupTeam> = {
   alg: { id: 'alg', nameHe: 'אלג׳יריה', nameEn: 'Algeria', flag: '🇩🇿' },
   ger: { id: 'ger', nameHe: 'גרמניה', nameEn: 'Germany', flag: '🇩🇪' },
   nzl: { id: 'nzl', nameHe: 'ניו זילנד', nameEn: 'New Zealand', flag: '🇳🇿' },
-  eng: { id: 'eng', nameHe: 'אנגליה', nameEn: 'England', flag: '🏴' },
+  eng: { id: 'eng', nameHe: 'אנגליה', nameEn: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
   cro: { id: 'cro', nameHe: 'קרואטיה', nameEn: 'Croatia', flag: '🇭🇷' },
   esp: { id: 'esp', nameHe: 'ספרד', nameEn: 'Spain', flag: '🇪🇸' },
   jpn: { id: 'jpn', nameHe: 'יפן', nameEn: 'Japan', flag: '🇯🇵' },
