@@ -15,8 +15,10 @@ import {
   Video,
   Lock,
   Video as VideoIcon,
+  WifiOff,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import MessageBubble from './MessageBubble';
 import ChatConnectionBanner from './ChatConnectionBanner';
 import type { ChatRoom } from '@/hooks/useChat';
@@ -24,6 +26,8 @@ import { useCall } from '@/contexts/CallContext';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import type { ChatConnectionState, ChatUiMessage } from './chatTypes';
 import type { UserProfile } from '@/contexts/AuthContext';
+
+const EmojiPicker = dynamic(() => import('@emoji-mart/react').then(mod => mod.default), { ssr: false });
 
 interface ReplyTarget {
   messageId: string;
@@ -60,11 +64,7 @@ interface ChatWindowProps {
   allUsers?: UserProfile[];
 }
 
-const EMOJI_LIST = [
-  '😊', '❤️', '😂', '👍', '🙏', '😍', '🔥', '🎬', '📷', '🎥',
-  '⭐', '💥', '💕', '👏', '🚶', '📸', '🎵', '💯', '😎', '✅',
-  '😢', '🎭', '👋', '…', '✌️', '💬', '📎', '🎞️', '🎧', '🎬',
-];
+import emojiData from '@emoji-mart/data';
 
 function getDateLabel(timestamp: number): string {
   const date = new Date(timestamp);
@@ -146,6 +146,19 @@ export default function ChatWindow({
   const [recordingMode, setRecordingMode] = useState<'audio' | 'video' | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  }, []);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -459,6 +472,13 @@ export default function ChatWindow({
         />
       )}
 
+      {isOffline && (
+        <div className="flex items-center justify-center gap-2 border-b px-4 py-2" style={{ background: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' }} dir="rtl">
+          <WifiOff className="h-4 w-4 text-red-400" />
+          <span className="text-[13px] text-red-300">אין חיבור לרשת — הודעות יישלחו כשהחיבור יחזור</span>
+        </div>
+      )}
+
       {showSearch && (
         <div className="border-b px-4 py-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
           <div className="relative">
@@ -570,21 +590,23 @@ export default function ChatWindow({
       )}
 
       {showEmoji && !isRecording && (
-        <div className="border-t p-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
-          <div className="grid grid-cols-10 gap-1 max-h-[120px] overflow-y-auto">
-            {EMOJI_LIST.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => {
-                  setText((prev) => prev + emoji);
-                  inputRef.current?.focus();
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded text-lg transition-colors hover:bg-[var(--theme-accent-glow)]"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+        <div className="border-t" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+          <EmojiPicker
+            data={emojiData}
+            onEmojiSelect={(emoji: { native?: string }) => {
+              if (emoji.native) {
+                setText((prev) => prev + emoji.native);
+                inputRef.current?.focus();
+              }
+            }}
+            theme="dark"
+            locale="he"
+            previewPosition="none"
+            skinTonePosition="search"
+            maxFrequentRows={2}
+            perLine={8}
+            set="native"
+          />
         </div>
       )}
 
