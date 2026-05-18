@@ -411,10 +411,17 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const isInitialLoad = useRef(true);
+
   useEffect(() => {
+    isInitialLoad.current = true;
     const q = query(collection(db, 'world-cup-chat', match.id, 'messages'), orderBy('createdAt', 'asc'), limit(120));
     return onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() } as ChatMessage)));
+      if (isInitialLoad.current) {
+        isInitialLoad.current = false;
+        return;
+      }
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
   }, [match.id]);
