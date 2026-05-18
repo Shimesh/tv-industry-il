@@ -65,29 +65,32 @@ function decodeWindows1255(buffer: ArrayBuffer): string {
   return score(win1255) > score(utf8) ? win1255 : utf8;
 }
 
-async function fetchMidrugHtml(url: string): Promise<string> {
+async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Promise<string> {
   const errors: string[] = [];
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
-    const response = await fetch(url, {
-      headers: MIDRUG_HEADERS,
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
+      const response = await fetch(url, {
+        method,
+        headers: MIDRUG_HEADERS,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return decodeWindows1255(await response.arrayBuffer());
+    } catch (error) {
+      errors.push(`fetch#${attempt}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return decodeWindows1255(await response.arrayBuffer());
-  } catch (error) {
-    errors.push(`fetch: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   for (const allowInsecureTls of [false, true]) {
     try {
-      const buffer = await requestMidrugBuffer(url, allowInsecureTls);
+      const buffer = await requestMidrugBuffer(url, method, allowInsecureTls);
       return decodeWindows1255(buffer);
     } catch (error) {
       errors.push(`${allowInsecureTls ? 'https-insecure' : 'https'}: ${error instanceof Error ? error.message : String(error)}`);
@@ -98,7 +101,7 @@ async function fetchMidrugHtml(url: string): Promise<string> {
   throw new Error(`Midrug fetch failed for ${path}: ${errors.join(' | ')}`);
 }
 
-function requestMidrugBuffer(urlString: string, allowInsecureTls: boolean): Promise<ArrayBuffer> {
+function requestMidrugBuffer(urlString: string, method: 'GET' | 'POST', allowInsecureTls: boolean): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const requestImpl = url.protocol === 'http:' ? httpRequest : httpsRequest;
@@ -107,8 +110,8 @@ function requestMidrugBuffer(urlString: string, allowInsecureTls: boolean): Prom
       hostname: url.hostname,
       port: url.port || undefined,
       path: `${url.pathname}${url.search}`,
-      method: 'GET',
-      headers: MIDRUG_HEADERS,
+      method,
+      headers: { ...MIDRUG_HEADERS, Connection: 'close' },
       family: 4,
       timeout: MIDRUG_TIMEOUT_MS,
       rejectUnauthorized: !allowInsecureTls,
@@ -285,7 +288,7 @@ async function fetchDailyHtml(date: Date): Promise<string> {
     Crowd: TARGET_AUDIENCE_ID,
     tmp: String(Date.now()),
   });
-  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`);
+  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`, 'POST');
 }
 
 async function fetchWeeklyOptions(): Promise<Array<{ id: string; label: string }>> {
@@ -305,7 +308,7 @@ async function fetchWeeklyHtml(weekId: string): Promise<string> {
     Crowd: TARGET_AUDIENCE_ID,
     tmp: String(Date.now()),
   });
-  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`);
+  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`, 'POST');
 }
 
 function shouldRunWeekly(now: Date, forceWeekly: boolean): boolean {
