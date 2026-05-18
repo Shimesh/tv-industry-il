@@ -77,7 +77,11 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Promise<string> {
+async function fetchMidrugHtml(baseUrl: string, method: 'GET' | 'POST' = 'GET', postBody?: URLSearchParams): Promise<string> {
+  const url = method === 'GET' && postBody ? `${baseUrl}?${postBody.toString()}` : baseUrl;
+  const bodyStr = method === 'POST' && postBody ? postBody.toString() : undefined;
+  const headers: Record<string, string> = { ...MIDRUG_HEADERS };
+  if (bodyStr) headers['Content-Type'] = 'application/x-www-form-urlencoded';
   const errors: string[] = [];
   const backoffs = [0, 2000];
 
@@ -88,7 +92,8 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
       const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
       const response = await fetch(url, {
         method,
-        headers: MIDRUG_HEADERS,
+        headers,
+        body: bodyStr,
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -104,7 +109,7 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
 
   for (const allowInsecureTls of [false, true]) {
     try {
-      const buffer = await requestMidrugBuffer(url, method, allowInsecureTls);
+      const buffer = await requestMidrugBuffer(url, method, bodyStr, allowInsecureTls);
       return decodeWindows1255(buffer);
     } catch (error) {
       errors.push(`${allowInsecureTls ? 'https-insecure' : 'https'}: ${error instanceof Error ? error.message : String(error)}`);
@@ -113,7 +118,7 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
 
   try {
     const httpUrl = url.replace('https://', 'http://');
-    const buffer = await requestMidrugBuffer(httpUrl, method, false);
+    const buffer = await requestMidrugBuffer(httpUrl, method, bodyStr, false);
     return decodeWindows1255(buffer);
   } catch (error) {
     errors.push(`http: ${error instanceof Error ? error.message : String(error)}`);
@@ -163,17 +168,23 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
   throw new Error(`Midrug fetch failed for ${path}: ${errors.join(' | ')}`);
 }
 
-function requestMidrugBuffer(urlString: string, method: 'GET' | 'POST', allowInsecureTls: boolean): Promise<ArrayBuffer> {
+function requestMidrugBuffer(urlString: string, method: 'GET' | 'POST', postBodyStr: string | undefined, allowInsecureTls: boolean): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const requestImpl = url.protocol === 'http:' ? httpRequest : httpsRequest;
+    const bodyBuf = postBodyStr ? Buffer.from(postBodyStr, 'utf-8') : undefined;
+    const headers: Record<string, string | number> = { ...MIDRUG_HEADERS, Connection: 'close' };
+    if (bodyBuf) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      headers['Content-Length'] = bodyBuf.length;
+    }
     const req = requestImpl({
       protocol: url.protocol,
       hostname: url.hostname,
       port: url.port || undefined,
       path: `${url.pathname}${url.search}`,
       method,
-      headers: { ...MIDRUG_HEADERS, Connection: 'close' },
+      headers,
       timeout: MIDRUG_TIMEOUT_MS,
       rejectUnauthorized: !allowInsecureTls,
     }, (res) => {
@@ -194,6 +205,7 @@ function requestMidrugBuffer(urlString: string, method: 'GET' | 'POST', allowIns
       req.destroy(new Error('request timeout'));
     });
     req.on('error', reject);
+    if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
 }
@@ -349,7 +361,7 @@ async function fetchDailyHtml(date: Date): Promise<string> {
     Crowd: TARGET_AUDIENCE_ID,
     tmp: String(Date.now()),
   });
-  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`, 'POST');
+  return fetchMidrugHtml(MIDRUG_AJAX_URL, 'POST', params);
 }
 
 async function fetchWeeklyOptions(): Promise<Array<{ id: string; label: string }>> {
@@ -369,7 +381,7 @@ async function fetchWeeklyHtml(weekId: string): Promise<string> {
     Crowd: TARGET_AUDIENCE_ID,
     tmp: String(Date.now()),
   });
-  return fetchMidrugHtml(`${MIDRUG_AJAX_URL}?${params.toString()}`, 'POST');
+  return fetchMidrugHtml(MIDRUG_AJAX_URL, 'POST', params);
 }
 
 function shouldRunWeekly(now: Date, forceWeekly: boolean): boolean {
