@@ -402,6 +402,7 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
+  const [runningRatingsSync, setRunningRatingsSync] = useState(false);
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
@@ -726,6 +727,28 @@ export default function AdminPage() {
     }
   }
 
+  async function runRatingsSync() {
+    if (!window.confirm('להריץ עכשיו סנכרון רייטינג יומי ושבועי?')) return;
+    setRunningRatingsSync(true);
+    try {
+      const result = await fetchWithAuth<{
+        daily?: { rows?: number; matched?: number; fallbackUsed?: boolean };
+        weekly?: { rows?: number; matched?: number };
+      }>(
+        '/api/admin/ratings-sync',
+        { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
+      );
+      const dailyRows = result.daily?.rows || 0;
+      const weeklyRows = result.weekly?.rows || 0;
+      showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`);
+      await loadOverview(true);
+    } catch (ratingsError) {
+      showToast('err', ratingsError instanceof Error ? ratingsError.message : 'שגיאה בסנכרון רייטינג');
+    } finally {
+      setRunningRatingsSync(false);
+    }
+  }
+
   async function runFullSync() {
     if (!window.confirm('להריץ סנכרון מלא?\n\nשלב 1: מיגרציית הפקות → global_productions\nשלב 2: סנכרון אנשי קשר מלוחות עבודה\n\nתהליך זה יעדכן את ה-Pro Cards ואת רשימת אנשי הקשר.')) return;
     setFullSyncRunning(true);
@@ -920,6 +943,8 @@ export default function AdminPage() {
     });
   }, [overview.users, search, userSort]);
 
+  const ratingsJob = overview.usage.jobs.find((job) => job.key === 'ratings-scrape') || null;
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-3 bg-gray-950" dir="rtl">
@@ -1070,6 +1095,54 @@ export default function AdminPage() {
             </pre>
           </div>
         )}
+
+        <section className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-purple-300" />
+                <h2 className="text-lg font-bold text-white">Ratings Automation</h2>
+              </div>
+              <p className="text-sm text-gray-400">
+                סנכרון אוטומטי של נתוני רייטינג יומי ושבועי ממערכת המדרוג.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void runRatingsSync()}
+              disabled={runningRatingsSync}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+            >
+              {runningRatingsSync ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+              {runningRatingsSync ? 'מריץ סקרייפר...' : 'Run Scraper Now'}
+            </button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+              <p className="text-xs text-gray-500">Last Successful Sync</p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {ratingsJob?.lastSuccessAt ? formatRelativeTime(ratingsJob.lastSuccessAt) : 'אין נתון'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+              <p className="text-xs text-gray-500">Status</p>
+              <p className={`mt-1 text-sm font-semibold ${ratingsJob?.lastStatus === 'failure' ? 'text-red-300' : ratingsJob?.lastStatus === 'success' ? 'text-green-300' : 'text-gray-300'}`}>
+                {ratingsJob?.lastStatus === 'failure' ? 'נכשל' : ratingsJob?.lastStatus === 'success' ? 'תקין' : 'אין נתון'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+              <p className="text-xs text-gray-500">Last Run</p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {ratingsJob?.lastRunAt ? formatRelativeTime(ratingsJob.lastRunAt) : 'אין נתון'}
+              </p>
+            </div>
+          </div>
+          {ratingsJob?.lastError ? (
+            <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200" dir="ltr">
+              {ratingsJob.lastError}
+            </p>
+          ) : null}
+        </section>
 
         {showAddContact && (
           <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4">

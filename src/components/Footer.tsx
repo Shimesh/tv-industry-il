@@ -6,9 +6,10 @@ const footerLinks = [
   { href: '/', label: 'דף הבית' },
   { href: '/schedule', label: 'שידור חי' },
   { href: '/directory', label: 'אלפון מקצועי' },
-  { href: '/chat', label: 'צ׳אט' },
+  { href: '/chat', label: "צ'אט" },
   { href: '/board', label: 'לוח מודעות' },
   { href: '/news', label: 'חדשות' },
+  { href: '/ratings', label: 'רייטינג' },
   { href: '/studios', label: 'אולפנים' },
   { href: '/tools', label: 'כלים' },
 ];
@@ -78,7 +79,7 @@ export default function Footer() {
               </Link>
             ))}
             <span style={{ color: 'var(--theme-text-secondary)', opacity: 0.8 }} dir="ltr">
-              Version 2.5.2 · By Yaron Orbach
+              Version 2.6.0 · By Yaron Orbach
             </span>
           </div>
         </div>

@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/contacts-discovery",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/scrape-ratings",
+      "schedule": "15 7 * * *"
     }
   ]
 }

@@ -288,7 +288,7 @@ export default function ChatWindow({
     }
     if (inputRef.current) inputRef.current.style.height = 'auto';
     await onSendMessage(textToSend, 'text', undefined, reply);
-  }, [onSendMessage, onSetTyping, replyTo, text]);
+  }, [onSendMessage, onSetTyping, replyTo, setReplyTo, setShowEmoji, setText, text]);
 
   const handleFileUpload = useCallback(async (file: File) => {
     const isImage = file.type.startsWith('image/');
@@ -298,7 +298,7 @@ export default function ChatWindow({
     await onSendMessage(file.name, isImage ? 'image' : 'file', file, reply);
     setReplyTo(null);
     setShowAttach(false);
-  }, [onSendMessage, replyTo]);
+  }, [onSendMessage, replyTo, setReplyTo, setShowAttach]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
