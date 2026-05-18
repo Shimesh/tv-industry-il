@@ -6,6 +6,7 @@ import { scrapeAndSaveRatings } from '@/lib/server/ratings';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+export const preferredRegion = ['fra1', 'cdg1', 'iad1'];
 
 export async function POST(request: NextRequest) {
   const authUser = await requireAdminRequest(request);

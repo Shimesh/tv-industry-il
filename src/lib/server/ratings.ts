@@ -12,7 +12,7 @@ const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
-const MIDRUG_TIMEOUT_MS = 25_000;
+const MIDRUG_TIMEOUT_MS = 40_000;
 const MIDRUG_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.6.0; +https://tv-industry-il.vercel.app)',
   Accept: 'text/html,application/xhtml+xml,*/*',
@@ -68,10 +68,16 @@ function decodeWindows1255(buffer: ArrayBuffer): string {
   return score(win1255) > score(utf8) ? win1255 : utf8;
 }
 
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Promise<string> {
   const errors: string[] = [];
+  const backoffs = [0, 2000, 4000];
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 0; attempt < backoffs.length; attempt++) {
+    if (backoffs[attempt]) await sleep(backoffs[attempt]);
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
@@ -87,7 +93,7 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
       }
       return decodeWindows1255(await response.arrayBuffer());
     } catch (error) {
-      errors.push(`fetch#${attempt}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`fetch#${attempt + 1}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -115,7 +121,6 @@ function requestMidrugBuffer(urlString: string, method: 'GET' | 'POST', allowIns
       path: `${url.pathname}${url.search}`,
       method,
       headers: { ...MIDRUG_HEADERS, Connection: 'close' },
-      family: 4,
       timeout: MIDRUG_TIMEOUT_MS,
       rejectUnauthorized: !allowInsecureTls,
     }, (res) => {
