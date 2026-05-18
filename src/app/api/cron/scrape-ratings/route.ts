@@ -5,6 +5,7 @@ import { scrapeAndSaveRatings } from '@/lib/server/ratings';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+export const preferredRegion = ['fra1', 'cdg1', 'iad1'];
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   const forceWeekly = request.nextUrl.searchParams.get('forceWeekly') === '1';
 
   try {
-    const result = await scrapeAndSaveRatings({ forceWeekly });
+    const result = await scrapeAndSaveRatings({ forceWeekly, allowCachedFallback: true });
     await Promise.all([
       recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
       recordJobMetric({
