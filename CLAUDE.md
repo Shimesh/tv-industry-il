@@ -37,7 +37,8 @@ Israeli TV industry platform built with Next.js 16 (App Router), React 19, TypeS
 - signInWithGoogle: popup first, redirect fallback ONLY for popup-specific error codes (not Firestore errors)
 - Auth state persists via browserLocalPersistence (IndexedDB)
 - `.npmrc` has `legacy-peer-deps=true` for Vercel build compatibility
-- `.nvmrc` sets Node 20 for Vercel
+- `.nvmrc` sets Node 20 for Vercel (LTS)
+- `vercel.json` sets `regions: ["fra1"]` (Frankfurt) — functions closer to Israel
 
 ## User
 - Hebrew-speaking user (all UI is in Hebrew, RTL)
