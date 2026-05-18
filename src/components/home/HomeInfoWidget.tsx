@@ -213,7 +213,7 @@ export default function HomeInfoWidget() {
   return (
     <div
       dir="rtl"
-      className={`relative isolate flex h-[148px] items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
+      className={`relative isolate flex h-[148px] w-full max-w-full items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
         heatwave
           ? 'border-orange-300/35 bg-orange-950/35 shadow-orange-500/20'
           : 'border-white/10 bg-slate-950/[0.42] shadow-black/25'
