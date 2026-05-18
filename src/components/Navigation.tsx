@@ -2,49 +2,59 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import { useWorldCup } from '@/contexts/WorldCupContext';
+import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
 import {
-  Tv,
-  Users,
-  Newspaper,
-  Menu,
-  X,
-  MessageCircle,
-  Megaphone,
-  Wrench,
+  BarChart3,
+  CheckCircle,
+  ChevronDown,
+  Clapperboard,
   LogIn,
   LogOut,
-  UserIcon,
+  Megaphone,
+  Menu,
+  MessageCircle,
+  Newspaper,
   Palette,
-  ChevronDown,
   Settings,
-  CheckCircle,
-  Clapperboard,
   Shield,
-  UsersRound,
   Trophy,
+  Tv,
+  UserIcon,
+  Users,
+  UsersRound,
+  Wrench,
+  X,
 } from 'lucide-react';
-import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 
-const navLinks = [
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof Tv;
+  auth?: boolean;
+};
+
+const navLinks: NavLink[] = [
   { href: '/', label: 'בית', icon: Tv },
   { href: '/productions', label: 'יומן אישי', icon: Clapperboard, auth: true },
   { href: '/teams', label: 'צוותים', icon: UsersRound, auth: true },
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
-  { href: '/chat', label: 'צ׳אט', icon: MessageCircle, auth: true },
+  { href: '/chat', label: "צ'אט", icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
   { href: '/news', label: 'חדשות', icon: Newspaper },
+  { href: '/ratings', label: 'רייטינג', icon: BarChart3 },
   { href: '/tools', label: 'כלים', icon: Wrench },
-  { href: '/admin', label: 'ניהול', icon: Shield, auth: true, adminOnly: true },
   { href: '/world-cup', label: 'מונדיאל', icon: Trophy },
 ];
+
+const adminNavLink: NavLink = { href: '/admin', label: 'ניהול', icon: Shield, auth: true };
 
 function emitNavigationStart() {
   if (typeof window === 'undefined') return;
@@ -68,6 +78,8 @@ export default function Navigation() {
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const effectiveProfile = profile ?? (loading ? cachedProfile : null);
   const hasAuthUi = Boolean(user || (loading && cachedProfile));
+  const showAdminLink = hasAuthUi && effectiveProfile?.siteRole === 'admin';
+  const adminIsActive = pathname === '/admin' || pathname.startsWith('/admin/');
 
   const navigateFromNav = useCallback((href: string) => {
     emitNavigationStart();
@@ -90,16 +102,11 @@ export default function Navigation() {
     let nextProfile: typeof profile = null;
     try {
       const raw = window.sessionStorage.getItem('tv-auth-profile-cache');
-      if (!raw) {
-        nextProfile = null;
-      } else {
+      if (raw) {
         const parsed: unknown = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && 'profile' in parsed) {
-          const payload = parsed as { profile?: typeof profile };
-          nextProfile = payload.profile ?? null;
-        } else {
-          nextProfile = (parsed as typeof profile) ?? null;
-        }
+        nextProfile = parsed && typeof parsed === 'object' && 'profile' in parsed
+          ? (parsed as { profile?: typeof profile }).profile ?? null
+          : (parsed as typeof profile) ?? null;
       }
     } catch {
       nextProfile = null;
@@ -122,27 +129,73 @@ export default function Navigation() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setUserMenuOpen(false);
-      }
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setThemeMenuOpen(false);
-      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) setUserMenuOpen(false);
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) setThemeMenuOpen(false);
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredLinks = navLinks.filter((link) => {
-    if (link.auth && !hasAuthUi) return false;
-    if ('adminOnly' in link && link.adminOnly && effectiveProfile?.siteRole !== 'admin') return false;
-    return true;
-  });
+  const filteredLinks = navLinks.filter((link) => !link.auth || hasAuthUi);
+
+  const renderNavLink = (link: NavLink, compact = false) => {
+    const isActive = pathname === link.href;
+    const Icon = link.icon;
+    const isChat = link.href === '/chat';
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        prefetch
+        onClick={(event) => {
+          event.preventDefault();
+          navigateFromNav(link.href);
+        }}
+        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2.5 text-xs xl:px-3 xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
+          isActive
+            ? 'text-[var(--theme-accent)]'
+            : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
+        }`}
+        style={isActive ? {
+          background: 'linear-gradient(135deg, var(--theme-accent-glow), color-mix(in srgb, var(--theme-bg-card) 72%, transparent))',
+          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 28%, transparent)',
+        } : undefined}
+      >
+        <span className="relative">
+          <Icon className={compact ? 'h-5 w-5' : 'h-4 w-4'} />
+          {isChat && totalUnread > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
+              {totalUnread > 99 ? '99+' : totalUnread}
+            </span>
+          ) : null}
+        </span>
+        {link.label}
+      </Link>
+    );
+  };
+
+  const renderAdminLink = (compact = false) => (
+    <Link
+      href={adminNavLink.href}
+      prefetch
+      onClick={(event) => {
+        event.preventDefault();
+        navigateFromNav(adminNavLink.href);
+      }}
+      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 px-2.5 text-xs xl:px-3 xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
+        adminIsActive
+          ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
+          : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
+      }`}
+    >
+      <Shield className={compact ? 'h-5 w-5' : 'h-4 w-4'} />
+      {adminNavLink.label}
+    </Link>
+  );
 
   return (
     <nav
-      className="fixed right-0 left-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell"
+      className="fixed left-0 right-0 top-0 z-[9999] border-b transition-colors app-safe-x app-nav-shell"
       style={{
         background: 'var(--theme-nav-bg)',
         borderColor: isWorldCupMode ? 'var(--wc-gold)' : 'var(--theme-border)',
@@ -151,17 +204,14 @@ export default function Navigation() {
         paddingTop: 'var(--safe-area-top)',
       }}
     >
-      {loadingBar && (
-        <div className="absolute top-0 right-0 left-0 z-50 h-0.5 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-l from-purple-500 via-pink-500 to-teal-400"
-            style={{ animation: 'navLoadBar 0.6s ease-out forwards' }}
-          />
+      {loadingBar ? (
+        <div className="absolute left-0 right-0 top-0 z-50 h-0.5 overflow-hidden">
+          <div className="h-full bg-gradient-to-l from-purple-500 via-pink-500 to-teal-400" style={{ animation: 'navLoadBar 0.6s ease-out forwards' }} />
         </div>
-      )}
+      ) : null}
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-16 items-center justify-between gap-3">
           <Link
             href="/"
             onClick={(event) => {
@@ -173,51 +223,21 @@ export default function Navigation() {
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-teal-400 shadow-lg shadow-purple-500/20 transition-all group-hover:shadow-purple-500/35">
               <Tv className="h-5 w-5 text-white" />
             </div>
-            <span className="hidden text-lg font-black leading-none whitespace-nowrap gradient-text sm:block">
-              TV Industry IL
-            </span>
+            <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text sm:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden items-center gap-0.5 lg:flex">
-            {filteredLinks.map((link) => {
-              const isActive = pathname === link.href;
-              const Icon = link.icon;
-              const isChat = link.href === '/chat';
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  prefetch
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigateFromNav(link.href);
-                  }}
-                  className={`inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-bold leading-none transition-all ${
-                    isActive
-                      ? 'text-[var(--theme-accent)]'
-                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-accent-glow)]'
-                  }`}
-                  style={isActive ? {
-                    background: 'linear-gradient(135deg, var(--theme-accent-glow), color-mix(in srgb, var(--theme-bg-card) 72%, transparent))',
-                    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 28%, transparent)',
-                  } : undefined}
-                >
-                  <span className="relative">
-                    <Icon className="h-4 w-4" />
-                    {isChat && totalUnread > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
-                        {totalUnread > 99 ? '99+' : totalUnread}
-                      </span>
-                    )}
-                  </span>
-                  {link.label}
-                </Link>
-              );
-            })}
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex">
+            {filteredLinks.map((link) => renderNavLink(link))}
+            {showAdminLink ? (
+              <>
+                <span className="mx-1 h-7 w-px shrink-0 bg-[var(--theme-border)]" />
+                {renderAdminLink()}
+              </>
+            ) : null}
           </div>
 
-          <div className="flex items-center gap-2">
-            {user && <NotificationBell />}
+          <div className="flex shrink-0 items-center gap-2">
+            {user ? <NotificationBell /> : null}
 
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button
@@ -231,10 +251,8 @@ export default function Navigation() {
                 <Palette className="h-5 w-5" />
               </button>
 
-              {themeMenuOpen && (
-                <div
-                  className="app-panel absolute left-0 top-full z-[100] mt-2 w-52 p-2 shadow-2xl"
-                >
+              {themeMenuOpen ? (
+                <div className="app-panel absolute left-0 top-full z-[100] mt-2 w-52 p-2 shadow-2xl">
                   {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, themeOption]) => (
                     <button
                       key={key}
@@ -251,11 +269,11 @@ export default function Navigation() {
                     >
                       <span className="text-lg">{themeOption.emoji}</span>
                       <span className="font-bold">{themeOption.label}</span>
-                      {theme === key && <CheckCircle className="mr-auto h-4 w-4" />}
+                      {theme === key ? <CheckCircle className="mr-auto h-4 w-4" /> : null}
                     </button>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
 
             {hasAuthUi ? (
@@ -279,54 +297,29 @@ export default function Navigation() {
                   <ChevronDown className={`hidden h-4 w-4 text-[var(--theme-text-secondary)] transition-transform sm:block ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {userMenuOpen && user && (
+                {userMenuOpen && user ? (
                   <div className="app-panel absolute left-0 top-full z-[100] mt-2 w-60 overflow-hidden shadow-2xl">
                     <div className="border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
-                      <p className="text-sm font-black text-[var(--theme-text)]">
-                        {effectiveProfile?.displayName || user.displayName || 'משתמש'}
-                      </p>
-                      <p className="truncate text-xs text-[var(--theme-text-secondary)]" dir="ltr">
-                        {effectiveProfile?.email || user.email}
-                      </p>
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-xs text-[var(--theme-text-secondary)]">
-                          {effectiveProfile?.status === 'busy'
-                            ? 'תפוס'
-                            : effectiveProfile?.status === 'offline'
-                              ? 'לא פעיל'
-                              : 'פנוי'}
-                        </span>
-                      </div>
+                      <p className="text-sm font-black text-[var(--theme-text)]">{effectiveProfile?.displayName || user.displayName || 'משתמש'}</p>
+                      <p className="truncate text-xs text-[var(--theme-text-secondary)]" dir="ltr">{effectiveProfile?.email || user.email}</p>
                     </div>
-
                     <div className="p-2">
-                      <button
-                        onClick={() => navigateFromNav('/profile')}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
-                      >
+                      <button onClick={() => navigateFromNav('/profile')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]">
                         <UserIcon className="h-4 w-4" />
                         <span className="font-bold">הפרופיל שלי</span>
                       </button>
-                      <button
-                        onClick={() => navigateFromNav('/settings')}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
-                      >
+                      <button onClick={() => navigateFromNav('/settings')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]">
                         <Settings className="h-4 w-4" />
                         <span className="font-bold">הגדרות</span>
                       </button>
-
                       <div className="my-1 border-t" style={{ borderColor: 'var(--theme-border)' }} />
-
                       <button
                         onClick={async () => {
                           setUserMenuOpen(false);
                           try {
-                            if (typeof window !== 'undefined') {
-                              localStorage.removeItem('lastOpenedChat');
-                              localStorage.removeItem('lastScheduleWeek');
-                              sessionStorage.clear();
-                            }
+                            localStorage.removeItem('lastOpenedChat');
+                            localStorage.removeItem('lastScheduleWeek');
+                            sessionStorage.clear();
                             await signOut(auth);
                             window.location.href = '/login';
                           } catch {
@@ -340,7 +333,7 @@ export default function Navigation() {
                       </button>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             ) : (
               <Link
@@ -368,46 +361,16 @@ export default function Navigation() {
         </div>
       </div>
 
-      {mobileOpen && (
-        <div
-          className="border-t backdrop-blur-xl lg:hidden"
-          style={{
-            borderColor: 'var(--theme-border)',
-            background: 'var(--theme-nav-bg)',
-          }}
-        >
+      {mobileOpen ? (
+        <div className="border-t backdrop-blur-xl lg:hidden" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-nav-bg)' }}>
           <div className="space-y-1 px-4 py-3">
-            {filteredLinks.map((link) => {
-              const isActive = pathname === link.href;
-              const Icon = link.icon;
-              const isChat = link.href === '/chat';
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigateFromNav(link.href);
-                  }}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
-                    isActive
-                      ? 'text-[var(--theme-accent)]'
-                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
-                  }`}
-                  style={isActive ? { background: 'var(--theme-accent-glow)' } : undefined}
-                >
-                  <span className="relative">
-                    <Icon className="h-5 w-5" />
-                    {isChat && totalUnread > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
-                        {totalUnread > 99 ? '99+' : totalUnread}
-                      </span>
-                    )}
-                  </span>
-                  {link.label}
-                </Link>
-              );
-            })}
+            {filteredLinks.map((link) => renderNavLink(link, true))}
+
+            {showAdminLink ? (
+              <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
+                {renderAdminLink(true)}
+              </div>
+            ) : null}
 
             <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
               <p className="flex items-center gap-2 px-4 py-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
@@ -420,13 +383,9 @@ export default function Navigation() {
                     key={key}
                     onClick={() => setTheme(key)}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                      theme === key
-                        ? 'text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
-                        : 'text-[var(--theme-text-secondary)]'
+                      theme === key ? 'text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
                     }`}
-                    style={{
-                      background: theme === key ? 'var(--theme-accent-glow)' : 'var(--theme-bg)',
-                    }}
+                    style={{ background: theme === key ? 'var(--theme-accent-glow)' : 'var(--theme-bg)' }}
                   >
                     <span>{themeOption.emoji}</span>
                     {themeOption.label}
@@ -436,8 +395,7 @@ export default function Navigation() {
             </div>
           </div>
         </div>
-      )}
-
+      ) : null}
     </nav>
   );
 }
