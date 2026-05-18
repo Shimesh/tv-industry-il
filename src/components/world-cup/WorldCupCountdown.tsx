@@ -63,7 +63,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden rounded-[1.5rem] border text-right shadow-[0_22px_60px_rgba(212,175,55,0.16),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition duration-200 hover:border-[#D4AF37]/45 hover:shadow-[0_28px_72px_rgba(212,175,55,0.25),inset_0_1px_0_rgba(255,255,255,0.12)] ${
         compact
           ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 px-2 py-2 sm:max-w-none'
-          : 'h-[148px] w-full flex-col justify-between gap-3 p-4'
+          : 'h-[148px] w-full max-w-full flex-col justify-between gap-3 p-4'
       }`}
       style={{
         borderColor: activeMatch ? 'color-mix(in srgb, var(--wc-gold, #D4AF37) 45%, transparent)' : 'rgba(255,255,255,.10)',

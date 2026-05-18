@@ -104,7 +104,7 @@ export default function HomePage() {
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
-            <aside className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-sm lg:grid-cols-1">
+            <aside className="grid w-full max-w-[calc(100vw-2rem)] gap-3 overflow-hidden sm:max-w-[calc(100vw-3rem)] sm:grid-cols-2 lg:max-w-sm lg:grid-cols-1">
               <RatingsWidget />
               <PersonalProCardWidget />
               <WorldCupCountdown />

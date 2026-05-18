@@ -149,7 +149,7 @@ export default function LiveNewsTicker({
   );
 
   return (
-    <div className="flex-1 overflow-hidden" dir="ltr">
+    <div className="flex-1 overflow-hidden" dir="ltr" style={{ contain: 'paint' }}>
       <div className="overflow-hidden py-2">
         <div
           ref={trackRef}
