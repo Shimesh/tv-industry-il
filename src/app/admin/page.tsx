@@ -974,7 +974,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-16 text-white" dir="rtl">
+    <div className="min-h-screen overflow-x-hidden bg-gray-950 pb-16 text-white" dir="rtl">
       {toast ? (
         <div
           className={`fixed left-1/2 top-20 z-[9999] flex -translate-x-1/2 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-medium shadow-xl ${
@@ -1025,12 +1025,12 @@ export default function AdminPage() {
               </span>
             </div>
           </div>
-          {/* Actions — 3-col grid on mobile, flex-wrap on desktop */}
-          <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          {/* Actions */}
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
             <button
               onClick={() => void runFullSync()}
               disabled={fullSyncRunning || runningSync}
-              className="col-span-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
             >
               {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               {fullSyncStep || 'סנכרון מלא'}
@@ -1075,7 +1075,7 @@ export default function AdminPage() {
           <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4">
             <h3 className="mb-3 text-sm font-bold text-green-400">הוספת איש קשר חדש</h3>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-[140px]">
+              <div className="flex-1 min-w-0 sm:min-w-[140px]">
                 <label className="mb-1 block text-xs text-gray-400">שם מלא *</label>
                 <input
                   type="text"
@@ -1086,7 +1086,7 @@ export default function AdminPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="flex-1 min-w-[140px]">
+              <div className="flex-1 min-w-0 sm:min-w-[140px]">
                 <label className="mb-1 block text-xs text-gray-400">טלפון *</label>
                 <input
                   type="tel"
@@ -1097,7 +1097,7 @@ export default function AdminPage() {
                   dir="ltr"
                 />
               </div>
-              <div className="flex-1 min-w-[140px]">
+              <div className="flex-1 min-w-0 sm:min-w-[140px]">
                 <label className="mb-1 block text-xs text-gray-400">תפקיד</label>
                 <input
                   type="text"
