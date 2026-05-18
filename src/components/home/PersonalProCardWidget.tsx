@@ -95,7 +95,7 @@ export default function PersonalProCardWidget() {
         whileTap={{ scale: 0.98 }}
         onClick={() => setOpen(true)}
         dir="rtl"
-        className="relative isolate flex h-[148px] w-full overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/[0.42] p-4 text-right shadow-2xl shadow-black/25 backdrop-blur-2xl transition"
+        className="relative isolate flex h-[148px] w-full cursor-pointer overflow-hidden rounded-[1.5rem] border border-sky-200/20 bg-slate-950/[0.42] p-4 text-right shadow-[0_22px_60px_rgba(14,165,233,0.18),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition duration-200 hover:border-sky-100/40 hover:shadow-[0_28px_72px_rgba(14,165,233,0.28),inset_0_1px_0_rgba(255,255,255,0.12)]"
       >
         <motion.div
           className="pointer-events-none absolute inset-0 opacity-80"

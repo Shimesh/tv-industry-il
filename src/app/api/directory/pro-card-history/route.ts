@@ -3,7 +3,7 @@ import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
 import type { IndustryMasterEntry, NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
-import { stripProductionSuffixes } from '@/lib/productionNameNormalization';
+import { stripProductionSuffixes, stringSimilarity } from '@/lib/productionNameNormalization';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -214,15 +214,11 @@ function matchingCrewEntry(
   contactPhone: string | null,
   displayNames: Set<string>,
 ): GlobalProductionCrewEntry | null {
-  // Pass 1: exact phone or full fuzzy name match
-  const exact = crew.find((entry) => {
+  return crew.find((entry) => {
     const entryPhone = normalizePhone(entry.normalizedPhone || entry.phone_number || '');
     if (contactPhone && entryPhone && entryPhone === contactPhone) return true;
     return nameMatchesFuzzy(entry.name || '', displayNames);
-  });
-  if (exact) return exact;
-  // Pass 2: substring token match (broader — e.g. "ירון" in "ירון כהן")
-  return crew.find((entry) => nameContainsToken(entry.name || '', displayNames)) || null;
+  }) || null;
 }
 
 // Deduplicate by id/key, then merge multiple shifts of the same show into one entry
@@ -274,7 +270,7 @@ function applyRegistryOverrides(
     const key = normalizeName(canonicalName);
     const rawKey = normalizeName(credit.productionName);
     const reg = registry.get(key) ?? registry.get(rawKey);
-    const mst = master.get(key) ?? master.get(rawKey);
+    const mst = master.get(key) ?? master.get(rawKey) ?? findBestMasterMatch(credit.productionName, master);
     // industry_master takes priority over production-registry for logo and network
     // Only use logo if it passed title verification (wikiTitleMatch !== 'needs_review')
     const masterLogo = (mst?.logoUrl && mst.logoUrl !== 'none' && mst.wikiTitleMatch !== 'needs_review')
@@ -285,8 +281,28 @@ function applyRegistryOverrides(
       ?? credit.logoUrl;
     const channelName = mst?.network || reg?.channel || credit.channelName;
     const isMajor = credit.isMajor || Boolean(reg?.isMajor);
-    return { ...credit, logoUrl, channelName, isMajor };
+    const productionName = (mst?.masterName || mst?.showName || reg?.name || credit.productionName).trim();
+    return { ...credit, productionName, logoUrl, channelName, isMajor };
   });
+}
+
+function findBestMasterMatch(title: string, master: Map<string, IndustryMasterEntry>): IndustryMasterEntry | null {
+  const normalizedTitle = normalizeName(stripProductionSuffixes(title));
+  if (!normalizedTitle || normalizedTitle.length < 3) return null;
+
+  let best: { entry: IndustryMasterEntry; score: number } | null = null;
+  const seen = new Set<string>();
+  for (const [key, entry] of master.entries()) {
+    if (!key || key.length < 3 || seen.has(entry.id)) continue;
+    const score = Math.max(
+      stringSimilarity(normalizedTitle, key),
+      normalizedTitle.includes(key) || key.includes(normalizedTitle) ? 0.88 : 0,
+    );
+    if (!best || score > best.score) best = { entry, score };
+    seen.add(entry.id);
+  }
+
+  return best && best.score >= 0.82 ? best.entry : null;
 }
 
 async function loadLinkedUserIds(contact: RawContact, normalizedContactName: string): Promise<Set<string>> {
@@ -356,11 +372,6 @@ export async function GET(request: NextRequest) {
     );
 
     const displayNames = new Set<string>([normalizedContactName].filter(Boolean));
-    const nameParts = (fullName || '').split(/\s+/).filter(Boolean);
-    const firstName = normalizeName(nameParts[0] || '');
-    const lastName = normalizeName(nameParts[nameParts.length - 1] || '');
-    if (firstName && firstName.length >= 2) displayNames.add(firstName);
-    if (lastName && lastName.length >= 2 && lastName !== firstName) displayNames.add(lastName);
 
     const userPhones = new Set<string>(
       [contactPhone, normalizePhone(cleanString(userDoc?.phone))].filter(Boolean) as string[],
@@ -412,9 +423,8 @@ export async function GET(request: NextRequest) {
     const rawCredits: ProCardProductionCredit[] = [
       ...globalProductions.flatMap((production): ProCardProductionCredit[] => {
         const crewEntry = matchingCrewEntry(production.crew_list || [], contactPhone, displayNames);
-        const isUploader = Boolean(production.lastUpdatedBy && linkedUserIds.has(production.lastUpdatedBy));
 
-        if (!crewEntry && !isUploader) {
+        if (!crewEntry) {
           if (isDebug) {
             const crewNames = (production.crew_list || []).map((e) => e.name).filter(Boolean);
             if (crewNames.some((n) => nameIsNearMiss(n, displayNames))) {
@@ -427,7 +437,7 @@ export async function GET(request: NextRequest) {
         const date = asDateValue(production.date);
         const year = date.slice(0, 4);
         const channelId = inferChannelIdFromTitle(production.name || '', production.studio || '');
-        const role = crewEntry ? (cleanString(crewEntry.profession) || 'קרדיט') : 'מעלה לוח';
+        const role = cleanString(crewEntry.profession) || 'קרדיט';
         const isMajor = Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).isMajor)
           || Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).majorProduction)
           || isMajorProductionTitle(production.name || '');

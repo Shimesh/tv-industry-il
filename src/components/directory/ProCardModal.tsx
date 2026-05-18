@@ -8,9 +8,12 @@ import {
   Camera,
   CheckCircle2,
   Clapperboard,
+  Copy,
   Clock,
   Download,
+  FileText,
   Film,
+  Image as ImageIcon,
   Mail,
   MapPin,
   MessageCircle,
@@ -167,6 +170,7 @@ export default function ProCardModal({
   const [history, setHistory] = useState<ProCardHistoryResponse>({ productionCredits: [], boardActivity: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [photoToast, setPhotoToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   const name = fullName(contact);
@@ -213,31 +217,123 @@ export default function ProCardModal({
     };
   }, [contact.id, user]);
 
+  function buildShareText(): string {
+    const title = `*${name}*`;
+    const roleText = roles.length ? roles.join(' · ') : 'איש מקצוע בתעשיית הטלוויזיה';
+    const departmentText = departments.length ? departments.join(' · ') : '';
+    const credits = history.productionCredits.slice(0, 5).map((credit) => {
+      const period = credit.shiftCount > 1
+        ? `${credit.shiftCount} משמרות, ${formatDate(credit.dateFrom)}-${formatDate(credit.dateTo)}`
+        : formatDate(credit.date);
+      return `• ${credit.productionName} | ${credit.role} | ${period}`;
+    });
+
+    return [
+      title,
+      roleText,
+      departmentText,
+      contact.city ? `אזור: ${contact.city}` : '',
+      '',
+      credits.length ? '*הפקות אחרונות:*' : '',
+      ...credits,
+      '',
+      'TV Industry IL',
+    ].filter(Boolean).join('\n');
+  }
+
+  async function renderCardImage(): Promise<{ blob: Blob; file: File }> {
+    if (!shareCardRef.current) throw new Error('Card is not ready');
+    const canvas = await html2canvas(shareCardRef.current, {
+      backgroundColor: '#020617',
+      scale: Math.min(window.devicePixelRatio || 2, 3),
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+    });
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.98));
+    if (!blob) throw new Error('Canvas export failed');
+    const filename = `tv-industry-il-pro-card-${String(contact.id)}.png`;
+    return { blob, file: new File([blob], filename, { type: 'image/png' }) };
+  }
+
   async function shareCard() {
-    if (!shareCardRef.current || shareState === 'rendering') return;
+    if (shareState === 'rendering') return;
     setShareState('rendering');
+    setShareMenuOpen(false);
     try {
-      const canvas = await html2canvas(shareCardRef.current, {
-        backgroundColor: null,
-        scale: Math.min(window.devicePixelRatio || 2, 3),
-        useCORS: true,
-      });
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.98));
-      if (!blob) throw new Error('Canvas export failed');
-      const filename = `tv-industry-il-pro-card-${String(contact.id)}.png`;
-      const file = new File([blob], filename, { type: 'image/png' });
+      const { blob, file } = await renderCardImage();
       const nav = navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean };
 
       if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-        await navigator.share({ title: name, text: 'כרטיס מקצועי - TV Industry IL', files: [file] });
+        await navigator.share({ title: name, text: buildShareText(), files: [file] });
       } else {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = filename;
+        anchor.download = file.name;
         anchor.click();
         URL.revokeObjectURL(url);
       }
+      setShareState('done');
+      window.setTimeout(() => setShareState('idle'), 1800);
+    } catch {
+      setShareState('error');
+      window.setTimeout(() => setShareState('idle'), 2200);
+    }
+  }
+
+  async function shareText() {
+    setShareMenuOpen(false);
+    const textToShare = buildShareText();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: name, text: textToShare });
+      } else {
+        await navigator.clipboard.writeText(textToShare);
+      }
+      setShareState('done');
+    } catch {
+      try {
+        await navigator.clipboard.writeText(textToShare);
+        setShareState('done');
+      } catch {
+        setShareState('error');
+      }
+    } finally {
+      window.setTimeout(() => setShareState('idle'), 1800);
+    }
+  }
+
+  async function sharePdf() {
+    if (shareState === 'rendering') return;
+    setShareState('rendering');
+    setShareMenuOpen(false);
+    try {
+      const { blob } = await renderCardImage();
+      const imageUrl = URL.createObjectURL(blob);
+      const printWindow = window.open('', '_blank', 'width=900,height=1200');
+      if (!printWindow) throw new Error('Popup blocked');
+      printWindow.document.write(`
+        <!doctype html>
+        <html dir="rtl" lang="he">
+          <head>
+            <meta charset="utf-8" />
+            <title>${name} - TV Industry IL Pro Card</title>
+            <style>
+              body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #020617; font-family: Arial, sans-serif; }
+              img { max-width: 94vw; max-height: 94vh; object-fit: contain; border-radius: 24px; }
+              @media print { body { background: #fff; } img { max-width: 100%; max-height: none; border-radius: 0; } }
+            </style>
+          </head>
+          <body><img src="${imageUrl}" alt="${name}" /></body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 500);
+      window.setTimeout(() => URL.revokeObjectURL(imageUrl), 10_000);
       setShareState('done');
       window.setTimeout(() => setShareState('idle'), 1800);
     } catch {
@@ -253,7 +349,7 @@ export default function ProCardModal({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/78 p-3 sm:p-6"
+        className="fixed inset-0 z-[12000] flex items-start justify-center overflow-y-auto bg-slate-950/78 p-3 pt-[calc(var(--app-header-offset)+0.75rem)] sm:p-6 sm:pt-[calc(var(--app-header-offset)+1rem)]"
         onClick={onClose}
       >
         <motion.div
@@ -261,7 +357,7 @@ export default function ProCardModal({
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/15 bg-slate-950 shadow-2xl"
+          className="relative flex max-h-[calc(100dvh-var(--app-header-offset)-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/15 bg-slate-950 shadow-2xl sm:max-h-[calc(100dvh-var(--app-header-offset)-2rem)]"
           style={{ boxShadow: '0 30px 120px rgba(0,0,0,0.64), 0 0 70px rgba(59,130,246,0.16)' }}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
@@ -445,48 +541,48 @@ export default function ProCardModal({
                     <div className="h-14 animate-pulse rounded-xl bg-white/8" />
                   </div>
                 ) : groupedCredits.length > 0 ? (
-                  <div className="space-y-5">
-                    {groupedCredits.map((yearGroup) => (
-                      <div key={yearGroup.year}>
-                        <div className="mb-2 text-sm font-black text-amber-100" dir="ltr">{yearGroup.year}</div>
-                        <div className="space-y-3">
-                          {yearGroup.channels.map((channelGroup) => (
-                            <div key={`${yearGroup.year}-${channelGroup.channelName}`} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                              <div className="mb-2 text-xs font-bold text-sky-100">{channelGroup.channelName}</div>
-                              <div className="space-y-2">
-                                {channelGroup.credits.map((credit) => (
-                                  <div key={`${credit.id}-${credit.role}`} className="flex items-center gap-3 rounded-xl bg-white/[0.055] p-2.5">
-                                    <ProductionMark credit={credit} />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-bold text-white">{credit.productionName}</span>
-                                        {credit.isMajor && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-100">
-                                            <Trophy className="h-3 w-3" />
-                                            הפקה מרכזית
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
-                                        <span>{credit.role}</span>
-                                        {credit.studio && <span>{credit.studio}</span>}
-                                        {credit.shiftCount > 1 ? (
-                                          <span dir="ltr" className="text-sky-300/80">
-                                            {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} – {formatDate(credit.dateTo)}
-                                          </span>
-                                        ) : (
-                                          <span dir="ltr">{formatDate(credit.date)}</span>
-                                        )}
-                                      </div>
-                                    </div>
+                  <div className="space-y-4">
+                    {groupedCredits.map((yearGroup) => {
+                      const yearCredits = yearGroup.channels.flatMap((channelGroup) => channelGroup.credits);
+                      return (
+                        <div key={yearGroup.year} className="rounded-2xl border border-white/10 bg-slate-950/42 p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="rounded-full bg-amber-300/12 px-3 py-1 text-sm font-black text-amber-100" dir="ltr">{yearGroup.year}</div>
+                            <div className="text-xs font-bold text-white/45">{yearCredits.length} קרדיטים</div>
+                          </div>
+                          <div className="grid gap-2">
+                            {yearCredits.map((credit) => (
+                              <div key={`${credit.id}-${credit.role}`} className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.055] p-3">
+                                <ProductionMark credit={credit} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="truncate text-sm font-black text-white">{credit.productionName}</span>
+                                    {credit.isMajor && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-100">
+                                        <Trophy className="h-3 w-3" />
+                                        מרכזית
+                                      </span>
+                                    )}
                                   </div>
-                                ))}
+                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
+                                    <span className="font-bold text-sky-100/85">{credit.role}</span>
+                                    <span>{credit.channelName}</span>
+                                    {credit.studio && <span>{credit.studio}</span>}
+                                    {credit.shiftCount > 1 ? (
+                                      <span dir="ltr" className="text-sky-300/80">
+                                        {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} - {formatDate(credit.dateTo)}
+                                      </span>
+                                    ) : (
+                                      <span dir="ltr">{formatDate(credit.date)}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/14 p-5 text-center text-sm text-white/58">
@@ -520,15 +616,34 @@ export default function ProCardModal({
 
           <div className="relative z-10 shrink-0 border-t border-white/10 px-4 pb-4 pt-3 sm:px-6 sm:pb-5">
             <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => void shareCard()}
-                disabled={shareState === 'rendering'}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-amber-300 to-sky-400 px-4 py-3 text-sm font-black text-slate-950 shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] disabled:cursor-wait disabled:opacity-70"
-              >
-                {shareState === 'rendering' ? <Download className="h-4 w-4 animate-pulse" /> : <Share2 className="h-4 w-4" />}
-                {shareState === 'rendering' ? 'מכין תמונה...' : shareState === 'done' ? 'התמונה מוכנה' : shareState === 'error' ? 'לא הצלחנו לשתף' : 'שתף כרטיס מקצועי'}
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShareMenuOpen((open) => !open)}
+                  disabled={shareState === 'rendering'}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-amber-300 to-sky-400 px-4 py-3 text-sm font-black text-slate-950 shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] disabled:cursor-wait disabled:opacity-70"
+                >
+                  {shareState === 'rendering' ? <Download className="h-4 w-4 animate-pulse" /> : <Share2 className="h-4 w-4" />}
+                  {shareState === 'rendering' ? 'מכין שיתוף...' : shareState === 'done' ? 'השיתוף מוכן' : shareState === 'error' ? 'לא הצלחנו לשתף' : 'שתף כרטיס מקצועי'}
+                </button>
+
+                {shareMenuOpen ? (
+                  <div className="absolute bottom-full right-0 z-30 mb-2 w-full overflow-hidden rounded-2xl border border-white/12 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
+                    <button type="button" onClick={() => void shareCard()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <ImageIcon className="h-4 w-4 text-sky-200" />
+                      תמונה לשיתוף
+                    </button>
+                    <button type="button" onClick={() => void sharePdf()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <FileText className="h-4 w-4 text-amber-200" />
+                      PDF / הדפסה
+                    </button>
+                    <button type="button" onClick={() => void shareText()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <Copy className="h-4 w-4 text-emerald-200" />
+                      טקסט מעוצב
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 {canShowContactInfo && contact.phone ? (

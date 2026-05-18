@@ -734,13 +734,20 @@ export default function AdminPage() {
       const result = await fetchWithAuth<{
         daily?: { rows?: number; matched?: number; fallbackUsed?: boolean };
         weekly?: { rows?: number; matched?: number };
+        cachedFallback?: boolean;
+        warning?: string;
       }>(
         '/api/admin/ratings-sync',
         { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
       );
       const dailyRows = result.daily?.rows || 0;
       const weeklyRows = result.weekly?.rows || 0;
-      showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`);
+      showToast(
+        'ok',
+        result.cachedFallback
+          ? `מקור המדרוג לא נגיש כרגע מ-Vercel, נשארו הנתונים השמורים: ${dailyRows} יומיים, ${weeklyRows} שבועיים`
+          : `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`,
+      );
       await loadOverview(true);
     } catch (ratingsError) {
       showToast('err', ratingsError instanceof Error ? ratingsError.message : 'שגיאה בסנכרון רייטינג');

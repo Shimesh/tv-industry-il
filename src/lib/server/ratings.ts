@@ -27,6 +27,7 @@ type MasterIndexEntry = {
 type ScrapeOptions = {
   forceWeekly?: boolean;
   now?: Date;
+  allowCachedFallback?: boolean;
 };
 
 export type RatingsScrapeResult = {
@@ -45,6 +46,8 @@ export type RatingsScrapeResult = {
     matched: number;
     unmatched: number;
   };
+  cachedFallback?: boolean;
+  warning?: string;
 };
 
 function decodeWindows1255(buffer: ArrayBuffer): string {
@@ -315,7 +318,50 @@ function shouldRunWeekly(now: Date, forceWeekly: boolean): boolean {
   return forceWeekly || israelDateParts(now).weekday === 0;
 }
 
-export async function scrapeAndSaveRatings(options: ScrapeOptions = {}): Promise<RatingsScrapeResult> {
+async function buildCachedRatingsFallback(error: unknown, includeWeekly: boolean): Promise<RatingsScrapeResult> {
+  const [daily, weekly] = await Promise.all([
+    getLatestRatingsDaily(),
+    includeWeekly ? getLatestRatingsWeekly() : Promise.resolve(null),
+  ]);
+  if (!daily) throw error;
+
+  const countMatches = (rows: RatingRow[]) => rows.reduce(
+    (acc, row) => {
+      if (row.masterEntryId) acc.matched += 1;
+      else acc.unmatched += 1;
+      return acc;
+    },
+    { matched: 0, unmatched: 0 },
+  );
+  const dailyCounts = countMatches(daily.top20 || []);
+  const result: RatingsScrapeResult = {
+    daily: {
+      date: daily.date,
+      sourceDate: daily.sourceDate || daily.date,
+      fallbackUsed: Boolean(daily.fallbackUsed),
+      rows: daily.top20?.length || 0,
+      matched: dailyCounts.matched,
+      unmatched: dailyCounts.unmatched,
+    },
+    cachedFallback: true,
+    warning: error instanceof Error ? error.message : 'Ratings source is temporarily unavailable',
+  };
+
+  if (weekly) {
+    const weeklyCounts = countMatches(weekly.top25 || []);
+    result.weekly = {
+      weekId: weekly.weekId || weekly.weekRange,
+      weekRange: weekly.weekRange,
+      rows: weekly.top25?.length || 0,
+      matched: weeklyCounts.matched,
+      unmatched: weeklyCounts.unmatched,
+    };
+  }
+
+  return result;
+}
+
+async function scrapeAndSaveRatingsFresh(options: ScrapeOptions = {}): Promise<RatingsScrapeResult> {
   const now = options.now || new Date();
   const today = israelDateAtUtcNoon(now);
   const yesterday = addDays(today, -1);
@@ -381,6 +427,17 @@ export async function scrapeAndSaveRatings(options: ScrapeOptions = {}): Promise
   }
 
   return result;
+}
+
+export async function scrapeAndSaveRatings(options: ScrapeOptions = {}): Promise<RatingsScrapeResult> {
+  try {
+    return await scrapeAndSaveRatingsFresh(options);
+  } catch (error) {
+    if (options.allowCachedFallback) {
+      return buildCachedRatingsFallback(error, shouldRunWeekly(options.now || new Date(), Boolean(options.forceWeekly)));
+    }
+    throw error;
+  }
 }
 
 export async function getLatestRatingsDaily(): Promise<RatingsDailyDocument | null> {

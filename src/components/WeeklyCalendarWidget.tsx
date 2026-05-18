@@ -357,7 +357,7 @@ export default function WeeklyCalendarWidget() {
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+      <div className="overflow-hidden rounded-2xl border shadow-[0_18px_48px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)] transition duration-200 hover:shadow-[0_24px_64px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.10)]" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500">
@@ -418,7 +418,7 @@ export default function WeeklyCalendarWidget() {
                 key={dateStr}
                 disabled={dayProds.length === 0}
                 onClick={() => dayProds.length > 0 && setPopupDate(dateStr)}
-                className="relative flex flex-col items-center gap-1.5 px-1 py-3 transition-colors"
+                className="relative flex flex-col items-center gap-1.5 px-1 py-3 transition-all enabled:hover:-translate-y-0.5 enabled:hover:bg-[var(--theme-accent-glow)] enabled:hover:shadow-inner"
                 style={{
                   background: isMyDay ? 'color-mix(in srgb, var(--theme-warning) 12%, transparent)' : isToday ? 'var(--theme-accent-glow)' : 'transparent',
                   borderLeft: index < 6 ? '1px solid var(--theme-border)' : undefined,

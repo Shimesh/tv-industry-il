@@ -46,7 +46,7 @@ export default function RatingsWidget() {
     : data?.weekly?.weekRange || 'עדכון שבועי אחרון';
 
   return (
-    <section className="rounded-2xl border border-purple-400/20 bg-gradient-to-br from-slate-950 via-purple-950/70 to-slate-950 p-4 shadow-xl shadow-purple-950/25" dir="rtl">
+    <section className="rounded-2xl border border-purple-300/25 bg-gradient-to-br from-slate-950 via-purple-950/70 to-slate-950 p-4 shadow-[0_22px_60px_rgba(88,28,135,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-purple-200/45 hover:shadow-[0_28px_72px_rgba(147,51,234,0.34),inset_0_1px_0_rgba(255,255,255,0.12)]" dir="rtl">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-purple-200">

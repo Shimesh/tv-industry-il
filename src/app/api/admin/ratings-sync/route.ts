@@ -15,13 +15,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const result = await scrapeAndSaveRatings({ forceWeekly: body?.forceWeekly !== false });
+    const result = await scrapeAndSaveRatings({ forceWeekly: body?.forceWeekly !== false, allowCachedFallback: true });
     await Promise.all([
       recordRouteMetric({ route: '/api/admin/ratings-sync', ok: true, statusCode: 200 }),
       recordJobMetric({
         job: 'ratings-scrape',
         ok: true,
-        message: 'סנכרון ידני של נתוני הרייטינג הושלם בהצלחה',
+        message: result.cachedFallback
+          ? 'מקור המדרוג לא נגיש כרגע מ-Vercel; הנתונים השמורים האחרונים נשארו פעילים'
+          : 'סנכרון ידני של נתוני הרייטינג הושלם בהצלחה',
         detail: result,
       }),
     ]);
@@ -47,4 +49,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
