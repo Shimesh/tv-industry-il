@@ -345,13 +345,13 @@ function StatCard({
   live?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-      <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${color}`}>
-        <Icon className="h-6 w-6" />
+    <div className="flex items-center gap-2.5 rounded-2xl border border-gray-800 bg-gray-900 p-3 sm:gap-4 sm:p-5">
+      <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 sm:rounded-xl ${color}`}>
+        <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-2xl font-bold text-white">{value}</p>
-        <p className="mt-0.5 text-xs text-gray-400">{label}</p>
+        <p className="text-lg font-bold text-white sm:text-2xl">{value}</p>
+        <p className="mt-0.5 text-[10px] leading-tight text-gray-400 sm:text-xs">{label}</p>
       </div>
       {live ? <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400 animate-pulse" /> : null}
     </div>
@@ -988,7 +988,7 @@ export default function AdminPage() {
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8">
+      <div className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-8">
         {error ? (
           <div className="flex items-center gap-3 rounded-2xl border border-red-500/40 bg-red-900/30 p-4 text-red-300">
             <AlertTriangle className="h-5 w-5 flex-shrink-0" />
@@ -1025,12 +1025,12 @@ export default function AdminPage() {
               </span>
             </div>
           </div>
-          {/* Actions — 2-col grid on mobile, flex-wrap on desktop */}
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          {/* Actions — 3-col grid on mobile, flex-wrap on desktop */}
+          <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
             <button
               onClick={() => void runFullSync()}
               disabled={fullSyncRunning || runningSync}
-              className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
+              className="col-span-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
             >
               {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               {fullSyncStep || 'סנכרון מלא'}
@@ -1125,7 +1125,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
           <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
           <StatCard icon={Wifi} label="מחוברים עכשיו" value={overview.stats.onlineNow} color="bg-green-500/20 text-green-400" live />
           <StatCard icon={Activity} label="פעילים ב־24 שעות" value={overview.stats.active24h} color="bg-teal-500/20 text-teal-400" />
@@ -1137,7 +1137,7 @@ export default function AdminPage() {
         </div>
 
         {/* גילויים חדשים */}
-        <section className="w-full rounded-2xl border p-5 space-y-3" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }} dir="rtl">
+        <section className="w-full rounded-2xl border p-3 space-y-3 sm:p-5" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }} dir="rtl">
           <div className="flex items-center gap-2">
             <Contact2 className="w-5 h-5 text-emerald-400" />
             <h2 className="font-bold text-[var(--theme-text)]">גילויים חדשים היום</h2>
@@ -1166,7 +1166,7 @@ export default function AdminPage() {
           )}
         </section>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-4">
           <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 xl:col-span-3">
             <div className="flex flex-col gap-3 border-b border-gray-800 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
@@ -1437,8 +1437,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5 lg:col-span-1">
             <div className="mb-4 flex items-center gap-2">
               <Settings className="h-5 w-5 text-purple-400" />
               <h2 className="text-lg font-bold">בקרת מערכת</h2>
@@ -1624,7 +1624,7 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5 lg:col-span-1">
             <div className="mb-4 flex items-center gap-2">
               <Activity className="h-5 w-5 text-green-400" />
               <h2 className="text-lg font-bold">בריאות מערכת ונתיבים</h2>
@@ -1694,7 +1694,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 xl:col-span-1">
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5 lg:col-span-1">
             <div className="mb-4 flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-blue-400" />
               <h2 className="text-lg font-bold">שימוש והתראות</h2>
