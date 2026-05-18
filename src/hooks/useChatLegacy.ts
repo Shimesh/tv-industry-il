@@ -68,6 +68,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   // Cache: chatId → decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
   const prevActiveChatRef = useRef<string | null>(null);
+  // Ref for getChatKey so the messages effect doesn't re-subscribe on every chats/allUsers change
+  const getChatKeyRef = useRef<((chatId: string, encryptedKeys?: Record<string, string>) => Promise<string | null>) | null>(null);
 
   const displayName = profile?.displayName || user?.displayName || 'משתמש';
   const displayPhoto = profile?.photoURL || user?.photoURL || null;
@@ -121,6 +123,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }
     return null;
   }, [user, chats, allUsers]);
+
+  getChatKeyRef.current = getChatKey;
 
   // Restore last chat from localStorage
   useEffect(() => {
@@ -189,7 +193,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     return () => unsubscribe();
   }, [user]);
 
-  // Subscribe to messages + mark delivery + decrypt
+  // Subscribe to messages + mark delivery/read + decrypt
   useEffect(() => {
     if (!activeChat || !user) {
       setLiveMessages([]);
@@ -198,40 +202,31 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       setHasMore(false);
       return;
     }
-    // Reset older messages when switching chats
     setOlderMessages([]);
     setLastVisible(null);
     setHasMore(false);
 
+    let cancelled = false;
     const q = query(
       collection(db, 'chats', activeChat, 'messages'),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      // snapshot.docs are in desc order (newest first). Reverse to chronological.
       const ascDocs = snapshot.docs.slice().reverse();
       const now = Date.now();
       const oneDayAgo = now - 86400000;
 
-      const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
-      const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
-      const chatKey = encryptedKeys ? await getChatKey(activeChat, encryptedKeys) : null;
-
-      const msgs: Message[] = [];
-      const decryptPromises: Promise<void>[] = [];
-
-      ascDocs.forEach(docSnap => {
+      // Build messages immediately (before any async work) so UI updates fast
+      const msgs: Message[] = ascDocs.map(docSnap => {
         const data = docSnap.data();
         const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || now);
-        const rawText = data.text || '';
-
-        const msg: Message = {
+        return {
           id: docSnap.id,
           senderId: data.senderId,
           senderName: data.senderName,
           senderPhoto: data.senderPhoto || null,
-          text: rawText,
+          text: data.text || '',
           type: data.type || 'text',
           fileURL: data.fileURL || null,
           fileName: data.fileName || null,
@@ -246,34 +241,67 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
             ? data.deletedAt.toMillis()
             : (data.deletedAt ?? null),
         };
-        msgs.push(msg);
-
-        if (chatKey && rawText && looksEncrypted(rawText) && data.type !== 'system') {
-          decryptPromises.push(
-            decryptMessage(rawText, chatKey).then(plain => {
-              if (plain !== null) msg.text = plain;
-              else msg.text = '[הודעה מוצפנת]';
-            }).catch(() => { msg.text = '[הודעה מוצפנת]'; })
-          );
-        }
       });
 
-      if (decryptPromises.length > 0) await Promise.all(decryptPromises);
+      // Set messages immediately so they appear without waiting for decryption.
+      // Preserve messages that fell out of the limit(50) window.
+      if (!cancelled) {
+        setLiveMessages(prev => {
+          if (prev.length > 0 && msgs.length > 0) {
+            const newIds = new Set(msgs.map(m => m.id));
+            const evicted = prev.filter(m => !newIds.has(m.id));
+            if (evicted.length > 0) {
+              setOlderMessages(older => {
+                const olderIds = new Set(older.map(m => m.id));
+                const toAdd = evicted.filter(m => !olderIds.has(m.id));
+                return toAdd.length > 0 ? [...older, ...toAdd] : older;
+              });
+            }
+          }
+          return msgs;
+        });
+        const oldestDoc = snapshot.docs[snapshot.docs.length - 1];
+        setLastVisible(oldestDoc ?? null);
+        setHasMore(snapshot.docs.length === 50);
+      }
 
-      setLiveMessages(msgs);
-      // Oldest doc in snapshot (last in desc order) is the cursor for loading more
-      const oldestDoc = snapshot.docs[snapshot.docs.length - 1];
-      setLastVisible(oldestDoc ?? null);
-      setHasMore(snapshot.docs.length === 50);
+      // Decrypt in background, then update messages again if needed
+      const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
+      if (cancelled) return;
+      const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
+      const chatKey = encryptedKeys && getChatKeyRef.current
+        ? await getChatKeyRef.current(activeChat, encryptedKeys)
+        : null;
+      if (cancelled) return;
 
-      // Batch-mark delivery for messages we received (not our own, not yet delivered, last 24h)
+      if (chatKey) {
+        let anyDecrypted = false;
+        const decryptPromises: Promise<void>[] = [];
+        for (const msg of msgs) {
+          if (msg.text && looksEncrypted(msg.text) && msg.type !== 'system') {
+            decryptPromises.push(
+              decryptMessage(msg.text, chatKey).then(plain => {
+                if (plain !== null) { msg.text = plain; anyDecrypted = true; }
+                else msg.text = '[הודעה מוצפנת]';
+              }).catch(() => { msg.text = '[הודעה מוצפנת]'; anyDecrypted = true; })
+            );
+          }
+        }
+        if (decryptPromises.length > 0) {
+          await Promise.all(decryptPromises);
+          if (!cancelled && anyDecrypted) setLiveMessages([...msgs]);
+        }
+      }
+
+      if (cancelled) return;
+
+      // Batch-mark delivery for messages we received
       const toDeliver = msgs.filter(m =>
         m.senderId !== user.uid &&
         m.type !== 'system' &&
         !m.deliveredTo[user.uid] &&
         m.createdAt > oneDayAgo
       );
-
       if (toDeliver.length > 0) {
         const batch = writeBatch(db);
         toDeliver.forEach(m => {
@@ -301,8 +329,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         readBatch.commit().catch(() => {});
       }
     });
-    return () => unsubscribe();
-  }, [activeChat, user, getChatKey]);
+    return () => { cancelled = true; unsubscribe(); };
+  }, [activeChat, user]);
 
   // Subscribe to typing indicators
   useEffect(() => {
@@ -494,7 +522,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       if (!chatKey) {
         const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch(() => null);
         const encryptedKeys = chatDoc?.data()?.encryptedKeys as Record<string, string> | undefined;
-        if (encryptedKeys) chatKey = await getChatKey(activeChat, encryptedKeys);
+        if (encryptedKeys && getChatKeyRef.current) chatKey = await getChatKeyRef.current(activeChat, encryptedKeys);
       }
 
       const now = Date.now();
@@ -542,7 +570,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     } finally {
       setLoadingMore(false);
     }
-  }, [activeChat, lastVisible, loadingMore, user, getChatKey]);
+  }, [activeChat, lastVisible, loadingMore, user]);
 
   const createPrivateChat = useCallback(async (otherUserId: string): Promise<string | null> => {
     if (!user) return null;

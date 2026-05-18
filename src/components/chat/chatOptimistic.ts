@@ -91,7 +91,7 @@ export function mergeMessagesWithOptimistic(
   optimisticMessages: ChatUiMessage[],
   currentUserId: string | null
 ): ChatUiMessage[] {
-  const queued = optimisticMessages.filter((message) => message.localState === 'sending');
+  const queued = optimisticMessages.filter((message) => message.localState === 'sending' || message.localState === 'failed');
   const merged: ChatUiMessage[] = [...serverMessages, ...queued];
   merged.sort((a, b) => {
     const left = a.createdAt ?? a.localCreatedAt ?? 0;
