@@ -114,6 +114,28 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
     errors.push(`http: ${error instanceof Error ? error.message : String(error)}`);
   }
 
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+  for (const proxyUrl of proxies) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) throw new Error(`proxy HTTP ${response.status}`);
+      return decodeWindows1255(await response.arrayBuffer());
+    } catch (error) {
+      const label = proxyUrl.includes('corsproxy') ? 'corsproxy' : 'allorigins';
+      errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   const path = new URL(url).pathname;
   throw new Error(`Midrug fetch failed for ${path}: ${errors.join(' | ')}`);
 }
