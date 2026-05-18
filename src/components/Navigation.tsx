@@ -13,6 +13,7 @@ import UserAvatar from './UserAvatar';
 import NotificationBell from './NotificationBell';
 import {
   BarChart3,
+  Building2,
   CheckCircle,
   ChevronDown,
   Clapperboard,
@@ -23,6 +24,7 @@ import {
   MessageCircle,
   Newspaper,
   Palette,
+  Radio,
   Settings,
   Shield,
   Trophy,
@@ -48,6 +50,8 @@ const navLinks: NavLink[] = [
   { href: '/directory', label: 'אלפון', icon: Users, auth: true },
   { href: '/chat', label: "צ'אט", icon: MessageCircle, auth: true },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone },
+  { href: '/schedule', label: 'שידור חי', icon: Radio },
+  { href: '/studios', label: 'אולפנים', icon: Building2 },
   { href: '/news', label: 'חדשות', icon: Newspaper },
   { href: '/ratings', label: 'רייטינג', icon: BarChart3 },
   { href: '/tools', label: 'כלים', icon: Wrench },
