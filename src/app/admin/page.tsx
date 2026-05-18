@@ -727,6 +727,24 @@ export default function AdminPage() {
     }
   }
 
+  async function fetchMidrugFromBrowser(dateStr: string): Promise<string> {
+    const params = new URLSearchParams({
+      param: '81', ShowTable: '1', TheDate: dateStr, Crowd: '1', tmp: String(Date.now()),
+    });
+    const targetUrl = `https://midrug.safenet.co.il/ajax_info.asp?${params}`;
+    const proxies = [
+      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    ];
+    for (const proxyUrl of proxies) {
+      try {
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) return await res.text();
+      } catch { /* try next */ }
+    }
+    throw new Error('לא הצלחתי להגיע למדרוג גם דרך הדפדפן');
+  }
+
   async function runRatingsSync() {
     if (!window.confirm('להריץ עכשיו סנכרון רייטינג יומי ושבועי?')) return;
     setRunningRatingsSync(true);
@@ -740,20 +758,57 @@ export default function AdminPage() {
         '/api/admin/ratings-sync',
         { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
       );
-      const dailyRows = result.daily?.rows || 0;
-      const weeklyRows = result.weekly?.rows || 0;
-      showToast(
-        'ok',
-        result.cachedFallback
-          ? `מקור המדרוג לא נגיש כרגע מ-Vercel, נשארו הנתונים השמורים: ${dailyRows} יומיים, ${weeklyRows} שבועיים`
-          : `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`,
-      );
-      await loadOverview(true);
-    } catch (ratingsError) {
-      showToast('err', ratingsError instanceof Error ? ratingsError.message : 'שגיאה בסנכרון רייטינג');
+
+      if (!result.cachedFallback) {
+        const dailyRows = result.daily?.rows || 0;
+        const weeklyRows = result.weekly?.rows || 0;
+        showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`);
+        await loadOverview(true);
+        return;
+      }
+
+      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך הדפדפן שלך...');
+      await runBrowserRatingsSync();
+    } catch {
+      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך הדפדפן שלך...');
+      try {
+        await runBrowserRatingsSync();
+      } catch (browserError) {
+        showToast('err', browserError instanceof Error ? browserError.message : 'שגיאה בסנכרון רייטינג');
+      }
     } finally {
       setRunningRatingsSync(false);
     }
+  }
+
+  async function runBrowserRatingsSync() {
+    const now = new Date();
+    const ilDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const [y, m, d] = ilDate.split('-');
+    const yesterday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 1, 12));
+    const prevDay = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 2, 12));
+    const fmt = (dt: Date) => {
+      const iso = dt.toISOString().slice(0, 10);
+      const [yy, mm, dd] = iso.split('-');
+      return `${dd}/${mm}/${yy}`;
+    };
+
+    let dailyHtml = await fetchMidrugFromBrowser(fmt(yesterday));
+    if (!dailyHtml.includes('<table') && !dailyHtml.includes('<tr')) {
+      dailyHtml = await fetchMidrugFromBrowser(fmt(prevDay));
+    }
+
+    const ingestResult = await fetchWithAuth<{
+      daily?: { rows?: number; matched?: number };
+      weekly?: { rows?: number; matched?: number };
+    }>(
+      '/api/admin/ratings-ingest',
+      { method: 'POST', body: JSON.stringify({ dailyHtml }) },
+    );
+
+    const dailyRows = ingestResult.daily?.rows || 0;
+    showToast('ok', `סנכרון רייטינג דרך הדפדפן הושלם: ${dailyRows} תוכניות`);
+    await loadOverview(true);
   }
 
   async function runFullSync() {

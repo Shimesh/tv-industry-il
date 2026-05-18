@@ -22,8 +22,10 @@ export async function GET(request: NextRequest) {
       recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
       recordJobMetric({
         job: 'ratings-scrape',
-        ok: true,
-        message: 'סנכרון נתוני הרייטינג הושלם בהצלחה',
+        ok: !result.cachedFallback,
+        message: result.cachedFallback
+          ? 'מקור המדרוג לא נגיש כרגע מ-Vercel; הנתונים השמורים האחרונים נשארו פעילים'
+          : 'סנכרון נתוני הרייטינג הושלם בהצלחה',
         detail: result,
       }),
     ]);

@@ -12,7 +12,7 @@ const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
-const MIDRUG_TIMEOUT_MS = 40_000;
+const MIDRUG_TIMEOUT_MS = 12_000;
 const MIDRUG_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.6.0; +https://tv-industry-il.vercel.app)',
   Accept: 'text/html,application/xhtml+xml,*/*',
@@ -74,7 +74,7 @@ async function sleep(ms: number): Promise<void> {
 
 async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Promise<string> {
   const errors: string[] = [];
-  const backoffs = [0, 2000, 4000];
+  const backoffs = [0, 2000];
 
   for (let attempt = 0; attempt < backoffs.length; attempt++) {
     if (backoffs[attempt]) await sleep(backoffs[attempt]);
@@ -103,6 +103,36 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
       return decodeWindows1255(buffer);
     } catch (error) {
       errors.push(`${allowInsecureTls ? 'https-insecure' : 'https'}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  try {
+    const httpUrl = url.replace('https://', 'http://');
+    const buffer = await requestMidrugBuffer(httpUrl, method, false);
+    return decodeWindows1255(buffer);
+  } catch (error) {
+    errors.push(`http: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+  for (const proxyUrl of proxies) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) throw new Error(`proxy HTTP ${response.status}`);
+      return decodeWindows1255(await response.arrayBuffer());
+    } catch (error) {
+      const label = proxyUrl.includes('corsproxy') ? 'corsproxy' : 'allorigins';
+      errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -163,22 +193,22 @@ function israelDateParts(date: Date): { year: number; month: number; day: number
   };
 }
 
-function israelDateAtUtcNoon(date: Date): Date {
+export function israelDateAtUtcNoon(date: Date): Date {
   const parts = israelDateParts(date);
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 12, 0, 0));
 }
 
-function addDays(date: Date, days: number): Date {
+export function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
 }
 
-function toIsoDate(date: Date): string {
+export function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function toMidrugDate(date: Date): string {
+export function toMidrugDate(date: Date): string {
   const iso = toIsoDate(date);
   const [year, month, day] = iso.split('-');
   return `${day}/${month}/${year}`;
@@ -262,7 +292,7 @@ function findMasterMatch(row: RatingRow, index: MasterIndexEntry[]): IndustryMas
   return best && best.score >= 0.78 ? best.entry : null;
 }
 
-function enrichRows(rows: RatingRow[], entries: IndustryMasterEntry[]): { rows: RatingRow[]; matched: number; unmatched: number } {
+export function enrichRows(rows: RatingRow[], entries: IndustryMasterEntry[]): { rows: RatingRow[]; matched: number; unmatched: number } {
   const index = buildMasterIndex(entries);
   let matched = 0;
   let unmatched = 0;
