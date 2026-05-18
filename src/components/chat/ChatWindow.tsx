@@ -164,7 +164,8 @@ export default function ChatWindow({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevScrollHeightRef = useRef(0);
-  const isAtBottomRef = useRef(true);
+  const isAtBottomRef = useRef(false);
+  const hasInitializedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -225,8 +226,12 @@ export default function ChatWindow({
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      return;
+    }
+
     if (prevScrollHeightRef.current > 0) {
-      // Older messages were prepended — restore scroll position
       const diff = container.scrollHeight - prevScrollHeightRef.current;
       if (diff > 0) container.scrollTop = diff;
       prevScrollHeightRef.current = 0;
@@ -244,7 +249,8 @@ export default function ChatWindow({
     setShowSearch(false);
     setSearchQuery('');
     prevScrollHeightRef.current = 0;
-    isAtBottomRef.current = true;
+    hasInitializedRef.current = false;
+    isAtBottomRef.current = false;
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
