@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BadgeCheck, Briefcase, Sparkles } from 'lucide-react';
+import { BadgeCheck, Briefcase, ChevronLeft, Sparkles } from 'lucide-react';
 import type { Contact } from '@/data/contacts';
 import ProCardModal from '@/components/directory/ProCardModal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -91,12 +91,13 @@ export default function PersonalProCardWidget() {
     <>
       <motion.button
         type="button"
-        whileHover={{ y: -2, scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
+        whileHover={{ y: -3, scale: 1.015 }}
+        whileTap={{ scale: 0.97, y: 0 }}
         onClick={() => setOpen(true)}
         dir="rtl"
-        className="relative isolate flex h-[148px] w-full max-w-full cursor-pointer overflow-hidden rounded-[1.5rem] border border-sky-200/20 bg-slate-950/[0.42] p-4 text-right shadow-[0_22px_60px_rgba(14,165,233,0.18),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition duration-200 hover:border-sky-100/40 hover:shadow-[0_28px_72px_rgba(14,165,233,0.28),inset_0_1px_0_rgba(255,255,255,0.12)]"
+        className="group relative isolate flex h-[148px] w-full max-w-full cursor-pointer overflow-hidden rounded-[1.5rem] border border-sky-200/20 bg-slate-950/[0.42] p-4 text-right shadow-[0_14px_40px_rgba(14,165,233,0.14),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition-all duration-200 hover:border-sky-100/50 hover:shadow-[0_22px_56px_rgba(14,165,233,0.28),0_0_20px_rgba(56,189,248,0.12),inset_0_1px_0_rgba(255,255,255,0.12)]"
       >
+        <span className="pointer-events-none absolute inset-0 translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:-translate-x-full" />
         <motion.div
           className="pointer-events-none absolute inset-0 opacity-80"
           animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
@@ -129,9 +130,10 @@ export default function PersonalProCardWidget() {
                 </span>
               )}
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-sky-100">
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-sky-100 transition-colors duration-200 group-hover:text-sky-50">
               <BadgeCheck className="h-3.5 w-3.5" />
-              לחץ לפתיחת הכרטיס המקצועי
+              פתיחת הכרטיס המקצועי
+              <ChevronLeft className="h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
             </div>
           </div>
 

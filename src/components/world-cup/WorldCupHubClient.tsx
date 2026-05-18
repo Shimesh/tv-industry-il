@@ -75,8 +75,7 @@ function isKnockout(stage: WorldCupMatch['stage']) {
   return ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(stage);
 }
 
-function getNextCountdown(matches: WorldCupMatch[]) {
-  const now = Date.now();
+function getNextCountdown(matches: WorldCupMatch[], now: number) {
   const next = matches
     .filter((m) => m.status === 'scheduled' && Date.parse(m.kickoff) > now)
     .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0];
@@ -87,6 +86,7 @@ function getNextCountdown(matches: WorldCupMatch[]) {
     days: Math.floor(diffMs / 86_400_000),
     hours: Math.floor((diffMs % 86_400_000) / 3_600_000),
     minutes: Math.floor((diffMs % 3_600_000) / 60_000),
+    seconds: Math.floor((diffMs % 60_000) / 1000),
   };
 }
 
@@ -169,7 +169,7 @@ function ScheduleGrid({ matches, activeId, onSelect }: { matches: WorldCupMatch[
 
   const byDay = useMemo(() => {
     return filtered.reduce<Record<string, WorldCupMatch[]>>((acc, match) => {
-      const key = match.kickoff.slice(0, 10);
+      const key = new Date(match.kickoff).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
       acc[key] = [...(acc[key] ?? []), match];
       return acc;
     }, {});
@@ -542,7 +542,12 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
   const selectedVenue = venues.find((venue) => venue.id === selectedMatch.venueId);
-  const nextCountdown = useMemo(() => getNextCountdown(matches), [matches]);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const nextCountdown = useMemo(() => getNextCountdown(matches, now), [matches, now]);
 
   useEffect(() => {
     fetch('/api/world-cup/news')
@@ -588,17 +593,21 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
                 <div className="flex shrink-0 gap-2 text-center" dir="ltr">
                   {nextCountdown.days > 0 && (
                     <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                      <div className="text-lg font-black tabular-nums text-[#D4AF37]">{nextCountdown.days}</div>
+                      <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.days).padStart(2, '0')}</div>
                       <div className="text-[9px] font-bold text-white/55">ימים</div>
                     </div>
                   )}
                   <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{nextCountdown.hours}</div>
+                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.hours).padStart(2, '0')}</div>
                     <div className="text-[9px] font-bold text-white/55">שעות</div>
                   </div>
                   <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{nextCountdown.minutes}</div>
+                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.minutes).padStart(2, '0')}</div>
                     <div className="text-[9px] font-bold text-white/55">דקות</div>
+                  </div>
+                  <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
+                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.seconds).padStart(2, '0')}</div>
+                    <div className="text-[9px] font-bold text-white/55">שניות</div>
                   </div>
                 </div>
               </div>
