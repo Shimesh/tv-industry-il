@@ -14,6 +14,27 @@ function buildIceServers(): RTCIceServer[] {
     for (const url of turnUrls.split(',')) {
       servers.push({ urls: url.trim(), username: turnUser, credential: turnCred });
     }
+  } else {
+    // Open Relay Project — free TURN (20 GB/month)
+    // https://www.metered.ca/tools/openrelay/
+    servers.push(
+      { urls: 'stun:openrelay.metered.ca:80' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    );
   }
 
   return servers;
