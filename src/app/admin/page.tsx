@@ -403,6 +403,8 @@ export default function AdminPage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
   const [runningRatingsSync, setRunningRatingsSync] = useState(false);
+  const [showManualPaste, setShowManualPaste] = useState(false);
+  const [manualHtml, setManualHtml] = useState('');
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
@@ -731,22 +733,24 @@ export default function AdminPage() {
     const params = new URLSearchParams({
       param: '81', ShowTable: '1', TheDate: dateStr, Crowd: '1', tmp: String(Date.now()),
     });
-    const targetUrl = `https://midrug.safenet.co.il/ajax_info.asp?${params}`;
-    const proxies = [
-      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    const sources = [
+      `/api/proxy/midrug?path=/ajax_info.asp&params=${encodeURIComponent(params.toString())}`,
+      `https://corsproxy.io/?${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${params}`)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${params}`)}`,
     ];
-    for (const proxyUrl of proxies) {
+    for (const sourceUrl of sources) {
       try {
-        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-        if (res.ok) return await res.text();
+        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) {
+          const text = await res.text();
+          if (text.includes('<t') || text.includes('<T')) return text;
+        }
       } catch { /* try next */ }
     }
-    throw new Error('לא הצלחתי להגיע למדרוג גם דרך הדפדפן');
+    throw new Error('PROXY_FAILED');
   }
 
   async function runRatingsSync() {
-    if (!window.confirm('להריץ עכשיו סנכרון רייטינג יומי ושבועי?')) return;
     setRunningRatingsSync(true);
     try {
       const result = await fetchWithAuth<{
@@ -767,14 +771,19 @@ export default function AdminPage() {
         return;
       }
 
-      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך הדפדפן שלך...');
+      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך Edge proxy...');
       await runBrowserRatingsSync();
     } catch {
-      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך הדפדפן שלך...');
+      showToast('ok', 'מנסה דרך Edge proxy...');
       try {
         await runBrowserRatingsSync();
       } catch (browserError) {
-        showToast('err', browserError instanceof Error ? browserError.message : 'שגיאה בסנכרון רייטינג');
+        if (browserError instanceof Error && browserError.message === 'PROXY_FAILED') {
+          showToast('err', 'כל המסלולים נכשלו. השתמש בייבוא ידני למטה.');
+          setShowManualPaste(true);
+        } else {
+          showToast('err', browserError instanceof Error ? browserError.message : 'שגיאה בסנכרון רייטינג');
+        }
       }
     } finally {
       setRunningRatingsSync(false);
@@ -807,8 +816,33 @@ export default function AdminPage() {
     );
 
     const dailyRows = ingestResult.daily?.rows || 0;
-    showToast('ok', `סנכרון רייטינג דרך הדפדפן הושלם: ${dailyRows} תוכניות`);
+    showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} תוכניות`);
+    setShowManualPaste(false);
     await loadOverview(true);
+  }
+
+  async function submitManualHtml() {
+    if (!manualHtml.trim()) return;
+    setRunningRatingsSync(true);
+    try {
+      const ingestResult = await fetchWithAuth<{ daily?: { rows?: number } }>(
+        '/api/admin/ratings-ingest',
+        { method: 'POST', body: JSON.stringify({ dailyHtml: manualHtml }) },
+      );
+      const rows = ingestResult.daily?.rows || 0;
+      if (rows === 0) {
+        showToast('err', 'לא נמצאו שורות בטבלה. ודא שהדבקת את קוד המקור של הדף.');
+        return;
+      }
+      showToast('ok', `ייבוא ידני הושלם: ${rows} תוכניות`);
+      setShowManualPaste(false);
+      setManualHtml('');
+      await loadOverview(true);
+    } catch (error) {
+      showToast('err', error instanceof Error ? error.message : 'שגיאה בייבוא');
+    } finally {
+      setRunningRatingsSync(false);
+    }
   }
 
   async function runFullSync() {
@@ -1204,6 +1238,39 @@ export default function AdminPage() {
               {ratingsJob.lastError}
             </p>
           ) : null}
+          {showManualPaste && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <h3 className="mb-2 text-sm font-bold text-amber-300">ייבוא ידני מהדפדפן</h3>
+              <p className="mb-3 text-xs text-gray-400">
+                1. פתח את{' '}
+                <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>
+                {' '}→ 2. לחץ ימני → &quot;הצג מקור הדף&quot; → 3. העתק הכל → 4. הדבק כאן
+              </p>
+              <textarea
+                value={manualHtml}
+                onChange={(e) => setManualHtml(e.target.value)}
+                placeholder="הדבק כאן את קוד המקור של דף המדרוג..."
+                dir="ltr"
+                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                rows={5}
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => void submitManualHtml()}
+                  disabled={!manualHtml.trim() || runningRatingsSync}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {runningRatingsSync ? 'מעבד...' : 'ייבוא'}
+                </button>
+                <button
+                  onClick={() => { setShowManualPaste(false); setManualHtml(''); }}
+                  className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {showAddContact && (
