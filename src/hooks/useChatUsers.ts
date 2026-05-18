@@ -68,6 +68,7 @@ export function useChatUsers(): UserProfile[] {
           onboardingComplete: bool('onboardingComplete'),
           skills: [],
           encryptionPublicKey: str('encryptionPublicKey') || undefined,
+          lastSeen: f['lastSeen']?.timestampValue ? new Date(String(f['lastSeen'].timestampValue)).getTime() : null,
         };
         return [profile];
       });

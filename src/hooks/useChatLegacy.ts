@@ -243,9 +243,23 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         };
       });
 
-      // Set messages immediately so they appear without waiting for decryption
+      // Set messages immediately so they appear without waiting for decryption.
+      // Preserve messages that fell out of the limit(50) window.
       if (!cancelled) {
-        setLiveMessages(msgs);
+        setLiveMessages(prev => {
+          if (prev.length > 0 && msgs.length > 0) {
+            const newIds = new Set(msgs.map(m => m.id));
+            const evicted = prev.filter(m => !newIds.has(m.id));
+            if (evicted.length > 0) {
+              setOlderMessages(older => {
+                const olderIds = new Set(older.map(m => m.id));
+                const toAdd = evicted.filter(m => !olderIds.has(m.id));
+                return toAdd.length > 0 ? [...older, ...toAdd] : older;
+              });
+            }
+          }
+          return msgs;
+        });
         const oldestDoc = snapshot.docs[snapshot.docs.length - 1];
         setLastVisible(oldestDoc ?? null);
         setHasMore(snapshot.docs.length === 50);

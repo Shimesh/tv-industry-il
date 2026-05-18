@@ -1,11 +1,48 @@
 // WebRTC configuration and utilities
 
-export const rtcConfig: RTCConfiguration = {
-  iceServers: [
+function buildIceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ],
+  ];
+
+  const turnUrls = process.env.NEXT_PUBLIC_TURN_URLS;
+  const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
+  const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+  if (turnUrls && turnUser && turnCred) {
+    for (const url of turnUrls.split(',')) {
+      servers.push({ urls: url.trim(), username: turnUser, credential: turnCred });
+    }
+  } else {
+    // Open Relay Project — free TURN (20 GB/month)
+    // https://www.metered.ca/tools/openrelay/
+    servers.push(
+      { urls: 'stun:openrelay.metered.ca:80' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    );
+  }
+
+  return servers;
+}
+
+export const rtcConfig: RTCConfiguration = {
+  iceServers: buildIceServers(),
+  iceCandidatePoolSize: 10,
 };
 
 export async function getLocalStream(video: boolean = true): Promise<MediaStream> {
