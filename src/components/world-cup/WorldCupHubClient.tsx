@@ -569,12 +569,12 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
   };
 
   return (
-    <div className="min-h-screen bg-[var(--theme-bg)]" dir="rtl">
+    <div className="min-h-screen overflow-x-hidden bg-[var(--theme-bg)]" dir="rtl">
       {/* Hero */}
       <header className="relative overflow-hidden border-b" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(135deg, #002046, #064523 70%, #002046)' }}>
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px)', backgroundSize: '42px 42px' }} />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(212,175,55,.18),transparent_50%)]" />
-        <div className="relative mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:py-8">
+        <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:py-8">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/40 bg-black/20 px-3 py-1 text-sm font-bold text-[#D4AF37]">
               <Trophy className="h-4 w-4" />
@@ -584,13 +584,13 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
             <p className="mt-2 max-w-2xl text-sm leading-7 text-white/72 sm:text-base">לוח משחקים, כאן 11, חדשות, טבלאות, אצטדיונים, מזג אוויר וצ׳אט משחקים חי.</p>
 
             {nextCountdown && (
-              <div className="mt-4 inline-flex items-center gap-3 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-2.5 backdrop-blur-sm">
+              <div className="mt-4 flex max-w-full flex-wrap items-center gap-3 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-2.5 backdrop-blur-sm">
                 <Timer className="h-5 w-5 shrink-0 text-[#D4AF37]" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-white/55">המשחק הבא</div>
                   <div className="truncate text-sm font-black text-white">{nextCountdown.match.homeTeam.flag} {nextCountdown.match.homeTeam.nameHe} vs {nextCountdown.match.awayTeam.nameHe} {nextCountdown.match.awayTeam.flag}</div>
                 </div>
-                <div className="flex shrink-0 gap-2 text-center" dir="ltr">
+                <div className="flex shrink-0 gap-1.5 text-center sm:gap-2" dir="ltr">
                   {nextCountdown.days > 0 && (
                     <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
                       <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.days).padStart(2, '0')}</div>
@@ -613,7 +613,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/55">
+            <div className="mt-3 flex max-w-full flex-wrap gap-2 text-[11px] text-white/55">
               <span className="rounded-full bg-white/8 px-2.5 py-1">📡 {source === 'football-data' ? 'Football-Data.org' : 'Fallback מקומי'}</span>
               <span className="rounded-full bg-white/8 px-2.5 py-1">🕐 עודכן {new Date(updatedAt).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem' })}</span>
               <span className="rounded-full bg-white/8 px-2.5 py-1">🇮🇱 כל השעות בשעון ישראל</span>
@@ -648,7 +648,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
       <MobileSectionTabs value={activeSection} onChange={handleSectionChange} />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
             <Card className="overflow-hidden p-3">
               <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />

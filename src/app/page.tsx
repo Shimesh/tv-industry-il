@@ -90,7 +90,7 @@ export default function HomePage() {
     <div className="min-h-screen overflow-x-hidden">
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-7">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
             <div className="max-w-3xl pt-1 lg:pt-4">
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
