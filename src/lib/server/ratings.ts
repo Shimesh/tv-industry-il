@@ -9,6 +9,11 @@ import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestor
 
 const MIDRUG_APP_URL = 'https://midrug.safenet.co.il/app/';
 const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
+const EDGE_PROXY_BASE = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}/api/proxy/midrug`
+  : process.env.NEXT_PUBLIC_VERCEL_URL
+    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/api/proxy/midrug`
+    : 'http://localhost:3000/api/proxy/midrug';
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
@@ -112,6 +117,24 @@ async function fetchMidrugHtml(url: string, method: 'GET' | 'POST' = 'GET'): Pro
     return decodeWindows1255(buffer);
   } catch (error) {
     errors.push(`http: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const edgeParams = new URLSearchParams({ path: parsedUrl.pathname, params: parsedUrl.search.slice(1) });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
+    const response = await fetch(`${EDGE_PROXY_BASE}?${edgeParams}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      return decodeWindows1255(await response.arrayBuffer());
+    }
+    throw new Error(`edge-proxy HTTP ${response.status}`);
+  } catch (error) {
+    errors.push(`edge-proxy: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const proxies = [
