@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { MouseEvent } from 'react';
 import {
   BarChart3,
+  Building2,
   CalendarDays,
   Home,
   Megaphone,
@@ -27,6 +28,7 @@ const mainLinks = [
   { href: '/calendar', label: 'יומן אישי', icon: CalendarDays, accent: '#60a5fa', auth: true },
   { href: '/directory', label: 'אלפון', icon: UserRoundCog, accent: '#f59e0b', auth: true },
   { href: '/live', label: 'שידור חי', icon: Radio, accent: '#ef4444' },
+  { href: '/studios', label: 'אולפנים', icon: Building2, accent: '#f97316' },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone, accent: '#38bdf8' },
   { href: '/chat', label: "צ'אט", icon: MessageCircle, accent: '#ec4899', auth: true },
   { href: '/ratings', label: 'רייטינג', icon: BarChart3, accent: '#c084fc' },
