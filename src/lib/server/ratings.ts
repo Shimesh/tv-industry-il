@@ -1,4 +1,6 @@
 import * as cheerio from 'cheerio';
+import { request as httpsRequest } from 'https';
+import { request as httpRequest } from 'http';
 import { normalizeName } from '@/lib/crewNormalization';
 import { stripProductionSuffixes, stringSimilarity } from '@/lib/productionNameNormalization';
 import type { IndustryMasterEntry } from '@/lib/proCardTypes';
@@ -10,6 +12,12 @@ const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
+const MIDRUG_TIMEOUT_MS = 25_000;
+const MIDRUG_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.6.0; +https://tv-industry-il.vercel.app)',
+  Accept: 'text/html,application/xhtml+xml,*/*',
+  Referer: MIDRUG_APP_URL,
+};
 
 type MasterIndexEntry = {
   entry: IndustryMasterEntry;
@@ -58,17 +66,72 @@ function decodeWindows1255(buffer: ArrayBuffer): string {
 }
 
 async function fetchMidrugHtml(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'TVIndustryIL/2.6.0 ratings scraper',
-      Accept: 'text/html,application/xhtml+xml',
-    },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    throw new Error(`Midrug request failed: ${response.status}`);
+  const errors: string[] = [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
+    const response = await fetch(url, {
+      headers: MIDRUG_HEADERS,
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return decodeWindows1255(await response.arrayBuffer());
+  } catch (error) {
+    errors.push(`fetch: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return decodeWindows1255(await response.arrayBuffer());
+
+  for (const allowInsecureTls of [false, true]) {
+    try {
+      const buffer = await requestMidrugBuffer(url, allowInsecureTls);
+      return decodeWindows1255(buffer);
+    } catch (error) {
+      errors.push(`${allowInsecureTls ? 'https-insecure' : 'https'}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const path = new URL(url).pathname;
+  throw new Error(`Midrug fetch failed for ${path}: ${errors.join(' | ')}`);
+}
+
+function requestMidrugBuffer(urlString: string, allowInsecureTls: boolean): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const requestImpl = url.protocol === 'http:' ? httpRequest : httpsRequest;
+    const req = requestImpl({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || undefined,
+      path: `${url.pathname}${url.search}`,
+      method: 'GET',
+      headers: MIDRUG_HEADERS,
+      family: 4,
+      timeout: MIDRUG_TIMEOUT_MS,
+      rejectUnauthorized: !allowInsecureTls,
+    }, (res) => {
+      const status = res.statusCode || 0;
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      res.on('end', () => {
+        if (status < 200 || status >= 300) {
+          reject(new Error(`HTTP ${status}`));
+          return;
+        }
+        const buffer = Buffer.concat(chunks);
+        resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy(new Error('request timeout'));
+    });
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 function israelDateParts(date: Date): { year: number; month: number; day: number; weekday: number } {

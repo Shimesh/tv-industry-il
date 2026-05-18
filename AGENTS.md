@@ -17,6 +17,7 @@ Israeli TV industry platform built with Next.js 16 (App Router), React 19, TypeS
 - **GitHub**: https://github.com/Shimesh/tv-industry-il (branch: master)
 - **Vercel account**: yaron-orbachs-projects
 - **Firebase project**: tv-industry-il
+- **Important**: Vercel Git integration auto-deploys every push to `master`. Do not also run `npx vercel --prod --yes` for the same commit, otherwise Vercel creates duplicate production deployments from two sources. Default deployment flow is: commit → `git push origin master` → wait for the Vercel Git deployment. Use manual CLI deploy only when intentionally bypassing Git auto-deploy.
 
 ## Architecture
 - **Auth**: Firebase Auth (Google sign-in with popup + redirect fallback)
