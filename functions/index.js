@@ -27,10 +27,16 @@ function decodeWindows1255(buffer) {
   return score(win1255) > score(utf8) ? win1255 : utf8;
 }
 
-async function fetchMidrug(url) {
+async function fetchMidrug(url, postBody) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const res = await fetch(url, { method: 'POST', headers: HEADERS, signal: controller.signal });
+  const bodyStr = postBody ? postBody.toString() : undefined;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...HEADERS, ...(bodyStr ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+    body: bodyStr,
+    signal: controller.signal,
+  });
   clearTimeout(timeout);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   return decodeWindows1255(await res.arrayBuffer());
@@ -85,20 +91,17 @@ async function scrapeAndSave() {
   let sourceDate = yesterday;
   let fallbackUsed = false;
 
-  const buildUrl = (y, m, d) => {
-    const params = new URLSearchParams({
-      param: '81', ShowTable: '1', TheDate: toMidrugDate(y, m, d), Crowd: '1', tmp: String(Date.now()),
-    });
-    return `${MIDRUG_AJAX_URL}?${params}`;
-  };
+  const buildParams = (y, m, d) => new URLSearchParams({
+    param: '81', ShowTable: '1', TheDate: toMidrugDate(y, m, d), Crowd: '1', tmp: String(Date.now()),
+  });
 
-  let html = await fetchMidrug(buildUrl(yesterday.year, yesterday.month, yesterday.day));
+  let html = await fetchMidrug(MIDRUG_AJAX_URL, buildParams(yesterday.year, yesterday.month, yesterday.day));
   let rows = parseRatingsTable(html, 20);
 
   if (rows.length === 0) {
     sourceDate = dayBefore;
     fallbackUsed = true;
-    html = await fetchMidrug(buildUrl(dayBefore.year, dayBefore.month, dayBefore.day));
+    html = await fetchMidrug(MIDRUG_AJAX_URL, buildParams(dayBefore.year, dayBefore.month, dayBefore.day));
     rows = parseRatingsTable(html, 20);
   }
 
