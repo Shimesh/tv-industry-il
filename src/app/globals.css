@@ -57,6 +57,8 @@ html {
   direction: rtl;
   scroll-behavior: smooth;
   min-height: 100%;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
@@ -67,6 +69,8 @@ body {
   min-height: 100dvh;
   transition: background-color 0.3s ease, color 0.3s ease;
   overflow-x: hidden;
+  max-width: 100vw;
+  max-width: 100dvw;
 }
 
 .app-ambient {
@@ -273,23 +277,25 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
   }
 }
 
-/* Custom Scrollbar - theme aware */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+/* Custom Scrollbar - desktop only (mobile uses native overlay scrollbar) */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 
-::-webkit-scrollbar-track {
-  background: var(--theme-bg-secondary, #111827);
-}
+  ::-webkit-scrollbar-track {
+    background: var(--theme-bg-secondary, #111827);
+  }
 
-::-webkit-scrollbar-thumb {
-  background: var(--theme-border, #374151);
-  border-radius: 4px;
-}
+  ::-webkit-scrollbar-thumb {
+    background: var(--theme-border, #374151);
+    border-radius: 4px;
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--theme-text-secondary, #4b5563);
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-text-secondary, #4b5563);
+  }
 }
 
 /* Gradient Text Utility */
