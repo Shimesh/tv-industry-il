@@ -4,6 +4,8 @@ import { setGlobalOptions } from 'firebase-functions/v2/options';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as cheerio from 'cheerio';
+import { request as httpsRequest } from 'https';
+import { request as httpRequest } from 'http';
 
 initializeApp();
 const db = getFirestore();
@@ -28,19 +30,69 @@ function decodeWindows1255(buffer) {
   return score(win1255) > score(utf8) ? win1255 : utf8;
 }
 
-async function fetchMidrug(url, postBody) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const bodyStr = postBody ? postBody.toString() : undefined;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { ...HEADERS, ...(bodyStr ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
-    body: bodyStr,
-    signal: controller.signal,
+function fetchMidrugRaw(urlString, bodyStr, allowInsecureTls) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const reqImpl = url.protocol === 'http:' ? httpRequest : httpsRequest;
+    const bodyBuf = bodyStr ? Buffer.from(bodyStr, 'utf-8') : undefined;
+    const headers = {
+      ...HEADERS,
+      Connection: 'close',
+      ...(bodyBuf ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': bodyBuf.length } : {}),
+    };
+    const req = reqImpl({
+      protocol: url.protocol, hostname: url.hostname, port: url.port || undefined,
+      path: `${url.pathname}${url.search}`, method: 'POST', headers,
+      timeout: TIMEOUT_MS, rejectUnauthorized: !allowInsecureTls,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`HTTP ${res.statusCode}`)); return;
+        }
+        const buf = Buffer.concat(chunks);
+        resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    if (bodyBuf) req.write(bodyBuf);
+    req.end();
   });
-  clearTimeout(timeout);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`);
-  return decodeWindows1255(await res.arrayBuffer());
+}
+
+async function fetchMidrug(url, postBody) {
+  const bodyStr = postBody ? postBody.toString() : undefined;
+  const headers = { ...HEADERS, ...(bodyStr ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) };
+  const errors = [];
+
+  // attempt 1: native fetch
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const res = await fetch(url, { method: 'POST', headers, body: bodyStr, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return decodeWindows1255(await res.arrayBuffer());
+  } catch (e) { errors.push(`fetch: ${e.message}`); }
+
+  // attempt 2: https module (strict TLS)
+  try {
+    return decodeWindows1255(await fetchMidrugRaw(url, bodyStr, false));
+  } catch (e) { errors.push(`https: ${e.message}`); }
+
+  // attempt 3: https module (relaxed TLS — handles self-signed / old certs)
+  try {
+    return decodeWindows1255(await fetchMidrugRaw(url, bodyStr, true));
+  } catch (e) { errors.push(`https-insecure: ${e.message}`); }
+
+  // attempt 4: http (no TLS)
+  try {
+    return decodeWindows1255(await fetchMidrugRaw(url.replace('https://', 'http://'), bodyStr, false));
+  } catch (e) { errors.push(`http: ${e.message}`); }
+
+  throw new Error(`Midrug unreachable: ${errors.join(' | ')}`);
 }
 
 function parseRatingsTable(html, limit) {
