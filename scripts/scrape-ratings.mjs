@@ -1,12 +1,12 @@
 /**
  * scrape-ratings.mjs
  * Runs inside GitHub Actions (ubuntu-latest).
- * GitHub runner IPs are not blocked by midrug.safenet.co.il.
- * We bypass the site's self-signed SSL cert with rejectUnauthorized:false.
+ * Bypasses midrug.safenet.co.il self-signed SSL cert with rejectUnauthorized:false.
  */
 
 import { request as httpsRequest } from 'https';
 import { request as httpRequest } from 'http';
+import { execSync } from 'child_process';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const admin = require('firebase-admin');
@@ -25,7 +25,7 @@ const db = admin.firestore();
 // ── Constants ─────────────────────────────────────────────────────────────────
 const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const MIDRUG_APP_URL  = 'https://midrug.safenet.co.il/app/';
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 30_000;
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
   Accept: 'text/html,application/xhtml+xml,*/*',
@@ -34,6 +34,8 @@ const HEADERS = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
 function decodeWindows1255(buffer) {
   const utf8 = new TextDecoder('utf-8').decode(buffer);
   let win1255;
@@ -74,24 +76,86 @@ function requestRaw(urlString, bodyStr, allowInsecureTls) {
   });
 }
 
+async function fetchMidrugNative(bodyStr) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(MIDRUG_AJAX_URL, {
+      method: 'POST',
+      headers: { ...HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: bodyStr,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return decodeWindows1255(await res.arrayBuffer());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fetchMidrugCurl(bodyStr) {
+  const escaped = bodyStr.replace(/'/g, "'\\''");
+  const cmd = [
+    'curl', '-s', '-X', 'POST', `'${MIDRUG_AJAX_URL}'`,
+    '-k',
+    '--data', `'${escaped}'`,
+    '--header', `'User-Agent: ${HEADERS['User-Agent']}'`,
+    '--header', `'Accept-Language: he-IL,he;q=0.9,en;q=0.8'`,
+    '--header', `'Referer: ${MIDRUG_APP_URL}'`,
+    '--connect-timeout', '30',
+    '--max-time', '45',
+  ].join(' ');
+  const buf = execSync(cmd, { timeout: 50_000, encoding: 'buffer' });
+  return decodeWindows1255(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+}
+
 async function fetchMidrug(postBody) {
   const bodyStr = postBody.toString();
   const errors = [];
-  // Try https strict → https insecure → http
+
+  // attempt 1: native fetch
+  try {
+    console.log('  trying native fetch...');
+    return await fetchMidrugNative(bodyStr);
+  } catch (e) { errors.push(`fetch: ${e.message}`); console.warn('  fetch failed:', e.message); }
+
+  // attempts 2-4: Node https (strict/insecure) + http
   for (const [url, insecure] of [
     [MIDRUG_AJAX_URL, false],
     [MIDRUG_AJAX_URL, true],
     [MIDRUG_AJAX_URL.replace('https://', 'http://'), false],
   ]) {
+    const label = url.startsWith('http://') ? 'http' : insecure ? 'https-insecure' : 'https';
     try {
+      console.log(`  trying ${label}...`);
       return decodeWindows1255(await requestRaw(url, bodyStr, insecure));
+    } catch (e) { errors.push(`${label}: ${e.message}`); console.warn(`  ${label} failed:`, e.message); }
+  }
+
+  // attempt 5: curl (different TCP stack, different TLS library)
+  try {
+    console.log('  trying curl...');
+    return fetchMidrugCurl(bodyStr);
+  } catch (e) { errors.push(`curl: ${e.message}`); console.warn('  curl failed:', e.message); }
+
+  throw new Error(`Midrug unreachable: ${errors.join(' | ')}`);
+}
+
+async function fetchMidrugWithRetry(postBody, retries = 3) {
+  const delays = [0, 10_000, 20_000];
+  for (let i = 0; i < retries; i++) {
+    if (delays[i]) {
+      console.log(`Retry ${i}/${retries - 1} — waiting ${delays[i] / 1000}s...`);
+      await sleep(delays[i]);
+    }
+    try {
+      return await fetchMidrug(postBody);
     } catch (e) {
-      const label = url.startsWith('http://') ? 'http' : insecure ? 'https-insecure' : 'https';
-      errors.push(`${label}: ${e.message}`);
-      console.warn(`fetchMidrug ${label} failed:`, e.message);
+      if (i === retries - 1) throw e;
+      console.warn(`Attempt ${i + 1} failed: ${e.message}`);
     }
   }
-  throw new Error(`Midrug unreachable: ${errors.join(' | ')}`);
 }
 
 function parseRatingsTable(html, limit) {
@@ -100,7 +164,7 @@ function parseRatingsTable(html, limit) {
   const rows = [];
   $('table tr').each((_, row) => {
     const cells = $(row).find('td').map((__, cell) =>
-      $(cell).text().replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
+      $(cell).text().replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
     ).get();
     if (cells.length < 7) return;
     const rank = Number(cells[0].replace(/[^\d.]/g, ''));
@@ -148,14 +212,14 @@ async function main() {
   });
 
   console.log('Fetching yesterday:', toMidrugDate(yesterday.year, yesterday.month, yesterday.day));
-  let html = await fetchMidrug(buildParams(yesterday.year, yesterday.month, yesterday.day));
+  let html = await fetchMidrugWithRetry(buildParams(yesterday.year, yesterday.month, yesterday.day));
   let rows = parseRatingsTable(html, 20);
   let sourceDate = yesterday;
   let fallbackUsed = false;
 
   if (rows.length === 0) {
     console.log('No rows for yesterday, trying day before...');
-    html = await fetchMidrug(buildParams(dayBefore.year, dayBefore.month, dayBefore.day));
+    html = await fetchMidrugWithRetry(buildParams(dayBefore.year, dayBefore.month, dayBefore.day));
     rows = parseRatingsTable(html, 20);
     sourceDate = dayBefore;
     fallbackUsed = true;
@@ -177,7 +241,6 @@ async function main() {
     fetchedAt,
   }, { merge: true });
 
-  // Update admin metrics (visible in admin panel)
   await db.doc('adminMetrics/job-ratings-scrape').set({
     key: 'ratings-scrape',
     metricType: 'job',
@@ -195,7 +258,6 @@ async function main() {
 
 main().catch((err) => {
   console.error('scrape-ratings failed:', err.message);
-  // Write failure to adminMetrics
   db.doc('adminMetrics/job-ratings-scrape').set({
     key: 'ratings-scrape',
     metricType: 'job',

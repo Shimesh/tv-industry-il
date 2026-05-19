@@ -531,7 +531,16 @@ export async function getRatingsJobStatus() {
     lastError?: string | null;
   }>('adminMetrics').catch(() => []);
   const all = metrics.filter((m) => m.metricType === 'job' && m.key === 'ratings-scrape');
-  return all.find((m) => m.source === 'github-actions') ?? all[0] ?? null;
+  if (!all.length) return null;
+
+  // Most recently run document drives status/error display
+  const byRun = [...all].sort((a, b) => String(b.lastRunAt || '').localeCompare(String(a.lastRunAt || '')));
+  // Best success from any document (covers cross-source history)
+  const bestSuccess = [...all]
+    .filter((m) => m.lastSuccessAt)
+    .sort((a, b) => String(b.lastSuccessAt || '').localeCompare(String(a.lastSuccessAt || '')))[0];
+
+  return { ...byRun[0], lastSuccessAt: bestSuccess?.lastSuccessAt ?? byRun[0].lastSuccessAt ?? null };
 }
 
 export async function getRatingsDocumentByPath<T>(path: string): Promise<T | null> {
