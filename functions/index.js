@@ -10,11 +10,11 @@ import { request as httpRequest } from 'http';
 initializeApp();
 const db = getFirestore();
 
-setGlobalOptions({ region: 'me-west1', timeoutSeconds: 60 });
+setGlobalOptions({ region: 'me-west1', timeoutSeconds: 120 });
 
 const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const MIDRUG_APP_URL = 'https://midrug.safenet.co.il/app/';
-const TIMEOUT_MS = 20000;
+const TIMEOUT_MS = 10000;
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,*/*',
@@ -75,22 +75,22 @@ async function fetchMidrug(url, postBody) {
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return decodeWindows1255(await res.arrayBuffer());
-  } catch (e) { errors.push(`fetch: ${e.message}`); }
+  } catch (e) { errors.push(`fetch: ${e.message}`); console.warn('fetchMidrug fetch attempt failed:', e.message); }
 
   // attempt 2: https module (strict TLS)
   try {
     return decodeWindows1255(await fetchMidrugRaw(url, bodyStr, false));
-  } catch (e) { errors.push(`https: ${e.message}`); }
+  } catch (e) { errors.push(`https: ${e.message}`); console.warn('fetchMidrug https strict failed:', e.message); }
 
   // attempt 3: https module (relaxed TLS — handles self-signed / old certs)
   try {
     return decodeWindows1255(await fetchMidrugRaw(url, bodyStr, true));
-  } catch (e) { errors.push(`https-insecure: ${e.message}`); }
+  } catch (e) { errors.push(`https-insecure: ${e.message}`); console.warn('fetchMidrug https-insecure failed:', e.message); }
 
   // attempt 4: http (no TLS)
   try {
     return decodeWindows1255(await fetchMidrugRaw(url.replace('https://', 'http://'), bodyStr, false));
-  } catch (e) { errors.push(`http: ${e.message}`); }
+  } catch (e) { errors.push(`http: ${e.message}`); console.warn('fetchMidrug http failed:', e.message); }
 
   throw new Error(`Midrug unreachable: ${errors.join(' | ')}`);
 }
