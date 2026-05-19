@@ -524,12 +524,14 @@ export async function getRatingsJobStatus() {
   const metrics = await listDocuments<{
     key?: string;
     metricType?: string;
+    source?: string;
     lastRunAt?: string | null;
     lastSuccessAt?: string | null;
     lastStatus?: 'success' | 'failure' | null;
     lastError?: string | null;
   }>('adminMetrics').catch(() => []);
-  return metrics.find((metric) => metric.metricType === 'job' && metric.key === 'ratings-scrape') || null;
+  const all = metrics.filter((m) => m.metricType === 'job' && m.key === 'ratings-scrape');
+  return all.find((m) => m.source === 'github-actions') ?? all[0] ?? null;
 }
 
 export async function getRatingsDocumentByPath<T>(path: string): Promise<T | null> {

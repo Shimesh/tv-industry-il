@@ -779,8 +779,14 @@ export default function AdminPage() {
         await runBrowserRatingsSync();
       } catch (browserError) {
         if (browserError instanceof Error && browserError.message === 'PROXY_FAILED') {
-          showToast('err', 'כל המסלולים נכשלו. השתמש בייבוא ידני למטה.');
-          setShowManualPaste(true);
+          try {
+            showToast('ok', 'כל הפרוקסי נכשלו, מפעיל GitHub Actions...');
+            await fetchWithAuth('/api/admin/trigger-ratings-scrape', { method: 'POST' });
+            showToast('ok', 'GitHub Actions הופעל – הנתונים יתעדכנו תוך כדקה');
+          } catch {
+            showToast('err', 'כל המסלולים נכשלו. השתמש בייבוא ידני למטה.');
+            setShowManualPaste(true);
+          }
         } else {
           showToast('err', browserError instanceof Error ? browserError.message : 'שגיאה בסנכרון רייטינג');
         }
