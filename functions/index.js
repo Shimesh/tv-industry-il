@@ -132,7 +132,7 @@ async function scrapeAndSave() {
   return { date: isoDate, rows: rows.length, fallbackUsed };
 }
 
-export const scrapeRatings = onRequest({ cors: true }, async (req, res) => {
+export const scrapeRatings = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
   try {
     const result = await scrapeAndSave();
     res.json({ success: true, ...result, region: 'me-west1' });
