@@ -47,6 +47,7 @@ async function fetchMidrug(postBody) {
   proxyUrl.searchParams.set('api_key', SCRAPERAPI_KEY);
   proxyUrl.searchParams.set('url', MIDRUG_AJAX_URL);
   proxyUrl.searchParams.set('country_code', 'il');
+  proxyUrl.searchParams.set('premium', 'true');
   proxyUrl.searchParams.set('render', 'false');
 
   const controller = new AbortController();
