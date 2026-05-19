@@ -1,0 +1,31 @@
+name: Scrape Ratings
+
+on:
+  schedule:
+    - cron: '15 7 * * *'   # 07:15 UTC = 10:15 IST daily
+  workflow_dispatch:         # manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-save firebase-admin cheerio
+
+      - name: Scrape and save ratings
+        env:
+          FIREBASE_PROJECT_ID:  ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Bypass midrug.safenet.co.il self-signed SSL cert
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        run: node scripts/scrape-ratings.mjs
