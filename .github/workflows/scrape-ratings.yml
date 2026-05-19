@@ -19,13 +19,11 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --no-save firebase-admin cheerio
+        run: npm install --no-save firebase-admin cheerio puppeteer-core @sparticuz/chromium
 
       - name: Scrape and save ratings
         env:
-          FIREBASE_PROJECT_ID:  ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PROJECT_ID:   ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          # Bypass midrug.safenet.co.il self-signed SSL cert
-          NODE_TLS_REJECT_UNAUTHORIZED: '0'
         run: node scripts/scrape-ratings.mjs

@@ -1,16 +1,16 @@
 /**
  * scrape-ratings.mjs
  * Runs inside GitHub Actions (ubuntu-latest).
- * Bypasses midrug.safenet.co.il self-signed SSL cert with rejectUnauthorized:false.
+ * Uses Puppeteer+Chromium so requests carry a real Chrome TLS fingerprint,
+ * bypassing Safenet's bot-detection on midrug.safenet.co.il.
  */
 
-import { request as httpsRequest } from 'https';
-import { request as httpRequest } from 'http';
-import { execSync } from 'child_process';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 // ── Firebase init ─────────────────────────────────────────────────────────────
 admin.initializeApp({
@@ -25,146 +25,101 @@ const db = admin.firestore();
 // ── Constants ─────────────────────────────────────────────────────────────────
 const MIDRUG_AJAX_URL = 'https://midrug.safenet.co.il/ajax_info.asp';
 const MIDRUG_APP_URL  = 'https://midrug.safenet.co.il/app/';
-const TIMEOUT_MS = 30_000;
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-  Accept: 'text/html,application/xhtml+xml,*/*',
-  'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
-  Referer: MIDRUG_APP_URL,
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-function decodeWindows1255(buffer) {
-  const utf8 = new TextDecoder('utf-8').decode(buffer);
-  let win1255;
-  try { win1255 = new TextDecoder('windows-1255').decode(buffer); } catch { return utf8; }
-  const score = (s) => (s.match(/[֐-׿]/g) || []).length * 2 - (s.match(/[×׳�]/g) || []).length;
-  return score(win1255) > score(utf8) ? win1255 : utf8;
+function decodeIfNeeded(text) {
+  // Puppeteer returns strings; detect mojibake from windows-1255 mis-decoded as latin1
+  const mojibake = (text.match(/[×ש׳â€]/g) || []).length;
+  const hebrew   = (text.match(/[א-ת]/g) || []).length;
+  if (hebrew > 0 || mojibake === 0) return text;
+  // attempt to re-encode latin1 → windows-1255
+  try {
+    const bytes = Uint8Array.from(text, (c) => c.charCodeAt(0));
+    const decoded = new TextDecoder('windows-1255').decode(bytes);
+    const hebrewAfter = (decoded.match(/[א-ת]/g) || []).length;
+    if (hebrewAfter > hebrew) return decoded;
+  } catch { /* ignore */ }
+  return text;
 }
 
-function requestRaw(urlString, bodyStr, allowInsecureTls) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    const reqImpl = url.protocol === 'http:' ? httpRequest : httpsRequest;
-    const bodyBuf = bodyStr ? Buffer.from(bodyStr, 'utf-8') : undefined;
-    const headers = {
-      ...HEADERS,
-      Connection: 'close',
-      ...(bodyBuf ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': bodyBuf.length } : {}),
-    };
-    const req = reqImpl({
-      protocol: url.protocol, hostname: url.hostname, port: url.port || undefined,
-      path: `${url.pathname}${url.search}`, method: 'POST', headers,
-      timeout: TIMEOUT_MS, rejectUnauthorized: !allowInsecureTls,
-    }, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-      res.on('end', () => {
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`HTTP ${res.statusCode}`)); return;
-        }
-        const buf = Buffer.concat(chunks);
-        resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
-      });
-    });
-    req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.on('error', reject);
-    if (bodyBuf) req.write(bodyBuf);
-    req.end();
+async function launchBrowser() {
+  return puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
   });
 }
 
-async function fetchMidrugNative(bodyStr) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+/**
+ * Fetch midrug AJAX data by running a fetch() call from inside Chrome.
+ * Chrome's TLS fingerprint passes Safenet's bot-detection; Node.js does not.
+ */
+async function fetchMidrugWithPuppeteer(postBody) {
+  const browser = await launchBrowser();
   try {
-    const res = await fetch(MIDRUG_AJAX_URL, {
-      method: 'POST',
-      headers: { ...HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: bodyStr,
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return decodeWindows1255(await res.arrayBuffer());
+    const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8' });
+
+    // Visit app page first to get session cookies
+    console.log('  [puppeteer] visiting app page for session...');
+    await page.goto(MIDRUG_APP_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+
+    // Run AJAX call from within Chrome (carries real browser TLS fingerprint + cookies)
+    console.log('  [puppeteer] posting AJAX request...');
+    const bodyStr = postBody.toString();
+    const result = await page.evaluate(async (url, body) => {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+        if (!res.ok) return { ok: false, status: res.status, text: '' };
+        const text = await res.text();
+        return { ok: true, status: res.status, text };
+      } catch (e) {
+        return { ok: false, status: 0, text: '', error: String(e) };
+      }
+    }, MIDRUG_AJAX_URL, bodyStr);
+
+    if (!result.ok) {
+      throw new Error(result.error || `HTTP ${result.status}`);
+    }
+    return decodeIfNeeded(result.text);
   } finally {
-    clearTimeout(timer);
+    await browser.close();
   }
-}
-
-function fetchMidrugCurl(bodyStr) {
-  const escaped = bodyStr.replace(/'/g, "'\\''");
-  const cmd = [
-    'curl', '-s', '-X', 'POST', `'${MIDRUG_AJAX_URL}'`,
-    '-k',
-    '--data', `'${escaped}'`,
-    '--header', `'User-Agent: ${HEADERS['User-Agent']}'`,
-    '--header', `'Accept-Language: he-IL,he;q=0.9,en;q=0.8'`,
-    '--header', `'Referer: ${MIDRUG_APP_URL}'`,
-    '--connect-timeout', '30',
-    '--max-time', '45',
-  ].join(' ');
-  const buf = execSync(cmd, { timeout: 50_000, encoding: 'buffer' });
-  return decodeWindows1255(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
-}
-
-async function fetchMidrug(postBody) {
-  const bodyStr = postBody.toString();
-  const errors = [];
-
-  // attempt 1: native fetch
-  try {
-    console.log('  trying native fetch...');
-    return await fetchMidrugNative(bodyStr);
-  } catch (e) { errors.push(`fetch: ${e.message}`); console.warn('  fetch failed:', e.message); }
-
-  // attempts 2-4: Node https (strict/insecure) + http
-  for (const [url, insecure] of [
-    [MIDRUG_AJAX_URL, false],
-    [MIDRUG_AJAX_URL, true],
-    [MIDRUG_AJAX_URL.replace('https://', 'http://'), false],
-  ]) {
-    const label = url.startsWith('http://') ? 'http' : insecure ? 'https-insecure' : 'https';
-    try {
-      console.log(`  trying ${label}...`);
-      return decodeWindows1255(await requestRaw(url, bodyStr, insecure));
-    } catch (e) { errors.push(`${label}: ${e.message}`); console.warn(`  ${label} failed:`, e.message); }
-  }
-
-  // attempt 5: curl (different TCP stack, different TLS library)
-  try {
-    console.log('  trying curl...');
-    return fetchMidrugCurl(bodyStr);
-  } catch (e) { errors.push(`curl: ${e.message}`); console.warn('  curl failed:', e.message); }
-
-  throw new Error(`Midrug unreachable: ${errors.join(' | ')}`);
 }
 
 async function fetchMidrugWithRetry(postBody, retries = 3) {
-  const delays = [0, 10_000, 20_000];
+  const delays = [0, 15_000, 30_000];
+  let lastError;
   for (let i = 0; i < retries; i++) {
     if (delays[i]) {
-      console.log(`Retry ${i}/${retries - 1} — waiting ${delays[i] / 1000}s...`);
+      console.log(`  retry ${i}/${retries - 1} — waiting ${delays[i] / 1000}s...`);
       await sleep(delays[i]);
     }
     try {
-      return await fetchMidrug(postBody);
+      return await fetchMidrugWithPuppeteer(postBody);
     } catch (e) {
-      if (i === retries - 1) throw e;
-      console.warn(`Attempt ${i + 1} failed: ${e.message}`);
+      lastError = e;
+      console.warn(`  attempt ${i + 1} failed: ${e.message}`);
     }
   }
+  throw lastError;
 }
 
+// ── Parsing ───────────────────────────────────────────────────────────────────
 function parseRatingsTable(html, limit) {
-  if (!html.trim()) return [];
+  if (!html || !html.trim()) return [];
   const $ = cheerio.load(html);
   const rows = [];
   $('table tr').each((_, row) => {
     const cells = $(row).find('td').map((__, cell) =>
-      $(cell).text().replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
+      $(cell).text().replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
     ).get();
     if (cells.length < 7) return;
     const rank = Number(cells[0].replace(/[^\d.]/g, ''));
@@ -180,6 +135,7 @@ function parseRatingsTable(html, limit) {
   return rows.slice(0, limit);
 }
 
+// ── Date helpers ──────────────────────────────────────────────────────────────
 function israelDateParts() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -187,25 +143,18 @@ function israelDateParts() {
   const get = (t) => parts.find((p) => p.type === t)?.value || '';
   return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')) };
 }
-
 function prevDay(y, m, d) {
   const dt = new Date(Date.UTC(y, m - 1, d - 1, 12));
   return { year: dt.getUTCFullYear(), month: dt.getUTCMonth() + 1, day: dt.getUTCDate() };
 }
-
-function toMidrugDate(y, m, d) {
-  return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
-}
-
-function toIsoDate(y, m, d) {
-  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-}
+function toMidrugDate(y, m, d) { return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`; }
+function toIsoDate(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const { year, month, day } = israelDateParts();
-  const yesterday  = prevDay(year, month, day);
-  const dayBefore  = prevDay(yesterday.year, yesterday.month, yesterday.day);
+  const yesterday = prevDay(year, month, day);
+  const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
 
   const buildParams = (y, m, d) => new URLSearchParams({
     param: '81', ShowTable: '1', TheDate: toMidrugDate(y, m, d), Crowd: '1', tmp: String(Date.now()),
@@ -252,7 +201,7 @@ async function main() {
     source: 'github-actions',
   }, { merge: true });
 
-  console.log(`✓ Done. Saved ratings for ${isoDate} (${rows.length} rows, fallbackUsed=${fallbackUsed})`);
+  console.log(`✓ Done. Saved ${rows.length} rows for ${isoDate} (fallbackUsed=${fallbackUsed})`);
   process.exit(0);
 }
 
