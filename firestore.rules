@@ -196,5 +196,17 @@ service cloud.firestore {
       allow read: if isAuth();
       allow write: if false; // all writes go through server-side admin API
     }
+
+    // ── Admin metrics (job status, read-only for admins) ──────────
+    match /adminMetrics/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ── Scraper triggers (admin panel → local watcher) ────────────
+    match /triggers/{docId} {
+      allow read: if false;
+      allow write: if isAdmin();
+    }
   }
 }

@@ -38,6 +38,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { INDUSTRY_DEPARTMENT_OPTIONS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 import { normalizeProfessionalFields, stringArray } from '@/lib/professionalFields';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -403,6 +405,12 @@ export default function AdminPage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
   const [runningRatingsSync, setRunningRatingsSync] = useState(false);
+  const [ratingsJobLive, setRatingsJobLive] = useState<{
+    lastRunAt?: string | null;
+    lastSuccessAt?: string | null;
+    lastStatus?: string | null;
+    lastError?: string | null;
+  } | null>(null);
   const [showManualPaste, setShowManualPaste] = useState(false);
   const [manualHtml, setManualHtml] = useState('');
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
@@ -654,6 +662,21 @@ export default function AdminPage() {
     );
   }, [user, profile?.siteRole]);
 
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    return onSnapshot(doc(db, 'adminMetrics', 'job-ratings-scrape'), (snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setRatingsJobLive({
+          lastRunAt: (d.lastRunAt as string) ?? null,
+          lastSuccessAt: (d.lastSuccessAt as string) ?? null,
+          lastStatus: (d.lastStatus as string) ?? null,
+          lastError: (d.lastError as string) ?? null,
+        });
+      }
+    });
+  }, [user, isAdmin]);
+
   async function claimAdmin() {
     setClaimingAdmin(true);
     try {
@@ -753,44 +776,13 @@ export default function AdminPage() {
   async function runRatingsSync() {
     setRunningRatingsSync(true);
     try {
-      const result = await fetchWithAuth<{
-        daily?: { rows?: number; matched?: number; fallbackUsed?: boolean };
-        weekly?: { rows?: number; matched?: number };
-        cachedFallback?: boolean;
-        warning?: string;
-      }>(
-        '/api/admin/ratings-sync',
-        { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
-      );
-
-      if (!result.cachedFallback) {
-        const dailyRows = result.daily?.rows || 0;
-        const weeklyRows = result.weekly?.rows || 0;
-        showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} יומיים, ${weeklyRows} שבועיים`);
-        await loadOverview(true);
-        return;
-      }
-
-      showToast('ok', 'השרת לא מגיע למדרוג, מנסה דרך Edge proxy...');
-      await runBrowserRatingsSync();
+      await setDoc(doc(db, 'triggers', 'ratings-scrape'), {
+        status: 'pending',
+        requestedAt: new Date().toISOString(),
+      });
+      showToast('ok', 'בקשה נשלחה לרץ המקומי – ממתין לתוצאה...');
     } catch {
-      showToast('ok', 'מנסה דרך Edge proxy...');
-      try {
-        await runBrowserRatingsSync();
-      } catch (browserError) {
-        if (browserError instanceof Error && browserError.message === 'PROXY_FAILED') {
-          try {
-            showToast('ok', 'כל הפרוקסי נכשלו, מפעיל GitHub Actions...');
-            await fetchWithAuth('/api/admin/trigger-ratings-scrape', { method: 'POST' });
-            showToast('ok', 'GitHub Actions הופעל – הנתונים יתעדכנו תוך כדקה');
-          } catch {
-            showToast('err', 'כל המסלולים נכשלו. השתמש בייבוא ידני למטה.');
-            setShowManualPaste(true);
-          }
-        } else {
-          showToast('err', browserError instanceof Error ? browserError.message : 'שגיאה בסנכרון רייטינג');
-        }
-      }
+      showToast('err', 'שגיאה בשליחת הבקשה לפיירסטור');
     } finally {
       setRunningRatingsSync(false);
     }
@@ -1046,6 +1038,7 @@ export default function AdminPage() {
   }, [overview.users, search, userSort]);
 
   const ratingsJob = overview.usage.jobs.find((job) => job.key === 'ratings-scrape') || null;
+  const effectiveRatingsJob = ratingsJobLive ?? ratingsJob;
 
   if (authLoading || loading) {
     return (
@@ -1212,36 +1205,43 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => void runRatingsSync()}
-              disabled={runningRatingsSync}
+              disabled={runningRatingsSync || effectiveRatingsJob?.lastStatus === 'running'}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
             >
-              {runningRatingsSync ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-              {runningRatingsSync ? 'מריץ סקרייפר...' : 'Run Scraper Now'}
+              <RefreshCw className={`h-4 w-4 ${(runningRatingsSync || effectiveRatingsJob?.lastStatus === 'running') ? 'animate-spin' : ''}`} />
+              {runningRatingsSync ? 'שולח...' : effectiveRatingsJob?.lastStatus === 'running' ? 'מריץ...' : 'Run Scraper Now'}
             </button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
               <p className="text-xs text-gray-500">Last Successful Sync</p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {ratingsJob?.lastSuccessAt ? formatRelativeTime(ratingsJob.lastSuccessAt) : 'אין נתון'}
+                {effectiveRatingsJob?.lastSuccessAt ? formatRelativeTime(effectiveRatingsJob.lastSuccessAt) : 'אין נתון'}
               </p>
             </div>
             <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
               <p className="text-xs text-gray-500">Status</p>
-              <p className={`mt-1 text-sm font-semibold ${ratingsJob?.lastStatus === 'failure' ? 'text-red-300' : ratingsJob?.lastStatus === 'success' ? 'text-green-300' : 'text-gray-300'}`}>
-                {ratingsJob?.lastStatus === 'failure' ? 'נכשל' : ratingsJob?.lastStatus === 'success' ? 'תקין' : 'אין נתון'}
+              <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
+                effectiveRatingsJob?.lastStatus === 'failure' ? 'text-red-300' :
+                effectiveRatingsJob?.lastStatus === 'success' ? 'text-green-300' :
+                effectiveRatingsJob?.lastStatus === 'running' ? 'text-yellow-300' : 'text-gray-300'
+              }`}>
+                {effectiveRatingsJob?.lastStatus === 'running' && <RefreshCw className="h-3 w-3 animate-spin" />}
+                {effectiveRatingsJob?.lastStatus === 'failure' ? 'נכשל' :
+                 effectiveRatingsJob?.lastStatus === 'success' ? 'תקין' :
+                 effectiveRatingsJob?.lastStatus === 'running' ? 'מריץ...' : 'אין נתון'}
               </p>
             </div>
             <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
               <p className="text-xs text-gray-500">Last Run</p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {ratingsJob?.lastRunAt ? formatRelativeTime(ratingsJob.lastRunAt) : 'אין נתון'}
+                {effectiveRatingsJob?.lastRunAt ? formatRelativeTime(effectiveRatingsJob.lastRunAt) : 'אין נתון'}
               </p>
             </div>
           </div>
-          {ratingsJob?.lastError ? (
+          {effectiveRatingsJob?.lastError ? (
             <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200" dir="ltr">
-              {ratingsJob.lastError}
+              {effectiveRatingsJob.lastError}
             </p>
           ) : null}
           {showManualPaste && (
