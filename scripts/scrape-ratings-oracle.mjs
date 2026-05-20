@@ -13,8 +13,8 @@ import { createRequire } from 'module';
 import { readFileSync, existsSync } from 'fs';
 const require = createRequire(import.meta.url);
 
-// Load .env if present
-const envPath = new URL('.env', import.meta.url).pathname;
+// Load .env from project root (one level up from scripts/)
+const envPath = new URL('../.env', import.meta.url).pathname;
 if (existsSync(envPath)) {
   for (const line of readFileSync(envPath, 'utf8').split('\n')) {
     const m = line.match(/^([^#=]+)=(.*)$/);
