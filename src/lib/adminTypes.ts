@@ -26,6 +26,7 @@ export type AdminUserSummary = {
   linkedContactId: number | string | null;
   phone: string | null;
   loginMethods: AdminLoginMethod[];
+  hasPush: boolean;
 };
 
 export type CountBucket = {

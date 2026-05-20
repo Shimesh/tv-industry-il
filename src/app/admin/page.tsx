@@ -10,6 +10,8 @@ import {
   ArrowLeft,
   ArrowUp,
   BarChart3,
+  Bell,
+  BellOff,
   CheckCircle,
   ChevronDown,
   Clapperboard,
@@ -1377,10 +1379,14 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-4">
           <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 xl:col-span-3">
             <div className="flex flex-col gap-3 border-b border-gray-800 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Users className="h-5 w-5 text-purple-400" />
                 <h2 className="text-lg font-bold">ניהול משתמשים</h2>
                 <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
+                <span className="flex items-center gap-1 rounded-full bg-blue-900/40 px-2 py-0.5 text-xs text-blue-300" title="משתמשים עם התראות push למובייל">
+                  <Smartphone className="h-3 w-3" />
+                  {overview.users.filter(u => u.hasPush).length}/{overview.users.length} push
+                </span>
               </div>
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -1440,7 +1446,14 @@ export default function AdminPage() {
                             ) : null}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                              {entry.hasPush ? (
+                                <span title="קיבל push למובייל"><Smartphone className="h-3 w-3 text-blue-400 flex-shrink-0" /></span>
+                              ) : (
+                                <span title="פעמון בלבד – אין push למובייל"><BellOff className="h-3 w-3 text-gray-500 flex-shrink-0" /></span>
+                              )}
+                            </div>
                             {entry.uidCount > 1 ? (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-300">
                                 {entry.uidCount} כניסות מאוחדות

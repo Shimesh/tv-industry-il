@@ -32,6 +32,7 @@ type RawUser = {
   phone?: string | null;
   profileId?: string | null;
   linkedUids?: unknown;
+  fcmTokens?: unknown;
 };
 
 type RawContact = {
@@ -254,6 +255,7 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     linkedContactId: raw.linkedContactId ?? null,
     phone: typeof raw.phone === 'string' && raw.phone.trim() ? raw.phone.trim() : null,
     loginMethods: inferLoginMethods([raw]),
+    hasPush: Array.isArray(raw.fcmTokens) && raw.fcmTokens.length > 0,
   };
 }
 
@@ -302,6 +304,7 @@ function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
     linkedContactId: firstValue(group, (user) => user.linkedContactId) || null,
     phone: firstString(group, (user) => user.phone) || null,
     loginMethods: inferLoginMethods(group),
+    hasPush: group.some((user) => Array.isArray(user.fcmTokens) && (user.fcmTokens as unknown[]).length > 0),
   };
 }
 
