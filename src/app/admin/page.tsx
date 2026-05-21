@@ -138,10 +138,6 @@ function formatPageViewDevice(event: PageViewEvent): string {
   return [event.deviceType, event.browser, event.os].filter(Boolean).join(' · ') || 'לא זמין';
 }
 
-function selectedOptionValues(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
-  return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
-}
-
 function safeProfileFields(entry: unknown) {
   return normalizeProfessionalFields((entry || {}) as Record<string, unknown>);
 }
@@ -156,6 +152,16 @@ function safeProfileDepartments(entry: unknown): string[] {
 
 function roleOptionsForEditor(roles: unknown): string[] {
   return Array.from(new Set([...INDUSTRY_ROLE_OPTIONS, ...safeProfileRoles({ roles })].filter(Boolean)));
+}
+
+function addUniqueValue(values: string[], value: string): string[] {
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return values;
+  return Array.from(new Set([...stringArray(values), cleaned]));
+}
+
+function removeValue(values: string[], value: string): string[] {
+  return stringArray(values).filter((item) => item !== value);
 }
 
 function rolePresentation(role: AdminRole) {
@@ -440,6 +446,7 @@ export default function AdminPage() {
     departments: string[];
     role: string;
     roles: string[];
+    customRole: string;
     forceContactId: string;
     linkedContactId: string | null;
   } | null>(null);
@@ -519,7 +526,11 @@ export default function AdminPage() {
       await fetchWithAuth('/api/admin/users/update', {
         method: 'POST',
         body: JSON.stringify({
-          ...editModal,
+          uid: editModal.uid,
+          displayName: editModal.displayName,
+          phone: editModal.phone,
+          departments: stringArray(editModal.departments),
+          roles: stringArray(editModal.roles),
           department: stringArray(editModal.departments)[0] || '',
           role: stringArray(editModal.roles)[0] || '',
           forceContactId: editModal.forceContactId || undefined,
@@ -1506,6 +1517,7 @@ export default function AdminPage() {
                                   departments: fields.departments,
                                   role: fields.role,
                                   roles: fields.roles,
+                                  customRole: '',
                                   forceContactId: '',
                                   linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
                                 });
@@ -2069,38 +2081,111 @@ export default function AdminPage() {
             </label>
             <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
               מחלקות
+              <div className="flex flex-wrap gap-1.5 rounded-lg p-2" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)' }}>
+                {stringArray(editModal.departments).length ? stringArray(editModal.departments).map((department) => (
+                  <button
+                    key={department}
+                    type="button"
+                    onClick={() => setEditModal((m) => {
+                      if (!m) return m;
+                      const departments = removeValue(m.departments, department);
+                      return { ...m, departments, department: departments[0] || '' };
+                    })}
+                    className="rounded-full bg-purple-500/20 px-2.5 py-1 text-xs text-purple-100 hover:bg-red-500/20 hover:text-red-100"
+                    title="הסר מחלקה"
+                  >
+                    {department} ×
+                  </button>
+                )) : <span className="text-xs text-gray-500">לא נבחרו מחלקות</span>}
+              </div>
               <select
-                multiple
-                value={stringArray(editModal.departments)}
+                value=""
                 onChange={(e) => {
-                  const departments = selectedOptionValues(e.currentTarget.selectedOptions);
-                  setEditModal((m) => m && { ...m, departments, department: departments[0] || '' });
+                  const department = e.currentTarget.value;
+                  setEditModal((m) => {
+                    if (!m) return m;
+                    const departments = addUniqueValue(m.departments, department);
+                    return { ...m, departments, department: departments[0] || '' };
+                  });
                 }}
-                className="min-h-28 rounded-lg px-3 py-2 text-sm"
+                className="rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               >
-                {INDUSTRY_DEPARTMENT_OPTIONS.map((d) => (
+                <option value="">הוסף מחלקה...</option>
+                {INDUSTRY_DEPARTMENT_OPTIONS.filter((d) => !stringArray(editModal.departments).includes(d)).map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
               תפקידים
+              <div className="flex flex-wrap gap-1.5 rounded-lg p-2" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)' }}>
+                {stringArray(editModal.roles).length ? stringArray(editModal.roles).map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => setEditModal((m) => {
+                      if (!m) return m;
+                      const roles = removeValue(m.roles, role);
+                      return { ...m, roles, role: roles[0] || '' };
+                    })}
+                    className="rounded-full bg-blue-500/20 px-2.5 py-1 text-xs text-blue-100 hover:bg-red-500/20 hover:text-red-100"
+                    title="הסר תפקיד"
+                  >
+                    {role} ×
+                  </button>
+                )) : <span className="text-xs text-gray-500">לא נבחרו תפקידים</span>}
+              </div>
               <select
-                multiple
-                value={stringArray(editModal.roles)}
+                value=""
                 onChange={(e) => {
-                  const roles = selectedOptionValues(e.currentTarget.selectedOptions);
-                  setEditModal((m) => m && { ...m, roles, role: roles[0] || '' });
+                  const role = e.currentTarget.value;
+                  setEditModal((m) => {
+                    if (!m) return m;
+                    const roles = addUniqueValue(m.roles, role);
+                    return { ...m, roles, role: roles[0] || '' };
+                  });
                 }}
                 dir="rtl"
-                className="min-h-28 rounded-lg px-3 py-2 text-sm"
+                className="rounded-lg px-3 py-2 text-sm"
                 style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
               >
-                {roleOptionsForEditor(editModal.roles).map((role) => (
+                <option value="">הוסף תפקיד...</option>
+                {roleOptionsForEditor(editModal.roles).filter((role) => !stringArray(editModal.roles).includes(role)).map((role) => (
                   <option key={role} value={role}>{role}</option>
                 ))}
               </select>
+              <div className="flex gap-2">
+                <input
+                  value={editModal.customRole}
+                  onChange={(e) => setEditModal((m) => m && { ...m, customRole: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    setEditModal((m) => {
+                      if (!m) return m;
+                      const roles = addUniqueValue(m.roles, m.customRole);
+                      return { ...m, roles, role: roles[0] || '', customRole: '' };
+                    });
+                  }}
+                  placeholder="תפקיד ידני, למשל VTR"
+                  dir="rtl"
+                  className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setEditModal((m) => {
+                    if (!m) return m;
+                    const roles = addUniqueValue(m.roles, m.customRole);
+                    return { ...m, roles, role: roles[0] || '', customRole: '' };
+                  })}
+                  className="rounded-lg px-3 py-2 text-xs font-bold"
+                  style={{ background: 'var(--theme-accent)', color: 'white' }}
+                >
+                  הוסף
+                </button>
+              </div>
             </label>
             {editModal.linkedContactId && (() => {
               const linked = availableContacts.find((c) => c.id === editModal.linkedContactId);
