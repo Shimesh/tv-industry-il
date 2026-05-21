@@ -49,6 +49,11 @@ function parsePercent(value) {
   return match ? Number(match[1]) : 0;
 }
 
+function parseViewers(value) {
+  const match = String(value || '').match(/(\d+(?:\.\d+)?)\s*k\b/i);
+  return match ? Number(match[1]) : 0;
+}
+
 function parseSourceDate(message, fallbackDate = new Date()) {
   const match = message.match(/לתאריך\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})/u);
   if (!match) {
@@ -89,35 +94,29 @@ function splitSections(message) {
   ].filter((index) => index >= 0);
   const end = endMarkers.length ? Math.min(...endMarkers) : compact.length;
 
-  const sections = [];
-  if (newsStart >= 0) {
-    sections.push({
-      name: 'חדשות',
-      text: compact.slice(newsStart + 'בחדשות'.length, primeStart >= 0 ? primeStart : end),
-    });
-  }
-  if (primeStart >= 0) {
-    sections.push({
-      name: 'פריים טיים',
-      text: compact.slice(primeStart + 'בפריים טיים'.length, end),
-    });
-  }
-  if (!sections.length) sections.push({ name: 'כללי', text: compact.slice(0, end) });
-  return sections;
+  return {
+    news: newsStart >= 0
+      ? compact.slice(newsStart + 'בחדשות'.length, primeStart >= 0 ? primeStart : end)
+      : '',
+    prime: primeStart >= 0
+      ? compact.slice(primeStart + 'בפריים טיים'.length, end)
+      : '',
+  };
 }
 
 function stripTrend(value) {
   return value
-    .replace(/[⬆⬇↔️]+/gu, ' ')
+    .replace(/[⬆⬇↗️↘️]+/gu, ' ')
     .replace(/\b(?:עלייה|ירידה)\b/gu, ' ')
     .trim();
 }
 
-function parseRankedItem(segment, date) {
+function parseRankedItem(segment) {
   const text = stripTrend(segment.text);
-  const percent = parsePercent(text);
-  if (!percent) return null;
+  const ratingPercent = parsePercent(text);
+  if (!ratingPercent) return null;
 
+  const viewers = parseViewers(text);
   const percentIndex = text.search(/\d+(?:\.\d+)?\s*%/);
   const beforePercent = normalizeWhitespace(text.slice(0, percentIndex).replace(/\d+(?:\.\d+)?k\b/gi, ''));
   const afterPercent = normalizeWhitespace(text.slice(percentIndex).replace(/^\d+(?:\.\d+)?\s*%\s*/, ''));
@@ -137,8 +136,7 @@ function parseRankedItem(segment, date) {
     showName = trailingChannelMatch[1];
     channel = trailingChannelMatch[2];
   } else if (channelAfterPercentMatch) {
-    const beforeK = beforePercent.replace(/\d+(?:\.\d+)?k\b/gi, '').replace(/\s*-\s*$/u, '');
-    showName = beforeK;
+    showName = beforePercent.replace(/\d+(?:\.\d+)?k\b/gi, '').replace(/\s*-\s*$/u, '');
     channel = channelAfterPercentMatch[1];
   } else if (dashMatch) {
     showName = dashMatch[1];
@@ -152,14 +150,19 @@ function parseRankedItem(segment, date) {
   if (!showName) return null;
 
   return {
-    rank: 0,
+    rank: segment.sourceRank,
     showName,
     channel,
-    date,
-    duration: 0,
-    ratingPercent: percent,
-    sourceRank: segment.sourceRank,
+    viewers,
+    ratingPercent,
   };
+}
+
+function parseSection(sectionText) {
+  return extractRankedSegments(sectionText)
+    .map(parseRankedItem)
+    .filter(Boolean)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
 export function parseScoptRatingsMessage(message, fallbackDate = new Date()) {
@@ -167,33 +170,19 @@ export function parseScoptRatingsMessage(message, fallbackDate = new Date()) {
   if (!text.includes('רייטינג') || !text.includes('Scopt')) return null;
 
   const date = parseSourceDate(text, fallbackDate);
-  const rows = [];
+  const sections = splitSections(text);
+  const telegramHouseholds = parseSection(sections.news);
+  const telegramPrime = parseSection(sections.prime);
 
-  for (const section of splitSections(text)) {
-    for (const segment of extractRankedSegments(section.text)) {
-      const row = parseRankedItem(segment, date);
-      if (row) rows.push({ ...row, section: section.name });
-    }
-  }
-
-  if (!rows.length) return null;
+  if (!telegramHouseholds.length && !telegramPrime.length) return null;
 
   return {
     date,
     sourceDate: formatSourceDate(date),
     targetAudience: TARGET_AUDIENCE,
-    top20: rows
-      .slice(0, 20)
-      .map((row, index) => ({
-        rank: index + 1,
-        showName: row.showName,
-        channel: row.channel,
-        date: row.date,
-        duration: row.duration,
-        ratingPercent: row.ratingPercent,
-        channelTags: [row.section, row.channel].filter(Boolean),
-      })),
-    fetchedAt: new Date().toISOString(),
+    telegramHouseholds,
+    telegramPrime,
+    telegramFetchedAt: new Date().toISOString(),
     fallbackUsed: false,
   };
 }
@@ -208,8 +197,12 @@ export function base64Url(input) {
 
 function getServiceAccount() {
   const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID?.trim() || process.env.FIREBASE_PROJECT_ID?.trim() || '';
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL?.trim() || '';
-  const privateKey = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL?.trim() || process.env.FIREBASE_CLIENT_EMAIL?.trim() || '';
+  const privateKey = (
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY ||
+    process.env.FIREBASE_PRIVATE_KEY ||
+    ''
+  ).replace(/\\n/g, '\n').trim();
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error('Firebase admin service account is not configured');
@@ -248,6 +241,53 @@ export async function getAccessToken() {
 
   const data = await response.json();
   return data.access_token;
+}
+
+function fromFirestoreValue(value) {
+  if (!value) return null;
+  if ('stringValue' in value) return value.stringValue ?? '';
+  if ('booleanValue' in value) return Boolean(value.booleanValue);
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('timestampValue' in value) return String(value.timestampValue);
+  if ('nullValue' in value) return null;
+  if ('arrayValue' in value) {
+    return (value.arrayValue.values ?? []).map((entry) => fromFirestoreValue(entry));
+  }
+  if ('mapValue' in value) {
+    const result = {};
+    for (const [key, nested] of Object.entries(value.mapValue.fields ?? {})) {
+      result[key] = fromFirestoreValue(nested);
+    }
+    return result;
+  }
+  return null;
+}
+
+export async function getFirestoreDocument(documentPath) {
+  const { projectId } = getServiceAccount();
+  const token = await getAccessToken();
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${documentPath}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to get ${documentPath}: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const parsed = {};
+  for (const [key, value] of Object.entries(payload.fields ?? {})) {
+    parsed[key] = fromFirestoreValue(value);
+  }
+  return parsed;
 }
 
 function toFirestoreValue(value) {

@@ -512,7 +512,29 @@ export async function scrapeAndSaveRatings(options: ScrapeOptions = {}): Promise
 
 export async function getLatestRatingsDaily(): Promise<RatingsDailyDocument | null> {
   const docs = await listDocuments<RatingsDailyDocument>('ratings_daily').catch(() => []);
-  return docs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0] || null;
+  const byDate = [...docs].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const latest = byDate[0] || null;
+  const latestMidrug = byDate.find((doc) => (
+    doc.source !== 'telegram' &&
+    (doc.top20 ?? []).some((row) => Boolean(row.date && row.channel && row.duration > 0))
+  )) || null;
+  const latestTelegram = byDate.find((doc) => (
+    (doc.telegramHouseholds?.length ?? 0) > 0 ||
+    (doc.telegramPrime?.length ?? 0) > 0
+  )) || null;
+
+  if (latestMidrug && latestTelegram) {
+    return {
+      ...latestMidrug,
+      date: String(latestTelegram.date || latestMidrug.date),
+      telegramHouseholds: latestTelegram.telegramHouseholds ?? [],
+      telegramPrime: latestTelegram.telegramPrime ?? [],
+      telegramFetchedAt: latestTelegram.telegramFetchedAt,
+      source: 'both',
+    };
+  }
+
+  return latestMidrug || latestTelegram || latest;
 }
 
 export async function getLatestRatingsWeekly(): Promise<RatingsWeeklyDocument | null> {

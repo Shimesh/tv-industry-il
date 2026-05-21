@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import {
+  getFirestoreDocument,
   loadEnvFile,
   parseScoptRatingsMessage,
   patchFirestoreDocument,
@@ -45,6 +46,11 @@ const client = new TelegramClient(new StringSession(SESSION), API_ID, API_HASH, 
   connectionRetries: 3,
 });
 
+function hasMidrugRows(document) {
+  if (!document?.top20?.length || document.source === 'telegram') return false;
+  return document.top20.some((row) => Boolean(row.date && row.channel && row.duration > 0));
+}
+
 try {
   await client.connect();
   const entity = await client.getEntity(CHANNEL);
@@ -65,16 +71,29 @@ try {
     throw new Error(`No Scopt ratings message found in the latest ${messages.length} Telegram messages`);
   }
 
+  const existing = await getFirestoreDocument(`ratings_daily/${parsed.date}`);
+  const hasMidrug = hasMidrugRows(existing);
   const doc = {
-    ...parsed,
-    source: 'telegram-scopt',
+    date: parsed.date,
+    sourceDate: existing?.sourceDate || parsed.sourceDate,
+    targetAudience: existing?.targetAudience || parsed.targetAudience,
+    telegramHouseholds: parsed.telegramHouseholds,
+    telegramPrime: parsed.telegramPrime,
+    telegramFetchedAt: parsed.telegramFetchedAt,
+    source: hasMidrug ? 'both' : 'telegram',
     sourceMessageId: String(messageId || ''),
   };
+
+  if (!existing?.fetchedAt) doc.fetchedAt = parsed.telegramFetchedAt;
+  if (!hasMidrug) doc.top20 = [];
+  if (existing?.fallbackUsed === undefined) doc.fallbackUsed = false;
 
   await patchFirestoreDocument(`ratings_daily/${doc.date}`, doc);
 
   console.log(`Imported Telegram ratings for ${doc.date}`);
-  console.log(`Rows: ${doc.top20.length}`);
+  console.log(`News rows: ${doc.telegramHouseholds.length}`);
+  console.log(`Prime rows: ${doc.telegramPrime.length}`);
+  console.log(`Preserved Midrug rows: ${hasMidrug ? existing.top20.length : 0}`);
   console.log(`Message ID: ${messageId}`);
 } catch (err) {
   console.error('Telegram ratings import failed:', err.errorMessage || err.message);

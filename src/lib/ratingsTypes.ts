@@ -16,6 +16,7 @@ export type RatingRow = {
 export type TelegramRatingRow = {
   rank: number;
   showName: string;
+  channel?: string;
   viewers: number; // in thousands (e.g. 334 = 334,000)
   ratingPercent: number;
 };

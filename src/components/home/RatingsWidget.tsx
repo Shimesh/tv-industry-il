@@ -60,6 +60,10 @@ export default function RatingsWidget() {
     return { rows: data?.weekly?.top25?.slice(0, 5) ?? [], dataSource: null };
   }, [data, mode]);
 
+  const scoptNews = mode === 'daily' ? (data?.daily?.telegramHouseholds ?? []).slice(0, 3) : [];
+  const scoptPrime = mode === 'daily' ? (data?.daily?.telegramPrime ?? []).slice(0, 3) : [];
+  const hasScoptSections = dataSource === 'midrug' && (scoptNews.length > 0 || scoptPrime.length > 0);
+
   const subtitle = mode === 'daily'
     ? data?.daily?.date
       ? new Date(data.daily.date).toLocaleDateString('he-IL')
@@ -125,6 +129,27 @@ export default function RatingsWidget() {
               </div>
             );
           })}
+          {hasScoptSections ? (
+            <div className="mt-3 grid gap-2 border-t border-white/10 pt-3 sm:grid-cols-2">
+              {[
+                { title: 'חדשות Scopt', rows: scoptNews },
+                { title: 'פריים טיים Scopt', rows: scoptPrime },
+              ].map((section) => section.rows.length > 0 ? (
+                <div key={section.title} className="rounded-xl border border-blue-300/15 bg-blue-950/20 p-2.5">
+                  <p className="mb-2 text-[11px] font-black text-blue-100">{section.title}</p>
+                  <div className="space-y-1.5">
+                    {section.rows.map((row) => (
+                      <div key={`${section.title}-${row.rank}-${row.showName}`} className="flex items-center gap-2 text-xs">
+                        <span className="w-4 shrink-0 font-black text-blue-300" dir="ltr">{row.rank}</span>
+                        <span className="min-w-0 flex-1 truncate text-white">{row.showName}</span>
+                        <span className="shrink-0 font-black text-fuchsia-200" dir="ltr">{row.ratingPercent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null)}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-purple-100/70">

@@ -1,12 +1,20 @@
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
-import type { RatingsDailyDocument } from '@/lib/ratingsTypes';
-import type { IndustryMasterEntry } from '@/lib/proCardTypes';
-import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
-import { enrichRows } from '@/lib/server/ratings';
+import type { RatingsDailyDocument, TelegramRatingRow } from '@/lib/ratingsTypes';
+import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
 
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const DEFAULT_MESSAGE_LIMIT = 30;
+
+type ParsedScoptRatings = {
+  date: string;
+  sourceDate: string;
+  targetAudience: string;
+  telegramHouseholds: TelegramRatingRow[];
+  telegramPrime: TelegramRatingRow[];
+  telegramFetchedAt: string;
+  fallbackUsed: false;
+};
 
 export type TelegramRatingsResult = {
   daily: {
@@ -41,6 +49,11 @@ function parsePercent(value: string): number {
   return match ? Number(match[1]) : 0;
 }
 
+function parseViewers(value: string): number {
+  const match = value.match(/(\d+(?:\.\d+)?)\s*k\b/i);
+  return match ? Number(match[1]) : 0;
+}
+
 function parseSourceDate(message: string, fallbackDate: Date): string {
   const match = message.match(/לתאריך\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})/u);
   if (!match) return fallbackDate.toISOString().slice(0, 10);
@@ -69,7 +82,7 @@ function extractRankedSegments(section: string): Array<{ sourceRank: number; tex
   });
 }
 
-function splitSections(message: string): Array<{ name: string; text: string }> {
+function splitSections(message: string): { news: string; prime: string } {
   const compact = normalizeWhitespace(message);
   const newsStart = compact.indexOf('בחדשות');
   const primeStart = compact.indexOf('בפריים טיים');
@@ -79,35 +92,29 @@ function splitSections(message: string): Array<{ name: string; text: string }> {
   ].filter((index) => index >= 0);
   const end = endMarkers.length ? Math.min(...endMarkers) : compact.length;
 
-  const sections: Array<{ name: string; text: string }> = [];
-  if (newsStart >= 0) {
-    sections.push({
-      name: 'חדשות',
-      text: compact.slice(newsStart + 'בחדשות'.length, primeStart >= 0 ? primeStart : end),
-    });
-  }
-  if (primeStart >= 0) {
-    sections.push({
-      name: 'פריים טיים',
-      text: compact.slice(primeStart + 'בפריים טיים'.length, end),
-    });
-  }
-  if (!sections.length) sections.push({ name: 'כללי', text: compact.slice(0, end) });
-  return sections;
+  return {
+    news: newsStart >= 0
+      ? compact.slice(newsStart + 'בחדשות'.length, primeStart >= 0 ? primeStart : end)
+      : '',
+    prime: primeStart >= 0
+      ? compact.slice(primeStart + 'בפריים טיים'.length, end)
+      : '',
+  };
 }
 
 function stripTrend(value: string): string {
   return value
-    .replace(/[⬆⬇↔️]+/gu, ' ')
+    .replace(/[⬆⬇↗️↘️]+/gu, ' ')
     .replace(/\b(?:עלייה|ירידה)\b/gu, ' ')
     .trim();
 }
 
-function parseRankedItem(segment: { sourceRank: number; text: string }, date: string) {
+function parseRankedItem(segment: { sourceRank: number; text: string }): TelegramRatingRow | null {
   const text = stripTrend(segment.text);
   const ratingPercent = parsePercent(text);
   if (!ratingPercent) return null;
 
+  const viewers = parseViewers(text);
   const percentIndex = text.search(/\d+(?:\.\d+)?\s*%/);
   const beforePercent = normalizeWhitespace(text.slice(0, percentIndex).replace(/\d+(?:\.\d+)?k\b/gi, ''));
   const afterPercent = normalizeWhitespace(text.slice(percentIndex).replace(/^\d+(?:\.\d+)?\s*%\s*/, ''));
@@ -141,43 +148,44 @@ function parseRankedItem(segment: { sourceRank: number; text: string }, date: st
   if (!showName) return null;
 
   return {
-    rank: 0,
+    rank: segment.sourceRank,
     showName,
     channel,
-    date,
-    duration: 0,
+    viewers,
     ratingPercent,
-    channelTags: [] as string[],
   };
 }
 
-export function parseScoptRatingsMessage(message: string, fallbackDate = new Date()): RatingsDailyDocument | null {
+function parseSection(sectionText: string): TelegramRatingRow[] {
+  return extractRankedSegments(sectionText)
+    .map(parseRankedItem)
+    .filter((row): row is TelegramRatingRow => Boolean(row))
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function hasMidrugRows(document: RatingsDailyDocument | null): boolean {
+  if (!document?.top20?.length || document.source === 'telegram') return false;
+  return document.top20.some((row) => Boolean(row.date && row.channel && row.duration > 0));
+}
+
+export function parseScoptRatingsMessage(message: string, fallbackDate = new Date()): ParsedScoptRatings | null {
   const text = normalizeWhitespace(message);
   if (!text.includes('רייטינג') || !text.includes('Scopt')) return null;
 
   const date = parseSourceDate(text, fallbackDate);
-  const rows: NonNullable<RatingsDailyDocument['top20']> = [];
+  const sections = splitSections(text);
+  const telegramHouseholds = parseSection(sections.news);
+  const telegramPrime = parseSection(sections.prime);
 
-  for (const section of splitSections(text)) {
-    for (const segment of extractRankedSegments(section.text)) {
-      const row = parseRankedItem(segment, date);
-      if (row) {
-        rows.push({
-          ...row,
-          channelTags: [section.name, row.channel].filter(Boolean),
-        });
-      }
-    }
-  }
-
-  if (!rows.length) return null;
+  if (!telegramHouseholds.length && !telegramPrime.length) return null;
 
   return {
     date,
     sourceDate: formatSourceDate(date),
     targetAudience: TARGET_AUDIENCE,
-    top20: rows.slice(0, 20).map((row, index) => ({ ...row, rank: index + 1 })),
-    fetchedAt: new Date().toISOString(),
+    telegramHouseholds,
+    telegramPrime,
+    telegramFetchedAt: new Date().toISOString(),
     fallbackUsed: false,
   };
 }
@@ -211,7 +219,7 @@ export async function importLatestTelegramRatings(): Promise<TelegramRatingsResu
     const entity = await client.getEntity(channel);
     const messages = await client.getMessages(entity, { limit: Number.isFinite(limit) ? limit : DEFAULT_MESSAGE_LIMIT });
 
-    let parsed: RatingsDailyDocument | null = null;
+    let parsed: ParsedScoptRatings | null = null;
     let sourceMessageId = '';
 
     for (const message of messages) {
@@ -226,25 +234,33 @@ export async function importLatestTelegramRatings(): Promise<TelegramRatingsResu
       throw new Error(`No Scopt ratings message found in the latest ${messages.length} Telegram messages`);
     }
 
-    const masterEntries = await listDocuments<IndustryMasterEntry>('industry_master').catch(() => []);
-    const enriched = enrichRows(parsed.top20, masterEntries);
-    const doc: RatingsDailyDocument & { sourceMessageId: string } = {
-      ...parsed,
-      top20: enriched.rows,
-      source: 'telegram',
+    const existing = await getDocument<RatingsDailyDocument>(`ratings_daily/${parsed.date}`).catch(() => null);
+    const hasMidrug = hasMidrugRows(existing);
+    const patch: Record<string, string | boolean | number | null | object[]> = {
+      date: parsed.date,
+      sourceDate: existing?.sourceDate || parsed.sourceDate,
+      targetAudience: existing?.targetAudience || parsed.targetAudience,
+      telegramHouseholds: parsed.telegramHouseholds,
+      telegramPrime: parsed.telegramPrime,
+      telegramFetchedAt: parsed.telegramFetchedAt,
+      source: hasMidrug ? 'both' : 'telegram',
       sourceMessageId,
     };
 
-    await patchDocument(`ratings_daily/${doc.date}`, doc as unknown as Record<string, never>);
+    if (!existing?.fetchedAt) patch.fetchedAt = parsed.telegramFetchedAt;
+    if (!hasMidrug) patch.top20 = [];
+    if (existing?.fallbackUsed === undefined) patch.fallbackUsed = false;
+
+    await patchDocument(`ratings_daily/${parsed.date}`, patch as never);
 
     return {
       daily: {
-        date: doc.date,
-        sourceDate: doc.sourceDate || doc.date,
+        date: parsed.date,
+        sourceDate: parsed.sourceDate,
         fallbackUsed: false,
-        rows: enriched.rows.length,
-        matched: enriched.matched,
-        unmatched: enriched.unmatched,
+        rows: parsed.telegramHouseholds.length + parsed.telegramPrime.length,
+        matched: 0,
+        unmatched: parsed.telegramHouseholds.length + parsed.telegramPrime.length,
       },
       source: 'telegram',
       sourceMessageId,

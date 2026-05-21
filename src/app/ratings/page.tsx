@@ -20,7 +20,23 @@ function formatDate(value: string | undefined): string {
   return new Date(parsed).toLocaleDateString('he-IL');
 }
 
-function RatingsTable({ rows }: { rows: RatingRow[] }) {
+function normalizeRatingName(value: string): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim();
+}
+
+function findScoptMatch(row: RatingRow, telegramRows: TelegramRatingRow[]): TelegramRatingRow | null {
+  const names = [
+    normalizeRatingName(row.showName),
+    normalizeRatingName(row.canonicalShowName || ''),
+  ].filter(Boolean);
+
+  return telegramRows.find((telegramRow) => names.includes(normalizeRatingName(telegramRow.showName))) || null;
+}
+
+function RatingsTable({ rows, telegramRows = [] }: { rows: RatingRow[]; telegramRows?: TelegramRatingRow[] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
       <div className="overflow-x-auto">
@@ -36,7 +52,11 @@ function RatingsTable({ rows }: { rows: RatingRow[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const scoptMatch = findScoptMatch(row, telegramRows);
+              const showScoptComparison = scoptMatch && scoptMatch.ratingPercent !== row.ratingPercent;
+
+              return (
               <tr key={`${row.rank}-${row.showName}-${row.date}`} className="align-middle text-sm text-slate-100">
                 <td className="px-4 py-3">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 font-black text-purple-100" dir="ltr">
@@ -51,6 +71,13 @@ function RatingsTable({ rows }: { rows: RatingRow[] }) {
                       {row.canonicalShowName && row.canonicalShowName !== row.showName ? (
                         <div className="mt-0.5 text-xs text-slate-400">{row.showName}</div>
                       ) : null}
+                      {scoptMatch ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-blue-200/80">
+                          <span>Scopt</span>
+                          <span dir="ltr">{scoptMatch.ratingPercent}%</span>
+                          {scoptMatch.viewers ? <span dir="ltr">{scoptMatch.viewers}K</span> : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </td>
@@ -58,12 +85,20 @@ function RatingsTable({ rows }: { rows: RatingRow[] }) {
                 <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(row.date)}</td>
                 <td className="px-4 py-3 text-slate-300" dir="ltr">{row.duration} דק׳</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-3 py-1.5 font-black text-fuchsia-100" dir="ltr">
-                    {row.ratingPercent}%
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-3 py-1.5 font-black text-fuchsia-100" dir="ltr">
+                      {row.ratingPercent}%
+                    </span>
+                    {showScoptComparison ? (
+                      <span className="inline-flex rounded-lg bg-blue-400/15 px-2.5 py-1 text-xs font-black text-blue-100" dir="ltr">
+                        Scopt {scoptMatch.ratingPercent}%
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -207,7 +242,13 @@ export default function RatingsPage() {
             טוען נתוני רייטינג
           </div>
         ) : rows.length > 0 ? (
-          <RatingsTable rows={rows} />
+          <RatingsTable
+            rows={rows}
+            telegramRows={[
+              ...(data?.daily?.telegramHouseholds ?? []),
+              ...(data?.daily?.telegramPrime ?? []),
+            ]}
+          />
         ) : (
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-8 text-center text-slate-300">
             עדיין אין נתוני רייטינג זמינים.
