@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "telegram:auth": "node scripts/telegram-auth.mjs",
+    "telegram:check": "node scripts/telegram-check-channel.mjs",
+    "telegram:import-ratings": "node scripts/telegram-import-ratings.mjs",
     "chat:server": "npm --prefix realtime-server run dev"
   },
   "dependencies": {

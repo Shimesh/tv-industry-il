@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
 import { scrapeAndSaveRatings } from '@/lib/server/ratings';
+import { hasTelegramRatingsConfig, importLatestTelegramRatings } from '@/lib/server/telegramRatings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,24 @@ async function tryFirebaseFunction(): Promise<{ success: boolean; date?: string;
 export async function POST(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
   if (authUser instanceof NextResponse) return authUser;
+
+  if (hasTelegramRatingsConfig()) {
+    try {
+      const telegramResult = await importLatestTelegramRatings();
+      await Promise.all([
+        recordRouteMetric({ route: '/api/admin/ratings-sync', ok: true, statusCode: 200 }),
+        recordJobMetric({
+          job: 'ratings-scrape',
+          ok: true,
+          message: `סנכרון רייטינג מטלגרם הושלם: ${telegramResult.daily.rows} תוכניות`,
+          detail: telegramResult,
+        }),
+      ]);
+      return NextResponse.json({ success: true, ...telegramResult });
+    } catch (telegramError) {
+      console.log('Telegram ratings import failed, falling back:', telegramError instanceof Error ? telegramError.message : telegramError);
+    }
+  }
 
   try {
     const fbResult = await tryFirebaseFunction();

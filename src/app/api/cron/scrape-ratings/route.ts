@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
 import { scrapeAndSaveRatings } from '@/lib/server/ratings';
+import { hasTelegramRatingsConfig, importLatestTelegramRatings } from '@/lib/server/telegramRatings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,24 @@ export async function GET(request: NextRequest) {
   }
 
   const forceWeekly = request.nextUrl.searchParams.get('forceWeekly') === '1';
+
+  if (hasTelegramRatingsConfig()) {
+    try {
+      const telegramResult = await importLatestTelegramRatings();
+      await Promise.all([
+        recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
+        recordJobMetric({
+          job: 'ratings-scrape',
+          ok: true,
+          message: `סנכרון רייטינג מטלגרם הושלם: ${telegramResult.daily.rows} תוכניות`,
+          detail: telegramResult,
+        }),
+      ]);
+      return NextResponse.json({ success: true, ...telegramResult });
+    } catch (telegramError) {
+      console.log('Telegram ratings import failed, falling back:', telegramError instanceof Error ? telegramError.message : telegramError);
+    }
+  }
 
   try {
     const fbResult = await tryFirebaseFunction();

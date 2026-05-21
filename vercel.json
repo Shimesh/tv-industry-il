@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/cron/scrape-ratings",
-      "schedule": "15 7 * * *"
+      "schedule": "10 6 * * *"
     }
   ]
 }
