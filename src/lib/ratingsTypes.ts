@@ -13,6 +13,13 @@ export type RatingRow = {
   channelTags?: string[];
 };
 
+export type TelegramRatingRow = {
+  rank: number;
+  showName: string;
+  viewers: number; // in thousands (e.g. 334 = 334,000)
+  ratingPercent: number;
+};
+
 export type RatingsDailyDocument = {
   id?: string;
   date: string;
@@ -21,6 +28,10 @@ export type RatingsDailyDocument = {
   fetchedAt: string;
   sourceDate?: string;
   fallbackUsed?: boolean;
+  telegramHouseholds?: TelegramRatingRow[];
+  telegramPrime?: TelegramRatingRow[];
+  telegramFetchedAt?: string;
+  source?: 'midrug' | 'telegram' | 'both';
 };
 
 export type RatingsWeeklyDocument = {

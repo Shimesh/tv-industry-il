@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, RefreshCw, Trophy } from 'lucide-react';
 import RatingLogo from '@/components/ratings/RatingLogo';
-import type { RatingRow, RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
+import type { RatingRow, RatingsApiResponse, RatingsMode, TelegramRatingRow } from '@/lib/ratingsTypes';
 
 const DISCLAIMER = [
   'הנתונים נאספו והופקו על ידי חברת קאנטר מדיה עבור הוועדה הישראלית למדרוג.',
@@ -95,6 +95,16 @@ export default function RatingsPage() {
   }, []);
 
   const rows = useMemo(() => mode === 'daily' ? data?.daily?.top20 ?? [] : data?.weekly?.top25 ?? [], [data, mode]);
+
+  const sourceBadge = useMemo(() => {
+    if (mode !== 'daily') return null;
+    const hasTelegram = (data?.daily?.telegramHouseholds?.length ?? 0) > 0;
+    const hasMidrug = (data?.daily?.top20?.length ?? 0) > 0;
+    if (hasMidrug && hasTelegram) return 'מקור: Midrug + Scopt';
+    if (hasMidrug) return 'מקור: הוועדה למדרוג';
+    return null;
+  }, [data, mode]);
+
   const meta = mode === 'daily'
     ? `Top 20 · ${formatDate(data?.daily?.date)}`
     : `Top 25 · ${data?.weekly?.weekRange || 'השבוע האחרון'}`;
@@ -143,9 +153,53 @@ export default function RatingsPage() {
             <h2 className="text-xl font-black">{mode === 'daily' ? 'רייטינג יומי' : 'רייטינג שבועי'}</h2>
           </div>
           <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-bold text-slate-300" dir="ltr">
-            {meta}
+            {sourceBadge ?? meta}
           </span>
         </div>
+
+        {mode === 'daily' && (data?.daily?.telegramHouseholds?.length ?? 0) > 0 ? (
+          <div className="mb-6 rounded-2xl border border-blue-500/30 bg-blue-950/30 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-full bg-blue-600/40 px-2.5 py-1 text-xs font-black text-blue-200">Scopt</span>
+              <span className="text-sm font-bold text-blue-100">נתונים מוקדמים</span>
+              {data?.daily?.telegramFetchedAt ? (
+                <span className="text-xs text-blue-300/60" dir="ltr">{new Date(data.daily.telegramFetchedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {(data?.daily?.telegramHouseholds?.length ?? 0) > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-bold text-blue-200/70">בחשבות</p>
+                  <div className="space-y-1.5">
+                    {(data!.daily!.telegramHouseholds as TelegramRatingRow[]).map((r) => (
+                      <div key={r.rank} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm">
+                        <span className="w-4 shrink-0 font-black text-blue-300" dir="ltr">{r.rank}</span>
+                        <span className="flex-1 truncate text-white">{r.showName}</span>
+                        <span className="shrink-0 text-xs text-blue-200/60" dir="ltr">{r.viewers}K</span>
+                        <span className="shrink-0 font-black text-fuchsia-300" dir="ltr">{r.ratingPercent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {(data?.daily?.telegramPrime?.length ?? 0) > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-bold text-blue-200/70">בפריים</p>
+                  <div className="space-y-1.5">
+                    {(data!.daily!.telegramPrime as TelegramRatingRow[]).map((r) => (
+                      <div key={r.rank} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm">
+                        <span className="w-4 shrink-0 font-black text-blue-300" dir="ltr">{r.rank}</span>
+                        <span className="flex-1 truncate text-white">{r.showName}</span>
+                        <span className="shrink-0 text-xs text-blue-200/60" dir="ltr">{r.viewers}K</span>
+                        <span className="shrink-0 font-black text-fuchsia-300" dir="ltr">{r.ratingPercent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="flex min-h-64 items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 text-purple-100/75">

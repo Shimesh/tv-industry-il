@@ -121,3 +121,8 @@ async function startDailyRun() {
 const delay = msUntilNext(10, 15);
 console.log(`[${ts()}] Watcher started. Next daily run in ${Math.round(delay / 60000)} min. Listening for triggers...`);
 setTimeout(startDailyRun, delay);
+
+// Start Telegram listener (non-fatal if Telegram creds not configured)
+import('./scrape-ratings-telegram.mjs').then(mod =>
+  mod.startTelegramListener(db)
+).catch(err => console.log(`[${ts()}] Telegram listener failed to start: ${err.message}`));

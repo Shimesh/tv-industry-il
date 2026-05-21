@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, BarChart3, RefreshCw } from 'lucide-react';
 import RatingLogo from '@/components/ratings/RatingLogo';
 import type { RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
+import type { TelegramRatingRow } from '@/lib/ratingsTypes';
 
 const MODES: Array<{ key: RatingsMode; label: string }> = [
   { key: 'daily', label: 'רייטינג יומי' },
@@ -34,9 +35,29 @@ export default function RatingsWidget() {
     };
   }, []);
 
-  const rows = useMemo(() => {
-    if (mode === 'daily') return data?.daily?.top20?.slice(0, 5) ?? [];
-    return data?.weekly?.top25?.slice(0, 5) ?? [];
+  const { rows, dataSource } = useMemo(() => {
+    if (mode === 'daily') {
+      if (data?.daily?.top20?.length) {
+        return {
+          rows: data.daily.top20.slice(0, 5),
+          dataSource: 'midrug' as const,
+        };
+      }
+      if (data?.daily?.telegramHouseholds?.length) {
+        const telegramRows = (data.daily.telegramHouseholds as TelegramRatingRow[]).slice(0, 5).map((r) => ({
+          rank: r.rank,
+          showName: r.showName,
+          channel: '',
+          date: data.daily?.date ?? '',
+          duration: 0,
+          ratingPercent: r.ratingPercent,
+          _viewers: r.viewers,
+        }));
+        return { rows: telegramRows, dataSource: 'telegram' as const };
+      }
+      return { rows: [], dataSource: null };
+    }
+    return { rows: data?.weekly?.top25?.slice(0, 5) ?? [], dataSource: null };
   }, [data, mode]);
 
   const subtitle = mode === 'daily'
@@ -54,6 +75,9 @@ export default function RatingsWidget() {
             <h2 className="text-base font-black text-white">מדד הרייטינג</h2>
           </div>
           <p className="mt-1 text-xs text-purple-100/65">{subtitle}</p>
+          {dataSource === 'telegram' && (
+            <span className="mt-1 text-[10px] text-blue-300/80">מקור: Scopt (מוקדם)</span>
+          )}
         </div>
         <div className="grid grid-cols-2 rounded-lg border border-white/10 bg-black/25 p-1 text-[11px] font-bold">
           {MODES.map((item) => (
@@ -78,19 +102,29 @@ export default function RatingsWidget() {
         </div>
       ) : rows.length > 0 ? (
         <div className="space-y-2.5">
-          {rows.map((row) => (
-            <div key={`${mode}-${row.rank}-${row.showName}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-2.5">
-              <div className="w-5 shrink-0 text-center text-sm font-black text-purple-200" dir="ltr">{row.rank}</div>
-              <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} channel={row.channel} compact />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-white">{row.canonicalShowName || row.showName}</p>
-                <p className="truncate text-xs text-purple-100/60">{row.channel}</p>
+          {rows.map((row) => {
+            const isTelegram = dataSource === 'telegram';
+            const viewersK = (row as { _viewers?: number })._viewers;
+            return (
+              <div key={`${mode}-${row.rank}-${row.showName}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-2.5">
+                <div className="w-5 shrink-0 text-center text-sm font-black text-purple-200" dir="ltr">{row.rank}</div>
+                {!isTelegram && (
+                  <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName} channel={row.channel} compact />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white">{(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName}</p>
+                  {isTelegram && viewersK != null ? (
+                    <p className="truncate text-xs text-blue-200/70">{viewersK}K צופים</p>
+                  ) : (
+                    <p className="truncate text-xs text-purple-100/60">{row.channel}</p>
+                  )}
+                </div>
+                <div className="rounded-lg bg-fuchsia-400/15 px-2.5 py-1 text-sm font-black text-fuchsia-100" dir="ltr">
+                  {row.ratingPercent}%
+                </div>
               </div>
-              <div className="rounded-lg bg-fuchsia-400/15 px-2.5 py-1 text-sm font-black text-fuchsia-100" dir="ltr">
-                {row.ratingPercent}%
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-purple-100/70">
