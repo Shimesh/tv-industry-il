@@ -141,6 +141,8 @@ export default function Navigation() {
   }, []);
 
   const filteredLinks = navLinks.filter((link) => !link.auth || hasAuthUi);
+  const desktopMainLinks = filteredLinks.filter((link) => !['/world-cup', '/tools'].includes(link.href));
+  const desktopPriorityLinks = filteredLinks.filter((link) => ['/world-cup', '/tools'].includes(link.href));
 
   const renderNavLink = (link: NavLink, compact = false) => {
     const isActive = pathname === link.href;
@@ -231,13 +233,12 @@ export default function Navigation() {
           </Link>
 
           <div className="hidden min-w-0 flex-1 items-center justify-center gap-0 overflow-hidden xl:flex">
-            {filteredLinks.map((link) => renderNavLink(link))}
-            {showAdminLink ? (
-              <>
-                <span className="mx-1 h-7 w-px shrink-0 bg-[var(--theme-border)]" />
-                {renderAdminLink()}
-              </>
-            ) : null}
+            {desktopMainLinks.map((link) => renderNavLink(link))}
+          </div>
+
+          <div className="hidden shrink-0 items-center gap-1 xl:flex">
+            {desktopPriorityLinks.map((link) => renderNavLink(link))}
+            {showAdminLink ? renderAdminLink() : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">

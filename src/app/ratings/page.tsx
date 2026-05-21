@@ -6,6 +6,8 @@ import { ArrowRight, BarChart3, RefreshCw, Trophy } from 'lucide-react';
 import RatingLogo from '@/components/ratings/RatingLogo';
 import type { RatingRow, RatingsApiResponse, RatingsMode, TelegramRatingRow } from '@/lib/ratingsTypes';
 
+type TelegramDisplayRow = TelegramRatingRow & { category?: string };
+
 const DISCLAIMER = [
   'הנתונים נאספו והופקו על ידי חברת קאנטר מדיה עבור הוועדה הישראלית למדרוג.',
   'ציטוט הנתונים או פרסומם בציבור מותר ובלבד שיעשה תוך הקפדה על שלמותם ודיוקם של הנתונים ותוך ציון העובדה כי הנתונים נמסרו על ידי הוועדה הישראלית למדרוג והופקו על ידי חברת קנטאר מדיה.',
@@ -27,7 +29,7 @@ function normalizeRatingName(value: string): string {
     .trim();
 }
 
-function findScoptMatch(row: RatingRow, telegramRows: TelegramRatingRow[]): TelegramRatingRow | null {
+function findScoptMatch(row: RatingRow, telegramRows: TelegramDisplayRow[]): TelegramDisplayRow | null {
   const names = [
     normalizeRatingName(row.showName),
     normalizeRatingName(row.canonicalShowName || ''),
@@ -36,7 +38,11 @@ function findScoptMatch(row: RatingRow, telegramRows: TelegramRatingRow[]): Tele
   return telegramRows.find((telegramRow) => names.includes(normalizeRatingName(telegramRow.showName))) || null;
 }
 
-function RatingsTable({ rows, telegramRows = [] }: { rows: RatingRow[]; telegramRows?: TelegramRatingRow[] }) {
+function RatingsTable({ rows, telegramRows = [], telegramDate }: { rows: RatingRow[]; telegramRows?: TelegramDisplayRow[]; telegramDate?: string }) {
+  const scoptOnlyRows = telegramRows.filter((telegramRow) => (
+    !rows.some((row) => findScoptMatch(row, [telegramRow]))
+  ));
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
       <div className="overflow-x-auto">
@@ -99,6 +105,36 @@ function RatingsTable({ rows, telegramRows = [] }: { rows: RatingRow[]; telegram
               </tr>
               );
             })}
+            {scoptOnlyRows.map((row) => (
+              <tr key={`scopt-${row.category || 'all'}-${row.rank}-${row.showName}`} className="align-middle text-sm text-slate-100">
+                <td className="px-4 py-3">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-blue-500/15 px-2 font-black text-blue-100" dir="rtl">
+                    {row.category ? `${row.category} ${row.rank}` : row.rank}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <RatingLogo src={undefined} name={row.showName} channel={row.channel || row.category || 'Scopt'} />
+                    <div className="min-w-0">
+                      <div className="font-bold text-white">{row.showName}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-blue-200/80">
+                        <span>Scopt</span>
+                        {row.category ? <span>{row.category}</span> : null}
+                        {row.viewers ? <span dir="ltr">{row.viewers}K</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-slate-300">{row.channel || '-'}</td>
+                <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(telegramDate)}</td>
+                <td className="px-4 py-3 text-slate-300" dir="ltr">{row.viewers ? `${row.viewers}K צופים` : '-'}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-3 py-1.5 font-black text-fuchsia-100" dir="ltr">
+                    {row.ratingPercent}%
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -130,6 +166,13 @@ export default function RatingsPage() {
   }, []);
 
   const rows = useMemo(() => mode === 'daily' ? data?.daily?.top20 ?? [] : data?.weekly?.top25 ?? [], [data, mode]);
+  const dailyTelegramRows = useMemo<TelegramDisplayRow[]>(() => {
+    if (mode !== 'daily') return [];
+    return [
+      ...((data?.daily?.telegramHouseholds ?? []).map((row) => ({ ...row, category: 'חדשות' }))),
+      ...((data?.daily?.telegramPrime ?? []).map((row) => ({ ...row, category: 'פריים טיים' }))),
+    ];
+  }, [data, mode]);
 
   const sourceBadge = useMemo(() => {
     if (mode !== 'daily') return null;
@@ -192,62 +235,16 @@ export default function RatingsPage() {
           </span>
         </div>
 
-        {mode === 'daily' && (data?.daily?.telegramHouseholds?.length ?? 0) > 0 ? (
-          <div className="mb-6 rounded-2xl border border-blue-500/30 bg-blue-950/30 p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="rounded-full bg-blue-600/40 px-2.5 py-1 text-xs font-black text-blue-200">Scopt</span>
-              <span className="text-sm font-bold text-blue-100">נתונים מוקדמים</span>
-              {data?.daily?.telegramFetchedAt ? (
-                <span className="text-xs text-blue-300/60" dir="ltr">{new Date(data.daily.telegramFetchedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {(data?.daily?.telegramHouseholds?.length ?? 0) > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs font-bold text-blue-200/70">בחשבות</p>
-                  <div className="space-y-1.5">
-                    {(data!.daily!.telegramHouseholds as TelegramRatingRow[]).map((r) => (
-                      <div key={r.rank} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm">
-                        <span className="w-4 shrink-0 font-black text-blue-300" dir="ltr">{r.rank}</span>
-                        <span className="flex-1 truncate text-white">{r.showName}</span>
-                        <span className="shrink-0 text-xs text-blue-200/60" dir="ltr">{r.viewers}K</span>
-                        <span className="shrink-0 font-black text-fuchsia-300" dir="ltr">{r.ratingPercent}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {(data?.daily?.telegramPrime?.length ?? 0) > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs font-bold text-blue-200/70">בפריים</p>
-                  <div className="space-y-1.5">
-                    {(data!.daily!.telegramPrime as TelegramRatingRow[]).map((r) => (
-                      <div key={r.rank} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm">
-                        <span className="w-4 shrink-0 font-black text-blue-300" dir="ltr">{r.rank}</span>
-                        <span className="flex-1 truncate text-white">{r.showName}</span>
-                        <span className="shrink-0 text-xs text-blue-200/60" dir="ltr">{r.viewers}K</span>
-                        <span className="shrink-0 font-black text-fuchsia-300" dir="ltr">{r.ratingPercent}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
         {loading ? (
           <div className="flex min-h-64 items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 text-purple-100/75">
             <RefreshCw className="h-5 w-5 animate-spin" />
             טוען נתוני רייטינג
           </div>
-        ) : rows.length > 0 ? (
+        ) : rows.length > 0 || dailyTelegramRows.length > 0 ? (
           <RatingsTable
             rows={rows}
-            telegramRows={[
-              ...(data?.daily?.telegramHouseholds ?? []),
-              ...(data?.daily?.telegramPrime ?? []),
-            ]}
+            telegramRows={dailyTelegramRows}
+            telegramDate={data?.daily?.date}
           />
         ) : (
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-8 text-center text-slate-300">
