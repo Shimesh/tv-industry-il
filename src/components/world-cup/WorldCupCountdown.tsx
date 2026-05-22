@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Trophy } from 'lucide-react';
-import { WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
+import { fallbackMatches, WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 
 function getDiff() {
@@ -42,9 +42,46 @@ function Digit({ value, label, compact = false }: { value: number; label: string
   );
 }
 
+const FLAG_IMAGE_CODES: Record<string, string> = {
+  mex: 'mx',
+  rsa: 'za',
+  can: 'ca',
+  qat: 'qa',
+  usa: 'us',
+  par: 'py',
+  bra: 'br',
+  mar: 'ma',
+  arg: 'ar',
+  alg: 'dz',
+  ger: 'de',
+  nzl: 'nz',
+  eng: 'gb-eng',
+  cro: 'hr',
+  esp: 'es',
+  jpn: 'jp',
+};
+
+function FlagBadge({ team }: { team: { id: string; nameHe: string; flag: string } }) {
+  const code = FLAG_IMAGE_CODES[team.id];
+  return (
+    <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/95 shadow-lg shadow-black/20">
+      {code ? (
+        <img
+          src={`https://flagcdn.com/w80/${code}.png`}
+          alt={team.nameHe}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <span className="text-3xl leading-none">{team.flag}</span>
+      )}
+    </span>
+  );
+}
+
 export default function WorldCupCountdown({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const { activeMatch } = useWorldCup();
+  const { activeMatch, nextMatch } = useWorldCup();
   const [diff, setDiff] = useState(() => getDiff());
 
   useEffect(() => {
@@ -53,6 +90,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   }, []);
 
   const label = useMemo(() => activeMatch ? 'מונדיאל LIVE' : 'מונדיאל 2026', [activeMatch]);
+  const previewMatch = nextMatch ?? fallbackMatches[0] ?? null;
 
   return (
     <motion.button
@@ -97,6 +135,21 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
           </span>
         )}
       </span>
+      {!compact && previewMatch ? (
+        <span className="relative flex w-full items-center justify-center gap-3 rounded-2xl border border-[#D4AF37]/20 bg-black/20 px-3 py-4 text-center shadow-inner shadow-black/20" dir="rtl">
+          <span className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <FlagBadge team={previewMatch.homeTeam} />
+            <span className="max-w-full truncate text-xs font-black text-white/85">{previewMatch.homeTeam.nameHe}</span>
+          </span>
+          <span className="rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-3 py-1 text-xs font-black tracking-wide text-[#D4AF37]" dir="ltr">
+            VS.
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <FlagBadge team={previewMatch.awayTeam} />
+            <span className="max-w-full truncate text-xs font-black text-white/85">{previewMatch.awayTeam.nameHe}</span>
+          </span>
+        </span>
+      ) : null}
       <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-2 gap-2'}`} dir="ltr">
         <Digit value={diff.days} label="ימים" compact={compact} />
         <Digit value={diff.hours} label="שעות" compact={compact} />

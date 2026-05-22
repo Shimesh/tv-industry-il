@@ -35,14 +35,11 @@ export default function RatingsWidget() {
     };
   }, []);
 
-  const { rows, dataSource } = useMemo(() => {
+  const rows = useMemo(() => {
     if (mode === 'daily') {
-      const unifiedRows = buildUnifiedDailyRatings(data?.daily).slice(0, 5);
-      const hasScopt = unifiedRows.some((row) => row.sources.some((source) => source.name === 'Scopt'));
-      const hasMidrug = unifiedRows.some((row) => row.sources.some((source) => source.name === 'Midrug'));
-      return { rows: unifiedRows, dataSource: hasScopt && hasMidrug ? 'both' as const : hasScopt ? 'telegram' as const : hasMidrug ? 'midrug' as const : null };
+      return buildUnifiedDailyRatings(data?.daily).slice(0, 5);
     }
-    return { rows: data?.weekly?.top25?.slice(0, 5).map((row) => ({ ...row, _source: 'midrug' as const })) ?? [], dataSource: null };
+    return data?.weekly?.top25?.slice(0, 5).map((row) => ({ ...row, _source: 'midrug' as const })) ?? [];
   }, [data, mode]);
 
   const subtitle = mode === 'daily'
@@ -60,7 +57,6 @@ export default function RatingsWidget() {
             <h2 className="text-base font-black text-white">מדד הרייטינג</h2>
           </div>
           <p className="mt-1 text-xs text-purple-100/65">{subtitle}</p>
-          {dataSource ? <span className="mt-1 block text-[10px] text-blue-300/80">מקור מאוחד: {dataSource === 'both' ? 'מדרוג + Scopt' : dataSource === 'telegram' ? 'Scopt' : 'מדרוג'}</span> : null}
         </div>
         <div className="grid grid-cols-2 rounded-lg border border-white/10 bg-black/25 p-1 text-[10px] font-bold">
           {MODES.map((item) => (
