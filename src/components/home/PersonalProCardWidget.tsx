@@ -2,10 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BadgeCheck, Briefcase, ChevronLeft, Sparkles } from 'lucide-react';
+import { BadgeCheck, Briefcase, ChevronLeft, Loader2, Sparkles } from 'lucide-react';
 import type { Contact } from '@/data/contacts';
 import ProCardModal from '@/components/directory/ProCardModal';
 import { useAuth } from '@/contexts/AuthContext';
+
+const STATUS_OPTIONS = [
+  { value: 'available', label: 'פנוי', dot: 'bg-emerald-400', bg: 'bg-emerald-400/15', text: 'text-emerald-200' },
+  { value: 'busy', label: 'תפוס', dot: 'bg-rose-400', bg: 'bg-rose-400/15', text: 'text-rose-200' },
+  { value: 'offline', label: 'לא זמין', dot: 'bg-slate-400', bg: 'bg-slate-400/15', text: 'text-slate-200' },
+] as const;
 
 const deptColors: Record<string, string> = {
   צילום: 'from-blue-500 to-blue-600',
@@ -45,8 +51,9 @@ function diceBearAvatarUrl(seed: string): string {
 }
 
 export default function PersonalProCardWidget() {
-  const { user, profile } = useAuth();
+  const { user, profile, updateUserProfile } = useAuth();
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const contact = useMemo<Contact | null>(() => {
     if (!profile && !user) return null;
@@ -86,14 +93,42 @@ export default function PersonalProCardWidget() {
   const departments = (contact.departments?.length ? contact.departments : contact.department ? [String(contact.department)] : []).filter(Boolean);
   const primaryDepartment = departments[0] || '';
   const avatarUrl = contact.customPhotoURL || contact.photoURL || diceBearAvatarUrl(`${contact.id}-${name}`);
+  const currentStatus = STATUS_OPTIONS.find((option) => option.value === (profile?.status || 'available')) ?? STATUS_OPTIONS[0];
+
+  async function updateStatus(status: typeof STATUS_OPTIONS[number]['value']) {
+    if (!profile || saving) return;
+    setSaving(true);
+    try {
+      await updateUserProfile({ status });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleOpenToWork() {
+    if (!profile || saving) return;
+    setSaving(true);
+    try {
+      await updateUserProfile({ openToWork: !profile.openToWork });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <>
-      <motion.button
-        type="button"
+      <motion.div
         whileHover={{ y: -3, scale: 1.015 }}
         whileTap={{ scale: 0.97, y: 0 }}
         onClick={() => setOpen(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
         dir="rtl"
         className="group relative isolate flex h-[360px] w-full max-w-full cursor-pointer overflow-hidden rounded-[1.5rem] border border-sky-200/20 bg-slate-950/[0.42] p-4 text-right shadow-[0_14px_40px_rgba(14,165,233,0.14),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl transition-all duration-200 hover:border-sky-100/50 hover:shadow-[0_22px_56px_rgba(14,165,233,0.28),0_0_20px_rgba(56,189,248,0.12),inset_0_1px_0_rgba(255,255,255,0.12)]"
       >
@@ -137,6 +172,51 @@ export default function PersonalProCardWidget() {
           </div>
 
           <div className="space-y-2">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-white/55">סטטוס</span>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-200" /> : null}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {STATUS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void updateStatus(option.value);
+                    }}
+                    className={`flex items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-black transition ${
+                      currentStatus.value === option.value ? `${option.bg} ${option.text}` : 'bg-black/20 text-white/55 hover:bg-white/10 hover:text-white'
+                    }`}
+                    aria-pressed={currentStatus.value === option.value}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${option.dot}`} />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void toggleOpenToWork();
+              }}
+              className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-xs font-black transition ${
+                profile?.openToWork
+                  ? 'border-emerald-300/25 bg-emerald-400/15 text-emerald-200'
+                  : 'border-white/10 bg-white/[0.06] text-white/65 hover:bg-white/10'
+              }`}
+              aria-pressed={profile?.openToWork === true}
+            >
+              <span>מחפש עבודה</span>
+              <span className={`relative h-5 w-9 rounded-full transition ${profile?.openToWork ? 'bg-emerald-400' : 'bg-white/20'}`}>
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition ${profile?.openToWork ? 'right-0.5' : 'right-4'}`} />
+              </span>
+            </button>
+
             <div className="flex flex-wrap gap-1.5">
               {roles.slice(0, 3).map((role) => (
                 <span key={role} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[11px] font-bold text-white/75">
@@ -161,7 +241,7 @@ export default function PersonalProCardWidget() {
             </div>
           </div>
         </div>
-      </motion.button>
+      </motion.div>
 
       <AnimatePresence>
         {open && (
