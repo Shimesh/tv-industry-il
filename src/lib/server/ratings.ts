@@ -524,13 +524,16 @@ export async function getLatestRatingsDaily(): Promise<RatingsDailyDocument | nu
   )) || null;
 
   if (latestMidrug && latestTelegram) {
+    const targetDate = String(latestTelegram.date || latestMidrug.date);
+    const sameDateMidrug = String(latestMidrug.date || '') === targetDate;
     return {
       ...latestMidrug,
-      date: String(latestTelegram.date || latestMidrug.date),
+      date: targetDate,
+      top20: sameDateMidrug ? latestMidrug.top20 ?? [] : [],
       telegramHouseholds: latestTelegram.telegramHouseholds ?? [],
       telegramPrime: latestTelegram.telegramPrime ?? [],
       telegramFetchedAt: latestTelegram.telegramFetchedAt,
-      source: 'both',
+      source: sameDateMidrug ? 'both' : 'telegram',
     };
   }
 

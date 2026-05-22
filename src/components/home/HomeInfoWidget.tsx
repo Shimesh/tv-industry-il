@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Cloud, CloudRain, CloudSun, MapPin, Zap } from 'lucide-react';
+import { Cloud, CloudRain, CloudSun, MapPin, Sunrise, Sunset, Zap } from 'lucide-react';
 
 type WeatherKind = 'sunny' | 'rain' | 'thunder' | 'cloudy';
 
@@ -9,10 +9,12 @@ type WeatherState = {
   city: string;
   temperature: number | null;
   code: number | null;
+  sunrise: string | null;
+  sunset: string | null;
   fetchedAt: number;
 };
 
-const WEATHER_CACHE_KEY = 'tv-home-weather-cache-v2';
+const WEATHER_CACHE_KEY = 'tv-home-weather-cache-v3';
 const WEATHER_CACHE_TTL_MS = 25 * 60 * 1000;
 const TEL_AVIV = { latitude: 32.0853, longitude: 34.7818, city: 'תל אביב' };
 
@@ -41,6 +43,8 @@ function readWeatherCache(): WeatherState | null {
         city: parsed.city,
         temperature: typeof parsed.temperature === 'number' ? parsed.temperature : null,
         code: typeof parsed.code === 'number' ? parsed.code : null,
+        sunrise: typeof parsed.sunrise === 'string' ? parsed.sunrise : null,
+        sunset: typeof parsed.sunset === 'string' ? parsed.sunset : null,
         fetchedAt: parsed.fetchedAt,
       };
     }
@@ -97,15 +101,24 @@ async function fetchWeather(): Promise<WeatherState> {
   const [city, weatherResponse] = await Promise.all([
     fetchCity(position.latitude, position.longitude, position.fallback),
     fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current=temperature_2m,weather_code&timezone=auto`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`,
     ),
   ]);
   const weatherData = await weatherResponse.json();
   const current = weatherData?.current;
   const temperature = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : null;
   const code = typeof current?.weather_code === 'number' ? current.weather_code : null;
+  const sunrise = typeof weatherData?.daily?.sunrise?.[0] === 'string' ? weatherData.daily.sunrise[0] : null;
+  const sunset = typeof weatherData?.daily?.sunset?.[0] === 'string' ? weatherData.daily.sunset[0] : null;
 
-  return { city, temperature, code, fetchedAt: Date.now() };
+  return { city, temperature, code, sunrise, sunset, fetchedAt: Date.now() };
+}
+
+function formatSunTime(value: string | null | undefined): string {
+  if (!value) return '--:--';
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return '--:--';
+  return new Date(parsed).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 }
 
 function WeatherAnimation({ kind, heatwave }: { kind: WeatherKind; heatwave: boolean }) {
@@ -187,7 +200,7 @@ export default function HomeInfoWidget() {
         writeWeatherCache(nextWeather);
       })
       .catch(() => {
-        const fallbackWeather = { city: TEL_AVIV.city, temperature: null, code: null, fetchedAt: Date.now() };
+        const fallbackWeather = { city: TEL_AVIV.city, temperature: null, code: null, sunrise: null, sunset: null, fetchedAt: Date.now() };
         if (!cancelled) {
           setWeather(fallbackWeather);
           writeWeatherCache(fallbackWeather);
@@ -213,7 +226,7 @@ export default function HomeInfoWidget() {
   return (
     <div
       dir="rtl"
-      className={`relative isolate flex h-[148px] w-full max-w-full items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
+      className={`relative isolate flex h-[360px] w-full max-w-full items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
         heatwave
           ? 'border-orange-300/35 bg-orange-950/35 shadow-orange-500/20'
           : 'border-white/10 bg-slate-950/[0.42] shadow-black/25'
@@ -228,26 +241,45 @@ export default function HomeInfoWidget() {
       />
       {heatwave ? <span className="pointer-events-none absolute inset-4 rounded-[1.25rem] border border-orange-300/20 animate-ping" /> : null}
 
-      <div className="relative flex w-full items-center justify-between gap-5">
-        <div className="text-right">
-          <p className="text-xs font-black uppercase tracking-wide text-white/45">Live Info</p>
-          <div className="mt-1 flex items-end gap-2">
-            <span className="font-mono text-3xl font-black leading-none text-white" dir="ltr">
-              {clock.time}
-            </span>
-            <span className="pb-0.5 font-mono text-sm font-bold text-white/55" dir="ltr">
-              {clock.date}
-            </span>
+      <div className="relative flex h-full w-full flex-col justify-between gap-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-right">
+            <p className="text-xs font-black uppercase tracking-wide text-white/45">Live Info</p>
+            <div className="mt-1 flex items-end gap-2">
+              <span className="font-mono text-3xl font-black leading-none text-white" dir="ltr">
+                {clock.time}
+              </span>
+              <span className="pb-0.5 font-mono text-sm font-bold text-white/55" dir="ltr">
+                {clock.date}
+              </span>
+            </div>
+            <div className="mt-3 flex items-center gap-1.5 text-sm font-bold text-white/72">
+              <MapPin className="h-4 w-4 text-[var(--theme-accent)]" />
+              <span>{weather?.city ?? 'תל אביב'}</span>
+              <span className="text-white/35">·</span>
+              <span dir="ltr">{typeof weather?.temperature === 'number' ? `${weather.temperature}°C` : '--°C'}</span>
+            </div>
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-sm font-bold text-white/72">
-            <MapPin className="h-4 w-4 text-[var(--theme-accent)]" />
-            <span>{weather?.city ?? 'תל אביב'}</span>
-            <span className="text-white/35">·</span>
-            <span dir="ltr">{typeof weather?.temperature === 'number' ? `${weather.temperature}°C` : '--°C'}</span>
-          </div>
+
+          <WeatherAnimation kind={weatherKind} heatwave={heatwave} />
         </div>
 
-        <WeatherAnimation kind={weatherKind} heatwave={heatwave} />
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold text-white/75">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-amber-200">
+              <Sunrise className="h-4 w-4" />
+              זריחה
+            </div>
+            <div className="font-mono text-xl font-black text-white" dir="ltr">{formatSunTime(weather?.sunrise)}</div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-orange-200">
+              <Sunset className="h-4 w-4" />
+              שקיעה
+            </div>
+            <div className="font-mono text-xl font-black text-white" dir="ltr">{formatSunTime(weather?.sunset)}</div>
+          </div>
+        </div>
       </div>
     </div>
   );

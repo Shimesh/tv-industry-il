@@ -63,7 +63,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden rounded-[1.5rem] border text-right backdrop-blur-2xl transition-all duration-200 hover:border-[#D4AF37]/60 ${
         compact
           ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 px-2 py-2 sm:max-w-none'
-          : 'h-[148px] w-full max-w-full flex-col justify-between gap-3 p-4'
+          : 'h-[360px] w-full max-w-full flex-col justify-between gap-4 p-4'
       }`}
       style={{
         borderColor: activeMatch ? 'color-mix(in srgb, var(--wc-gold, #D4AF37) 45%, transparent)' : 'rgba(255,255,255,.10)',
@@ -97,7 +97,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
           </span>
         )}
       </span>
-      <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-2'}`} dir="ltr">
+      <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-2 gap-2'}`} dir="ltr">
         <Digit value={diff.days} label="ימים" compact={compact} />
         <Digit value={diff.hours} label="שעות" compact={compact} />
         <Digit value={diff.minutes} label="דקות" compact={compact} />

@@ -62,8 +62,10 @@ export function buildUnifiedDailyRatings(daily: RatingsDailyDocument | null | un
 
   const unified = new Map<string, UnifiedRatingRow>();
   const midrugIndex = new Map<string, UnifiedRatingRow>();
+  const targetDate = String(daily.date || '');
 
   for (const row of daily.top20 ?? []) {
+    if (targetDate && row.date && row.date !== targetDate) continue;
     const keys = ratingKeys(row);
     const key = keys[0] || `midrug-${row.rank}-${row.showName}`;
     const item: UnifiedRatingRow = {

@@ -71,7 +71,7 @@ export default function RatingLogo({
   channel?: string;
   compact?: boolean;
 }) {
-  const size = compact ? 'h-10 w-10' : 'h-12 w-12';
+  const size = compact ? 'h-8 w-8' : 'h-12 w-12';
   if (src) {
     return (
       <div className={`${size} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/95 p-1.5`}>
@@ -87,7 +87,7 @@ export default function RatingLogo({
         className={`${size} flex shrink-0 flex-col items-center justify-center rounded-lg border shadow-lg shadow-black/10 ${brand.className}`}
         title={brand.name}
       >
-        <span className={`${compact ? 'text-sm' : 'text-base'} font-black leading-none`} dir="ltr">{brand.label}</span>
+        <span className={`${compact ? 'text-xs' : 'text-base'} font-black leading-none`} dir="ltr">{brand.label}</span>
         {!compact ? <span className="mt-0.5 max-w-full truncate px-1 text-[9px] font-bold leading-none opacity-85">{brand.name}</span> : null}
       </div>
     );

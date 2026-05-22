@@ -105,7 +105,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(300px,390px)_minmax(220px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)] xl:items-stretch">
+            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
               <RatingsWidget />
               <PersonalProCardWidget />
               <WorldCupCountdown />
