@@ -140,9 +140,8 @@ export default function Navigation() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredLinks = navLinks.filter((link) => !link.auth || hasAuthUi);
-  const desktopMainLinks = filteredLinks.filter((link) => !['/world-cup', '/tools'].includes(link.href));
-  const desktopPriorityLinks = filteredLinks.filter((link) => ['/world-cup', '/tools'].includes(link.href));
+  const filteredLinks = navLinks;
+  const desktopLinks = showAdminLink ? [...filteredLinks, adminNavLink] : filteredLinks;
 
   const renderNavLink = (link: NavLink, compact = false) => {
     const isActive = pathname === link.href;
@@ -157,7 +156,7 @@ export default function Navigation() {
           event.preventDefault();
           navigateFromNav(link.href);
         }}
-        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 shrink-0 whitespace-nowrap px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
+        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 whitespace-nowrap px-2 text-[11px] 2xl:h-10 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl font-bold leading-none transition-all ${
           isActive
             ? 'text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
@@ -188,7 +187,7 @@ export default function Navigation() {
         event.preventDefault();
         navigateFromNav(adminNavLink.href);
       }}
-      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-10 shrink-0 whitespace-nowrap px-2 text-xs 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
+      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 whitespace-nowrap px-2 text-[11px] 2xl:h-10 2xl:px-3 2xl:text-sm'} items-center gap-1.5 rounded-xl border font-bold leading-none transition-all ${
         adminIsActive
           ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
           : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
@@ -232,13 +231,8 @@ export default function Navigation() {
             <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text 2xl:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-0 overflow-hidden xl:flex">
-            {desktopMainLinks.map((link) => renderNavLink(link))}
-          </div>
-
-          <div className="hidden shrink-0 items-center gap-1 xl:flex">
-            {desktopPriorityLinks.map((link) => renderNavLink(link))}
-            {showAdminLink ? renderAdminLink() : null}
+          <div className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto px-1 [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden">
+            {desktopLinks.map((link) => link.href === adminNavLink.href ? renderAdminLink() : renderNavLink(link))}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -357,7 +351,7 @@ export default function Navigation() {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] xl:hidden"
+              className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)] lg:hidden"
               aria-label="פתיחת תפריט"
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -367,7 +361,7 @@ export default function Navigation() {
       </div>
 
       {mobileOpen ? (
-        <div className="border-t backdrop-blur-xl xl:hidden" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-nav-bg)' }}>
+        <div className="border-t backdrop-blur-xl lg:hidden" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-nav-bg)' }}>
           <div className="space-y-1 px-4 py-3">
             {filteredLinks.map((link) => renderNavLink(link, true))}
 

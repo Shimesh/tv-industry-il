@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, RefreshCw, Trophy } from 'lucide-react';
 import RatingLogo from '@/components/ratings/RatingLogo';
-import type { RatingRow, RatingsApiResponse, RatingsMode, TelegramRatingRow } from '@/lib/ratingsTypes';
-
-type TelegramDisplayRow = TelegramRatingRow & { category?: string };
+import type { RatingRow, RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
+import { buildUnifiedDailyRatings, sourceSummary, type UnifiedRatingRow } from '@/lib/ratingsMerge';
 
 const DISCLAIMER = [
   'הנתונים נאספו והופקו על ידי חברת קאנטר מדיה עבור הוועדה הישראלית למדרוג.',
@@ -22,27 +21,7 @@ function formatDate(value: string | undefined): string {
   return new Date(parsed).toLocaleDateString('he-IL');
 }
 
-function normalizeRatingName(value: string): string {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '')
-    .trim();
-}
-
-function findScoptMatch(row: RatingRow, telegramRows: TelegramDisplayRow[]): TelegramDisplayRow | null {
-  const names = [
-    normalizeRatingName(row.showName),
-    normalizeRatingName(row.canonicalShowName || ''),
-  ].filter(Boolean);
-
-  return telegramRows.find((telegramRow) => names.includes(normalizeRatingName(telegramRow.showName))) || null;
-}
-
-function RatingsTable({ rows, telegramRows = [], telegramDate }: { rows: RatingRow[]; telegramRows?: TelegramDisplayRow[]; telegramDate?: string }) {
-  const scoptOnlyRows = telegramRows.filter((telegramRow) => (
-    !rows.some((row) => findScoptMatch(row, [telegramRow]))
-  ));
-
+function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
       <div className="overflow-x-auto">
@@ -51,22 +30,23 @@ function RatingsTable({ rows, telegramRows = [], telegramDate }: { rows: RatingR
             <tr>
               <th className="px-4 py-3 font-bold">דירוג</th>
               <th className="px-4 py-3 font-bold">תוכנית</th>
-              <th className="px-4 py-3 font-bold">ערוץ/משדר</th>
+              <th className="px-4 py-3 font-bold">ערוץ/קטגוריה</th>
               <th className="px-4 py-3 font-bold">תאריך</th>
-              <th className="px-4 py-3 font-bold">משך</th>
+              <th className="px-4 py-3 font-bold">מקור</th>
               <th className="px-4 py-3 font-bold">שיעור צפייה</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
             {rows.map((row) => {
-              const scoptMatch = findScoptMatch(row, telegramRows);
-              const showScoptComparison = scoptMatch && scoptMatch.ratingPercent !== row.ratingPercent;
+              const unifiedRow = row as UnifiedRatingRow;
+              const sources = Array.isArray(unifiedRow.sources) ? unifiedRow.sources : [{ name: 'Midrug' as const, ratingPercent: row.ratingPercent }];
+              const hasDifferentValues = new Set(sources.map((source) => source.ratingPercent)).size > 1;
 
               return (
               <tr key={`${row.rank}-${row.showName}-${row.date}`} className="align-middle text-sm text-slate-100">
                 <td className="px-4 py-3">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 font-black text-purple-100" dir="ltr">
-                    {row.rank}
+                    {unifiedRow.displayRank || row.rank}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -77,64 +57,39 @@ function RatingsTable({ rows, telegramRows = [], telegramDate }: { rows: RatingR
                       {row.canonicalShowName && row.canonicalShowName !== row.showName ? (
                         <div className="mt-0.5 text-xs text-slate-400">{row.showName}</div>
                       ) : null}
-                      {scoptMatch ? (
+                      {hasDifferentValues ? (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-blue-200/80">
-                          <span>Scopt</span>
-                          <span dir="ltr">{scoptMatch.ratingPercent}%</span>
-                          {scoptMatch.viewers ? <span dir="ltr">{scoptMatch.viewers}K</span> : null}
+                          {sources.map((source) => (
+                            <span key={`${source.name}-${source.category || 'all'}-${source.ratingPercent}`} dir="ltr">
+                              {source.name}{source.category ? ` ${source.category}` : ''} {source.ratingPercent}%
+                            </span>
+                          ))}
                         </div>
                       ) : null}
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-300">{row.channel}</td>
+                <td className="px-4 py-3 text-slate-300">
+                  {row.channel}
+                  {unifiedRow.category ? <span className="mr-2 rounded-full bg-blue-400/10 px-2 py-0.5 text-xs text-blue-200">{unifiedRow.category}</span> : null}
+                </td>
                 <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(row.date)}</td>
-                <td className="px-4 py-3 text-slate-300" dir="ltr">{row.duration} דק׳</td>
+                <td className="px-4 py-3 text-slate-300">
+                  <div className="flex flex-wrap gap-1.5">
+                    <span>{sourceSummary(unifiedRow) || 'מדרוג'}</span>
+                    {unifiedRow.viewers ? <span dir="ltr">{unifiedRow.viewers}K</span> : null}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-3 py-1.5 font-black text-fuchsia-100" dir="ltr">
                       {row.ratingPercent}%
                     </span>
-                    {showScoptComparison ? (
-                      <span className="inline-flex rounded-lg bg-blue-400/15 px-2.5 py-1 text-xs font-black text-blue-100" dir="ltr">
-                        Scopt {scoptMatch.ratingPercent}%
-                      </span>
-                    ) : null}
                   </div>
                 </td>
               </tr>
               );
             })}
-            {scoptOnlyRows.map((row) => (
-              <tr key={`scopt-${row.category || 'all'}-${row.rank}-${row.showName}`} className="align-middle text-sm text-slate-100">
-                <td className="px-4 py-3">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-blue-500/15 px-2 font-black text-blue-100" dir="rtl">
-                    {row.category ? `${row.category} ${row.rank}` : row.rank}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <RatingLogo src={undefined} name={row.showName} channel={row.channel || row.category || 'Scopt'} />
-                    <div className="min-w-0">
-                      <div className="font-bold text-white">{row.showName}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-blue-200/80">
-                        <span>Scopt</span>
-                        {row.category ? <span>{row.category}</span> : null}
-                        {row.viewers ? <span dir="ltr">{row.viewers}K</span> : null}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-300">{row.channel || '-'}</td>
-                <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(telegramDate)}</td>
-                <td className="px-4 py-3 text-slate-300" dir="ltr">{row.viewers ? `${row.viewers}K צופים` : '-'}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-3 py-1.5 font-black text-fuchsia-100" dir="ltr">
-                    {row.ratingPercent}%
-                  </span>
-                </td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>
@@ -165,14 +120,9 @@ export default function RatingsPage() {
     };
   }, []);
 
-  const rows = useMemo(() => mode === 'daily' ? data?.daily?.top20 ?? [] : data?.weekly?.top25 ?? [], [data, mode]);
-  const dailyTelegramRows = useMemo<TelegramDisplayRow[]>(() => {
-    if (mode !== 'daily') return [];
-    return [
-      ...((data?.daily?.telegramHouseholds ?? []).map((row) => ({ ...row, category: 'חדשות' }))),
-      ...((data?.daily?.telegramPrime ?? []).map((row) => ({ ...row, category: 'פריים טיים' }))),
-    ];
-  }, [data, mode]);
+  const rows = useMemo<Array<RatingRow | UnifiedRatingRow>>(() => (
+    mode === 'daily' ? buildUnifiedDailyRatings(data?.daily) : data?.weekly?.top25 ?? []
+  ), [data, mode]);
 
   const sourceBadge = useMemo(() => {
     if (mode !== 'daily') return null;
@@ -184,7 +134,7 @@ export default function RatingsPage() {
   }, [data, mode]);
 
   const meta = mode === 'daily'
-    ? `Top 20 · ${formatDate(data?.daily?.date)}`
+    ? `Top ${rows.length} · ${formatDate(data?.daily?.date)}`
     : `Top 25 · ${data?.weekly?.weekRange || 'השבוע האחרון'}`;
 
   return (
@@ -240,12 +190,8 @@ export default function RatingsPage() {
             <RefreshCw className="h-5 w-5 animate-spin" />
             טוען נתוני רייטינג
           </div>
-        ) : rows.length > 0 || dailyTelegramRows.length > 0 ? (
-          <RatingsTable
-            rows={rows}
-            telegramRows={dailyTelegramRows}
-            telegramDate={data?.daily?.date}
-          />
+        ) : rows.length > 0 ? (
+          <RatingsTable rows={rows} />
         ) : (
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-8 text-center text-slate-300">
             עדיין אין נתוני רייטינג זמינים.

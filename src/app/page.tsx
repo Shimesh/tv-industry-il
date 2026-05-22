@@ -89,22 +89,23 @@ export default function HomePage() {
   return (
     <div className="min-h-screen overflow-x-hidden">
       <header className="app-hero">
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-7">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-            <div className="max-w-3xl pt-1 lg:pt-4">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-8">
+          <div className="grid grid-cols-1 gap-5">
+            <div className="mx-auto max-w-4xl pt-1 text-center lg:pt-2">
               <div className="app-section-kicker mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 מרכז העבודה של תעשיית הטלוויזיה
               </div>
-              <h1 className="text-4xl font-black leading-tight sm:text-5xl" style={{ color: 'var(--theme-text)' }}>
+              <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
-              <p className="mt-3 text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+              <p className="mx-auto mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
                 שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
               </p>
             </div>
-            <aside className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-sm lg:grid-cols-1">
+
+            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(300px,390px)_minmax(220px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)] xl:items-stretch">
               <RatingsWidget />
               <PersonalProCardWidget />
               <WorldCupCountdown />

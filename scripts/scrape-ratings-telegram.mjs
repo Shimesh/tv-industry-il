@@ -51,7 +51,7 @@ export function parseScoptRatingsMessage(text) {
     // Find where this section ends: next section header or end of text
     const afterHeader = text.slice(sectionIndex + sectionHeader.length);
     // Look for the next section (another בX header) or end
-    const nextSectionMatch = afterHeader.match(/\n(?:בחשבות|בפריים|ריייטינג|לתאריך)/);
+    const nextSectionMatch = afterHeader.match(/\n(?:בחדשות|בפריים|ריייטינג|לתאריך)/);
     const sectionText = nextSectionMatch
       ? afterHeader.slice(0, nextSectionMatch.index)
       : afterHeader;
@@ -70,7 +70,7 @@ export function parseScoptRatingsMessage(text) {
     return rows;
   }
 
-  const households = extractSection('בחשבות');
+  const households = extractSection('בחדשות');
   const prime = extractSection('בפריים');
 
   if (households.length === 0 && prime.length === 0) return null;
