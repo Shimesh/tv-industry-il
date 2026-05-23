@@ -156,7 +156,7 @@ export default function Navigation() {
           event.preventDefault();
           navigateFromNav(link.href);
         }}
-        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 min-w-0 flex-1 shrink items-center justify-center whitespace-nowrap px-1 text-[10px] xl:text-[11px] 2xl:h-10 2xl:px-2 2xl:text-sm'} items-center gap-1 rounded-xl font-bold leading-none transition-all ${
+        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-[clamp(0.25rem,0.42vw,0.65rem)] text-[clamp(0.66rem,0.72vw,0.82rem)] 2xl:h-10'} items-center gap-1 rounded-xl font-bold leading-none transition-all ${
           isActive
             ? 'text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
@@ -167,7 +167,7 @@ export default function Navigation() {
         } : undefined}
       >
         <span className="relative">
-          <Icon className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 2xl:block 2xl:h-4 2xl:w-4'} />
+          <Icon className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 xl:block'} />
           {isChat && totalUnread > 0 ? (
             <span className="absolute -right-1.5 -top-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
               {totalUnread > 99 ? '99+' : totalUnread}
@@ -187,13 +187,13 @@ export default function Navigation() {
         event.preventDefault();
         navigateFromNav(adminNavLink.href);
       }}
-      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 min-w-0 flex-1 shrink items-center justify-center whitespace-nowrap px-1 text-[10px] xl:text-[11px] 2xl:h-10 2xl:px-2 2xl:text-sm'} items-center gap-1 rounded-xl border font-bold leading-none transition-all ${
+      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-[clamp(0.25rem,0.42vw,0.65rem)] text-[clamp(0.66rem,0.72vw,0.82rem)] 2xl:h-10'} items-center gap-1 rounded-xl border font-bold leading-none transition-all ${
         adminIsActive
           ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
           : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
       }`}
     >
-      <Shield className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 2xl:block 2xl:h-4 2xl:w-4'} />
+      <Shield className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 xl:block'} />
       <span className="whitespace-nowrap">{adminNavLink.label}</span>
     </Link>
   );
@@ -215,8 +215,8 @@ export default function Navigation() {
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex h-16 items-center justify-between gap-2">
+      <div className="w-full px-3 sm:px-4 2xl:px-6">
+        <div className="flex h-16 w-full items-center justify-between gap-3">
           <Link
             href="/"
             onClick={(event) => {
@@ -231,7 +231,7 @@ export default function Navigation() {
             <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text 2xl:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-between gap-0.5 px-1 lg:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-[clamp(0.1rem,0.22vw,0.35rem)] px-2 lg:flex">
             {desktopLinks.map((link) => link.href === adminNavLink.href ? renderAdminLink() : renderNavLink(link))}
           </div>
 
