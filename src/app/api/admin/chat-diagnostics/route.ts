@@ -4,6 +4,7 @@ import { getRecentSystemEvents, getUsageSnapshot, recordRouteMetric } from '@/li
 import { listDocuments } from '@/lib/server/firestoreAdminRest';
 
 export const runtime = 'nodejs';
+const ACTIVE_CLIENT_VERSION = '2.6.7';
 
 type ClientSystemLogRecord = {
   id: string;
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
 
     const clientErrors = clientLogs
       .filter((log) => !isBrowserExtensionNoise(log))
+      .filter((log) => log.version === ACTIVE_CLIENT_VERSION)
       .sort((a, b) => toTime(b.createdAt).valueOf() - toTime(a.createdAt).valueOf())
       .slice(0, 20)
       .map(simplifyClientError);
