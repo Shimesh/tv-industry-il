@@ -409,7 +409,7 @@ export default function ChatWindow({
         >
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-[15px] font-medium text-[var(--theme-text)]">{chatName}</h3>
-            <span title="צ׳אט מוגן">
+            <span title="שיחה לחברי הצ׳אט בלבד">
               <Lock className="h-3 w-3 shrink-0 text-[var(--theme-accent)]" />
             </span>
           </div>
@@ -430,7 +430,7 @@ export default function ChatWindow({
 
         {v2Enabled && (
           <span className="hidden xl:inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
-            V2 {connectionState?.mode === 'connected' ? 'מחובר' : 'מוכן'}
+            {connectionState?.mode === 'connected' ? 'Socket מחובר' : 'Firestore פעיל'}
           </span>
         )}
 

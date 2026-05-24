@@ -6,6 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
+import AdminChatAssistant from '@/components/chat/AdminChatAssistant';
 import { useChat } from '@/hooks/useChat';
 import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,12 +78,18 @@ function mapConnectionState(
         detail: `${formatLastSync(state.lastSyncAt)} • מסנכרנים מחדש הודעות וסטטוסים.`,
       };
     case 'disabled':
+      return {
+        mode: 'legacy',
+        online: true,
+        label: 'Firestore פעיל',
+        detail: 'Socket.IO לא מוגדר כרגע. הצ׳אט עובד בזמן אמת דרך Firestore.',
+      };
     case 'idle':
       return {
         mode: 'preview',
         online: true,
-        label: 'מצב היברידי מוכן',
-        detail: 'הממשק מוכן ל־Socket.IO, ובינתיים Firestore משמש כשכבת גיבוי.',
+        label: 'Firestore פעיל / Socket ממתין',
+        detail: 'Socket.IO יופעל רק אחרי הגדרת URL ודגל מתאים. Firestore הוא הנתיב הפעיל.',
       };
     case 'degraded':
     case 'error':
@@ -145,7 +152,7 @@ export default function ChatPage() {
 }
 
 function ChatContent() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { contacts } = useAppData();
   const { showToast } = useToast();
   const allUsers = useChatUsers();
@@ -168,11 +175,11 @@ function ChatContent() {
     setTyping,
     connectionState,
     transportMode,
-    socketReady,
-    lastSyncAt,
   } = useChat({ allUsers });
 
   const chatV2Enabled = isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI);
+  const isAdmin = profile?.siteRole === 'admin';
+  const showConnectionBanner = chatV2Enabled || transportMode === 'hybrid' || isAdmin || process.env.NODE_ENV !== 'production';
   const effectiveV2Enabled = chatV2Enabled || transportMode === 'hybrid';
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
@@ -180,11 +187,14 @@ function ChatContent() {
 
   const activeChatId = activeChatData?.id ?? activeChat ?? null;
   const bannerConnectionState = useMemo(
-    () => mapConnectionState(connectionState, effectiveV2Enabled),
-    [connectionState, effectiveV2Enabled]
+    () => mapConnectionState(connectionState, showConnectionBanner),
+    [connectionState, showConnectionBanner]
   );
 
-  const currentOptimisticMessages = activeChatId ? optimisticMessagesByChat[activeChatId] ?? [] : [];
+  const currentOptimisticMessages = useMemo(
+    () => (activeChatId ? optimisticMessagesByChat[activeChatId] ?? [] : []),
+    [activeChatId, optimisticMessagesByChat]
+  );
 
   const visibleMessages = useMemo(() => {
     if (!effectiveV2Enabled) return messages;
@@ -211,7 +221,8 @@ function ChatContent() {
       if (settled.length === queue.length) return prev;
 
       if (settled.length === 0) {
-        const { [activeChatId]: _removed, ...rest } = prev;
+        const rest = { ...prev };
+        delete rest[activeChatId];
         return rest;
       }
 
@@ -267,7 +278,8 @@ function ChatContent() {
 
       const nextQueue = queue.filter((message) => message.optimisticId !== optimisticId);
       if (!nextQueue.length) {
-        const { [chatId]: _removed, ...rest } = prev;
+        const rest = { ...prev };
+        delete rest[chatId];
         return rest;
       }
 
@@ -464,16 +476,19 @@ function ChatContent() {
         maxHeight: 'calc(100dvh - var(--app-header-offset))',
       }}
     >
-      <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative ${mobileShowChat ? 'hidden lg:block' : 'block'}`}>
-        <ChatSidebar
-          chats={chats}
-          activeChatId={activeChat}
-          currentUserId={user.uid}
-          onlineUsers={onlineUsers}
-          onSelectChat={handleSelectChat}
-          onNewChat={() => setShowNewChat(true)}
-          onSelectOnlineUser={handleSelectOnlineUser}
-        />
+      <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
+        {isAdmin && <AdminChatAssistant />}
+        <div className="min-h-0 flex-1">
+          <ChatSidebar
+            chats={chats}
+            activeChatId={activeChat}
+            currentUserId={user.uid}
+            onlineUsers={onlineUsers}
+            onSelectChat={handleSelectChat}
+            onNewChat={() => setShowNewChat(true)}
+            onSelectOnlineUser={handleSelectOnlineUser}
+          />
+        </div>
       </div>
 
       <div className={`flex-1 flex flex-col min-w-0 ${!mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
@@ -485,7 +500,7 @@ function ChatContent() {
             typingUsers={typingUsers}
             uploadProgress={uploadProgress}
             connectionState={bannerConnectionState}
-            v2Enabled={effectiveV2Enabled}
+            v2Enabled={showConnectionBanner}
             pendingCount={pendingCount}
             onSendMessage={handleSendMessage}
             onDeleteMessage={deleteMessage}

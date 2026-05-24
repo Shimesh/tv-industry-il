@@ -384,7 +384,7 @@ function applyReceiptUpdate(
 export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const { user, profile } = useAuth();
   const featureFlags = useMemo(() => getChatV2FeatureFlags(), []);
-  const socketTransportEnabled = false;
+  const socketTransportEnabled = featureFlags.socketEnabled;
   const legacy = useLegacyChat({ allUsers });
   const legacyChatsByIdRef = useRef<Map<string, ChatRoom>>(new Map());
   const displayName =
@@ -610,12 +610,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         setTransportChat(nextChat);
         setTransportMessages(nextMessages);
       }
-      setSnapshotFallback((prev) => ({
+      setSnapshotFallback({
         chat: nextChat,
         messages: nextMessages,
         cursor: payload.cursor,
         savedAt: Date.now(),
-      }));
+      });
     },
     onDelta: (payload: ChatV2DeltaPayload) => {
       const deltaMessages = payload.messages ?? [];
@@ -1287,8 +1287,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       activeChatId,
       displayName,
       displayPhoto,
-      featureFlags.socketEnabled,
       legacy,
+      socketTransportEnabled,
       transport,
       updateLocalMessage,
       upsertLocalMessage,

@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
-  getKeyPair, generateSymmetricKey, encryptChatKeyForMember,
+  getKeyPair,
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
 } from '@/lib/encryption';
 
@@ -595,60 +595,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     try {
       const result = await fetchChatApi<{ chatId?: string }>({ type: 'group', name, memberIds });
       if (result.chatId) return result.chatId;
+      throw new Error('Group creation did not return a chat id');
     } catch (apiError) {
-      console.warn('Create group API fallback:', apiError);
-    }
-
-    const allMembers = [user.uid, ...memberIds];
-    const membersInfo = allMembers.map(uid => {
-      const u = allUsers.find(u => u.uid === uid);
-      return { uid, displayName: u?.displayName || '', photoURL: u?.photoURL || null };
-    });
-
-    try {
-      const chatKey = await generateSymmetricKey();
-      const myKeyPair = getKeyPair(user.uid);
-      const encryptedKeys: Record<string, string> = {};
-
-      if (chatKey && myKeyPair) {
-        for (const uid of allMembers) {
-          const memberUser = allUsers.find(u => u.uid === uid);
-          const pubKey = uid === user.uid ? profile?.encryptionPublicKey : memberUser?.encryptionPublicKey;
-          if (pubKey) {
-            const enc = await encryptChatKeyForMember(chatKey, pubKey, myKeyPair.privateKey);
-            if (enc) encryptedKeys[uid] = enc;
-          }
-        }
-      }
-
-      const chatRef = await addDoc(collection(db, 'chats'), {
-        type: 'group',
-        name,
-        members: allMembers,
-        admins: [user.uid],
-        membersInfo,
-        unreadCount: {},
-        lastRead: {},
-        encryptedKeys,
-        createdAt: serverTimestamp(),
-      });
-
-      if (chatKey) chatKeyCache.current.set(chatRef.id, chatKey);
-
-      await addDoc(collection(db, 'chats', chatRef.id, 'messages'), {
-        senderId: 'system',
-        senderName: 'מערכת',
-        text: `${displayName} יצר/ה את הקבוצה "${name}"`,
-        type: 'system',
-        createdAt: serverTimestamp(),
-      });
-
-      return chatRef.id;
-    } catch (err) {
-      console.error('Create group error:', err);
+      console.error('Create group API error:', apiError);
       return null;
     }
-  }, [user, profile, allUsers, displayName, fetchChatApi]);
+  }, [user, fetchChatApi]);
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!activeChat || !user) return;
