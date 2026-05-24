@@ -34,6 +34,8 @@ export interface ChatRoom {
 
 export interface Message {
   id: string;
+  clientMessageId?: string | null;
+  serverMessageId?: string | null;
   senderId: string;
   senderName: string;
   senderPhoto: string | null;
@@ -223,6 +225,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || now);
         return {
           id: docSnap.id,
+          clientMessageId: typeof data.clientMessageId === 'string' ? data.clientMessageId : null,
+          serverMessageId: docSnap.id,
           senderId: data.senderId,
           senderName: data.senderName,
           senderPhoto: data.senderPhoto || null,
@@ -365,7 +369,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     file?: File,
     replyTo?: { messageId: string; text: string; senderName: string } | null,
     duration?: number,
-    mimeType?: string
+    mimeType?: string,
+    clientMessageId?: string | null
   ) => {
     if (!user || !activeChat) return;
 
@@ -437,6 +442,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     const messageData: Record<string, unknown> = {
       senderId: user.uid,
+      clientMessageId: clientMessageId || null,
+      serverMessageId: null,
       senderName: displayName,
       senderPhoto: displayPhoto,
       text: messageText,
@@ -534,6 +541,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         const rawText = data.text || '';
         const msg: Message = {
           id: docSnap.id,
+          clientMessageId: typeof data.clientMessageId === 'string' ? data.clientMessageId : null,
+          serverMessageId: docSnap.id,
           senderId: data.senderId,
           senderName: data.senderName,
           senderPhoto: data.senderPhoto || null,

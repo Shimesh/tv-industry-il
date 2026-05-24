@@ -20,6 +20,7 @@ import type { ChatConnectionState as ChatTransportConnectionState } from '@/lib/
 import {
   buildOptimisticMessage,
   markOptimisticFailed,
+  markOptimisticSent,
   mergeMessagesWithOptimistic,
   refreshOptimisticSending,
   settleOptimisticMessages,
@@ -31,6 +32,14 @@ function isTruthyFlag(value: string | undefined): boolean {
 
 function getDisplayName(user: { displayName?: string | null; email?: string | null }): string {
   return user.displayName || user.email?.split('@')[0] || 'משתמש';
+}
+
+function buildLocalClientMessageId(chatId: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${chatId}:${crypto.randomUUID()}`;
+  }
+
+  return `${chatId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function formatLastSync(lastSyncAt: number | null): string {
@@ -195,8 +204,8 @@ function ChatContent() {
   );
 
   const visibleMessages = useMemo(() => {
-    return mergeMessagesWithOptimistic(messages, currentOptimisticMessages, user?.uid ?? null);
-  }, [currentOptimisticMessages, messages, user?.uid]);
+    return mergeMessagesWithOptimistic(messages, currentOptimisticMessages);
+  }, [currentOptimisticMessages, messages]);
 
   const pendingCount = useMemo(
     () =>
@@ -387,7 +396,14 @@ function ChatContent() {
         return;
       }
 
+      if (!activeChatId) {
+        showToast('יש לבחור שיחה לפני שליחת הודעה', 'error');
+        return;
+      }
+
+      const clientMessageId = buildLocalClientMessageId(activeChatId);
       const payload: ChatOptimisticPayload = {
+        clientMessageId,
         text: type === 'text' ? text : file?.name || text,
         type,
         file: file || null,
@@ -401,7 +417,10 @@ function ChatContent() {
       const optimisticMessage = queueOptimisticMessage(payload);
 
       try {
-        await sendMessage(text, type, file, replyTo, duration, mimeType);
+        await sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageId);
+        if (activeChatId && optimisticMessage?.optimisticId) {
+          updateOptimisticMessage(activeChatId, optimisticMessage.optimisticId, markOptimisticSent);
+        }
       } catch (error) {
         console.error('[chat] Failed to send message:', error);
         if (activeChatId && optimisticMessage?.optimisticId) {
@@ -434,7 +453,13 @@ function ChatContent() {
           message.localPayload.file || undefined,
           message.localPayload.replyTo || null,
           message.localPayload.duration ?? undefined,
-          message.localPayload.mimeType || undefined
+          message.localPayload.mimeType || undefined,
+          message.localPayload.clientMessageId || message.clientMessageId || null
+        );
+        updateOptimisticMessage(
+          activeChatId,
+          message.optimisticId || message.id,
+          markOptimisticSent
         );
       } catch (error) {
         console.error('[chat] Failed to retry message:', error);

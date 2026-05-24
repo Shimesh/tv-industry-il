@@ -996,18 +996,19 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       file?: File,
       replyTo?: { messageId: string; text: string; senderName: string } | null,
       duration?: number,
-      mimeType?: string
+      mimeType?: string,
+      clientMessageIdOverride?: string | null
     ) => {
       if (!activeChatId || !user) return;
 
       const canUseSocketDirect = socketTransportEnabled && transport.socketReady;
 
       if (!canUseSocketDirect) {
-        await legacy.sendMessage(text, type, file, replyTo, duration, mimeType);
+        await legacy.sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageIdOverride);
         return;
       }
 
-      const clientMessageId = buildClientMessageId(activeChatId);
+      const clientMessageId = clientMessageIdOverride || buildClientMessageId(activeChatId);
       const createdAtClient = Date.now();
       const previewText = getMessagePreviewText({
         type,

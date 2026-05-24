@@ -67,6 +67,7 @@ export interface MessageReplyReference {
 }
 
 export interface ChatOptimisticPayload {
+  clientMessageId?: string | null;
   text: string;
   type: Message['type'];
   file?: File | null;
@@ -114,7 +115,7 @@ export interface Message {
   };
   errorCode?: string | null;
   optimisticId?: string;
-  localState?: 'sending' | 'failed';
+  localState?: 'sending' | 'sent' | 'failed';
   localStatusText?: string;
   localCreatedAt?: number;
   localPayload?: ChatOptimisticPayload;

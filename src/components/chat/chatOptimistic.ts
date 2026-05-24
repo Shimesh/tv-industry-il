@@ -27,6 +27,9 @@ function getComparableText(message: Pick<Message, 'text' | 'fileName' | 'type'> 
 
 function isLikelyMatch(serverMessage: ChatUiMessage, optimisticMessage: ChatUiMessage, currentUserId: string): boolean {
   if (serverMessage.senderId !== currentUserId) return false;
+  if (serverMessage.clientMessageId && optimisticMessage.clientMessageId) {
+    return serverMessage.clientMessageId === optimisticMessage.clientMessageId;
+  }
   if (serverMessage.type !== optimisticMessage.type) return false;
   if (!isCloseTime(serverMessage.createdAt, optimisticMessage.localCreatedAt ?? optimisticMessage.createdAt)) return false;
 
@@ -59,12 +62,13 @@ export function buildOptimisticMessage({
   payload,
 }: BuildOptimisticMessageOptions): ChatUiMessage {
   const localCreatedAt = Date.now();
-  const optimisticId = `${chatId}:${localCreatedAt}:${Math.random().toString(36).slice(2, 8)}`;
+  const optimisticId = payload.clientMessageId || `${chatId}:${localCreatedAt}:${Math.random().toString(36).slice(2, 8)}`;
   const fileLabel = payload.fileName || (payload.type === 'text' ? '' : payload.text);
 
   return {
     id: optimisticId,
     optimisticId,
+    clientMessageId: optimisticId,
     senderId: userId,
     senderName: displayName,
     senderPhoto: displayPhoto,
@@ -81,17 +85,18 @@ export function buildOptimisticMessage({
     createdAt: localCreatedAt,
     localCreatedAt,
     localState: 'sending',
-    localStatusText: 'נשלח באופן מקומי',
+    localStatusText: 'שולח...',
     localPayload: payload,
   };
 }
 
 export function mergeMessagesWithOptimistic(
   serverMessages: Message[],
-  optimisticMessages: ChatUiMessage[],
-  currentUserId: string | null
+  optimisticMessages: ChatUiMessage[]
 ): ChatUiMessage[] {
-  const queued = optimisticMessages.filter((message) => message.localState === 'sending' || message.localState === 'failed');
+  const queued = optimisticMessages.filter((message) =>
+    message.localState === 'sending' || message.localState === 'sent' || message.localState === 'failed'
+  );
   const merged: ChatUiMessage[] = [...serverMessages, ...queued];
   merged.sort((a, b) => {
     const left = a.createdAt ?? a.localCreatedAt ?? 0;
@@ -115,12 +120,20 @@ export function settleOptimisticMessages(
   if (!currentUserId) return optimisticMessages;
 
   return optimisticMessages.filter((optimisticMessage) => {
-    if (optimisticMessage.localState !== 'sending') return true;
+    if (optimisticMessage.localState !== 'sending' && optimisticMessage.localState !== 'sent') return true;
     const matched = serverMessages.some((serverMessage) =>
       isLikelyMatch(serverMessage as ChatUiMessage, optimisticMessage, currentUserId)
     );
     return !matched;
   });
+}
+
+export function markOptimisticSent(message: ChatUiMessage): ChatUiMessage {
+  return {
+    ...message,
+    localState: 'sent',
+    localStatusText: 'נשלח',
+  };
 }
 
 export function markOptimisticFailed(message: ChatUiMessage, errorText = 'נכשל בשליחה'): ChatUiMessage {

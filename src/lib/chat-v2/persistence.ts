@@ -174,7 +174,10 @@ export function normalizeFirestoreMessage(messageId: string, raw: unknown): Mess
       : undefined,
     errorCode: typeof data.errorCode === 'string' ? data.errorCode : null,
     optimisticId: typeof data.optimisticId === 'string' ? data.optimisticId : undefined,
-    localState: data.localState === 'sending' || data.localState === 'failed' ? data.localState : undefined,
+    localState:
+      data.localState === 'sending' || data.localState === 'sent' || data.localState === 'failed'
+        ? data.localState
+        : undefined,
     localStatusText: typeof data.localStatusText === 'string' ? data.localStatusText : undefined,
     localCreatedAt: typeof data.localCreatedAt === 'number' ? data.localCreatedAt : undefined,
     localPayload: undefined,

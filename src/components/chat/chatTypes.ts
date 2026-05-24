@@ -1,6 +1,6 @@
 ﻿import type { Message } from '@/hooks/useChat';
 
-export type ChatLocalMessageState = 'sending' | 'failed';
+export type ChatLocalMessageState = 'sending' | 'sent' | 'failed';
 
 export type ChatTransportMode = 'legacy' | 'preview' | 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'degraded';
 
@@ -20,6 +20,7 @@ export interface ChatUiMessage extends Message {
 }
 
 export interface ChatOptimisticPayload {
+  clientMessageId?: string | null;
   text: string;
   type: Message['type'];
   file?: File | null;
