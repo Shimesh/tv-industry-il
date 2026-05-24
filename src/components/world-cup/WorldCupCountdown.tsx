@@ -16,7 +16,7 @@ function getDiff() {
   return { days, hours, minutes, seconds };
 }
 
-function Digit({ value, label, compact = false }: { value: number; label: string; compact?: boolean }) {
+function Digit({ value, label, compact = false }: { value: number | null; label: string; compact?: boolean }) {
   return (
     <div
       className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl border leading-none ${
@@ -28,14 +28,14 @@ function Digit({ value, label, compact = false }: { value: number; label: string
       }}
     >
       <motion.span
-        key={value}
+        key={value ?? label}
         initial={{ scale: 0.92, opacity: 0.55 }}
         animate={{ scale: label === 'שניות' ? [1, 1.09, 1] : 1, opacity: 1 }}
         transition={{ duration: label === 'שניות' ? 0.45 : 0.22 }}
         className={`${compact ? 'text-sm' : 'text-2xl sm:text-3xl'} font-black leading-none tabular-nums text-[var(--wc-gold,#D4AF37)] drop-shadow-[0_0_12px_rgba(212,175,55,.32)]`}
         dir="ltr"
       >
-        {String(value).padStart(2, '0')}
+        {value === null ? '--' : String(value).padStart(2, '0')}
       </motion.span>
       <span className={`${compact ? 'text-[8px]' : 'mt-1 text-[11px] sm:text-xs'} font-black leading-none text-white/86`}>{label}</span>
     </div>
@@ -82,9 +82,10 @@ function FlagBadge({ team }: { team: { id: string; nameHe: string; flag: string 
 export default function WorldCupCountdown({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const { activeMatch, nextMatch } = useWorldCup();
-  const [diff, setDiff] = useState(() => getDiff());
+  const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
 
   useEffect(() => {
+    setDiff(getDiff());
     const interval = window.setInterval(() => setDiff(getDiff()), 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -151,10 +152,10 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         </span>
       ) : null}
       <span className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-2 gap-2'}`} dir="ltr">
-        <Digit value={diff.days} label="ימים" compact={compact} />
-        <Digit value={diff.hours} label="שעות" compact={compact} />
-        <Digit value={diff.minutes} label="דקות" compact={compact} />
-        <Digit value={diff.seconds} label="שניות" compact={compact} />
+        <Digit value={diff?.days ?? null} label="ימים" compact={compact} />
+        <Digit value={diff?.hours ?? null} label="שעות" compact={compact} />
+        <Digit value={diff?.minutes ?? null} label="דקות" compact={compact} />
+        <Digit value={diff?.seconds ?? null} label="שניות" compact={compact} />
       </span>
     </motion.button>
   );

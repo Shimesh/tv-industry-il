@@ -44,12 +44,16 @@ function getGreeting(): string {
 
 export default function HomePage() {
   const { user, profile } = useAuth();
-  const [greeting] = useState(() => getGreeting());
+  const [greeting, setGreeting] = useState('שלום');
   const firstName = (profile?.displayName || user?.displayName)?.split(' ')[0] ?? '';
   const [liveNews, setLiveNews] = useState<RssNewsItem[]>([]);
   const [newsLoaded, setNewsLoaded] = useState(false);
   const [events, setEvents] = useState<UpcomingEventItem[]>([]);
   const { channels: broadcastChannels, loading: broadcastsLoading } = useBroadcasts({ scope: 'home', pollMs: 120000 });
+
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
