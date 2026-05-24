@@ -42,6 +42,20 @@ function simplifyClientError(log: ClientSystemLogRecord) {
   };
 }
 
+function isBrowserExtensionNoise(log: ClientSystemLogRecord): boolean {
+  const combined = [
+    log.source,
+    log.message,
+    log.stack,
+    log.href,
+    log.pathname,
+  ].filter(Boolean).join('\n');
+
+  return combined.includes('chrome-extension://') ||
+    combined.includes('moz-extension://') ||
+    combined.includes('safari-web-extension://');
+}
+
 export async function GET(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
   if (authUser instanceof NextResponse) return authUser;
@@ -54,6 +68,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const clientErrors = clientLogs
+      .filter((log) => !isBrowserExtensionNoise(log))
       .sort((a, b) => toTime(b.createdAt).valueOf() - toTime(a.createdAt).valueOf())
       .slice(0, 20)
       .map(simplifyClientError);
@@ -63,8 +78,8 @@ export async function GET(request: NextRequest) {
 
     const suggestedActions = [
       ...(clientErrors.length
-        ? ['נמצאו שגיאות לקוח אחרונות. מומלץ לבדוק את הנתיב וה־stack לפני פריסה נוספת.']
-        : ['לא נמצאו שגיאות לקוח אחרונות.']),
+        ? ['נמצאו שגיאות לקוח אחרונות. מומלץ לבדוק את הנתיב ואת ה־stack לפני פריסה נוספת.']
+        : ['לא נמצאו שגיאות לקוח אחרונות מתוך האפליקציה.']),
       ...(routeFailures.length
         ? ['יש נתיבי API עם כשלים אחרונים. בדקו את פירוט routeHealth.']
         : ['נתיבי ה־API האחרונים נראים תקינים.']),

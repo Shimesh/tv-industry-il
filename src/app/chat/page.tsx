@@ -317,8 +317,10 @@ function ChatContent() {
         } else {
           showToast('לא ניתן ליצור שיחה חדשה', 'error');
         }
-      } catch {
-        showToast('שגיאה ביצירת שיחה', 'error');
+      } catch (error) {
+        console.error('[chat] Failed to create private chat:', error);
+        const message = error instanceof Error ? error.message : 'שגיאה ביצירת שיחה';
+        showToast(message, 'error');
       }
     },
     [createPrivateChat, setActiveChat, showToast, user]
@@ -340,8 +342,10 @@ function ChatContent() {
         } else {
           showToast('לא ניתן ליצור שיחה חדשה', 'error');
         }
-      } catch {
-        showToast('שגיאה ביצירת שיחה', 'error');
+      } catch (error) {
+        console.error('[chat] Failed to create private chat:', error);
+        const message = error instanceof Error ? error.message : 'שגיאה ביצירת שיחה';
+        showToast(message, 'error');
       }
     },
     [createPrivateChat, setActiveChat, showToast, user]
@@ -363,8 +367,10 @@ function ChatContent() {
         } else {
           showToast('לא ניתן ליצור את הקבוצה', 'error');
         }
-      } catch {
-        showToast('שגיאה ביצירת קבוצה', 'error');
+      } catch (error) {
+        console.error('[chat] Failed to create group:', error);
+        const message = error instanceof Error ? error.message : 'שגיאה ביצירת קבוצה';
+        showToast(message, 'error');
       }
     },
     [createGroup, setActiveChat, showToast, user]
@@ -399,15 +405,20 @@ function ChatContent() {
 
       try {
         await sendMessage(text, type, file, replyTo, duration, mimeType);
-      } catch {
+      } catch (error) {
+        console.error('[chat] Failed to send message:', error);
         if (effectiveV2Enabled && activeChatId && optimisticMessage?.optimisticId) {
           updateOptimisticMessage(
             activeChatId,
             optimisticMessage.optimisticId,
-            (message) => markOptimisticFailed(message, 'השליחה נכשלה')
+            (message) => markOptimisticFailed(
+              message,
+              error instanceof Error ? error.message : 'השליחה נכשלה'
+            )
           );
         }
-        showToast('שגיאה בשליחת ההודעה', 'error');
+        const message = error instanceof Error ? error.message : 'שגיאה בשליחת ההודעה';
+        showToast(message, 'error');
       }
     },
     [activeChatId, effectiveV2Enabled, queueOptimisticMessage, sendMessage, showToast, updateOptimisticMessage, user]
@@ -428,13 +439,18 @@ function ChatContent() {
           message.localPayload.duration ?? undefined,
           message.localPayload.mimeType || undefined
         );
-      } catch {
+      } catch (error) {
+        console.error('[chat] Failed to retry message:', error);
         updateOptimisticMessage(
           activeChatId,
           message.optimisticId || message.id,
-          (current) => markOptimisticFailed(current, 'הניסיון החוזר נכשל')
+          (current) => markOptimisticFailed(
+            current,
+            error instanceof Error ? error.message : 'הניסיון החוזר נכשל'
+          )
         );
-        showToast('שגיאה בשליחה החוזרת', 'error');
+        const toastMessage = error instanceof Error ? error.message : 'שגיאה בשליחה החוזרת';
+        showToast(toastMessage, 'error');
       }
     },
     [activeChatId, sendMessage, showToast, updateOptimisticMessage, user]

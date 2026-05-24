@@ -107,7 +107,28 @@ function formatRecordingDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function formatLastSeen(timestamp: number | null | undefined): string {
+function toMillis(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const maybeTimestamp = value as { toMillis?: () => number; seconds?: number; nanoseconds?: number };
+  if (typeof maybeTimestamp.toMillis === 'function') {
+    const millis = maybeTimestamp.toMillis();
+    return Number.isFinite(millis) ? millis : null;
+  }
+  if (typeof maybeTimestamp.seconds === 'number') {
+    return (maybeTimestamp.seconds * 1000) + Math.floor((maybeTimestamp.nanoseconds || 0) / 1_000_000);
+  }
+
+  return null;
+}
+
+function formatLastSeen(value: unknown): string {
+  const timestamp = toMillis(value);
   if (!timestamp) return '';
   const now = Date.now();
   const diff = now - timestamp;
@@ -420,8 +441,8 @@ export default function ChatWindow({
               `${chat.members.length} משתתפים`
             ) : onlineUsers.some(u => u.uid === otherMember?.uid) ? (
               <span className="text-[var(--theme-success)]">מחובר/ת</span>
-            ) : otherUserProfile?.lastSeen ? (
-              formatLastSeen(otherUserProfile.lastSeen)
+            ) : formatLastSeen(otherUserProfile?.lastSeen) ? (
+              formatLastSeen(otherUserProfile?.lastSeen)
             ) : (
               'לחצו לפרופיל'
             )}
