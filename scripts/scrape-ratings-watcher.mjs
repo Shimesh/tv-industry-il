@@ -1,9 +1,9 @@
 /**
  * scrape-ratings-watcher.mjs
  * Runs as a daemon on Windows (Task Scheduler: at login).
- * - Listens to Firestore triggers/ratings-scrape for manual triggers from admin panel
+ * - Listens to Firestore triggers/ratings-midrug-scrape for manual triggers from admin panel
  * - Runs daily scrape at 10:15 IST, retries every 30 min until data arrives
- * - Reports live status (running/success/failure) to adminMetrics/job-ratings-scrape
+ * - Reports live status (running/success/failure) to adminMetrics/job-ratings-midrug-scrape
  */
 
 import { createRequire } from 'module';
@@ -34,10 +34,10 @@ async function runScraper(trigger = 'auto') {
   scraping = true;
   console.log(`[${ts()}] Starting scrape (${trigger})...`);
 
-  await db.doc('adminMetrics/job-ratings-scrape').set({
-    key: 'ratings-scrape', metricType: 'job', label: 'ratings-scrape',
+  await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+    key: 'ratings-midrug-scrape', metricType: 'job', label: 'ratings-midrug-scrape',
     lastRunAt: new Date().toISOString(), lastStatus: 'running',
-    lastError: null, source: 'local-watcher',
+    lastError: null, source: 'local-watcher', lastMessage: 'משיכת מדרוג מקומית התחילה',
   }, { merge: true });
 
   return new Promise((res) => {
@@ -51,12 +51,21 @@ async function runScraper(trigger = 'auto') {
 }
 
 // Manual trigger listener
-db.doc('triggers/ratings-scrape').onSnapshot(async (snap) => {
+db.doc('triggers/ratings-midrug-scrape').onSnapshot(async (snap) => {
   if (!snap.exists) return;
   const data = snap.data();
   if (data?.status !== 'pending') return;
   await snap.ref.update({ status: 'running', pickedUpAt: new Date().toISOString() });
   await runScraper('manual');
+  await snap.ref.update({ status: 'done', completedAt: new Date().toISOString() });
+});
+
+db.doc('triggers/ratings-scrape').onSnapshot(async (snap) => {
+  if (!snap.exists) return;
+  const data = snap.data();
+  if (data?.status !== 'pending') return;
+  await snap.ref.update({ status: 'running', pickedUpAt: new Date().toISOString(), redirectedTo: 'ratings-midrug-scrape' });
+  await runScraper('manual-legacy');
   await snap.ref.update({ status: 'done', completedAt: new Date().toISOString() });
 });
 

@@ -30,8 +30,10 @@ type MetricRecord = {
   lastSuccessAt?: string | null;
   lastFailureAt?: string | null;
   lastStatusCode?: number | null;
-  lastStatus?: 'success' | 'failure' | null;
+  lastStatus?: 'running' | 'success' | 'failure' | null;
   lastError?: string | null;
+  lastMessage?: string | null;
+  lastDetail?: string | null;
   updatedAt?: string | null;
 };
 
@@ -88,6 +90,7 @@ function hashKey(value: string): string {
 }
 
 function metricDocId(metricType: 'page' | 'route' | 'job', key: string): string {
+  if (metricType === 'job' && /^[A-Za-z0-9_-]+$/.test(key)) return `job-${key}`;
   return `${metricType}-${hashKey(key)}`;
 }
 
@@ -287,6 +290,7 @@ export async function recordJobMetric(input: {
     const failureRuns = Number(existing?.failureRuns || 0) + (input.ok ? 0 : 1);
     const runs = Number(existing?.runs || 0) + 1;
     const lastError = input.ok ? null : serializeDetail(input.detail);
+    const lastDetail = input.ok ? serializeDetail(input.detail) : existing?.lastDetail || null;
 
     await patchDocument(docPath, {
       metricType: 'job',
@@ -300,12 +304,55 @@ export async function recordJobMetric(input: {
       lastFailureAt: input.ok ? existing?.lastFailureAt || null : timestamp,
       lastStatus: input.ok ? 'success' : 'failure',
       lastError,
+      lastMessage: input.message,
+      lastDetail,
       updatedAt: timestamp,
     });
 
     await recordSystemEvent({
       type: 'job_run',
       level: input.ok ? 'success' : 'error',
+      source: 'job',
+      message: input.message,
+      detail: serializeDetail(input.detail),
+      job: key,
+    });
+  } catch {
+    // telemetry must never break callers
+  }
+}
+
+export async function recordJobStarted(input: {
+  job: string;
+  message: string;
+  detail?: unknown;
+}): Promise<void> {
+  try {
+    const key = input.job;
+    const docPath = `adminMetrics/${metricDocId('job', key)}`;
+    const existing = await getDocument<MetricRecord>(docPath);
+    const timestamp = nowIso();
+
+    await patchDocument(docPath, {
+      metricType: 'job',
+      key,
+      label: key,
+      runs: Number(existing?.runs || 0),
+      successRuns: Number(existing?.successRuns || 0),
+      failureRuns: Number(existing?.failureRuns || 0),
+      lastRunAt: timestamp,
+      lastSuccessAt: existing?.lastSuccessAt || null,
+      lastFailureAt: existing?.lastFailureAt || null,
+      lastStatus: 'running',
+      lastError: null,
+      lastMessage: input.message,
+      lastDetail: serializeDetail(input.detail),
+      updatedAt: timestamp,
+    });
+
+    await recordSystemEvent({
+      type: 'job_run',
+      level: 'info',
       source: 'job',
       message: input.message,
       detail: serializeDetail(input.detail),
@@ -370,8 +417,21 @@ export async function getUsageSnapshot(): Promise<{
       lastError: metric.lastError || null,
     }));
 
-  const jobs = metrics
-    .filter((metric) => metric.metricType === 'job')
+  const jobRecords = Array.from(
+    metrics
+      .filter((metric) => metric.metricType === 'job')
+      .reduce((map, metric) => {
+        const key = metric.key || metric.id;
+        const current = map.get(key);
+        if (!current || String(metric.lastRunAt || '').localeCompare(String(current.lastRunAt || '')) > 0) {
+          map.set(key, metric);
+        }
+        return map;
+      }, new Map<string, MetricRecord>())
+      .values(),
+  );
+
+  const jobs = jobRecords
     .sort((a, b) => String(b.lastRunAt || '').localeCompare(String(a.lastRunAt || '')))
     .slice(0, 8)
     .map((metric) => ({
@@ -385,6 +445,8 @@ export async function getUsageSnapshot(): Promise<{
       lastFailureAt: metric.lastFailureAt || null,
       lastStatus: metric.lastStatus || null,
       lastError: metric.lastError || null,
+      lastMessage: metric.lastMessage || null,
+      lastDetail: metric.lastDetail || null,
     }));
 
   return { topPages, routeHealth, jobs };

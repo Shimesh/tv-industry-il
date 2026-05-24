@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
-import { scrapeAndSaveRatings } from '@/lib/server/ratings';
-import { hasTelegramRatingsConfig, importLatestTelegramRatings } from '@/lib/server/telegramRatings';
+import { runMidrugRatingsJob, runTelegramRatingsJob } from '@/lib/server/ratingsSyncJobs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 export const preferredRegion = ['fra1', 'cdg1', 'iad1'];
 
-const FIREBASE_FN_URL = process.env.RATINGS_FIREBASE_FN_URL || '';
-
-async function tryFirebaseFunction(): Promise<{ success: boolean; date?: string; rows?: number }> {
-  if (!FIREBASE_FN_URL) throw new Error('RATINGS_FIREBASE_FN_URL not configured');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 50000);
-  const res = await fetch(FIREBASE_FN_URL, { signal: controller.signal, cache: 'no-store' });
-  clearTimeout(timeout);
-  if (!res.ok) throw new Error(`Firebase fn HTTP ${res.status}`);
-  return res.json();
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
 export async function GET(request: NextRequest) {
@@ -27,72 +18,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const source = request.nextUrl.searchParams.get('source') || 'all';
   const forceWeekly = request.nextUrl.searchParams.get('forceWeekly') === '1';
+  const actions: Array<Record<string, unknown>> = [];
 
-  if (hasTelegramRatingsConfig()) {
+  if (source === 'all' || source === 'midrug') {
     try {
-      const telegramResult = await importLatestTelegramRatings();
-      await Promise.all([
-        recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
-        recordJobMetric({
-          job: 'ratings-scrape',
-          ok: true,
-          message: `סנכרון רייטינג מטלגרם הושלם: ${telegramResult.daily.rows} תוכניות`,
-          detail: telegramResult,
-        }),
-      ]);
-      return NextResponse.json({ success: true, ...telegramResult });
-    } catch (telegramError) {
-      console.log('Telegram ratings import failed, falling back:', telegramError instanceof Error ? telegramError.message : telegramError);
+      actions.push(await runMidrugRatingsJob({
+        route: '/api/cron/scrape-ratings',
+        trigger: 'cron',
+        forceWeekly,
+      }));
+    } catch (error) {
+      actions.push({ success: false, source: 'midrug', error: errorMessage(error) });
     }
   }
 
-  try {
-    const fbResult = await tryFirebaseFunction();
-    if (fbResult.success) {
-      await Promise.all([
-        recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
-        recordJobMetric({
-          job: 'ratings-scrape',
-          ok: true,
-          message: `סנכרון רייטינג דרך Firebase Israel הושלם: ${fbResult.rows || 0} תוכניות`,
-          detail: fbResult,
-        }),
-      ]);
-      return NextResponse.json({ ...fbResult, source: 'firebase-il' });
+  if (source === 'all' || source === 'telegram') {
+    try {
+      actions.push(await runTelegramRatingsJob({
+        route: '/api/cron/scrape-ratings',
+        trigger: 'cron',
+      }));
+    } catch (error) {
+      actions.push({ success: false, source: 'telegram', error: errorMessage(error) });
     }
-    throw new Error('Firebase function returned failure');
-  } catch (fbError) {
-    console.log('Firebase fn failed, falling back to direct:', fbError instanceof Error ? fbError.message : fbError);
   }
 
-  try {
-    const result = await scrapeAndSaveRatings({ forceWeekly, allowCachedFallback: true });
-    await Promise.all([
-      recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: true, statusCode: 200 }),
-      recordJobMetric({
-        job: 'ratings-scrape',
-        ok: !result.cachedFallback,
-        message: result.cachedFallback
-          ? 'מקור המדרוג לא נגיש כרגע; הנתונים השמורים האחרונים נשארו פעילים'
-          : 'סנכרון נתוני הרייטינג הושלם בהצלחה',
-        detail: result,
-      }),
-    ]);
-    return NextResponse.json({ success: true, ...result });
-  } catch (error) {
-    await Promise.all([
-      recordRouteMetric({ route: '/api/cron/scrape-ratings', ok: false, statusCode: 500, error }),
-      recordJobMetric({
-        job: 'ratings-scrape',
-        ok: false,
-        message: 'סנכרון נתוני הרייטינג נכשל',
-        detail: error instanceof Error ? error.message : error,
-      }),
-    ]);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Ratings scrape failed' },
-      { status: 500 },
-    );
-  }
+  const ok = actions.some((action) => action.success === true);
+  await Promise.all([
+    recordRouteMetric({ route: '/api/cron/scrape-ratings', ok, statusCode: ok ? 200 : 500, error: ok ? undefined : actions }),
+    recordJobMetric({
+      job: 'ratings-scrape',
+      ok,
+      message: ok ? 'Cron ratings sync completed' : 'Cron ratings sync failed',
+      detail: { source, forceWeekly, actions },
+    }),
+  ]);
+
+  return NextResponse.json(
+    { success: ok, source, forceWeekly, actions },
+    { status: ok ? 200 : 500 },
+  );
 }
+

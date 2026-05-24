@@ -102,8 +102,10 @@ export type JobStatusMetric = {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
-  lastStatus: 'success' | 'failure' | null;
+  lastStatus: 'running' | 'success' | 'failure' | null;
   lastError: string | null;
+  lastMessage?: string | null;
+  lastDetail?: string | null;
 };
 
 export type AdminOverviewStats = {

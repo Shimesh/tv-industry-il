@@ -552,10 +552,13 @@ export async function getRatingsJobStatus() {
     source?: string;
     lastRunAt?: string | null;
     lastSuccessAt?: string | null;
-    lastStatus?: 'success' | 'failure' | null;
+    lastStatus?: 'running' | 'success' | 'failure' | null;
     lastError?: string | null;
   }>('adminMetrics').catch(() => []);
-  const all = metrics.filter((m) => m.metricType === 'job' && m.key === 'ratings-scrape');
+  const all = metrics.filter((m) => (
+    m.metricType === 'job' &&
+    ['ratings-midrug-scrape', 'ratings-telegram-scopt', 'ratings-scrape'].includes(String(m.key || ''))
+  ));
   if (!all.length) return null;
 
   // Most recently run document drives status/error display

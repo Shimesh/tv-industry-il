@@ -105,14 +105,16 @@ export async function saveTelegramRatings(parsed, messageId, db) {
 
   console.log(`[${ts()}] Saved Telegram ratings for ${isoDate} (source: ${source}, households: ${households.length}, prime: ${prime.length})`);
 
-  await db.doc('adminMetrics/job-ratings-telegram').set({
-    key: 'ratings-telegram',
+  await db.doc('adminMetrics/job-ratings-telegram-scopt').set({
+    key: 'ratings-telegram-scopt',
     metricType: 'job',
-    label: 'ratings-telegram',
+    label: 'ratings-telegram-scopt',
     lastRunAt: new Date().toISOString(),
     lastSuccessAt: new Date().toISOString(),
     lastStatus: 'success',
     lastError: null,
+    lastMessage: `Scopt Telegram saved ${households.length + prime.length} rows`,
+    lastDetail: JSON.stringify({ source: 'telegram-scopt', trigger: 'listener', date: isoDate, rows: households.length + prime.length, sourceMessageId: String(messageId) }),
     source: 'telegram',
     lastDate: isoDate,
   }, { merge: true });

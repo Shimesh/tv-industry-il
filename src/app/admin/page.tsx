@@ -37,11 +37,11 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
+import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, JobStatusMetric, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { INDUSTRY_DEPARTMENT_OPTIONS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 import { normalizeProfessionalFields, stringArray } from '@/lib/professionalFields';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 type ToastState = {
   type: 'ok' | 'err';
@@ -73,6 +73,13 @@ const NOTIFICATION_LINK_OPTIONS = [
 ];
 
 const APP_VERSION = '2.6.0';
+const RATINGS_MIDRUG_JOB = 'ratings-midrug-scrape';
+const RATINGS_TELEGRAM_JOB = 'ratings-telegram-scopt';
+
+type RatingsJobLive = Pick<
+  JobStatusMetric,
+  'key' | 'lastRunAt' | 'lastSuccessAt' | 'lastStatus' | 'lastError' | 'lastMessage' | 'lastDetail'
+>;
 
 const EMPTY_OVERVIEW: AdminOverview = {
   generatedAt: '',
@@ -395,6 +402,139 @@ function EventRow({ event }: { event: SystemEventRecord }) {
   );
 }
 
+function jobStatusLabel(status: JobStatusMetric['lastStatus'] | string | null | undefined): string {
+  if (status === 'running') return 'רץ עכשיו';
+  if (status === 'success') return 'תקין';
+  if (status === 'failure') return 'נכשל';
+  return 'אין נתון';
+}
+
+function jobStatusClass(status: JobStatusMetric['lastStatus'] | string | null | undefined): string {
+  if (status === 'running') return 'text-yellow-300';
+  if (status === 'success') return 'text-green-300';
+  if (status === 'failure') return 'text-red-300';
+  return 'text-gray-300';
+}
+
+function parseJobDetail(detail: string | null | undefined): Record<string, unknown> | null {
+  if (!detail) return null;
+  try {
+    const parsed = JSON.parse(detail);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatJobDetailLine(key: string, value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (Array.isArray(value)) return `${key}: ${value.join(' → ')}`;
+  if (typeof value === 'object') return null;
+  const labels: Record<string, string> = {
+    source: 'מקור',
+    trigger: 'טריגר',
+    startedAt: 'התחיל',
+    completedAt: 'הסתיים',
+    failedAt: 'נכשל ב',
+    dailyDate: 'תאריך יומי',
+    date: 'תאריך',
+    dailyRows: 'שורות יומיות',
+    rows: 'שורות',
+    fallbackUsed: 'Fallback',
+    dailyMatched: 'התאמות',
+    dailyUnmatched: 'ללא התאמה',
+    weeklyRows: 'שורות שבועיות',
+    weeklyRange: 'שבוע',
+    sourceMessageId: 'הודעת Telegram',
+    htmlLength: 'אורך HTML',
+    hasTable: 'נמצאה טבלה',
+    hasRows: 'נמצאו שורות',
+    error: 'שגיאה',
+    warning: 'אזהרה',
+  };
+  const label = labels[key] || key;
+  const display = typeof value === 'boolean' ? (value ? 'כן' : 'לא') : String(value);
+  return `${label}: ${display}`;
+}
+
+function RatingsJobCard({
+  title,
+  description,
+  job,
+  action,
+  running,
+  icon,
+  tone = 'purple',
+}: {
+  title: string;
+  description: string;
+  job: RatingsJobLive | JobStatusMetric | null;
+  action: ReactNode;
+  running: boolean;
+  icon: ReactNode;
+  tone?: 'purple' | 'sky';
+}) {
+  const detail = parseJobDetail(job?.lastDetail || job?.lastError);
+  const lines = detail
+    ? Object.entries(detail)
+      .map(([key, value]) => formatJobDetailLine(key, value))
+      .filter(Boolean)
+      .slice(0, 8) as string[]
+    : [];
+  const borderClass = tone === 'sky' ? 'border-sky-500/30 bg-sky-500/5' : 'border-purple-500/30 bg-purple-500/5';
+
+  return (
+    <div className={`rounded-2xl border ${borderClass} p-4`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {icon}
+            <h3 className="text-base font-bold text-white">{title}</h3>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-gray-400">{description}</p>
+        </div>
+        {action}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+          <p className="text-xs text-gray-500">סנכרון מוצלח אחרון</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {job?.lastSuccessAt ? formatRelativeTime(job.lastSuccessAt) : 'אין נתון'}
+          </p>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+          <p className="text-xs text-gray-500">סטטוס</p>
+          <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${jobStatusClass(job?.lastStatus)}`}>
+            {(running || job?.lastStatus === 'running') && <RefreshCw className="h-3 w-3 animate-spin" />}
+            {running ? 'רץ עכשיו' : jobStatusLabel(job?.lastStatus)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+          <p className="text-xs text-gray-500">הרצה אחרונה</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {job?.lastRunAt ? formatRelativeTime(job.lastRunAt) : 'אין נתון'}
+          </p>
+        </div>
+      </div>
+
+      {(job?.lastMessage || lines.length || job?.lastError) ? (
+        <div className="mt-3 rounded-xl border border-gray-800 bg-gray-950/60 p-3 text-xs text-gray-300">
+          {job?.lastMessage ? <p className="mb-2 font-semibold text-gray-200">{job.lastMessage}</p> : null}
+          {lines.length ? (
+            <div className="grid gap-1 sm:grid-cols-2" dir="rtl">
+              {lines.map((line) => (
+                <span key={line} className="rounded-lg bg-white/5 px-2 py-1">{line}</span>
+              ))}
+            </div>
+          ) : null}
+          {job?.lastError && !detail ? <p className="mt-2 text-red-200" dir="ltr">{job.lastError}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const [overview, setOverview] = useState<AdminOverview>(EMPTY_OVERVIEW);
@@ -412,13 +552,10 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
-  const [runningRatingsSync, setRunningRatingsSync] = useState(false);
-  const [ratingsJobLive, setRatingsJobLive] = useState<{
-    lastRunAt?: string | null;
-    lastSuccessAt?: string | null;
-    lastStatus?: string | null;
-    lastError?: string | null;
-  } | null>(null);
+  const [runningMidrugSync, setRunningMidrugSync] = useState(false);
+  const [runningTelegramSync, setRunningTelegramSync] = useState(false);
+  const [runningRatingsIngest, setRunningRatingsIngest] = useState(false);
+  const [ratingsJobsLive, setRatingsJobsLive] = useState<Record<string, RatingsJobLive>>({});
   const [showManualPaste, setShowManualPaste] = useState(false);
   const [manualHtml, setManualHtml] = useState('');
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
@@ -677,17 +814,26 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!user || !isAdmin) return;
-    return onSnapshot(doc(db, 'adminMetrics', 'job-ratings-scrape'), (snap) => {
-      if (snap.exists()) {
-        const d = snap.data();
-        setRatingsJobLive({
+    const jobKeys = [RATINGS_MIDRUG_JOB, RATINGS_TELEGRAM_JOB, 'ratings-scrape'];
+    const unsubscribers = jobKeys.map((jobKey) => onSnapshot(doc(db, 'adminMetrics', `job-${jobKey}`), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      setRatingsJobsLive((prev) => ({
+        ...prev,
+        [jobKey]: {
+          key: jobKey,
           lastRunAt: (d.lastRunAt as string) ?? null,
           lastSuccessAt: (d.lastSuccessAt as string) ?? null,
-          lastStatus: (d.lastStatus as string) ?? null,
+          lastStatus: (d.lastStatus as JobStatusMetric['lastStatus']) ?? null,
           lastError: (d.lastError as string) ?? null,
-        });
-      }
-    });
+          lastMessage: (d.lastMessage as string) ?? null,
+          lastDetail: (d.lastDetail as string) ?? null,
+        },
+      }));
+    }));
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, [user, isAdmin]);
 
   async function claimAdmin() {
@@ -779,62 +925,90 @@ export default function AdminPage() {
         const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
         if (res.ok) {
           const text = await res.text();
-          if (text.includes('<t') || text.includes('<T')) return text;
+          if (/<(?:table|tbody|tr|td|th)\b/i.test(text)) return text;
         }
       } catch { /* try next */ }
     }
     throw new Error('PROXY_FAILED');
   }
 
-  async function runRatingsSync() {
-    setRunningRatingsSync(true);
+  async function runMidrugRatingsSync() {
+    setRunningMidrugSync(true);
     try {
-      await setDoc(doc(db, 'triggers', 'ratings-scrape'), {
-        status: 'pending',
-        requestedAt: new Date().toISOString(),
-      });
-      showToast('ok', 'בקשה נשלחה לרץ המקומי – ממתין לתוצאה...');
-    } catch {
-      showToast('err', 'שגיאה בשליחת הבקשה לפיירסטור');
+      const result = await fetchWithAuth<{ daily?: { rows?: number }; weekly?: { rows?: number } }>(
+        '/api/admin/ratings-sync/midrug',
+        { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
+      );
+      showToast('ok', `מדרוג עודכן: ${result.daily?.rows || 0} שורות יומיות${result.weekly ? `, ${result.weekly.rows || 0} שבועיות` : ''}`);
+      await loadOverview(true);
+    } catch (syncError) {
+      showToast('err', syncError instanceof Error ? syncError.message : 'משיכת מדרוג נכשלה');
     } finally {
-      setRunningRatingsSync(false);
+      setRunningMidrugSync(false);
     }
   }
 
-  async function runBrowserRatingsSync() {
-    const now = new Date();
-    const ilDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-    const [y, m, d] = ilDate.split('-');
-    const yesterday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 1, 12));
-    const prevDay = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 2, 12));
-    const fmt = (dt: Date) => {
-      const iso = dt.toISOString().slice(0, 10);
-      const [yy, mm, dd] = iso.split('-');
-      return `${dd}/${mm}/${yy}`;
-    };
-
-    let dailyHtml = await fetchMidrugFromBrowser(fmt(yesterday));
-    if (!dailyHtml.includes('<table') && !dailyHtml.includes('<tr')) {
-      dailyHtml = await fetchMidrugFromBrowser(fmt(prevDay));
+  async function runTelegramRatingsSync() {
+    setRunningTelegramSync(true);
+    try {
+      const result = await fetchWithAuth<{ daily?: { rows?: number }; sourceMessageId?: string }>(
+        '/api/admin/ratings-sync/telegram',
+        { method: 'POST' },
+      );
+      showToast('ok', `Scopt Telegram עודכן: ${result.daily?.rows || 0} שורות${result.sourceMessageId ? `, הודעה ${result.sourceMessageId}` : ''}`);
+      await loadOverview(true);
+    } catch (syncError) {
+      showToast('err', syncError instanceof Error ? syncError.message : 'משיכת Scopt Telegram נכשלה');
+    } finally {
+      setRunningTelegramSync(false);
     }
+  }
 
-    const ingestResult = await fetchWithAuth<{
-      daily?: { rows?: number; matched?: number };
-      weekly?: { rows?: number; matched?: number };
-    }>(
-      '/api/admin/ratings-ingest',
-      { method: 'POST', body: JSON.stringify({ dailyHtml }) },
-    );
+  async function runRatingsSync() {
+    return runMidrugRatingsSync();
+  }
 
-    const dailyRows = ingestResult.daily?.rows || 0;
-    showToast('ok', `סנכרון רייטינג הושלם: ${dailyRows} תוכניות`);
-    setShowManualPaste(false);
-    await loadOverview(true);
+  async function runBrowserRatingsSync() {
+    setRunningRatingsIngest(true);
+    try {
+      const now = new Date();
+      const ilDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+      const [y, m, d] = ilDate.split('-');
+      const yesterday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 1, 12));
+      const prevDay = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 2, 12));
+      const fmt = (dt: Date) => {
+        const iso = dt.toISOString().slice(0, 10);
+        const [yy, mm, dd] = iso.split('-');
+        return `${dd}/${mm}/${yy}`;
+      };
+
+      let dailyHtml = await fetchMidrugFromBrowser(fmt(yesterday));
+      if (!dailyHtml.includes('<table') && !dailyHtml.includes('<tr')) {
+        dailyHtml = await fetchMidrugFromBrowser(fmt(prevDay));
+      }
+
+      const ingestResult = await fetchWithAuth<{
+        daily?: { rows?: number; matched?: number };
+        weekly?: { rows?: number; matched?: number };
+      }>(
+        '/api/admin/ratings-ingest',
+        { method: 'POST', body: JSON.stringify({ dailyHtml }) },
+      );
+
+      const dailyRows = ingestResult.daily?.rows || 0;
+      showToast('ok', `ייבוא מדרוג מהדפדפן הושלם: ${dailyRows} תוכניות`);
+      setShowManualPaste(false);
+      await loadOverview(true);
+    } catch (syncError) {
+      showToast('err', syncError instanceof Error ? syncError.message : 'ייבוא מדרוג מהדפדפן נכשל');
+    } finally {
+      setRunningRatingsIngest(false);
+    }
   }
 
   async function submitManualHtml() {
     if (!manualHtml.trim()) return;
-    setRunningRatingsSync(true);
+    setRunningRatingsIngest(true);
     try {
       const ingestResult = await fetchWithAuth<{ daily?: { rows?: number } }>(
         '/api/admin/ratings-ingest',
@@ -852,7 +1026,7 @@ export default function AdminPage() {
     } catch (error) {
       showToast('err', error instanceof Error ? error.message : 'שגיאה בייבוא');
     } finally {
-      setRunningRatingsSync(false);
+      setRunningRatingsIngest(false);
     }
   }
 
@@ -1050,8 +1224,15 @@ export default function AdminPage() {
     });
   }, [overview.users, search, userSort]);
 
-  const ratingsJob = overview.usage.jobs.find((job) => job.key === 'ratings-scrape') || null;
-  const effectiveRatingsJob = ratingsJobLive ?? ratingsJob;
+  const midrugRatingsJob = ratingsJobsLive[RATINGS_MIDRUG_JOB]
+    ?? overview.usage.jobs.find((job) => job.key === RATINGS_MIDRUG_JOB)
+    ?? overview.usage.jobs.find((job) => job.key === 'ratings-scrape')
+    ?? null;
+  const telegramRatingsJob = ratingsJobsLive[RATINGS_TELEGRAM_JOB]
+    ?? overview.usage.jobs.find((job) => job.key === RATINGS_TELEGRAM_JOB)
+    ?? null;
+  const effectiveRatingsJob = midrugRatingsJob;
+  const runningRatingsSync = runningMidrugSync;
 
   if (authLoading || loading) {
     return (
@@ -1204,7 +1385,113 @@ export default function AdminPage() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+        <section className="rounded-2xl border border-slate-700/80 bg-slate-950/70 p-4 shadow-xl shadow-purple-950/20">
+          <div className="mb-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-purple-300" />
+              <h2 className="text-lg font-bold text-white">Ratings Automation</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-gray-400">
+              משיכת הנתונים מחולקת לשני מקורות עצמאיים: מדרוג הרשמי וערוץ Scopt בטלגרם. כל כפתור מפעיל רק את הטריגר שלו ומציג חיווי מפורט.
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RatingsJobCard
+              title="מדרוג רשמי"
+              description="משיכת AJAX יומית ושבועית ממערכת מדרוג, כולל fallback לתאריך קודם והצלבה מול industry_master."
+              job={midrugRatingsJob}
+              running={runningMidrugSync || midrugRatingsJob?.lastStatus === 'running'}
+              icon={<BarChart3 className="h-4 w-4 text-purple-300" />}
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runMidrugRatingsSync()}
+                    disabled={runningMidrugSync || midrugRatingsJob?.lastStatus === 'running'}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition-colors hover:bg-purple-500 disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${(runningMidrugSync || midrugRatingsJob?.lastStatus === 'running') ? 'animate-spin' : ''}`} />
+                    משוך ממדרוג
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runBrowserRatingsSync()}
+                    disabled={runningRatingsIngest}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-60"
+                  >
+                    <MousePointerClick className={`h-4 w-4 ${runningRatingsIngest ? 'animate-pulse' : ''}`} />
+                    דפדפן
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualPaste((value) => !value)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-3 py-2.5 text-xs font-bold text-gray-200 transition-colors hover:bg-gray-800"
+                  >
+                    <FileText className="h-4 w-4" />
+                    ידני
+                  </button>
+                </div>
+              )}
+            />
+
+            <RatingsJobCard
+              title="Scopt Telegram"
+              description="משיכת ההודעה האחרונה מערוץ Scopt בטלגרם ושמירת מדדי החדשות והפריים תחת אותו מסמך יומי."
+              job={telegramRatingsJob}
+              running={runningTelegramSync || telegramRatingsJob?.lastStatus === 'running'}
+              tone="sky"
+              icon={<MessageCircle className="h-4 w-4 text-sky-300" />}
+              action={(
+                <button
+                  type="button"
+                  onClick={() => void runTelegramRatingsSync()}
+                  disabled={runningTelegramSync || telegramRatingsJob?.lastStatus === 'running'}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-sky-500/20 transition-colors hover:bg-sky-500 disabled:opacity-60"
+                >
+                  <RefreshCw className={`h-4 w-4 ${(runningTelegramSync || telegramRatingsJob?.lastStatus === 'running') ? 'animate-spin' : ''}`} />
+                  משוך מ-Scopt
+                </button>
+              )}
+            />
+          </div>
+
+          {showManualPaste && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <h3 className="mb-2 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
+              <p className="mb-3 text-xs leading-relaxed text-gray-400">
+                פתח את{' '}
+                <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>
+                {' '}והדבק כאן את קוד מקור הטבלה אם המשיכה האוטומטית לא מצליחה.
+              </p>
+              <textarea
+                value={manualHtml}
+                onChange={(e) => setManualHtml(e.target.value)}
+                placeholder="הדבק כאן את קוד המקור של טבלת מדרוג..."
+                dir="ltr"
+                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                rows={5}
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => void submitManualHtml()}
+                  disabled={!manualHtml.trim() || runningRatingsIngest}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {runningRatingsIngest ? 'מעבד...' : 'ייבוא'}
+                </button>
+                <button
+                  onClick={() => { setShowManualPaste(false); setManualHtml(''); }}
+                  className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="hidden rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2">

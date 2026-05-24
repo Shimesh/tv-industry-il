@@ -143,14 +143,16 @@ async function main() {
     fetchedAt,
   }, { merge: true });
 
-  await db.doc('adminMetrics/job-ratings-scrape').set({
-    key: 'ratings-scrape',
+  await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+    key: 'ratings-midrug-scrape',
     metricType: 'job',
-    label: 'ratings-scrape',
+    label: 'ratings-midrug-scrape',
     lastRunAt: fetchedAt,
     lastSuccessAt: fetchedAt,
     lastStatus: 'success',
     lastError: null,
+    lastMessage: `Midrug Oracle saved ${rows.length} rows`,
+    lastDetail: JSON.stringify({ source: 'midrug', trigger: 'oracle-vm', dailyDate: isoDate, dailyRows: rows.length, fallbackUsed }),
     source: 'oracle-vm',
   }, { merge: true });
 
@@ -160,9 +162,9 @@ async function main() {
 
 main().catch(err => {
   console.error(`✗ Failed: ${err.message}`);
-  db.doc('adminMetrics/job-ratings-scrape').set({
-    key: 'ratings-scrape', metricType: 'job', label: 'ratings-scrape',
+  db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+    key: 'ratings-midrug-scrape', metricType: 'job', label: 'ratings-midrug-scrape',
     lastRunAt: new Date().toISOString(), lastStatus: 'failure',
-    lastError: err.message, source: 'oracle-vm',
+    lastError: err.message, lastMessage: 'Midrug Oracle failed', source: 'oracle-vm',
   }, { merge: true }).catch(() => {}).finally(() => process.exit(1));
 });

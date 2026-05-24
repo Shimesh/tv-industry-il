@@ -172,13 +172,15 @@ async function scrapeAndSave() {
     fetchedAt,
   }, { merge: true });
 
-  await db.doc('adminMetrics/ratings-scrape').set({
-    key: 'ratings-scrape',
+  await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+    key: 'ratings-midrug-scrape',
     metricType: 'job',
     lastRunAt: fetchedAt,
     lastSuccessAt: fetchedAt,
     lastStatus: 'success',
     lastError: null,
+    lastMessage: `Firebase Midrug saved ${rows.length} rows`,
+    lastDetail: JSON.stringify({ source: 'midrug', trigger: 'firebase-function', dailyDate: isoDate, dailyRows: rows.length, fallbackUsed }),
   }, { merge: true });
 
   return { date: isoDate, rows: rows.length, fallbackUsed };
@@ -190,12 +192,13 @@ export const scrapeRatings = onRequest({ cors: true, invoker: 'public' }, async 
     res.json({ success: true, ...result, region: 'me-west1' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await db.doc('adminMetrics/ratings-scrape').set({
-      key: 'ratings-scrape',
+    await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+      key: 'ratings-midrug-scrape',
       metricType: 'job',
       lastRunAt: new Date().toISOString(),
       lastStatus: 'failure',
       lastError: message,
+      lastMessage: 'Firebase Midrug failed',
     }, { merge: true }).catch(() => {});
     res.status(500).json({ success: false, error: message });
   }
@@ -207,12 +210,13 @@ export const scrapeRatingsScheduled = onSchedule('every day 07:15', async () => 
     console.log('Ratings scrape success:', result);
   } catch (error) {
     console.error('Ratings scrape failed:', error);
-    await db.doc('adminMetrics/ratings-scrape').set({
-      key: 'ratings-scrape',
+    await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+      key: 'ratings-midrug-scrape',
       metricType: 'job',
       lastRunAt: new Date().toISOString(),
       lastStatus: 'failure',
       lastError: error instanceof Error ? error.message : String(error),
+      lastMessage: 'Firebase Midrug scheduled run failed',
     }, { merge: true }).catch(() => {});
   }
 });

@@ -12,6 +12,7 @@ import {
 import type { RatingsDailyDocument, RatingsWeeklyDocument } from '@/lib/ratingsTypes';
 import type { IndustryMasterEntry } from '@/lib/proCardTypes';
 import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { RATINGS_MIDRUG_JOB } from '@/lib/server/ratingsSyncJobs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,23 @@ export async function POST(request: NextRequest) {
 
     const dailyRows = parseRatingsTable(dailyHtml, 20);
     if (dailyRows.length === 0) {
-      return NextResponse.json({ error: 'No rows parsed from dailyHtml' }, { status: 400 });
+      const detail = {
+        source: 'browser-ingest',
+        htmlLength: dailyHtml.length,
+        hasTable: /<table/i.test(dailyHtml),
+        hasRows: /<tr/i.test(dailyHtml),
+        preview: dailyHtml.replace(/\s+/g, ' ').slice(0, 240),
+      };
+      await Promise.all([
+        recordRouteMetric({ route: '/api/admin/ratings-ingest', ok: false, statusCode: 400, error: detail }),
+        recordJobMetric({
+          job: RATINGS_MIDRUG_JOB,
+          ok: false,
+          message: 'ייבוא מדרוג מהדפדפן נכשל: לא נמצאו שורות בטבלה',
+          detail,
+        }),
+      ]);
+      return NextResponse.json({ success: false, error: 'No ratings rows parsed', detail }, { status: 400 });
     }
 
     const firstRowDate = dailyRows[0]?.date;
@@ -100,7 +117,7 @@ export async function POST(request: NextRequest) {
     await Promise.all([
       recordRouteMetric({ route: '/api/admin/ratings-ingest', ok: true, statusCode: 200 }),
       recordJobMetric({
-        job: 'ratings-scrape',
+        job: RATINGS_MIDRUG_JOB,
         ok: true,
         message: 'סנכרון רייטינג דרך הדפדפן הושלם בהצלחה',
         detail: result,
@@ -109,7 +126,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    await recordRouteMetric({ route: '/api/admin/ratings-ingest', ok: false, statusCode: 500, error });
+    await Promise.all([
+      recordRouteMetric({ route: '/api/admin/ratings-ingest', ok: false, statusCode: 500, error }),
+      recordJobMetric({
+        job: RATINGS_MIDRUG_JOB,
+        ok: false,
+        message: 'ייבוא מדרוג מהדפדפן נכשל',
+        detail: error instanceof Error ? error.message : error,
+      }),
+    ]);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Ingest failed' },
       { status: 500 },
