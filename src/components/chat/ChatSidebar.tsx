@@ -78,7 +78,7 @@ export default function ChatSidebar({
   }, [chats, currentUserId, search]);
 
   return (
-    <div className="flex flex-col h-full border-l" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
+    <div className="relative flex h-full min-h-0 flex-col border-l" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
         <h2 className="font-bold text-lg" style={{ color: 'var(--theme-text)' }}>צ׳אטים</h2>
@@ -110,7 +110,7 @@ export default function ChatSidebar({
       <OnlineUsers users={onlineUsers} onSelectUser={onSelectOnlineUser} />
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-20" style={{ scrollbarWidth: 'thin' }}>
         {filteredChats.length === 0 ? (
           <div className="p-8 text-center">
             <MessageCircle className="mx-auto mb-3 h-12 w-12 text-[var(--theme-text-secondary)] opacity-40" />

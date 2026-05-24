@@ -6,7 +6,6 @@ import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
-import AdminChatAssistant from '@/components/chat/AdminChatAssistant';
 import { useChat } from '@/hooks/useChat';
 import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -152,7 +151,7 @@ export default function ChatPage() {
 }
 
 function ChatContent() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { contacts } = useAppData();
   const { showToast } = useToast();
   const allUsers = useChatUsers();
@@ -178,8 +177,7 @@ function ChatContent() {
   } = useChat({ allUsers });
 
   const chatV2Enabled = isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI);
-  const isAdmin = profile?.siteRole === 'admin';
-  const showConnectionBanner = chatV2Enabled || transportMode === 'hybrid' || isAdmin || process.env.NODE_ENV !== 'production';
+  const showConnectionBanner = chatV2Enabled || transportMode === 'hybrid' || process.env.NODE_ENV !== 'production';
   const effectiveV2Enabled = chatV2Enabled || transportMode === 'hybrid';
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
@@ -197,9 +195,8 @@ function ChatContent() {
   );
 
   const visibleMessages = useMemo(() => {
-    if (!effectiveV2Enabled) return messages;
     return mergeMessagesWithOptimistic(messages, currentOptimisticMessages, user?.uid ?? null);
-  }, [effectiveV2Enabled, currentOptimisticMessages, messages, user?.uid]);
+  }, [currentOptimisticMessages, messages, user?.uid]);
 
   const pendingCount = useMemo(
     () =>
@@ -211,7 +208,7 @@ function ChatContent() {
   );
 
   useEffect(() => {
-    if (!effectiveV2Enabled || !activeChatId || !user?.uid) return;
+    if (!activeChatId || !user?.uid) return;
 
     setOptimisticMessagesByChat((prev) => {
       const queue = prev[activeChatId];
@@ -231,7 +228,7 @@ function ChatContent() {
         [activeChatId]: settled,
       };
     });
-  }, [activeChatId, effectiveV2Enabled, messages, user?.uid]);
+  }, [activeChatId, messages, user?.uid]);
 
   const queueOptimisticMessage = useCallback((payload: ChatOptimisticPayload) => {
     if (!activeChatId || !user) return null;
@@ -401,13 +398,13 @@ function ChatContent() {
         replyTo,
       };
 
-      const optimisticMessage = effectiveV2Enabled ? queueOptimisticMessage(payload) : null;
+      const optimisticMessage = queueOptimisticMessage(payload);
 
       try {
         await sendMessage(text, type, file, replyTo, duration, mimeType);
       } catch (error) {
         console.error('[chat] Failed to send message:', error);
-        if (effectiveV2Enabled && activeChatId && optimisticMessage?.optimisticId) {
+        if (activeChatId && optimisticMessage?.optimisticId) {
           updateOptimisticMessage(
             activeChatId,
             optimisticMessage.optimisticId,
@@ -421,7 +418,7 @@ function ChatContent() {
         showToast(message, 'error');
       }
     },
-    [activeChatId, effectiveV2Enabled, queueOptimisticMessage, sendMessage, showToast, updateOptimisticMessage, user]
+    [activeChatId, queueOptimisticMessage, sendMessage, showToast, updateOptimisticMessage, user]
   );
 
   const handleRetryOptimisticMessage = useCallback(
@@ -488,12 +485,10 @@ function ChatContent() {
       dir="rtl"
       style={{
         background: 'var(--theme-bg)',
-        minHeight: 'calc(100dvh - var(--app-header-offset))',
-        maxHeight: 'calc(100dvh - var(--app-header-offset))',
+        height: 'calc(100dvh - var(--app-header-offset))',
       }}
     >
-      <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
-        {isAdmin && <AdminChatAssistant />}
+      <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full min-h-0 flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
         <div className="min-h-0 flex-1">
           <ChatSidebar
             chats={chats}
@@ -507,7 +502,7 @@ function ChatContent() {
         </div>
       </div>
 
-      <div className={`flex-1 flex flex-col min-w-0 ${!mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
+      <div className={`flex-1 flex h-full min-h-0 flex-col min-w-0 ${!mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
         {activeChatData ? (
           <ChatWindow
             chat={activeChatData}
