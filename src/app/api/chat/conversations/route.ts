@@ -119,12 +119,12 @@ async function createOrFindPrivateConversation(authUser: NonNullable<Awaited<Ret
     membersInfo: [
       {
         uid: authUser.uid,
-        displayName: displayNameFor(currentProfile, authUser.displayName || authUser.email || 'משתמש'),
+        displayName: displayNameFor(currentProfile, authUser.displayName || authUser.email || '\u05de\u05e9\u05ea\u05de\u05e9'),
         photoURL: currentProfile?.photoURL || authUser.photoURL || null,
       },
       {
         uid: otherUserId,
-        displayName: displayNameFor(otherProfile, 'משתמש'),
+        displayName: displayNameFor(otherProfile, '\u05de\u05e9\u05ea\u05de\u05e9'),
         photoURL: otherProfile.photoURL || null,
       },
     ],
@@ -171,7 +171,7 @@ async function createGroupConversation(authUser: NonNullable<Awaited<ReturnType<
       const profile = profiles[members.indexOf(uid)];
       return {
         uid,
-        displayName: displayNameFor(profile, uid === authUser.uid ? authUser.displayName || authUser.email || 'משתמש' : 'משתמש'),
+        displayName: displayNameFor(profile, uid === authUser.uid ? authUser.displayName || authUser.email || '\u05de\u05e9\u05ea\u05de\u05e9' : '\u05de\u05e9\u05ea\u05de\u05e9'),
         photoURL: profile?.photoURL || (uid === authUser.uid ? authUser.photoURL || null : null),
       };
     }),
@@ -189,9 +189,9 @@ async function createGroupConversation(authUser: NonNullable<Awaited<ReturnType<
 
   await createDocument(`chats/${chat.id}/messages`, {
     senderId: 'system',
-    senderName: 'מערכת',
+    senderName: '\u05de\u05e2\u05e8\u05db\u05ea',
     senderPhoto: null,
-    text: `${displayNameFor(profiles[members.indexOf(authUser.uid)], authUser.displayName || 'משתמש')} יצר/ה את הקבוצה "${groupName}"`,
+    text: `${displayNameFor(profiles[members.indexOf(authUser.uid)], authUser.displayName || '\u05de\u05e9\u05ea\u05de\u05e9')} \u05d9\u05e6\u05e8/\u05d4 \u05d0\u05ea \u05d4\u05e7\u05d1\u05d5\u05e6\u05d4 "${groupName}"`,
     type: 'system',
     fileURL: null,
     fileName: null,
@@ -206,9 +206,9 @@ async function createGroupConversation(authUser: NonNullable<Awaited<ReturnType<
 
   await patchDocument(`chats/${chat.id}`, {
     lastMessage: {
-      text: `הקבוצה "${groupName}" נוצרה`,
+      text: `\u05d4\u05e7\u05d1\u05d5\u05e6\u05d4 "${groupName}" \u05e0\u05d5\u05e6\u05e8\u05d4`,
       senderId: 'system',
-      senderName: 'מערכת',
+      senderName: '\u05de\u05e2\u05e8\u05db\u05ea',
       timestamp: now,
       kind: 'system',
     },
