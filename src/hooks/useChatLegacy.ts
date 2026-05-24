@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
@@ -13,6 +13,11 @@ import {
   getKeyPair,
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
 } from '@/lib/encryption';
+
+export interface SendMessageResult {
+  messageId: string;
+  clientMessageId: string | null;
+}
 
 export interface ChatRoom {
   id: string;
@@ -30,6 +35,8 @@ export interface ChatRoom {
   };
   unreadCount: number;
   lastRead: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Message {
@@ -59,6 +66,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const [activeChat, setActiveChatState] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [chatsLoading, setChatsLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Pagination state
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
@@ -67,7 +77,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Cache: chatId → decrypted symmetric key
+  // Cache: chatId -> decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
   const prevActiveChatRef = useRef<string | null>(null);
   // Ref for getChatKey so the messages effect doesn't re-subscribe on every chats/allUsers change
@@ -161,7 +171,13 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   // Subscribe to chats
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setChats([]);
+      setChatsLoading(false);
+      return;
+    }
+    setChatsLoading(true);
+    setChatError(null);
     const q = query(
       collection(db, 'chats'),
       where('members', 'array-contains', user.uid)
@@ -171,6 +187,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
         const lastMsg = data.lastMessage;
+        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || 0);
+        const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (data.updatedAt || createdAt);
         chatList.push({
           id: docSnap.id,
           type: data.type || 'general',
@@ -187,10 +205,20 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           } : undefined,
           unreadCount: data.unreadCount?.[user.uid] || 0,
           lastRead: data.lastRead || {},
+          createdAt,
+          updatedAt,
         });
       });
-      chatList.sort((a, b) => (b.lastMessage?.timestamp || 0) - (a.lastMessage?.timestamp || 0));
+      chatList.sort((a, b) =>
+        (b.lastMessage?.timestamp || b.updatedAt || b.createdAt || 0) -
+        (a.lastMessage?.timestamp || a.updatedAt || a.createdAt || 0)
+      );
       setChats(chatList);
+      setChatsLoading(false);
+    }, (error) => {
+      console.error('[chat] Failed to subscribe to chats:', error);
+      setChatError('לא ניתן לטעון את רשימת השיחות כרגע');
+      setChatsLoading(false);
     });
     return () => unsubscribe();
   }, [user]);
@@ -202,8 +230,11 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       setOlderMessages([]);
       setLastVisible(null);
       setHasMore(false);
+      setMessagesLoading(false);
       return;
     }
+    setMessagesLoading(true);
+    setChatError(null);
     setOlderMessages([]);
     setLastVisible(null);
     setHasMore(false);
@@ -267,6 +298,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         const oldestDoc = snapshot.docs[snapshot.docs.length - 1];
         setLastVisible(oldestDoc ?? null);
         setHasMore(snapshot.docs.length === 50);
+        setMessagesLoading(false);
       }
 
       // Decrypt in background, then update messages again if needed
@@ -332,6 +364,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         });
         readBatch.commit().catch(() => {});
       }
+    }, (error) => {
+      console.error('[chat] Failed to subscribe to messages:', error);
+      if (!cancelled) {
+        setChatError('לא ניתן לטעון את ההודעות כרגע');
+        setMessagesLoading(false);
+      }
     });
     return () => { cancelled = true; unsubscribe(); };
   }, [activeChat, user]);
@@ -371,8 +409,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     duration?: number,
     mimeType?: string,
     clientMessageId?: string | null
-  ) => {
-    if (!user || !activeChat) return;
+  ): Promise<SendMessageResult | null> => {
+    if (!user || !activeChat) return null;
 
     let fileURL = null;
     let fileSize = null;
@@ -388,7 +426,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     const encryptedKeys = chatData?.encryptedKeys as Record<string, string> | undefined;
 
     if (!chatDoc?.exists()) {
-      throw new Error('השיחה לא נמצאה. נסו לפתוח אותה מחדש מהרשימה.');
+      throw new Error('השיחה לא נמצאה. נסו לפתוח אותה מחדש מרשימת השיחות.');
     }
 
     if (!chatMembers.includes(user.uid)) {
@@ -426,10 +464,10 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       }
     }
 
-    const previewText = type === 'voice' ? 'הודעת קול'
+    const previewText = type === 'voice' ? 'הודעה קולית'
       : type === 'video' ? 'הודעת וידאו'
       : type === 'text' ? text
-      : `קובץ ${file?.name || ''}`.trim();
+      : `קובץ ${file?.name || text || ''}`.trim();
 
     let messageText = type === 'text' ? text : (type === 'voice' || type === 'video' ? '' : file?.name || text);
     if (encryptedKeys) {
@@ -460,7 +498,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     };
 
     try {
-      await addDoc(collection(db, 'chats', activeChat, 'messages'), messageData);
+      const messageRef = await addDoc(collection(db, 'chats', activeChat, 'messages'), messageData);
 
       const unreadUpdates: Record<string, unknown> = {};
       chatMembers.forEach(uid => {
@@ -469,7 +507,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         }
       });
 
-      await updateDoc(doc(db, 'chats', activeChat), {
+      updateDoc(doc(db, 'chats', activeChat), {
         lastMessage: {
           text: previewText,
           senderName: displayName,
@@ -477,14 +515,22 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           timestamp: serverTimestamp(),
           kind: type,
         },
+        updatedAt: serverTimestamp(),
         ...unreadUpdates,
+      }).catch((error) => {
+        console.warn('[chat] Message was sent but chat summary update failed:', error);
       });
 
-      await setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
+      setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
         isTyping: false,
         name: displayName,
         timestamp: serverTimestamp(),
-      });
+      }).catch(() => {});
+
+      return {
+        messageId: messageRef.id,
+        clientMessageId: clientMessageId || null,
+      };
     } catch (err) {
       console.error('Send message error:', err);
       throw err;
@@ -651,6 +697,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     activeChat,
     activeChatData,
     messages,
+    chatsLoading,
+    messagesLoading,
+    chatError,
     allUsers,
     onlineUsers,
     typingUsers,

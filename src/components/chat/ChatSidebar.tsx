@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, Plus, MessageCircle } from 'lucide-react';
+import { Search, Plus, MessageCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import type { ChatRoom } from '@/hooks/useChat';
 import type { UserProfile } from '@/contexts/AuthContext';
 import OnlineUsers from './OnlineUsers';
@@ -11,6 +11,8 @@ interface ChatSidebarProps {
   activeChatId: string | null;
   currentUserId: string;
   onlineUsers: UserProfile[];
+  loading?: boolean;
+  error?: string | null;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   onSelectOnlineUser: (userId: string) => void;
@@ -66,6 +68,8 @@ function getLastMessagePreview(chat: ChatRoom): string {
 
 export default function ChatSidebar({
   chats, activeChatId, currentUserId, onlineUsers,
+  loading = false,
+  error = null,
   onSelectChat, onNewChat, onSelectOnlineUser,
 }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
@@ -111,7 +115,19 @@ export default function ChatSidebar({
 
       {/* Chat List */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-20" style={{ scrollbarWidth: 'thin' }}>
-        {filteredChats.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 p-8 text-[13px] text-[var(--theme-text-secondary)]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>טוען שיחות...</span>
+          </div>
+        ) : error ? (
+          <div className="m-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-right">
+            <div className="flex items-center gap-2 text-[13px] text-red-200">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          </div>
+        ) : filteredChats.length === 0 ? (
           <div className="p-8 text-center">
             <MessageCircle className="mx-auto mb-3 h-12 w-12 text-[var(--theme-text-secondary)] opacity-40" />
             <p className="text-[13px] text-[var(--theme-text-secondary)]">

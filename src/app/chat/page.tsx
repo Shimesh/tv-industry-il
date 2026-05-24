@@ -169,6 +169,9 @@ function ChatContent() {
     activeChat,
     activeChatData,
     messages,
+    chatsLoading,
+    messagesLoading,
+    chatError,
     onlineUsers,
     typingUsers,
     uploadProgress,
@@ -417,9 +420,14 @@ function ChatContent() {
       const optimisticMessage = queueOptimisticMessage(payload);
 
       try {
-        await sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageId);
+        const result = await sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageId);
         if (activeChatId && optimisticMessage?.optimisticId) {
-          updateOptimisticMessage(activeChatId, optimisticMessage.optimisticId, markOptimisticSent);
+          updateOptimisticMessage(activeChatId, optimisticMessage.optimisticId, (message) => ({
+            ...markOptimisticSent(message),
+            id: result?.messageId || message.id,
+            serverMessageId: result?.messageId || message.serverMessageId || null,
+            clientMessageId: result?.clientMessageId || message.clientMessageId || undefined,
+          }));
         }
       } catch (error) {
         console.error('[chat] Failed to send message:', error);
@@ -447,7 +455,7 @@ function ChatContent() {
       updateOptimisticMessage(activeChatId, message.optimisticId || message.id, refreshOptimisticSending);
 
       try {
-        await sendMessage(
+        const result = await sendMessage(
           message.localPayload.text,
           message.localPayload.type as 'text' | 'image' | 'file' | 'voice' | 'video',
           message.localPayload.file || undefined,
@@ -459,7 +467,12 @@ function ChatContent() {
         updateOptimisticMessage(
           activeChatId,
           message.optimisticId || message.id,
-          markOptimisticSent
+          (current) => ({
+            ...markOptimisticSent(current),
+            id: result?.messageId || current.id,
+            serverMessageId: result?.messageId || current.serverMessageId || null,
+            clientMessageId: result?.clientMessageId || current.clientMessageId || undefined,
+          })
         );
       } catch (error) {
         console.error('[chat] Failed to retry message:', error);
@@ -520,6 +533,8 @@ function ChatContent() {
             activeChatId={activeChat}
             currentUserId={user.uid}
             onlineUsers={onlineUsers}
+            loading={chatsLoading}
+            error={chatError}
             onSelectChat={handleSelectChat}
             onNewChat={() => setShowNewChat(true)}
             onSelectOnlineUser={handleSelectOnlineUser}
@@ -535,6 +550,8 @@ function ChatContent() {
             currentUserId={user.uid}
             typingUsers={typingUsers}
             uploadProgress={uploadProgress}
+            loading={messagesLoading}
+            error={chatError}
             connectionState={bannerConnectionState}
             v2Enabled={showConnectionBanner}
             pendingCount={pendingCount}

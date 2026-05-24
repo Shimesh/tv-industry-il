@@ -1004,8 +1004,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       const canUseSocketDirect = socketTransportEnabled && transport.socketReady;
 
       if (!canUseSocketDirect) {
-        await legacy.sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageIdOverride);
-        return;
+        return legacy.sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageIdOverride);
       }
 
       const clientMessageId = clientMessageIdOverride || buildClientMessageId(activeChatId);
@@ -1062,6 +1061,10 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           if (!messageSendResponse?.ok) {
             throw new Error(messageSendResponse?.error || 'message_send_failed');
           }
+          return {
+            messageId: clientMessageId,
+            clientMessageId,
+          };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'message_send_failed';
           updateLocalMessage(
@@ -1080,7 +1083,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         }
       }
 
-      if (!file || type === 'text') {
+      if (!file) {
         return;
       }
 
@@ -1256,6 +1259,10 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         if (!messageSendResponse?.ok) {
           throw new Error(messageSendResponse?.error || 'message_send_failed');
         }
+        return {
+          messageId: clientMessageId,
+          clientMessageId,
+        };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'upload_failed';
         updateLocalMessage(
@@ -1432,6 +1439,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     activeChat: legacy.activeChat,
     activeChatData,
     messages,
+    chatsLoading: legacy.chatsLoading,
+    messagesLoading: legacy.messagesLoading,
+    chatError: legacy.chatError,
     allUsers: legacy.allUsers,
     onlineUsers: legacy.onlineUsers,
     typingUsers,

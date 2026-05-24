@@ -16,6 +16,8 @@ import {
   Lock,
   Video as VideoIcon,
   WifiOff,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -41,6 +43,8 @@ interface ChatWindowProps {
   currentUserId: string;
   typingUsers: string[];
   uploadProgress: number | null;
+  loading?: boolean;
+  error?: string | null;
   connectionState?: ChatConnectionState;
   v2Enabled?: boolean;
   pendingCount?: number;
@@ -145,6 +149,8 @@ export default function ChatWindow({
   currentUserId,
   typingUsers,
   uploadProgress,
+  loading = false,
+  error = null,
   connectionState,
   v2Enabled = false,
   pendingCount = 0,
@@ -455,9 +461,11 @@ export default function ChatWindow({
           </span>
         )}
 
-        <span className="hidden rounded-full border px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] xl:inline-flex" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-          {signalingMode === 'socket-ready' ? 'שיחות מוכנות דרך Socket.IO' : 'שיחות דרך Firestore'}
-        </span>
+        {v2Enabled && (
+          <span className="hidden rounded-full border px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] xl:inline-flex" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+            {signalingMode === 'socket-ready' ? 'שיחות מוכנות דרך Socket.IO' : 'שיחות דרך Firestore'}
+          </span>
+        )}
 
         {chat.type === 'private' && otherMember?.uid && (
           <>
@@ -533,12 +541,18 @@ export default function ChatWindow({
             'radial-gradient(circle at 20% 10%, var(--theme-accent-glow), transparent 18rem), var(--theme-bg)',
         }}
       >
-        {loadingMore && (
-          <div className="flex justify-center py-3">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--theme-accent)] border-t-transparent" />
+        {error && (
+          <div className="mx-auto my-3 flex w-fit max-w-[90%] items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-200" dir="rtl">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
-        {filteredMessages.length === 0 ? (
+        {(loading || loadingMore) && (
+          <div className="flex justify-center py-3">
+            <Loader2 className="h-5 w-5 animate-spin text-[var(--theme-accent)]" />
+          </div>
+        )}
+        {!loading && filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--theme-accent-glow)]">
               {searchQuery.trim() ? (
