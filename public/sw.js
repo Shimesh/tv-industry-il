@@ -1,10 +1,5 @@
-const CACHE_NAME = 'tv-industry-il-v1.8.8';
+const CACHE_NAME = 'tv-industry-il-v2.6.5';
 const STATIC_ASSETS = [
-  '/',
-  '/schedule',
-  '/directory',
-  '/news',
-  '/studios',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -19,10 +14,13 @@ const SKIP_PATH_PREFIXES = [
 function shouldHandleRequest(request) {
   if (request.method !== 'GET') return false;
   if (request.headers.has('range')) return false;
+  if (request.mode === 'navigate') return false;
+  if (request.destination === 'document') return false;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return false;
   if (SKIP_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return false;
+  if (url.pathname.startsWith('/_next/')) return false;
 
   return true;
 }
@@ -36,6 +34,12 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

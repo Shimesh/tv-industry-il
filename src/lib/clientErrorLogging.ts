@@ -3,7 +3,9 @@
 import type { ErrorInfo } from 'react';
 import { auth } from '@/lib/firebase';
 
-const APP_VERSION = '1.8.7';
+const APP_VERSION = '2.6.5';
+const RECENT_ERROR_TTL_MS = 60_000;
+const recentErrors = new Map<string, number>();
 
 type ClientErrorLogInput = {
   error: unknown;
@@ -51,6 +53,17 @@ export function logClientError(input: ClientErrorLogInput): void {
   if (typeof window === 'undefined') return;
 
   const errorRecord = toErrorRecord(input.error);
+  const dedupeKey = [
+    input.source,
+    errorRecord.name,
+    errorRecord.message,
+    window.location.pathname,
+  ].join('|');
+  const now = Date.now();
+  const lastSeen = recentErrors.get(dedupeKey);
+  if (lastSeen && now - lastSeen < RECENT_ERROR_TTL_MS) return;
+  recentErrors.set(dedupeKey, now);
+
   const payload = {
     ...errorRecord,
     componentStack: input.errorInfo?.componentStack || null,

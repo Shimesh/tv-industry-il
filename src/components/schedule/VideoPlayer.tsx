@@ -22,40 +22,6 @@ function isMobileBrowser() {
   return /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(navigator.userAgent);
 }
 
-function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string | null) {
-  if (typeof window === 'undefined' || !isMobileBrowser()) return;
-
-  const body = JSON.stringify({
-    source: 'schedule-player',
-    version: '1.9.2',
-    name: 'MOBILE_KESHET_START_ATTEMPT',
-    message: 'MOBILE_KESHET_START_ATTEMPT',
-    href: window.location.href,
-    pathname: window.location.pathname,
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    language: navigator.language,
-    stack: JSON.stringify({
-      channelId: 'keshet12',
-      mode,
-      sourceUrl,
-    }),
-  });
-
-  try {
-    if (typeof navigator.sendBeacon === 'function') {
-      const sent = navigator.sendBeacon('/api/client-system-logs', new Blob([body], { type: 'application/json' }));
-      if (sent) return;
-    }
-  } catch {}
-
-  void fetch('/api/client-system-logs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-    keepalive: true,
-  }).catch(() => undefined);
-}
 
 export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, initialMuted = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -442,7 +408,6 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
     const key = `${mode}:${sourceUrl ?? ''}`;
     if (loggedKeshetStartRef.current === key) return;
     loggedKeshetStartRef.current = key;
-    logMobileKeshetStartAttempt(mode, sourceUrl ?? null);
   }, [isKeshetMobile, resolvedAutoplayEmbedUrl, resolvedEmbedUrl, resolvedHlsUrl, showEmbed, showHls]);
 
   const handleLoadedMetadata = useCallback(() => {

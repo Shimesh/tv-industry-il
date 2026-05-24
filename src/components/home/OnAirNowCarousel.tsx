@@ -47,40 +47,6 @@ function isMobileBrowser() {
   return /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(navigator.userAgent);
 }
 
-function logMobileKeshetStartAttempt(mode: 'HLS' | 'IFRAME', sourceUrl: string | null) {
-  if (typeof window === 'undefined' || !isMobileBrowser()) return;
-
-  const body = JSON.stringify({
-    source: 'home-carousel',
-    version: '1.9.2',
-    name: 'MOBILE_KESHET_START_ATTEMPT',
-    message: 'MOBILE_KESHET_START_ATTEMPT',
-    href: window.location.href,
-    pathname: window.location.pathname,
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    language: navigator.language,
-    stack: JSON.stringify({
-      channelId: 'keshet12',
-      mode,
-      sourceUrl,
-    }),
-  });
-
-  try {
-    if (typeof navigator.sendBeacon === 'function') {
-      const sent = navigator.sendBeacon('/api/client-system-logs', new Blob([body], { type: 'application/json' }));
-      if (sent) return;
-    }
-  } catch {}
-
-  void fetch('/api/client-system-logs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-    keepalive: true,
-  }).catch(() => undefined);
-}
 
 function configureAutoplayVideo(video: HTMLVideoElement | null) {
   if (!video) return;
@@ -156,7 +122,6 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     const key = `${mode}:${hlsUrl ?? stream?.embedUrl ?? ''}`;
     if (loggedKeshetStartRef.current === key) return;
     loggedKeshetStartRef.current = key;
-    logMobileKeshetStartAttempt(mode, hlsUrl ?? stream?.embedUrl ?? null);
   }, [dynamicStreamResolved, hlsUrl, isKeshetMobile, stream?.embedUrl]);
 
   useEffect(() => {
