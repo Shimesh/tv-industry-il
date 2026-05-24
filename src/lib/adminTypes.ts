@@ -123,7 +123,16 @@ export type AdminOverviewStats = {
 export type AppConfigSnapshot = {
   maintenanceMode: boolean;
   boardAnnouncement: string;
+  ratingsAutomation: RatingsAutomationConfig;
   updatedAt: string | null;
+};
+
+export type RatingsAutomationConfig = {
+  midrugEnabled: boolean;
+  telegramEnabled: boolean;
+  weeklyMode: 'sunday' | 'always';
+  cronSchedule: string;
+  cronTimezone: string;
 };
 
 export type AdminOverview = {

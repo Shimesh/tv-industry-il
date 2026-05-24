@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
+import { getDocument } from '@/lib/server/firestoreAdminRest';
 import { runMidrugRatingsJob, runTelegramRatingsJob } from '@/lib/server/ratingsSyncJobs';
 
 export const runtime = 'nodejs';
@@ -11,6 +12,22 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
+async function getRatingsAutomationSettings() {
+  const config = await getDocument<{
+    ratingsAutomation?: {
+      midrugEnabled?: boolean;
+      telegramEnabled?: boolean;
+      weeklyMode?: 'sunday' | 'always';
+    };
+  }>('appConfig/global').catch(() => null);
+
+  return {
+    midrugEnabled: config?.ratingsAutomation?.midrugEnabled !== false,
+    telegramEnabled: config?.ratingsAutomation?.telegramEnabled !== false,
+    weeklyMode: config?.ratingsAutomation?.weeklyMode === 'always' ? 'always' : 'sunday',
+  };
+}
+
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
@@ -18,11 +35,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const source = request.nextUrl.searchParams.get('source') || 'all';
-  const forceWeekly = request.nextUrl.searchParams.get('forceWeekly') === '1';
+  const explicitSource = request.nextUrl.searchParams.get('source');
+  const source = explicitSource || 'all';
+  const settings = await getRatingsAutomationSettings();
+  const forceWeeklyParam = request.nextUrl.searchParams.get('forceWeekly');
+  const forceWeekly = forceWeeklyParam === '1' || (forceWeeklyParam !== '0' && settings.weeklyMode === 'always');
   const actions: Array<Record<string, unknown>> = [];
 
-  if (source === 'all' || source === 'midrug') {
+  if ((source === 'all' || source === 'midrug') && (explicitSource === 'midrug' || settings.midrugEnabled)) {
     try {
       actions.push(await runMidrugRatingsJob({
         route: '/api/cron/scrape-ratings',
@@ -32,9 +52,11 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       actions.push({ success: false, source: 'midrug', error: errorMessage(error) });
     }
+  } else if (source === 'all' || source === 'midrug') {
+    actions.push({ success: true, source: 'midrug', skipped: true, reason: 'disabled in admin settings' });
   }
 
-  if (source === 'all' || source === 'telegram') {
+  if ((source === 'all' || source === 'telegram') && (explicitSource === 'telegram' || settings.telegramEnabled)) {
     try {
       actions.push(await runTelegramRatingsJob({
         route: '/api/cron/scrape-ratings',
@@ -43,6 +65,8 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       actions.push({ success: false, source: 'telegram', error: errorMessage(error) });
     }
+  } else if (source === 'all' || source === 'telegram') {
+    actions.push({ success: true, source: 'telegram', skipped: true, reason: 'disabled in admin settings' });
   }
 
   const ok = actions.some((action) => action.success === true);
@@ -52,13 +76,12 @@ export async function GET(request: NextRequest) {
       job: 'ratings-scrape',
       ok,
       message: ok ? 'Cron ratings sync completed' : 'Cron ratings sync failed',
-      detail: { source, forceWeekly, actions },
+      detail: { source, forceWeekly, settings, actions },
     }),
   ]);
 
   return NextResponse.json(
-    { success: ok, source, forceWeekly, actions },
+    { success: ok, source, forceWeekly, settings, actions },
     { status: ok ? 200 : 500 },
   );
 }
-

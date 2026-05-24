@@ -8,12 +8,26 @@ export async function GET() {
     const config = await getDocument<{
       maintenanceMode?: boolean;
       boardAnnouncement?: string;
+      ratingsAutomation?: {
+        midrugEnabled?: boolean;
+        telegramEnabled?: boolean;
+        weeklyMode?: 'sunday' | 'always';
+        cronSchedule?: string;
+        cronTimezone?: string;
+      };
       updatedAt?: string | null;
     }>('appConfig/global');
 
     return NextResponse.json({
       maintenanceMode: Boolean(config?.maintenanceMode),
       boardAnnouncement: String(config?.boardAnnouncement || ''),
+      ratingsAutomation: {
+        midrugEnabled: config?.ratingsAutomation?.midrugEnabled !== false,
+        telegramEnabled: config?.ratingsAutomation?.telegramEnabled !== false,
+        weeklyMode: config?.ratingsAutomation?.weeklyMode === 'always' ? 'always' : 'sunday',
+        cronSchedule: config?.ratingsAutomation?.cronSchedule || '10 6 * * *',
+        cronTimezone: config?.ratingsAutomation?.cronTimezone || 'UTC',
+      },
       updatedAt: config?.updatedAt || null,
     });
   } catch {
@@ -21,6 +35,13 @@ export async function GET() {
       {
         maintenanceMode: false,
         boardAnnouncement: '',
+        ratingsAutomation: {
+          midrugEnabled: true,
+          telegramEnabled: true,
+          weeklyMode: 'sunday',
+          cronSchedule: '10 6 * * *',
+          cronTimezone: 'UTC',
+        },
         updatedAt: null,
       },
       { status: 200 },

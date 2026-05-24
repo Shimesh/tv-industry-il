@@ -45,6 +45,13 @@ type RawContact = {
 type RawAppConfig = {
   maintenanceMode?: boolean;
   boardAnnouncement?: string;
+  ratingsAutomation?: {
+    midrugEnabled?: boolean;
+    telegramEnabled?: boolean;
+    weeklyMode?: 'sunday' | 'always';
+    cronSchedule?: string;
+    cronTimezone?: string;
+  };
   updatedAt?: string | null;
 };
 
@@ -409,6 +416,13 @@ export async function getAdminOverview(): Promise<AdminOverview> {
   const appConfig: AppConfigSnapshot = {
     maintenanceMode: Boolean(appConfigRaw?.maintenanceMode),
     boardAnnouncement: String(appConfigRaw?.boardAnnouncement || ''),
+    ratingsAutomation: {
+      midrugEnabled: appConfigRaw?.ratingsAutomation?.midrugEnabled !== false,
+      telegramEnabled: appConfigRaw?.ratingsAutomation?.telegramEnabled !== false,
+      weeklyMode: appConfigRaw?.ratingsAutomation?.weeklyMode === 'always' ? 'always' : 'sunday',
+      cronSchedule: appConfigRaw?.ratingsAutomation?.cronSchedule || '10 6 * * *',
+      cronTimezone: appConfigRaw?.ratingsAutomation?.cronTimezone || 'UTC',
+    },
     updatedAt: appConfigRaw?.updatedAt || null,
   };
 

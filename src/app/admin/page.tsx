@@ -98,6 +98,13 @@ const EMPTY_OVERVIEW: AdminOverview = {
   appConfig: {
     maintenanceMode: false,
     boardAnnouncement: '',
+    ratingsAutomation: {
+      midrugEnabled: true,
+      telegramEnabled: true,
+      weeklyMode: 'sunday',
+      cronSchedule: '10 6 * * *',
+      cronTimezone: 'UTC',
+    },
     updatedAt: null,
   },
   contactsByDepartment: [],
@@ -863,9 +870,17 @@ export default function AdminPage() {
     }
   }
 
-  async function saveAppConfig(next: { maintenanceMode?: boolean; boardAnnouncement?: string }) {
+  async function saveAppConfig(next: {
+    maintenanceMode?: boolean;
+    boardAnnouncement?: string;
+    ratingsAutomation?: Partial<AdminOverview['appConfig']['ratingsAutomation']>;
+  }) {
     setSavingConfig(true);
     try {
+      const ratingsAutomation = {
+        ...overview.appConfig.ratingsAutomation,
+        ...(next.ratingsAutomation || {}),
+      };
       const payload = {
         maintenanceMode:
           typeof next.maintenanceMode === 'boolean'
@@ -875,6 +890,7 @@ export default function AdminPage() {
           typeof next.boardAnnouncement === 'string'
             ? next.boardAnnouncement
             : announcementDraft,
+        ratingsAutomation,
       };
 
       await fetchWithAuth('/api/admin/app-config', {
@@ -946,6 +962,15 @@ export default function AdminPage() {
     } finally {
       setRunningMidrugSync(false);
     }
+  }
+
+  async function saveRatingsAutomation(next: Partial<AdminOverview['appConfig']['ratingsAutomation']>) {
+    await saveAppConfig({
+      ratingsAutomation: {
+        ...overview.appConfig.ratingsAutomation,
+        ...next,
+      },
+    });
   }
 
   async function runTelegramRatingsSync() {
@@ -1454,6 +1479,92 @@ export default function AdminPage() {
                 </button>
               )}
             />
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-gray-800 bg-gray-950/60 p-4">
+            <div className="mb-4 flex flex-col gap-1">
+              <h3 className="text-sm font-bold text-white">הגדרות Cron</h3>
+              <p className="text-xs leading-relaxed text-gray-400">
+                ההגדרות כאן קובעות מה ירוץ בקריאת ה־cron היומית. שינוי שעת ה־Vercel Cron עצמו דורש שינוי בקובץ `vercel.json` ו־deploy.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white">מדרוג</span>
+                  <button
+                    type="button"
+                    onClick={() => void saveRatingsAutomation({ midrugEnabled: !overview.appConfig.ratingsAutomation.midrugEnabled })}
+                    disabled={savingConfig}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                      overview.appConfig.ratingsAutomation.midrugEnabled
+                        ? 'bg-green-500/20 text-green-200 hover:bg-green-500/30'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    } disabled:opacity-60`}
+                  >
+                    {overview.appConfig.ratingsAutomation.midrugEnabled ? 'פעיל' : 'כבוי'}
+                  </button>
+                </div>
+                <p className="text-xs leading-relaxed text-gray-500">כאשר כבוי, ה־cron ידלג על משיכת מדרוג. כפתור ידני עדיין יכול להריץ מדרוג לפי הצורך.</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white">Scopt Telegram</span>
+                  <button
+                    type="button"
+                    onClick={() => void saveRatingsAutomation({ telegramEnabled: !overview.appConfig.ratingsAutomation.telegramEnabled })}
+                    disabled={savingConfig}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                      overview.appConfig.ratingsAutomation.telegramEnabled
+                        ? 'bg-green-500/20 text-green-200 hover:bg-green-500/30'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    } disabled:opacity-60`}
+                  >
+                    {overview.appConfig.ratingsAutomation.telegramEnabled ? 'פעיל' : 'כבוי'}
+                  </button>
+                </div>
+                <p className="text-xs leading-relaxed text-gray-500">כאשר כבוי, ה־cron ידלג על Scopt. משיכה ידנית מהכפתור עדיין נשארת זמינה למנהל.</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
+                <p className="mb-2 text-sm font-semibold text-white">רייטינג שבועי</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void saveRatingsAutomation({ weeklyMode: 'sunday' })}
+                    disabled={savingConfig}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                      overview.appConfig.ratingsAutomation.weeklyMode === 'sunday'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    } disabled:opacity-60`}
+                  >
+                    רק בראשון
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveRatingsAutomation({ weeklyMode: 'always' })}
+                    disabled={savingConfig}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                      overview.appConfig.ratingsAutomation.weeklyMode === 'always'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    } disabled:opacity-60`}
+                  >
+                    בכל ריצה
+                  </button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-gray-500">הגדרה זו משפיעה על משיכות מדרוג אוטומטיות בלבד.</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 text-xs text-gray-400 sm:grid-cols-3">
+              <span className="rounded-lg bg-white/5 px-3 py-2">Vercel schedule: <span dir="ltr">{overview.appConfig.ratingsAutomation.cronSchedule}</span></span>
+              <span className="rounded-lg bg-white/5 px-3 py-2">Timezone: <span dir="ltr">{overview.appConfig.ratingsAutomation.cronTimezone}</span></span>
+              <span className="rounded-lg bg-white/5 px-3 py-2">בקיץ ישראל: בערך 09:10</span>
+            </div>
           </div>
 
           {showManualPaste && (

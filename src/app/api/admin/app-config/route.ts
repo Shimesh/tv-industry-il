@@ -8,7 +8,27 @@ export const runtime = 'nodejs';
 type AppConfigPayload = {
   maintenanceMode?: boolean;
   boardAnnouncement?: string;
+  ratingsAutomation?: {
+    midrugEnabled?: boolean;
+    telegramEnabled?: boolean;
+    weeklyMode?: 'sunday' | 'always';
+  };
 };
+
+function normalizeRatingsAutomation(value: AppConfigPayload['ratingsAutomation'] | undefined, current?: AppConfigPayload['ratingsAutomation']) {
+  const currentConfig = current || {};
+  return {
+    midrugEnabled: typeof value?.midrugEnabled === 'boolean' ? value.midrugEnabled : currentConfig.midrugEnabled !== false,
+    telegramEnabled: typeof value?.telegramEnabled === 'boolean' ? value.telegramEnabled : currentConfig.telegramEnabled !== false,
+    weeklyMode: value?.weeklyMode === 'always' || value?.weeklyMode === 'sunday'
+      ? value.weeklyMode
+      : currentConfig.weeklyMode === 'always'
+        ? 'always'
+        : 'sunday',
+    cronSchedule: '10 6 * * *',
+    cronTimezone: 'UTC',
+  };
+}
 
 export async function GET(request: NextRequest) {
   const authUser = await requireAdminRequest(request);
@@ -20,6 +40,10 @@ export async function GET(request: NextRequest) {
     const config = await getDocument<{
       maintenanceMode?: boolean;
       boardAnnouncement?: string;
+      ratingsAutomation?: AppConfigPayload['ratingsAutomation'] & {
+        cronSchedule?: string;
+        cronTimezone?: string;
+      };
       updatedAt?: string | null;
     }>('appConfig/global');
 
@@ -27,6 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       maintenanceMode: Boolean(config?.maintenanceMode),
       boardAnnouncement: String(config?.boardAnnouncement || ''),
+      ratingsAutomation: normalizeRatingsAutomation(config?.ratingsAutomation, config?.ratingsAutomation),
       updatedAt: config?.updatedAt || null,
     });
   } catch (error) {
@@ -54,6 +79,7 @@ export async function POST(request: NextRequest) {
     const current = await getDocument<{
       maintenanceMode?: boolean;
       boardAnnouncement?: string;
+      ratingsAutomation?: AppConfigPayload['ratingsAutomation'];
     }>('appConfig/global');
 
     const nextConfig = {
@@ -65,6 +91,7 @@ export async function POST(request: NextRequest) {
         typeof body.boardAnnouncement === 'string'
           ? body.boardAnnouncement.trim()
           : String(current?.boardAnnouncement || ''),
+      ratingsAutomation: normalizeRatingsAutomation(body.ratingsAutomation, current?.ratingsAutomation),
       updatedAt: new Date().toISOString(),
     };
 
