@@ -156,6 +156,7 @@ function ChatContent() {
     chatsLoading,
     messagesLoading,
     chatError,
+    retryChats,
     onlineUsers,
     typingUsers,
     uploadProgress,
@@ -527,6 +528,7 @@ function ChatContent() {
             onlineUsers={onlineUsers}
             loading={chatsLoading}
             error={chatError}
+            onRetry={retryChats}
             onSelectChat={handleSelectChat}
             onNewChat={() => setShowNewChat(true)}
             onSelectOnlineUser={handleSelectOnlineUser}

@@ -1449,6 +1449,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     chatsLoading: legacy.chatsLoading,
     messagesLoading: legacy.messagesLoading,
     chatError: legacy.chatError,
+    retryChats: legacy.retryChats,
     allUsers: legacy.allUsers,
     onlineUsers: legacy.onlineUsers,
     typingUsers,

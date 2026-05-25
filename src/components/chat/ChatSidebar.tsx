@@ -13,6 +13,7 @@ interface ChatSidebarProps {
   onlineUsers: UserProfile[];
   loading?: boolean;
   error?: string | null;
+  onRetry?: () => void;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   onSelectOnlineUser: (userId: string) => void;
@@ -70,6 +71,7 @@ export default function ChatSidebar({
   chats, activeChatId, currentUserId, onlineUsers,
   loading = false,
   error = null,
+  onRetry,
   onSelectChat, onNewChat, onSelectOnlineUser,
 }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
@@ -126,6 +128,14 @@ export default function ChatSidebar({
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="mt-2 w-full rounded-md bg-red-500/20 px-3 py-1.5 text-[12px] font-medium text-red-200 transition-colors hover:bg-red-500/30"
+              >
+                נסה שוב
+              </button>
+            )}
           </div>
         ) : filteredChats.length === 0 ? (
           <div className="p-8 text-center">

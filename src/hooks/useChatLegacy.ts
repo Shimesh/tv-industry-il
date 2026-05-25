@@ -14,7 +14,7 @@ import {
 } from '@/lib/encryption';
 import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } from '@/lib/chatTrace';
 
-const CHAT_SNAPSHOT_TIMEOUT_MS = 10_000;
+const CHAT_SNAPSHOT_TIMEOUT_MS = 20_000;
 const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
 const SEND_STEP_TIMEOUT_MS = 12_000;
 const PRESENCE_WINDOW_MS = 30 * 60 * 1000; // 30 min — lastSeen updated only at page-load, not continuously
@@ -137,6 +137,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const [chatsLoading, setChatsLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Pagination state
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
@@ -316,7 +317,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       clearTimeout(timeoutId);
       unsubscribe();
     };
-  }, [user]);
+  }, [user, retryKey]);
 
   useEffect(() => {
     if (!user || chatsLoading || chats.length === 0) return;
@@ -1072,5 +1073,10 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     setTyping,
     displayName,
     displayPhoto,
+    retryChats: useCallback(() => {
+      setChatError(null);
+      setChatsLoading(true);
+      setRetryKey((k) => k + 1);
+    }, []),
   };
 }
