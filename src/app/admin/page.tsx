@@ -19,6 +19,7 @@ import {
   Crown,
   Database,
   FileText,
+  GitBranch,
   Mail,
   Megaphone,
   MessageCircle,
@@ -562,6 +563,7 @@ export default function AdminPage() {
   const [runningMidrugSync, setRunningMidrugSync] = useState(false);
   const [runningTelegramSync, setRunningTelegramSync] = useState(false);
   const [runningRatingsIngest, setRunningRatingsIngest] = useState(false);
+  const [runningGithubAction, setRunningGithubAction] = useState(false);
   const [ratingsJobsLive, setRatingsJobsLive] = useState<Record<string, RatingsJobLive>>({});
   const [showManualPaste, setShowManualPaste] = useState(false);
   const [manualHtml, setManualHtml] = useState('');
@@ -1055,6 +1057,18 @@ export default function AdminPage() {
     }
   }
 
+  async function triggerGithubRatingsScrape() {
+    setRunningGithubAction(true);
+    try {
+      await fetchWithAuth('/api/admin/trigger-ratings-scrape', { method: 'POST' });
+      showToast('ok', 'GitHub Actions הופעל — ייקח ~2 דקות לסיים. הנתונים יתעדכנו אוטומטית.');
+    } catch (err) {
+      showToast('err', err instanceof Error ? err.message : 'הפעלת GitHub Actions נכשלה');
+    } finally {
+      setRunningGithubAction(false);
+    }
+  }
+
   async function runFullSync() {
     if (!window.confirm('להריץ סנכרון מלא?\n\nשלב 1: מיגרציית הפקות → global_productions\nשלב 2: סנכרון אנשי קשר מלוחות עבודה\n\nתהליך זה יעדכן את ה-Pro Cards ואת רשימת אנשי הקשר.')) return;
     setFullSyncRunning(true);
@@ -1455,6 +1469,16 @@ export default function AdminPage() {
                   >
                     <FileText className="h-4 w-4" />
                     ידני
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void triggerGithubRatingsScrape()}
+                    disabled={runningGithubAction}
+                    title="מפעיל GitHub Actions עם ScraperAPI (IP ישראלי) — עוקף חסימת סייפנט"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-700/50 bg-green-900/20 px-3 py-2.5 text-xs font-bold text-green-300 transition-colors hover:bg-green-900/40 disabled:opacity-60"
+                  >
+                    <GitBranch className={`h-4 w-4 ${runningGithubAction ? 'animate-pulse' : ''}`} />
+                    GitHub
                   </button>
                 </div>
               )}
