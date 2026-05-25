@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
-import { getFirestore, initializeFirestore, persistentLocalCache } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, memoryLocalCache } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
@@ -24,11 +24,12 @@ const app: FirebaseApp = isNewApp
   ? initializeApp(isBuildTime ? { ...firebaseConfig, apiKey: 'build-placeholder' } : firebaseConfig)
   : getApp();
 
-// persistentLocalCache uses IndexedDB which is browser-only.
-// On the server or subsequent inits, fall back to getFirestore (returns existing instance).
+// memoryLocalCache avoids IndexedDB which can cause lock contention when Service Workers
+// are transitioning (especially after SW updates). For a real-time chat app, in-memory
+// cache is sufficient — fresh data always comes from the live onSnapshot subscription.
 const db: Firestore =
-  typeof window !== 'undefined' && isNewApp
-    ? initializeFirestore(app, { localCache: persistentLocalCache() })
+  isNewApp
+    ? initializeFirestore(app, { localCache: memoryLocalCache() })
     : getFirestore(app);
 
 const auth: Auth = getAuth(app);

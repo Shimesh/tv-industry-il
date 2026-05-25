@@ -245,6 +245,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }
     const traceId = createChatTraceId('chats');
     let receivedFirstSnapshot = false;
+    let cancelled = false;
     const startedAt = performance.now();
     setChatsLoading(true);
     setChatError(null);
@@ -253,8 +254,58 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       collection(db, 'chats'),
       where('members', 'array-contains', user.uid)
     );
+
+    // Helper to parse a Firestore doc snapshot into a ChatRoom
+    function parseDocToRoom(docSnap: { id: string; data: () => Record<string, unknown> }): ChatRoom {
+      const data = docSnap.data() as Record<string, unknown>;
+      const lastMsg = data.lastMessage as Record<string, unknown> | undefined;
+      const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : 0);
+      const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (typeof data.updatedAt === 'number' ? data.updatedAt : createdAt);
+      return {
+        id: docSnap.id,
+        type: (data.type as ChatRoom['type']) || 'general',
+        name: (data.name as string) || '',
+        photoURL: (data.photoURL as string | null) || null,
+        members: (data.members as string[]) || [],
+        membersInfo: (data.membersInfo as ChatRoom['membersInfo']) || [],
+        lastMessage: lastMsg ? {
+          text: (lastMsg.text as string) || '',
+          senderId: (lastMsg.senderId as string) || '',
+          senderName: (lastMsg.senderName as string) || '',
+          timestamp: lastMsg.timestamp instanceof Timestamp ? lastMsg.timestamp.toMillis() : ((lastMsg.timestamp as number) || 0),
+          kind: (lastMsg.kind as string) || undefined,
+        } : undefined,
+        unreadCount: (data.unreadCount as Record<string, number>)?.[user!.uid] || 0,
+        lastRead: (data.lastRead as Record<string, number>) || {},
+        createdAt,
+        updatedAt,
+      };
+    }
+
+    // Fallback: if onSnapshot doesn't fire within 8s (e.g. IndexedDB lock or WS delay),
+    // do a one-time getDocs fetch so the user sees data immediately.
+    const fallbackId = setTimeout(async () => {
+      if (receivedFirstSnapshot || cancelled) return;
+      chatTrace('chats', 'fallback:start', { traceId, uid: user.uid });
+      try {
+        const snap = await getDocs(q);
+        if (receivedFirstSnapshot || cancelled) return; // onSnapshot won in the meantime
+        const chatList = snap.docs.map(parseDocToRoom);
+        chatList.sort((a, b) =>
+          (b.lastMessage?.timestamp || b.updatedAt || b.createdAt || 0) -
+          (a.lastMessage?.timestamp || a.updatedAt || a.createdAt || 0)
+        );
+        chatTrace('chats', 'fallback:ok', { traceId, count: chatList.length });
+        setChats(chatList);
+        setChatsLoading(false);
+        // Keep onSnapshot running for live updates
+      } catch (err) {
+        chatTrace('chats', 'fallback:error', { traceId, err }, { level: 'warn' });
+      }
+    }, 8_000);
+
     const timeoutId = setTimeout(() => {
-      if (receivedFirstSnapshot) return;
+      if (receivedFirstSnapshot || cancelled) return;
       chatTrace('chats', 'subscribe:timeout', {
         traceId,
         uid: user.uid,
@@ -266,33 +317,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }, CHAT_SNAPSHOT_TIMEOUT_MS);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       receivedFirstSnapshot = true;
+      clearTimeout(fallbackId);
       clearTimeout(timeoutId);
-      const chatList: ChatRoom[] = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const lastMsg = data.lastMessage;
-        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || 0);
-        const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (data.updatedAt || createdAt);
-        chatList.push({
-          id: docSnap.id,
-          type: data.type || 'general',
-          name: data.name || '',
-          photoURL: data.photoURL || null,
-          members: data.members || [],
-          membersInfo: data.membersInfo || [],
-          lastMessage: lastMsg ? {
-            text: lastMsg.text || '',
-            senderId: lastMsg.senderId || '',
-            senderName: lastMsg.senderName || '',
-            timestamp: lastMsg.timestamp instanceof Timestamp ? lastMsg.timestamp.toMillis() : (lastMsg.timestamp || 0),
-            kind: lastMsg.kind || undefined,
-          } : undefined,
-          unreadCount: data.unreadCount?.[user.uid] || 0,
-          lastRead: data.lastRead || {},
-          createdAt,
-          updatedAt,
-        });
-      });
+      const chatList = snapshot.docs.map(parseDocToRoom);
       chatList.sort((a, b) =>
         (b.lastMessage?.timestamp || b.updatedAt || b.createdAt || 0) -
         (a.lastMessage?.timestamp || a.updatedAt || a.createdAt || 0)
@@ -307,6 +334,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       setChats(chatList);
       setChatsLoading(false);
     }, (error) => {
+      clearTimeout(fallbackId);
       clearTimeout(timeoutId);
       console.error('[chat] Failed to subscribe to chats:', error);
       chatTrace('chats', 'subscribe:error', { traceId, error }, { level: 'error' });
@@ -314,6 +342,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       setChatsLoading(false);
     });
     return () => {
+      cancelled = true;
+      clearTimeout(fallbackId);
       clearTimeout(timeoutId);
       unsubscribe();
     };
