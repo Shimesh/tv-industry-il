@@ -17,7 +17,7 @@ import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } f
 const CHAT_SNAPSHOT_TIMEOUT_MS = 10_000;
 const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
 const SEND_STEP_TIMEOUT_MS = 12_000;
-const PRESENCE_WINDOW_MS = 2 * 60 * 1000;
+const PRESENCE_WINDOW_MS = 30 * 60 * 1000; // 30 min — lastSeen updated only at page-load, not continuously
 const CHAT_ATTACHMENT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 export interface SendMessageResult {

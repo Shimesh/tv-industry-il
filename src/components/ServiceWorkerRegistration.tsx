@@ -2,16 +2,6 @@
 
 import { useEffect } from 'react';
 
-function getMessagingServiceWorkerUrl(): string {
-  const params = new URLSearchParams({
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() || '',
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() || '',
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() || '',
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim() || '',
-  });
-  return `/firebase-messaging-sw.js?${params.toString()}`;
-}
-
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -25,17 +15,19 @@ export function ServiceWorkerRegistration() {
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
 
+    // Register the app's caching service worker (handles PWA offline & cache).
+    // firebase-messaging-sw.js is registered separately by FCMTokenRegistration.
     navigator.serviceWorker
-      .register(getMessagingServiceWorkerUrl(), { scope: '/' })
+      .register('/sw.js')
       .then((registration) => {
-        console.log('Push SW registered:', registration.scope);
+        console.log('SW registered:', registration.scope);
         void registration.update();
         if (registration.waiting) {
           registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
       })
       .catch((error) => {
-        console.log('Push SW registration failed:', error);
+        console.log('SW registration failed:', error);
       });
 
     return () => {

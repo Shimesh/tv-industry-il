@@ -173,6 +173,7 @@ export async function PATCH(request: NextRequest) {
       'isOnline',
       'is_consented',
       'termsAccepted',
+      'notificationsEnabled',
       'soundEnabled',
       'showPhone',
       'photoURL',
@@ -195,8 +196,8 @@ export async function PATCH(request: NextRequest) {
     if (patch.termsAccepted === true) {
       patch.termsAcceptedAt = new Date().toISOString();
     }
-    if (body.notificationsEnabled !== undefined || patch.termsAccepted === true || patch.is_consented === true) {
-      patch.notificationsEnabled = true;
+    if (body.notificationsEnabled !== undefined) {
+      patch.notificationsEnabled = Boolean(body.notificationsEnabled);
     }
 
     await patchDocument(`users/${authUser.uid}`, patch as Record<string, string | boolean | number | null | string[]>);

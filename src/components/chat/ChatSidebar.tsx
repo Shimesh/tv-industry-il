@@ -52,26 +52,6 @@ function getChatInitial(chat: ChatRoom, currentUserId: string): string {
   return getChatName(chat, currentUserId).charAt(0);
 }
 
-function toMillis(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  return null;
-}
-
-function formatPresenceLabel(lastSeen: unknown, isOnline: boolean): string {
-  if (isOnline) return 'מחובר/ת עכשיו';
-  const timestamp = toMillis(lastSeen);
-  if (!timestamp) return 'לא מחובר/ת';
-  const diff = Date.now() - timestamp;
-  if (diff < 60_000) return 'נראה/ת עכשיו';
-  if (diff < 3600_000) return `נראה/ת לפני ${Math.floor(diff / 60_000)} דקות`;
-  if (diff < 86400_000) return `נראה/ת לפני ${Math.floor(diff / 3600_000)} שעות`;
-  return 'לא מחובר/ת';
-}
-
 function getLastMessagePreview(chat: ChatRoom): string {
   const message = chat.lastMessage;
   if (!message) return 'אין הודעות עדיין';
@@ -167,15 +147,9 @@ export default function ChatSidebar({
             const otherMemberUid = chat.type === 'private'
               ? chat.membersInfo?.find(m => m.uid !== currentUserId)?.uid
               : null;
-            const otherMember = chat.type === 'private'
-              ? chat.membersInfo?.find(m => m.uid !== currentUserId)
-              : null;
             const isOtherOnline = otherMemberUid
               ? onlineUserIds.has(otherMemberUid)
               : false;
-            const presenceLabel = otherMember
-              ? formatPresenceLabel(otherMember.lastSeen, isOtherOnline)
-              : null;
 
             return (
               <button
@@ -203,13 +177,8 @@ export default function ChatSidebar({
                   >
                     {chatInitial}
                   </div>
-                  {chat.type === 'private' && (
-                    <span
-                      className={`absolute bottom-0.5 right-0.5 h-[12px] w-[12px] rounded-full border-2 border-[var(--theme-bg)] ${
-                        isOtherOnline ? 'bg-[var(--theme-success)]' : 'bg-slate-500'
-                      }`}
-                      title={presenceLabel || undefined}
-                    />
+                  {isOtherOnline && (
+                    <span className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full bg-[var(--theme-success)] border-2 border-[var(--theme-bg)]" />
                   )}
                 </div>
 
@@ -227,16 +196,10 @@ export default function ChatSidebar({
                       </span>
                     )}
                   </div>
-                  {presenceLabel && (
-                    <div className="mt-[2px] flex items-center gap-1 text-[11px]">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          isOtherOnline ? 'bg-[var(--theme-success)]' : 'bg-slate-500'
-                        }`}
-                      />
-                      <span className={isOtherOnline ? 'text-[var(--theme-success)]' : 'text-[var(--theme-text-secondary)]'}>
-                        {presenceLabel}
-                      </span>
+                  {isOtherOnline && (
+                    <div className="mt-[1px] flex items-center gap-1 text-[11px]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-success)]" />
+                      <span className="text-[var(--theme-success)]">מחובר/ת עכשיו</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between mt-[2px]">
