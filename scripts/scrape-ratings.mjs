@@ -116,10 +116,16 @@ function parseRatingsTable(html, limit) {
 
 function israelDateParts() {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
   }).formatToParts(new Date());
   const get = t => parts.find(p => p.type === t)?.value || '';
-  return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')) };
+  const weekdays = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    weekday: weekdays[get('weekday')] ?? new Date().getUTCDay(),
+  };
 }
 function prevDay(y, m, d) {
   const dt = new Date(Date.UTC(y, m - 1, d - 1, 12));
@@ -128,8 +134,39 @@ function prevDay(y, m, d) {
 function toMidrugDate(y, m, d) { return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`; }
 function toIsoDate(y, m, d)    { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 
+async function fetchWeeklyOptions() {
+  if (!SCRAPERAPI_KEY) throw new Error('SCRAPERAPI_KEY not configured');
+  const proxyUrl = new URL('http://api.scraperapi.com/');
+  proxyUrl.searchParams.set('api_key', SCRAPERAPI_KEY);
+  proxyUrl.searchParams.set('url', MIDRUG_APP_URL);
+  proxyUrl.searchParams.set('country_code', 'il');
+  proxyUrl.searchParams.set('ultra_premium', 'true');
+  proxyUrl.searchParams.set('render', 'false');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(proxyUrl.toString(), {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`ScraperAPI HTTP ${res.status}`);
+    const html = decodeWindows1255(await res.text());
+    const $ = cheerio.load(html);
+    return $('#TheWeek option')
+      .map((_, el) => ({ id: $(el).attr('value')?.trim() || '', label: $(el).text().replace(/\s+/g, ' ').trim() }))
+      .get()
+      .filter(o => o.id && o.id !== '0' && o.label);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function main() {
-  const { year, month, day } = israelDateParts();
+  const { year, month, day, weekday } = israelDateParts();
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
 
@@ -178,7 +215,38 @@ async function main() {
     source: 'github-actions',
   }, { merge: true });
 
-  console.log(`✓ Done. Saved ${rows.length} rows for ${isoDate} (fallbackUsed=${fallbackUsed})`);
+  console.log(`✓ Daily done. Saved ${rows.length} rows for ${isoDate} (fallbackUsed=${fallbackUsed})`);
+
+  // Scrape weekly on Sunday (0) and Monday (1) to catch data published after Sunday morning's cron.
+  if (weekday === 0 || weekday === 1) {
+    console.log(`\nFetching weekly ratings (weekday=${weekday})...`);
+    try {
+      const weeklyOptions = await fetchWeeklyOptions();
+      const latestWeek = weeklyOptions.at(-1);
+      if (!latestWeek) throw new Error('No weekly options found in Midrug dropdown');
+
+      console.log(`  Latest week: id=${latestWeek.id} label="${latestWeek.label}"`);
+      const weeklyParams = new URLSearchParams({
+        param: '82', ShowTable: '2', TheWeek: latestWeek.id, Crowd: '1', tmp: String(Date.now()),
+      });
+      const weeklyHtml = await fetchWithRetry(weeklyParams);
+      const weeklyRows = parseRatingsTable(weeklyHtml, 25);
+      if (weeklyRows.length === 0) throw new Error(`No rows parsed for week ${latestWeek.label}`);
+
+      await db.doc(`ratings_weekly/week-${latestWeek.id}`).set({
+        weekId: latestWeek.id,
+        weekRange: latestWeek.label,
+        targetAudience: 'משקי בית בכלל האוכלוסייה',
+        top25: weeklyRows,
+        fetchedAt: new Date().toISOString(),
+      }, { merge: true });
+
+      console.log(`✓ Weekly done. Saved ${weeklyRows.length} rows for ${latestWeek.label}`);
+    } catch (weeklyErr) {
+      console.warn(`⚠ Weekly scrape failed (non-fatal): ${weeklyErr.message}`);
+    }
+  }
+
   process.exit(0);
 }
 

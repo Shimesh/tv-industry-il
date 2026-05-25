@@ -385,7 +385,10 @@ async function fetchWeeklyHtml(weekId: string): Promise<string> {
 }
 
 function shouldRunWeekly(now: Date, forceWeekly: boolean): boolean {
-  return forceWeekly || israelDateParts(now).weekday === 0;
+  // Run on Sunday (weekday=0) and Monday (weekday=1) to catch weekly data
+  // published on Midrug after Sunday morning's cron has already run.
+  const weekday = israelDateParts(now).weekday;
+  return forceWeekly || weekday === 0 || weekday === 1;
 }
 
 async function buildCachedRatingsFallback(error: unknown, includeWeekly: boolean): Promise<RatingsScrapeResult> {
