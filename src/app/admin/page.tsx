@@ -950,6 +950,54 @@ export default function AdminPage() {
     throw new Error('PROXY_FAILED');
   }
 
+  async function fetchMidrugWeeklyFromBrowser(): Promise<{ weekId: string; weekLabel: string; weeklyHtml: string } | null> {
+    const appSources = [
+      `/api/proxy/midrug?path=/app/`,
+      `https://corsproxy.io/?${encodeURIComponent('https://midrug.safenet.co.il/app/')}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent('https://midrug.safenet.co.il/app/')}`,
+    ];
+
+    let weekOptions: Array<{ id: string; label: string }> = [];
+    for (const sourceUrl of appSources) {
+      try {
+        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) continue;
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const select = doc.querySelector('#TheWeek');
+        if (!select) continue;
+        weekOptions = Array.from(select.querySelectorAll('option'))
+          .map((o) => ({ id: (o.getAttribute('value') || '').trim(), label: o.textContent?.replace(/\s+/g, ' ').trim() || '' }))
+          .filter((o) => o.id && o.id !== '0' && o.label);
+        if (weekOptions.length > 0) break;
+      } catch { /* try next */ }
+    }
+
+    const latestWeek = weekOptions.at(-1);
+    if (!latestWeek) return null;
+
+    const weekParams = new URLSearchParams({
+      param: '82', ShowTable: '2', TheWeek: latestWeek.id, Crowd: '1', tmp: String(Date.now()),
+    });
+    const weeklySources = [
+      `/api/proxy/midrug?path=/ajax_info.asp&params=${encodeURIComponent(weekParams.toString())}`,
+      `https://corsproxy.io/?${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${weekParams}`)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${weekParams}`)}`,
+    ];
+    for (const sourceUrl of weeklySources) {
+      try {
+        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) {
+          const text = await res.text();
+          if (/<(?:table|tbody|tr|td|th)\b/i.test(text)) {
+            return { weekId: latestWeek.id, weekLabel: latestWeek.label, weeklyHtml: text };
+          }
+        }
+      } catch { /* try next */ }
+    }
+    return null;
+  }
+
   async function runMidrugRatingsSync() {
     setRunningMidrugSync(true);
     try {
@@ -1014,16 +1062,25 @@ export default function AdminPage() {
         dailyHtml = await fetchMidrugFromBrowser(fmt(prevDay));
       }
 
+      const weeklyData = await fetchMidrugWeeklyFromBrowser().catch(() => null);
+
       const ingestResult = await fetchWithAuth<{
         daily?: { rows?: number; matched?: number };
         weekly?: { rows?: number; matched?: number };
       }>(
         '/api/admin/ratings-ingest',
-        { method: 'POST', body: JSON.stringify({ dailyHtml }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            dailyHtml,
+            ...(weeklyData ? { weeklyHtml: weeklyData.weeklyHtml, weekId: weeklyData.weekId, weekLabel: weeklyData.weekLabel } : {}),
+          }),
+        },
       );
 
       const dailyRows = ingestResult.daily?.rows || 0;
-      showToast('ok', `ייבוא מדרוג מהדפדפן הושלם: ${dailyRows} תוכניות`);
+      const weeklyRows = ingestResult.weekly?.rows;
+      showToast('ok', `ייבוא מדרוג מהדפדפן הושלם: ${dailyRows} תוכניות${weeklyRows ? `, ${weeklyRows} שבועיות` : ''}`);
       setShowManualPaste(false);
       await loadOverview(true);
     } catch (syncError) {
