@@ -34,7 +34,7 @@ export default function ChatConnectionBanner({
   connectionState,
   pendingCount,
 }: ChatConnectionBannerProps) {
-  if (!enabled && connectionState.mode === 'legacy') return null;
+  if (connectionState.mode === 'legacy') return null;
 
   const Icon = iconByMode[connectionState.mode];
   const isSpinning = connectionState.mode === 'connecting' || connectionState.mode === 'reconnecting';

@@ -189,6 +189,7 @@ export async function finalizeUserOnboardingProfile(
       isOnline: true,
       onboardingComplete: false,
       theme: 'dark',
+      notificationsEnabled: true,
       createdAt: now,
     });
   } else {
@@ -198,6 +199,7 @@ export async function finalizeUserOnboardingProfile(
     if (!cleanString(existing.phone) && authUser.phoneNumber) patch.phone = authUser.phoneNumber;
     if (!existing.approvalStatus) patch.approvalStatus = isPrimaryAdminUid(authUser.uid) ? 'active' : 'pending';
     if (typeof existing.is_consented !== 'boolean') patch.is_consented = false;
+    if (existing.notificationsEnabled !== true) patch.notificationsEnabled = true;
     if (!existing.createdAt) patch.createdAt = now;
     if (missingProfessionalFields(existing) && (professional.department || professional.role)) {
       patch.department = professional.department;
@@ -264,6 +266,7 @@ export function buildDefaultSessionProfile(authUser: VerifiedAuthUser): SessionP
     isOnline: true,
     onboardingComplete: false,
     theme: 'dark',
+    notificationsEnabled: true,
   };
 }
 
@@ -325,7 +328,7 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
     gear: asStringArray(raw.gear),
     preferredRoles: asStringArray(raw.preferredRoles),
     preferredRegions: asStringArray(raw.preferredRegions),
-    notificationsEnabled: typeof raw.notificationsEnabled === 'boolean' ? raw.notificationsEnabled : undefined,
+    notificationsEnabled: true,
     soundEnabled: typeof raw.soundEnabled === 'boolean' ? raw.soundEnabled : undefined,
     showPhone: typeof raw.showPhone === 'boolean' ? raw.showPhone : undefined,
     encryptionPublicKey: asOptionalString(raw.encryptionPublicKey),
@@ -357,6 +360,12 @@ export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): P
   } else if (typeof existing.is_consented !== 'boolean') {
     patch.is_consented = false;
     profile = { ...profile, is_consented: false };
+    repaired = true;
+  }
+
+  if (existing.notificationsEnabled !== true) {
+    patch.notificationsEnabled = true;
+    profile = { ...profile, notificationsEnabled: true };
     repaired = true;
   }
 

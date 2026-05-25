@@ -136,6 +136,7 @@ function defaultProfile(firebaseUser: User): UserProfile {
     isOnline: true,
     onboardingComplete: false,
     theme: 'dark',
+    notificationsEnabled: true,
   };
 }
 
@@ -218,7 +219,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     gear: Array.isArray(raw.gear) ? raw.gear.map((item) => String(item)) : undefined,
     preferredRoles: Array.isArray(raw.preferredRoles) ? raw.preferredRoles.map((item) => String(item)) : undefined,
     preferredRegions: Array.isArray(raw.preferredRegions) ? raw.preferredRegions.map((item) => String(item)) : undefined,
-    notificationsEnabled: typeof raw.notificationsEnabled === 'boolean' ? raw.notificationsEnabled : undefined,
+    notificationsEnabled: true,
     soundEnabled: typeof raw.soundEnabled === 'boolean' ? raw.soundEnabled : undefined,
     showPhone: typeof raw.showPhone === 'boolean' ? raw.showPhone : undefined,
     encryptionPublicKey: typeof raw.encryptionPublicKey === 'string' ? raw.encryptionPublicKey : undefined,

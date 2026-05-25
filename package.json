@@ -1,6 +1,6 @@
 {
   "name": "tv-industry-il",
-  "version": "2.6.12",
+  "version": "2.6.13",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -31,9 +31,10 @@
     "react-joyride": "^2.9.3",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.1",
+    "telegram": "^2.26.22",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "telegram": "^2.26.22",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "engines": {
@@ -44,6 +45,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

@@ -149,14 +149,28 @@ export function useChatTransport({
 
   const updateConnectionState = useCallback((next: Partial<ChatConnectionState> & { socket?: ChatSocketMode }) => {
     if (!mountedRef.current) return;
-    setConnectionState((current) => ({
-      ...current,
-      ...next,
-      transport: enabled ? 'hybrid' : 'firestore',
-      socket: next.socket ?? current.socket,
-      pendingQueue: pendingQueueRef.current,
-      lastSyncAt: next.lastSyncAt ?? current.lastSyncAt,
-    }));
+    setConnectionState((current) => {
+      const nextSocket = next.socket ?? current.socket;
+      const nextTransport = enabled ? 'hybrid' : 'firestore';
+      const nextLastSyncAt = next.lastSyncAt ?? current.lastSyncAt;
+      const nextPending = pendingQueueRef.current;
+      if (
+        current.socket === nextSocket &&
+        current.transport === nextTransport &&
+        current.lastSyncAt === nextLastSyncAt &&
+        current.pendingQueue === nextPending
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        ...next,
+        transport: nextTransport,
+        socket: nextSocket,
+        pendingQueue: nextPending,
+        lastSyncAt: nextLastSyncAt,
+      };
+    });
   }, [enabled]);
 
   useEffect(() => {

@@ -118,15 +118,7 @@ function mapConnectionState(
   }
 }
 
-function ChatEmptyState({
-  v2Enabled,
-  connectionLabel,
-  connectionDetail,
-}: {
-  v2Enabled: boolean;
-  connectionLabel: string;
-  connectionDetail: string;
-}) {
+function ChatEmptyState() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-6" style={{ background: 'var(--theme-bg)' }} dir="rtl">
       <div className="w-[200px] h-[200px] rounded-full flex items-center justify-center" style={{ background: 'var(--theme-accent)1a' }}>
@@ -134,19 +126,10 @@ function ChatEmptyState({
       </div>
 
       <div className="max-w-sm text-center px-6">
-        <h2 className="mb-2 text-[22px] font-light" style={{ color: 'var(--theme-text)' }}>
-          {v2Enabled ? 'צ׳אט מיידי מוכן' : 'TV Industry IL צ׳אט'}
-        </h2>
+        <h2 className="mb-2 text-[22px] font-light" style={{ color: 'var(--theme-text)' }}>TV Industry IL צ׳אט</h2>
         <p className="text-[14px] leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
-          {v2Enabled
-            ? 'בחרו שיחה כדי לראות הודעות בזמן אמת, עם מצב חיבור, אופטימיות וסטטוסים משופרים.'
-            : 'שלחו וקבלו הודעות בזמן אמת. בחרו שיחה מהרשימה או התחילו שיחה חדשה.'}
+          שלחו וקבלו הודעות בזמן אמת. בחרו שיחה מהרשימה או התחילו שיחה חדשה.
         </p>
-      </div>
-
-      <div className="max-w-md rounded-2xl border px-4 py-3 text-right app-panel" style={{ borderColor: 'var(--theme-border)' }}>
-        <p className="text-[13px] font-semibold" style={{ color: 'var(--theme-text)' }}>{connectionLabel}</p>
-        <p className="mt-1 text-[12px] leading-5" style={{ color: 'var(--theme-text-secondary)' }}>{connectionDetail}</p>
       </div>
     </div>
   );
@@ -191,7 +174,6 @@ function ChatContent() {
 
   const chatV2Enabled = isTruthyFlag(process.env.NEXT_PUBLIC_CHAT_V2_UI);
   const showConnectionBanner = chatV2Enabled || transportMode === 'hybrid' || process.env.NODE_ENV !== 'production';
-  const effectiveV2Enabled = chatV2Enabled || transportMode === 'hybrid';
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [optimisticMessagesByChat, setOptimisticMessagesByChat] = useState<Record<string, ChatUiMessage[]>>({});
@@ -578,11 +560,7 @@ function ChatContent() {
             allUsers={allUsers}
           />
         ) : (
-          <ChatEmptyState
-            v2Enabled={effectiveV2Enabled}
-            connectionLabel={bannerConnectionState.label}
-            connectionDetail={bannerConnectionState.detail}
-          />
+          <ChatEmptyState />
         )}
       </div>
 

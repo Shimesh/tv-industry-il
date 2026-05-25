@@ -1,11 +1,13 @@
 import { createDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { getFirebaseAdminMessaging } from '@/lib/server/firebaseAdmin';
 import { getPrimaryAdminUid } from '@/lib/server/primaryAdmin';
+import webPush from 'web-push';
 
 type RawUserForNotification = {
   id: string;
   siteRole?: string | null;
   fcmTokens?: unknown;
+  webPushSubscriptions?: unknown;
 };
 
 type CreateUserNotificationParams = {
@@ -26,8 +28,49 @@ type SendFcmPushParams = {
   type?: string;
 };
 
+export type StoredWebPushSubscription = {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
+type SendWebPushParams = {
+  subscriptions: StoredWebPushSubscription[];
+  title: string;
+  body: string;
+  linkUrl?: string;
+  type?: string;
+};
+
 function uniqueStrings(values: unknown[]): string[] {
   return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+export function normalizeWebPushSubscription(value: unknown): StoredWebPushSubscription | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const endpoint = typeof record.endpoint === 'string' ? record.endpoint.trim() : '';
+  const keys = record.keys && typeof record.keys === 'object'
+    ? record.keys as Record<string, unknown>
+    : {};
+  const p256dh = typeof keys.p256dh === 'string' ? keys.p256dh.trim() : '';
+  const auth = typeof keys.auth === 'string' ? keys.auth.trim() : '';
+  const expirationTime = typeof record.expirationTime === 'number' ? record.expirationTime : null;
+
+  if (!endpoint || !p256dh || !auth) return null;
+  return { endpoint, expirationTime, keys: { p256dh, auth } };
+}
+
+export function uniqueWebPushSubscriptions(values: unknown[]): StoredWebPushSubscription[] {
+  const unique = new Map<string, StoredWebPushSubscription>();
+  for (const value of values) {
+    const subscription = normalizeWebPushSubscription(value);
+    if (subscription) unique.set(subscription.endpoint, subscription);
+  }
+  return Array.from(unique.values());
 }
 
 function cleanInternalLink(value: unknown): string | undefined {
@@ -62,14 +105,13 @@ export async function sendFcmPush(params: SendFcmPushParams) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
   const linkUrl = cleanInternalLink(params.linkUrl) || '/';
   const link = `${appUrl}${linkUrl}`;
-  const tag = params.type?.startsWith('world_cup_') ? params.type : 'tv-industry-push';
 
   const chunkSize = 500;
   for (let i = 0; i < tokens.length; i += chunkSize) {
     await messaging.sendEachForMulticast({
       tokens: tokens.slice(i, i + chunkSize),
-      notification: { title: params.title, body: params.body },
       data: {
+        source: 'firebase',
         title: params.title,
         body: params.body,
         link,
@@ -79,18 +121,60 @@ export async function sendFcmPush(params: SendFcmPushParams) {
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
-        notification: {
-          title: params.title,
-          body: params.body,
-          icon: '/icons/icon-192x192.png',
-          badge: '/icons/icon-72x72.png',
-          tag,
-          renotify: true,
-          data: { link, type: params.type || 'general' },
-        },
       },
     });
   }
+}
+
+let webPushConfigured = false;
+
+function configureWebPush(): boolean {
+  if (webPushConfigured) return true;
+
+  const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim();
+  if (!publicKey || !privateKey) return false;
+
+  const subject =
+    process.env.WEB_PUSH_VAPID_SUBJECT?.trim() ||
+    process.env.WEB_PUSH_CONTACT_EMAIL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    'https://tv-industry-il.vercel.app';
+
+  webPush.setVapidDetails(subject.startsWith('mailto:') || subject.startsWith('http') ? subject : `mailto:${subject}`, publicKey, privateKey);
+  webPushConfigured = true;
+  return true;
+}
+
+export async function sendStandardWebPush(params: SendWebPushParams) {
+  const subscriptions = uniqueWebPushSubscriptions(params.subscriptions);
+  if (subscriptions.length === 0) return;
+  if (!configureWebPush()) {
+    console.warn('[notifications] WEB_PUSH_VAPID_PRIVATE_KEY / NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY not configured; skipping standard Web Push.');
+    return;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+  const linkUrl = cleanInternalLink(params.linkUrl) || '/';
+  const link = `${appUrl}${linkUrl}`;
+  const payload = JSON.stringify({
+    data: {
+      title: params.title,
+      body: params.body,
+      link,
+      linkUrl,
+      type: params.type || 'general',
+    },
+  });
+
+  await Promise.allSettled(
+    subscriptions.map((subscription) =>
+      webPush.sendNotification(subscription, payload, {
+        TTL: 60 * 60 * 24,
+        urgency: 'high',
+      }),
+    ),
+  );
 }
 
 export async function notifyAdminsOfPendingUser(params: {
@@ -103,6 +187,7 @@ export async function notifyAdminsOfPendingUser(params: {
     const adminUsers = users.filter((user) => user.siteRole === 'admin' || user.id === primaryAdminUid);
     const adminUids = uniqueStrings([...adminUsers.map((user) => user.id), primaryAdminUid]);
     const tokenByUid = new Map(adminUsers.map((user) => [user.id, user.fcmTokens]));
+    const webPushByUid = new Map(adminUsers.map((user) => [user.id, user.webPushSubscriptions]));
     const linkUrl = `/admin/users?uid=${encodeURIComponent(params.uid)}`;
     const title = 'משתמש חדש ממתין לאישור';
     const message = `${params.displayLabel} ממתין/ה לאישור גישה`;
@@ -131,6 +216,26 @@ export async function notifyAdminsOfPendingUser(params: {
     if (fcmTokens.length > 0) {
       await sendFcmPush({
         tokens: fcmTokens,
+        title: 'New User Waiting',
+        body: `New User Waiting: ${params.displayLabel} is requesting access to TV Industry IL.`,
+        linkUrl,
+      });
+    }
+
+    const subscriptions = uniqueWebPushSubscriptions(
+      adminUids
+        .filter((uid) => {
+          const value = tokenByUid.get(uid);
+          return !Array.isArray(value) || value.length === 0;
+        })
+        .flatMap((uid) => {
+          const value = webPushByUid.get(uid);
+          return Array.isArray(value) ? value : [];
+        }),
+    );
+    if (subscriptions.length > 0) {
+      await sendStandardWebPush({
+        subscriptions,
         title: 'New User Waiting',
         body: `New User Waiting: ${params.displayLabel} is requesting access to TV Industry IL.`,
         linkUrl,

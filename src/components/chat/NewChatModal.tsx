@@ -26,6 +26,18 @@ interface DisplayPerson {
   photoURL?: string | null;
   userId?: string;
   isOnline?: boolean;
+  lastSeen?: number | null;
+}
+
+function formatPresenceLabel(person: DisplayPerson): string {
+  if (!person.userId) return 'לא רשום באפליקציה';
+  if (person.isOnline) return 'מחובר/ת עכשיו';
+  if (!person.lastSeen) return 'לא מחובר/ת';
+  const diff = Date.now() - person.lastSeen;
+  if (diff < 60_000) return 'נראה/ת עכשיו';
+  if (diff < 3600_000) return `נראה/ת לפני ${Math.floor(diff / 60_000)} דקות`;
+  if (diff < 86400_000) return `נראה/ת לפני ${Math.floor(diff / 3600_000)} שעות`;
+  return 'לא מחובר/ת';
 }
 
 export default function NewChatModal({
@@ -60,6 +72,7 @@ export default function NewChatModal({
         photoURL: u.photoURL,
         userId: u.uid,
         isOnline: onlineUsers.some((onlineUser) => onlineUser.uid === u.uid),
+        lastSeen: typeof u.lastSeen === 'number' ? u.lastSeen : null,
       });
     }
 
@@ -153,12 +166,12 @@ export default function NewChatModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md overflow-hidden rounded-xl border border-[#2A3942] shadow-2xl"
-        style={{ backgroundColor: '#202C33' }}
+        className="flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-[#2A3942] shadow-2xl"
+        style={{ backgroundColor: '#202C33', maxHeight: 'calc(100dvh - 2rem)' }}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between bg-[#00A884] px-5 py-4">
@@ -263,7 +276,7 @@ export default function NewChatModal({
           )}
         </div>
 
-        <div className="max-h-[320px] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="p-8 text-center">
               <p className="text-sm text-[#8696a0]">לא נמצאו אנשי קשר</p>
@@ -293,24 +306,36 @@ export default function NewChatModal({
                     >
                       <div className="flex items-center gap-3">
                         {person.photoURL ? (
-                          <img src={person.photoURL} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-                        ) : (
-                          <div
-                            className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
-                              canChat ? 'bg-[#00A884]' : 'bg-[#3B4A54]'
-                            }`}
-                          >
-                            {person.displayName.charAt(0)}
-                            {person.isOnline && (
-                              <span className="absolute bottom-0 left-0 h-3 w-3 rounded-full border-2 border-[#202C33] bg-[#00A884]" />
-                            )}
-                          </div>
-                        )}
+                          <img
+                            src={person.photoURL}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.style.display = 'none';
+                              const fallback = event.currentTarget.nextElementSibling;
+                              if (fallback instanceof HTMLElement) fallback.style.setProperty('display', 'flex');
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`relative h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
+                            canChat ? 'bg-[#00A884]' : 'bg-[#3B4A54]'
+                          }`}
+                          style={{ display: person.photoURL ? 'none' : 'flex' }}
+                        >
+                          {person.displayName.charAt(0)}
+                          {person.isOnline && (
+                            <span className="absolute bottom-0 left-0 h-3 w-3 rounded-full border-2 border-[#202C33] bg-[#00A884]" />
+                          )}
+                        </div>
 
                         <div className="min-w-0 flex-1 text-right">
                           <p className="truncate text-[14px] font-medium text-[#E9EDEF]">{person.displayName}</p>
                           <p className="truncate text-[11px] text-[#8696a0]">
-                            {person.isOnline ? <span className="text-[#00A884]">מחובר • </span> : ''}
+                            <span className={person.isOnline ? 'text-[#00A884]' : 'text-[#8696a0]'}>
+                              {formatPresenceLabel(person)}
+                            </span>
+                            {' • '}
                             {person.role}
                             {person.role && person.department ? ' · ' : ''}
                             {person.department}

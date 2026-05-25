@@ -250,13 +250,15 @@ function SettingsContent() {
         {/* Notifications */}
         <SettingsSection icon={<Bell className="w-4 h-4" />} title="התראות">
           <div className="space-y-3">
+            <div className="hidden">
             <ToggleRow
               icon={<Bell className="w-4 h-4" />}
               label="התראות Push"
               description="קבל התראות על עדכוני לוח הפקות"
-              enabled={notificationsEnabled}
+              enabled={true}
               onToggle={handleToggleNotifications}
             />
+            </div>
             <ToggleRow
               icon={<Volume2 className="w-4 h-4" />}
               label="צלילים"
@@ -378,7 +380,7 @@ function SettingsContent() {
         {/* App Info */}
         <div className="text-center py-4">
           <p className="text-xs" style={{ color: 'var(--theme-text-secondary)', opacity: 0.5 }}>
-            TV Industry IL v2.6.2
+            TV Industry IL v2.6.12
           </p>
         </div>
       </div>

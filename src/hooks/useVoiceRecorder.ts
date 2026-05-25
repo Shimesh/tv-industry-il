@@ -6,6 +6,7 @@ export type RecorderMode = 'audio' | 'video';
 
 interface UseVoiceRecorderReturn {
   isRecording: boolean;
+  isRequestingPermission: boolean;
   duration: number;
   audioBlob: Blob | null;
   mimeType: string;
@@ -15,6 +16,9 @@ interface UseVoiceRecorderReturn {
   cancelRecording: () => void;
   error: string | null;
 }
+
+const MAX_DURATION = 120;
+const PERMISSION_HINT_DELAY_MS = 1200;
 
 function getBestMimeType(mode: RecorderMode): string {
   const audioCandidates = [
@@ -31,15 +35,50 @@ function getBestMimeType(mode: RecorderMode): string {
     'video/mp4',
   ];
   const candidates = mode === 'video' ? videoCandidates : audioCandidates;
-  return candidates.find(t => {
-    try { return MediaRecorder.isTypeSupported(t); } catch { return false; }
+
+  return candidates.find((type) => {
+    try {
+      return MediaRecorder.isTypeSupported(type);
+    } catch {
+      return false;
+    }
   }) || '';
 }
 
-const MAX_DURATION = 120; // seconds
+function getRecorderErrorMessage(err: unknown, mode: RecorderMode): string {
+  const name = typeof err === 'object' && err && 'name' in err ? String((err as { name?: unknown }).name) : '';
+  const target = mode === 'video' ? 'מצלמה ומיקרופון' : 'מיקרופון';
+
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return `לא ניתן לגשת ל${target}. בדקו שההרשאה פתוחה בדפדפן ונסו שוב.`;
+  }
+
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return mode === 'video'
+      ? 'לא נמצאו מצלמה או מיקרופון זמינים במכשיר.'
+      : 'לא נמצא מיקרופון זמין במכשיר.';
+  }
+
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return `${target} כבר בשימוש על ידי אפליקציה אחרת. סגרו אותה ונסו שוב.`;
+  }
+
+  if (name === 'SecurityError') {
+    return 'הדפדפן חסם הקלטה בעמוד הזה. ודאו שהאתר פתוח ב-HTTPS ושההרשאות מאופשרות.';
+  }
+
+  if (name === 'NotSupportedError') {
+    return 'הדפדפן הזה לא תומך בהקלטת הודעות.';
+  }
+
+  return mode === 'video'
+    ? 'הדפדפן לא הצליח להתחיל הקלטת וידאו.'
+    : 'הדפדפן לא הצליח להתחיל הקלטה קולית.';
+}
 
 export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const [isRecording, setIsRecording] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [duration, setDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [mimeType, setMimeType] = useState('audio/webm');
@@ -49,116 +88,148 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const resolveRef = useRef<((blob: Blob | null) => void) | null>(null);
+  const permissionHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
+  const activeStreamRef = useRef<MediaStream | null>(null);
 
-  const stopTimer = () => {
+  const clearPermissionHintTimer = useCallback(() => {
+    if (permissionHintTimerRef.current) {
+      clearTimeout(permissionHintTimerRef.current);
+      permissionHintTimerRef.current = null;
+    }
+  }, []);
+
+  const stopTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  };
+  }, []);
 
-  const releaseStream = useCallback((s: MediaStream | null) => {
-    s?.getTracks().forEach(t => t.stop());
+  const releaseStream = useCallback((nextStream: MediaStream | null) => {
+    nextStream?.getTracks().forEach((track) => track.stop());
+    if (activeStreamRef.current === nextStream) activeStreamRef.current = null;
     setStream(null);
   }, []);
+
+  const resetRecordingState = useCallback(() => {
+    stopTimer();
+    clearPermissionHintTimer();
+    setIsRequestingPermission(false);
+    setIsRecording(false);
+    setDuration(0);
+    setAudioBlob(null);
+    chunksRef.current = [];
+  }, [clearPermissionHintTimer, stopTimer]);
 
   const startRecording = useCallback(async (mode: RecorderMode = 'audio') => {
     setError(null);
     setAudioBlob(null);
+    setIsRequestingPermission(true);
     cancelledRef.current = false;
 
     try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        throw new DOMException('Media recording is not supported', 'NotSupportedError');
+      }
+
+      clearPermissionHintTimer();
+      permissionHintTimerRef.current = setTimeout(() => {
+        setError(mode === 'video'
+          ? 'מחכה לאישור גישה למצלמה ולמיקרופון בדפדפן.'
+          : 'מחכה לאישור גישה למיקרופון בדפדפן.');
+      }, PERMISSION_HINT_DELAY_MS);
+
       const constraints = mode === 'video'
         ? { video: { facingMode: 'user' }, audio: true }
         : { audio: true };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      clearPermissionHintTimer();
+      setIsRequestingPermission(false);
+      setError(null);
+
+      activeStreamRef.current = mediaStream;
       const selectedMime = getBestMimeType(mode);
       setMimeType(selectedMime || (mode === 'video' ? 'video/webm' : 'audio/webm'));
       setStream(mediaStream);
 
       chunksRef.current = [];
-      const options = selectedMime ? { mimeType: selectedMime } : {};
-      const recorder = new MediaRecorder(mediaStream, options);
+      const recorder = new MediaRecorder(mediaStream, selectedMime ? { mimeType: selectedMime } : undefined);
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
       };
 
       recorder.onstop = () => {
         stopTimer();
         if (cancelledRef.current) {
           releaseStream(mediaStream);
-          resolveRef.current?.(null);
           return;
         }
-        const blob = new Blob(chunksRef.current, { type: selectedMime || 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: selectedMime || (mode === 'video' ? 'video/webm' : 'audio/webm') });
         setAudioBlob(blob);
         releaseStream(mediaStream);
-        resolveRef.current?.(blob);
       };
 
-      recorder.start(250); // collect every 250ms
+      recorder.start(250);
       setIsRecording(true);
       setDuration(0);
 
-      // Start timer
       timerRef.current = setInterval(() => {
-        setDuration(prev => {
-          if (prev >= MAX_DURATION - 1) {
+        setDuration((prev) => {
+          if (prev >= MAX_DURATION - 1 && recorder.state !== 'inactive') {
             recorder.stop();
+            setIsRecording(false);
             return prev;
           }
           return prev + 1;
         });
       }, 1000);
-
     } catch (err: unknown) {
-      const e = err as { name?: string };
-      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-        setError('נא לאפשר גישה למיקרופון בהגדרות הדפדפן');
-      } else {
-        setError('הדפדפן שלך אינו תומך בהקלטה');
-      }
+      resetRecordingState();
+      releaseStream(activeStreamRef.current);
+      setError(getRecorderErrorMessage(err, mode));
     }
-  }, [releaseStream]);
+  }, [clearPermissionHintTimer, releaseStream, resetRecordingState, stopTimer]);
 
   const stopRecording = useCallback(() => {
     cancelledRef.current = false;
+    clearPermissionHintTimer();
+    setIsRequestingPermission(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
-  }, []);
+  }, [clearPermissionHintTimer]);
 
   const cancelRecording = useCallback(() => {
     cancelledRef.current = true;
-    stopTimer();
+    resetRecordingState();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+    } else {
+      releaseStream(activeStreamRef.current);
     }
-    setIsRecording(false);
-    setDuration(0);
-    setAudioBlob(null);
-    chunksRef.current = [];
-  }, []);
+  }, [releaseStream, resetRecordingState]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
+      cancelledRef.current = true;
       stopTimer();
+      clearPermissionHintTimer();
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        cancelledRef.current = true;
         mediaRecorderRef.current.stop();
+      } else {
+        releaseStream(activeStreamRef.current);
       }
     };
-  }, []);
+  }, [clearPermissionHintTimer, releaseStream, stopTimer]);
 
   return {
     isRecording,
+    isRequestingPermission,
     duration,
     audioBlob,
     mimeType,

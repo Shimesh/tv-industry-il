@@ -254,15 +254,26 @@ export default function MessageBubble({
           onClick={() => message.senderId !== 'system' && router.push(`/profile/${message.senderId}`)}
         >
           {message.senderPhoto ? (
-            <img src={message.senderPhoto} alt="" className="w-[28px] h-[28px] rounded-full object-cover" />
-          ) : (
-            <div
-              className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-white text-[11px] font-bold"
-              style={{ backgroundColor: nameColor(message.senderName) }}
-            >
-              {message.senderName.charAt(0)}
-            </div>
-          )}
+            <img
+              src={message.senderPhoto}
+              alt=""
+              className="w-[28px] h-[28px] rounded-full object-cover"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+                const fallback = event.currentTarget.nextElementSibling;
+                if (fallback instanceof HTMLElement) fallback.style.setProperty('display', 'flex');
+              }}
+            />
+          ) : null}
+          <div
+            className="w-[28px] h-[28px] rounded-full items-center justify-center text-white text-[11px] font-bold"
+            style={{
+              backgroundColor: nameColor(message.senderName),
+              display: message.senderPhoto ? 'none' : 'flex',
+            }}
+          >
+            {message.senderName.charAt(0)}
+          </div>
         </div>
       )}
       {!isOwn && isGroup && !showSender && <div className="w-[34px] shrink-0" />}

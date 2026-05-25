@@ -76,6 +76,7 @@ export default function Navigation() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [loadingBar, setLoadingBar] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [cachedProfile, setCachedProfile] = useState<typeof profile>(null);
   const prevPathnameRef = useRef(pathname);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -143,6 +144,10 @@ export default function Navigation() {
   const filteredLinks = navLinks;
   const desktopLinks = showAdminLink ? [...filteredLinks, adminNavLink] : filteredLinks;
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const renderNavLink = (link: NavLink, compact = false) => {
     const isActive = pathname === link.href;
     const Icon = link.icon;
@@ -181,6 +186,7 @@ export default function Navigation() {
 
   const renderAdminLink = (compact = false) => (
     <Link
+      key={adminNavLink.href}
       href={adminNavLink.href}
       prefetch
       onClick={(event) => {
@@ -236,7 +242,9 @@ export default function Navigation() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            {user ? <NotificationBell /> : null}
+            <div className="hidden md:block">
+              {mounted && user ? <NotificationBell /> : null}
+            </div>
 
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button

@@ -9,10 +9,6 @@ export type VerifiedAuthUser = {
   phoneNumber?: string | null;
 };
 
-/**
- * Verify Firebase ID token via Google's tokeninfo endpoint.
- * This avoids needing firebase-admin SDK.
- */
 export async function verifyAuthToken(request: NextRequest): Promise<VerifiedAuthUser | null> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -61,7 +57,6 @@ export async function verifyAuthToken(request: NextRequest): Promise<VerifiedAut
   }
 }
 
-/** Standard 401 response */
 export function unauthorizedResponse() {
   return NextResponse.json({ error: 'לא מורשה - נדרשת הזדהות' }, { status: 401 });
 }

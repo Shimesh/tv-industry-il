@@ -392,6 +392,11 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const displayPhoto =
     legacy.displayPhoto || profile?.photoURL || user?.photoURL || null;
   const activeChatId = legacy.activeChatData?.id || legacy.activeChat || null;
+
+  const getIdToken = useCallback(
+    () => user ? user.getIdToken() : Promise.reject(new Error('not-authenticated')),
+    [user]
+  );
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const deliveredReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
   const readReceiptCacheRef = useRef<Map<string, Set<string>>>(new Map());
@@ -595,7 +600,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     currentUserId: user?.uid ?? null,
     displayName,
     displayPhoto,
-    getIdToken: user ? () => user.getIdToken() : null,
+    getIdToken: user ? getIdToken : null,
     enabled: socketTransportEnabled,
     onSnapshot: (payload: ChatV2SnapshotPayload) => {
       const nextChat = mapProtocolRoom(payload.chat, user?.uid ?? null);
@@ -854,7 +859,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   const messages = useMemo(() => {
     const baseMessages =
-      legacy.messages.length > 0 ? (legacy.messages as Message[]) : snapshotFallback?.messages ?? [];
+      legacy.activeChat === activeChatId && legacy.messages.length > 0
+        ? (legacy.messages as Message[])
+        : snapshotFallback?.messages ?? [];
 
     const roomMessages = activeChatId ? roomStore[activeChatId]?.messages ?? [] : [];
     const canonicalMessages = roomMessages.length
@@ -893,7 +900,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     return settledOptimisticMessages.length
       ? mergeMessages(mergedServerMessages, settledOptimisticMessages)
       : mergedServerMessages;
-  }, [activeChatId, legacy.messages, roomStore, snapshotFallback?.messages, transportMessages, user?.uid]);
+  }, [activeChatId, legacy.activeChat, legacy.messages, roomStore, snapshotFallback?.messages, transportMessages, user?.uid]);
 
   const typingUsers = useMemo(() => {
     if (!activeChatId) return legacy.typingUsers;

@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import {
   collection, query, orderBy, onSnapshot, addDoc, doc, getDoc,
   serverTimestamp, where, setDoc, updateDoc, limit, Timestamp, increment, writeBatch,
   getDocs, startAfter, type QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
   getKeyPair,
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
@@ -18,8 +17,8 @@ import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } f
 const CHAT_SNAPSHOT_TIMEOUT_MS = 10_000;
 const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
 const SEND_STEP_TIMEOUT_MS = 12_000;
-const FILE_UPLOAD_TIMEOUT_MS = 90_000;
 const PRESENCE_WINDOW_MS = 2 * 60 * 1000;
+const CHAT_ATTACHMENT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 export interface SendMessageResult {
   messageId: string;
@@ -32,7 +31,7 @@ export interface ChatRoom {
   name: string;
   photoURL: string | null;
   members: string[];
-  membersInfo: { uid?: string; displayName: string; photoURL: string | null }[];
+  membersInfo: { uid?: string; displayName: string; photoURL: string | null; isOnline?: boolean; lastSeen?: number | null }[];
   lastMessage?: {
     text: string;
     senderId: string;
@@ -44,6 +43,68 @@ export interface ChatRoom {
   lastRead: Record<string, number>;
   createdAt: number;
   updatedAt: number;
+}
+
+async function uploadChatAttachmentViaApi({
+  file,
+  chatId,
+  user,
+  duration,
+  traceId,
+  clientMessageId,
+  onProgress,
+}: {
+  file: File;
+  chatId: string;
+  user: NonNullable<ReturnType<typeof useAuth>['user']>;
+  duration?: number;
+  traceId: string;
+  clientMessageId?: string | null;
+  onProgress: (progress: number | null) => void;
+}): Promise<{ url: string; fileName: string; sizeBytes: number; mimeType: string }> {
+  if (file.size > CHAT_ATTACHMENT_MAX_BYTES) {
+    throw new Error('הקובץ גדול מדי. עד שיופעל Firebase Storage אפשר להעלות קבצים עד 3.5MB.');
+  }
+
+  const token = await user.getIdToken();
+  const formData = new FormData();
+  formData.set('chatId', chatId);
+  formData.set('file', file);
+  if (typeof duration === 'number' && Number.isFinite(duration)) {
+    formData.set('duration', String(duration));
+  }
+
+  onProgress(5);
+  chatTrace('send', 'api-upload:start', { traceId, chatId, clientMessageId, file });
+
+  try {
+    const response = await withChatTimeout(
+      fetch('/api/chat/attachments', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      }),
+      35_000,
+      'send',
+      'api-upload',
+      { traceId, chatId, clientMessageId, file }
+    );
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload?.attachment?.url) {
+      throw new Error(typeof payload?.error === 'string' ? payload.error : 'העלאת הקובץ נכשלה');
+    }
+
+    onProgress(100);
+    return {
+      url: payload.attachment.url,
+      fileName: payload.attachment.fileName || file.name,
+      sizeBytes: payload.attachment.sizeBytes || file.size,
+      mimeType: payload.attachment.mimeType || file.type || 'application/octet-stream',
+    };
+  } finally {
+    onProgress(null);
+  }
 }
 
 export interface Message {
@@ -89,6 +150,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const prevActiveChatRef = useRef<string | null>(null);
   const restoredActiveChatRef = useRef(false);
   const observedClientMessageIdsRef = useRef<Set<string>>(new Set());
+  const repairedMissingSummaryRef = useRef<Set<string>>(new Set());
+  const lastTypingWriteRef = useRef<{ chatId: string; isTyping: boolean; at: number } | null>(null);
   // Ref for getChatKey so the messages effect doesn't re-subscribe on every chats/allUsers change
   const getChatKeyRef = useRef<((chatId: string, encryptedKeys?: Record<string, string>) => Promise<string | null>) | null>(null);
 
@@ -256,6 +319,91 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   }, [user]);
 
   useEffect(() => {
+    if (!user || chatsLoading || chats.length === 0) return;
+    const missingSummaries = chats
+      .filter((chat) => !chat.lastMessage && !repairedMissingSummaryRef.current.has(chat.id))
+      .filter((chat) => !(chat.type === 'private' && chat.members.every((uid) => uid === user.uid)))
+      .slice(0, 12);
+
+    if (missingSummaries.length === 0) return;
+
+    missingSummaries.forEach((chat) => {
+      repairedMissingSummaryRef.current.add(chat.id);
+      const traceId = createChatTraceId('summary-repair');
+      chatTrace('chats', 'summary-repair:start', { traceId, chatId: chat.id });
+
+      void (async () => {
+        try {
+          const latestQuery = query(
+            collection(db, 'chats', chat.id, 'messages'),
+            orderBy('createdAt', 'desc'),
+            limit(1)
+          );
+          const latest = await withChatTimeout(
+            getDocs(latestQuery),
+            SEND_STEP_TIMEOUT_MS,
+            'chats',
+            'summary-repair-read-latest',
+            { traceId, chatId: chat.id }
+          );
+          const latestDoc = latest.docs[0];
+          if (!latestDoc) {
+            chatTrace('chats', 'summary-repair:no-messages', { traceId, chatId: chat.id });
+            return;
+          }
+
+          const data = latestDoc.data();
+          const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || Date.now());
+          const type = data.type || 'text';
+          const summaryText = type === 'voice'
+            ? 'הודעה קולית'
+            : type === 'video'
+              ? 'הודעת וידאו'
+              : type === 'image'
+                ? 'תמונה'
+                : type === 'file'
+                  ? data.fileName || 'קובץ'
+                  : data.text || '';
+          const lastMessage = {
+            text: summaryText,
+            senderId: data.senderId || '',
+            senderName: data.senderName || '',
+            timestamp: createdAt,
+            kind: type,
+          };
+
+          setChats((current) => current
+            .map((item) => item.id === chat.id ? { ...item, lastMessage, updatedAt: Math.max(item.updatedAt || 0, createdAt) } : item)
+            .sort((a, b) => (b.lastMessage?.timestamp || b.updatedAt || b.createdAt || 0) - (a.lastMessage?.timestamp || a.updatedAt || a.createdAt || 0))
+          );
+
+          await withChatTimeout(
+            updateDoc(doc(db, 'chats', chat.id), {
+              lastMessage: {
+                text: summaryText,
+                senderId: data.senderId || '',
+                senderName: data.senderName || '',
+                timestamp: data.createdAt || createdAt,
+                kind: type,
+                messageId: latestDoc.id,
+                clientMessageId: data.clientMessageId || null,
+              },
+              updatedAt: data.createdAt || serverTimestamp(),
+            }),
+            SEND_STEP_TIMEOUT_MS,
+            'chats',
+            'summary-repair-write',
+            { traceId, chatId: chat.id, messageId: latestDoc.id }
+          );
+          chatTrace('chats', 'summary-repair:ok', { traceId, chatId: chat.id, messageId: latestDoc.id });
+        } catch (error) {
+          chatTrace('chats', 'summary-repair:failed', { traceId, chatId: chat.id, error }, { level: 'warn' });
+        }
+      })();
+    });
+  }, [chats, chatsLoading, user]);
+
+  useEffect(() => {
     if (!user || chatsLoading || restoredActiveChatRef.current) return;
     restoredActiveChatRef.current = true;
     const lastChat = localStorage.getItem('tv-chat-active');
@@ -299,6 +447,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }
     setMessagesLoading(true);
     setChatError(null);
+    setLiveMessages([]);
     setOlderMessages([]);
     setLastVisible(null);
     setHasMore(false);
@@ -337,6 +486,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       const msgs: Message[] = ascDocs.map(docSnap => {
         const data = docSnap.data();
         const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt || now);
+        if (typeof data.clientMessageId === 'string') {
+          observedClientMessageIdsRef.current.add(data.clientMessageId);
+        }
         return {
           id: docSnap.id,
           clientMessageId: typeof data.clientMessageId === 'string' ? data.clientMessageId : null,
@@ -359,9 +511,6 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
             ? data.deletedAt.toMillis()
             : (data.deletedAt ?? null),
         };
-        if (typeof data.clientMessageId === 'string') {
-          observedClientMessageIdsRef.current.add(data.clientMessageId);
-        }
       });
 
       // Set messages immediately so they appear without waiting for decryption.
@@ -524,6 +673,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     let fileURL = null;
     let fileSize = null;
+    let uploadedFileName = file?.name || null;
 
     const cachedChat = chats.find(c => c.id === activeChat);
     const chatDoc = await withChatTimeout(
@@ -551,42 +701,23 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
     if (file && type !== 'text') {
       try {
-        let storagePath: string;
-        if (type === 'voice') {
-          storagePath = `chat/${activeChat}/voice_${Date.now()}.${file.name.split('.').pop() || 'webm'}`;
-        } else if (type === 'video') {
-          storagePath = `chat/${activeChat}/video_${Date.now()}.${file.name.split('.').pop() || 'webm'}`;
-        } else {
-          storagePath = `chat/${activeChat}/${Date.now()}_${file.name}`;
-        }
-        const storageRef = ref(storage, storagePath);
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        await withChatTimeout(
-          new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed',
-              (snapshot) => {
-                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                setUploadProgress(progress);
-                chatTrace('send', 'upload:progress', { traceId, chatId: activeChat, clientMessageId, progress });
-              },
-              reject,
-              () => { setUploadProgress(null); resolve(); }
-            );
-          }),
-          FILE_UPLOAD_TIMEOUT_MS,
-          'send',
-          'upload-file',
-          { traceId, chatId: activeChat, clientMessageId, file }
-        );
-        fileURL = await withChatTimeout(
-          getDownloadURL(storageRef),
-          SEND_STEP_TIMEOUT_MS,
-          'send',
-          'get-download-url',
-          { traceId, chatId: activeChat, clientMessageId }
-        );
-        fileSize = file.size;
+        const uploaded = await uploadChatAttachmentViaApi({
+          file,
+          chatId: activeChat,
+          user,
+          duration,
+          traceId,
+          clientMessageId,
+          onProgress: (progress) => {
+            setUploadProgress(progress);
+            if (progress !== null) {
+              chatTrace('send', 'upload:progress', { traceId, chatId: activeChat, clientMessageId, progress });
+            }
+          },
+        });
+        fileURL = uploaded.url;
+        fileSize = uploaded.sizeBytes;
+        uploadedFileName = uploaded.fileName;
       } catch (err) {
         console.error('Upload error:', err);
         setUploadProgress(null);
@@ -597,7 +728,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     const previewText = type === 'voice' ? 'הודעה קולית'
       : type === 'video' ? 'הודעת וידאו'
       : type === 'text' ? text
-      : `קובץ ${file?.name || text || ''}`.trim();
+      : `קובץ ${uploadedFileName || text || ''}`.trim();
 
     let messageText = type === 'text' ? text : (type === 'voice' || type === 'video' ? '' : file?.name || text);
     if (encryptedKeys) {
@@ -617,7 +748,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       text: messageText,
       type,
       fileURL,
-      fileName: file?.name || null,
+      fileName: uploadedFileName,
       fileSize,
       duration: duration || null,
       mimeType: mimeType || null,
@@ -856,6 +987,18 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!activeChat || !user) return;
+    const now = Date.now();
+    const lastTypingWrite = lastTypingWriteRef.current;
+    const debounceMs = isTyping ? 1200 : 5000;
+    if (
+      lastTypingWrite &&
+      lastTypingWrite.chatId === activeChat &&
+      lastTypingWrite.isTyping === isTyping &&
+      now - lastTypingWrite.at < debounceMs
+    ) {
+      return;
+    }
+    lastTypingWriteRef.current = { chatId: activeChat, isTyping, at: now };
     chatTrace('typing', isTyping ? 'start' : 'stop', { chatId: activeChat, uid: user.uid });
     setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
       isTyping,
@@ -875,9 +1018,16 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       if (!current) return member;
       const newName = current.displayName || member.displayName;
       const newPhoto = current.photoURL ?? member.photoURL;
-      if (newName === member.displayName && newPhoto === member.photoURL) return member;
+      const newIsOnline = current.isOnline ?? member.isOnline;
+      const newLastSeen = current.lastSeen ?? member.lastSeen;
+      if (
+        newName === member.displayName &&
+        newPhoto === member.photoURL &&
+        newIsOnline === member.isOnline &&
+        newLastSeen === member.lastSeen
+      ) return member;
       changed = true;
-      return { ...member, displayName: newName, photoURL: newPhoto };
+      return { ...member, displayName: newName, photoURL: newPhoto, isOnline: newIsOnline, lastSeen: newLastSeen };
     });
     return changed ? { ...chat, membersInfo: enriched } : chat;
   }, [usersByUid]);

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
-import { createUserNotification, sendFcmPush } from '@/lib/server/notifications';
+import {
+  createUserNotification,
+  sendFcmPush,
+  sendStandardWebPush,
+  uniqueWebPushSubscriptions,
+  type StoredWebPushSubscription,
+} from '@/lib/server/notifications';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
@@ -11,6 +17,7 @@ type RawUser = {
   email?: string;
   crewName?: string;
   fcmTokens?: string[];
+  webPushSubscriptions?: unknown[];
 };
 
 function cleanText(value: unknown, maxLength: number): string {
@@ -59,12 +66,16 @@ export async function POST(request: NextRequest) {
 
     let recipients: string[] = [];
     let fcmTokens: string[] = [];
+    let webPushSubscriptions: StoredWebPushSubscription[] = [];
 
     if (target === 'test') {
       recipients = [authUser.uid];
       if (sendPush) {
         const adminDoc = await getDocument<RawUser>(`users/${authUser.uid}`);
         fcmTokens = Array.isArray(adminDoc?.fcmTokens) ? adminDoc.fcmTokens : [];
+        webPushSubscriptions = fcmTokens.length > 0
+          ? []
+          : uniqueWebPushSubscriptions(adminDoc?.webPushSubscriptions ?? []);
       }
     } else if (target === 'user') {
       if (!targetUserId) {
@@ -77,6 +88,9 @@ export async function POST(request: NextRequest) {
       recipients = [targetUserId];
       if (sendPush) {
         fcmTokens = Array.isArray(userDoc.fcmTokens) ? userDoc.fcmTokens : [];
+        webPushSubscriptions = fcmTokens.length > 0
+          ? []
+          : uniqueWebPushSubscriptions(userDoc.webPushSubscriptions ?? []);
       }
     } else if (target === 'incomplete_profile') {
       const users = await listDocuments<RawUser>('users');
@@ -84,6 +98,11 @@ export async function POST(request: NextRequest) {
       recipients = filtered.map((u) => u.id).filter(Boolean);
       if (sendPush) {
         fcmTokens = filtered.flatMap((u) => (Array.isArray(u.fcmTokens) ? u.fcmTokens : [])).filter(Boolean);
+        webPushSubscriptions = uniqueWebPushSubscriptions(
+          filtered
+            .filter((u) => !Array.isArray(u.fcmTokens) || u.fcmTokens.length === 0)
+            .flatMap((u) => (Array.isArray(u.webPushSubscriptions) ? u.webPushSubscriptions : [])),
+        );
       }
     } else {
       // 'all'
@@ -91,6 +110,11 @@ export async function POST(request: NextRequest) {
       recipients = users.map((u) => u.id).filter(Boolean);
       if (sendPush) {
         fcmTokens = users.flatMap((u) => (Array.isArray(u.fcmTokens) ? u.fcmTokens : [])).filter(Boolean);
+        webPushSubscriptions = uniqueWebPushSubscriptions(
+          users
+            .filter((u) => !Array.isArray(u.fcmTokens) || u.fcmTokens.length === 0)
+            .flatMap((u) => (Array.isArray(u.webPushSubscriptions) ? u.webPushSubscriptions : [])),
+        );
       }
     }
 
@@ -111,9 +135,16 @@ export async function POST(request: NextRequest) {
     if (sendPush && fcmTokens.length > 0) {
       await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl, type: notificationType });
     }
+    if (sendPush && webPushSubscriptions.length > 0) {
+      await sendStandardWebPush({ subscriptions: webPushSubscriptions, title, body: message, linkUrl, type: notificationType });
+    }
 
     await recordRouteMetric({ route: '/api/admin/notifications', ok: true, statusCode: 200 });
-    return NextResponse.json({ success: true, sent: recipients.length, pushTokens: sendPush ? fcmTokens.length : 0 });
+    return NextResponse.json({
+      success: true,
+      sent: recipients.length,
+      pushTokens: sendPush ? fcmTokens.length + webPushSubscriptions.length : 0,
+    });
   } catch (error) {
     await recordRouteMetric({
       route: '/api/admin/notifications',

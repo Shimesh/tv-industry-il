@@ -14,6 +14,8 @@ export interface ChatRoomMemberInfo {
   uid?: string;
   displayName: string;
   photoURL: string | null;
+  isOnline?: boolean;
+  lastSeen?: number | null;
 }
 
 export interface ChatRoomLastMessage {

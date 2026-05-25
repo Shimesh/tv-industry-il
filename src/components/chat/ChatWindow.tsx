@@ -197,11 +197,13 @@ export default function ChatWindow({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSetTypingRef = useRef(onSetTyping);
 
   const router = useRouter();
   const { callState, startCall, signalingMode } = useCall();
   const {
     isRecording,
+    isRequestingPermission,
     duration,
     audioBlob,
     mimeType,
@@ -209,6 +211,7 @@ export default function ChatWindow({
     startRecording,
     stopRecording,
     cancelRecording,
+    error: recorderError,
   } = useVoiceRecorder();
 
   const chatName = getChatDisplayName(chat, currentUserId);
@@ -223,10 +226,18 @@ export default function ChatWindow({
   const canCall = !!otherMember?.uid && callState.status === 'idle';
 
   useEffect(() => {
+    onSetTypingRef.current = onSetTyping;
+  }, [onSetTyping]);
+
+  useEffect(() => {
     if (videoPreviewRef.current && stream && recordingMode === 'video') {
       videoPreviewRef.current.srcObject = stream;
     }
   }, [stream, recordingMode]);
+
+  useEffect(() => {
+    if (recorderError && !isRequestingPermission) setRecordingMode(null);
+  }, [isRequestingPermission, recorderError]);
 
   useEffect(() => {
     if (!isRecording && audioBlob && recordingMode) {
@@ -245,9 +256,9 @@ export default function ChatWindow({
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
-      onSetTyping(false);
+      onSetTypingRef.current(false);
     };
-  }, [onSetTyping]);
+  }, [chat.id]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -282,7 +293,7 @@ export default function ChatWindow({
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-    onSetTyping(false);
+    onSetTypingRef.current(false);
   }, [chat.id]);
 
   const handleScroll = useCallback(() => {
@@ -370,7 +381,7 @@ export default function ChatWindow({
 
   const filteredMessages = searchQuery.trim()
     ? messages.filter((m) => {
-        if (m.type !== 'text') return true;
+        if (m.type !== 'text') return false;
         return (m.text || '').toLowerCase().includes(searchQuery.toLowerCase());
       })
     : messages;
@@ -414,15 +425,26 @@ export default function ChatWindow({
               onClick={handleProfileClick}
             >
               {chatPhoto ? (
-                <img src={chatPhoto} alt="" className="w-10 h-10 rounded-full object-cover" />
-              ) : (
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: isGroup ? 'var(--theme-accent)' : 'var(--theme-text-secondary)' }}
-                >
-                  {chatName.charAt(0)}
-                </div>
-              )}
+                <img
+                  src={chatPhoto}
+                  alt=""
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                    const fallback = event.currentTarget.nextElementSibling;
+                    if (fallback instanceof HTMLElement) fallback.style.setProperty('display', 'flex');
+                  }}
+                />
+              ) : null}
+              <div
+                className="w-10 h-10 rounded-full items-center justify-center text-white font-bold"
+                style={{
+                  backgroundColor: isGroup ? 'var(--theme-accent)' : 'var(--theme-text-secondary)',
+                  display: chatPhoto ? 'none' : 'flex',
+                }}
+              >
+                {chatName.charAt(0)}
+              </div>
               {isOtherOnline && (
                 <span className="absolute bottom-0 right-0 h-[11px] w-[11px] rounded-full border-2 bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg-secondary)' }} />
               )}
@@ -450,20 +472,14 @@ export default function ChatWindow({
             ) : formatLastSeen(otherUserProfile?.lastSeen) ? (
               formatLastSeen(otherUserProfile?.lastSeen)
             ) : (
-              'לחצו לפרופיל'
+              'לא מחובר/ת'
             )}
           </p>
         </div>
 
-        {v2Enabled && (
+        {v2Enabled && connectionState?.mode === 'connected' && (
           <span className="hidden xl:inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
-            {connectionState?.mode === 'connected' ? 'Socket מחובר' : 'Firestore פעיל'}
-          </span>
-        )}
-
-        {v2Enabled && (
-          <span className="hidden rounded-full border px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] xl:inline-flex" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-            {signalingMode === 'socket-ready' ? 'שיחות מוכנות דרך Socket.IO' : 'שיחות דרך Firestore'}
+            Socket מחובר
           </span>
         )}
 
@@ -566,8 +582,8 @@ export default function ChatWindow({
             </p>
           </div>
         ) : (
-          groupedMessages.map((group) => (
-            <div key={group.date}>
+          groupedMessages.map((group, groupIdx) => (
+            <div key={`${group.date}-${groupIdx}`}>
               <div className="flex justify-center my-3">
                 <span className="rounded-[7.5px] border px-3 py-[5px] text-[12.5px] shadow-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
                   {group.date}
@@ -727,6 +743,24 @@ export default function ChatWindow({
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {isRequestingPermission && !isRecording && (
+        <div className="border-t px-4 py-2" style={{ background: 'rgba(191, 89, 207, 0.12)', borderColor: 'rgba(191, 89, 207, 0.25)' }} dir="rtl">
+          <div className="flex items-center justify-center gap-2 text-[13px] text-[var(--theme-text)]">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <span>{recordingMode === 'video' ? 'מחכה לאישור מצלמה ומיקרופון בדפדפן.' : 'מחכה לאישור מיקרופון בדפדפן.'}</span>
+          </div>
+        </div>
+      )}
+
+      {recorderError && !isRecording && !isRequestingPermission && (
+        <div className="border-t px-4 py-2" style={{ background: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.25)' }} dir="rtl">
+          <div className="flex items-center justify-center gap-2 text-[13px] text-red-200">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{recorderError}</span>
           </div>
         </div>
       )}
