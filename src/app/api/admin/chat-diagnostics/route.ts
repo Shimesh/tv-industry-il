@@ -4,7 +4,7 @@ import { getRecentSystemEvents, getUsageSnapshot, recordRouteMetric } from '@/li
 import { listDocuments } from '@/lib/server/firestoreAdminRest';
 
 export const runtime = 'nodejs';
-const ACTIVE_CLIENT_VERSION = '2.6.11';
+const ACTIVE_CLIENT_VERSION = '2.6.12';
 
 type ClientSystemLogRecord = {
   id: string;

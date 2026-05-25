@@ -25,6 +25,7 @@ import {
   refreshOptimisticSending,
   settleOptimisticMessages,
 } from '@/components/chat/chatOptimistic';
+import { chatTrace, createChatTraceId } from '@/lib/chatTrace';
 
 function isTruthyFlag(value: string | undefined): boolean {
   return value === '1' || value === 'true' || value === 'on';
@@ -58,8 +59,8 @@ function mapConnectionState(
     return {
       mode: 'legacy',
       online: true,
-      label: 'צ׳אט Firestore פעיל',
-      detail: 'מצב התאימות הישן עדיין פעיל עד שנשלים את המעבר ל־Socket.IO.',
+      label: '\u05e6\u05f3\u05d0\u05d8 Firestore \u05e4\u05e2\u05d9\u05dc',
+      detail: '\u05de\u05e6\u05d1 \u05d4\u05ea\u05d0\u05d9\u05de\u05d5\u05ea \u05d4\u05d9\u05e9\u05df \u05e2\u05d3\u05d9\u05d9\u05df \u05e4\u05e2\u05d9\u05dc \u05e2\u05d3 \u05e9\u05e0\u05e9\u05dc\u05d9\u05dd \u05d0\u05ea \u05d4\u05de\u05e2\u05d1\u05e8 \u05dc\u05beSocket.IO.',
     };
   }
 
@@ -68,51 +69,51 @@ function mapConnectionState(
       return {
         mode: 'connected',
         online: true,
-        label: 'Socket.IO מחובר',
-        detail: `${formatLastSync(state.lastSyncAt)}${state.pendingQueue > 0 ? ` • ${state.pendingQueue} פעולות ממתינות` : ''}`,
+        label: 'Socket.IO \u05de\u05d7\u05d5\u05d1\u05e8',
+        detail: formatLastSync(state.lastSyncAt) + (state.pendingQueue > 0 ? ' • ' + state.pendingQueue + ' \u05e4\u05e2\u05d5\u05dc\u05d5\u05ea \u05de\u05de\u05ea\u05d9\u05e0\u05d5\u05ea' : ''),
       };
     case 'connecting':
       return {
         mode: 'connecting',
         online: true,
-        label: 'מתחבר לצ׳אט בזמן אמת',
-        detail: 'אנחנו מקימים כרגע את חיבור ה־Socket. אפשר להמשיך לעבוד כרגיל.',
+        label: '\u05de\u05ea\u05d7\u05d1\u05e8 \u05dc\u05e6\u05f3\u05d0\u05d8 \u05d1\u05d6\u05de\u05df \u05d0\u05de\u05ea',
+        detail: '\u05d0\u05e0\u05d7\u05e0\u05d5 \u05de\u05e7\u05d9\u05de\u05d9\u05dd \u05db\u05e8\u05d2\u05e2 \u05d0\u05ea \u05d7\u05d9\u05d1\u05d5\u05e8 \u05d4\u05beSocket. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05d4\u05de\u05e9\u05d9\u05da \u05dc\u05e2\u05d1\u05d5\u05d3 \u05db\u05e8\u05d2\u05d9\u05dc.',
       };
     case 'reconnecting':
       return {
         mode: 'reconnecting',
         online: true,
-        label: 'מחדש חיבור',
-        detail: `${formatLastSync(state.lastSyncAt)} • מסנכרנים מחדש הודעות וסטטוסים.`,
+        label: '\u05de\u05d7\u05d3\u05e9 \u05d7\u05d9\u05d1\u05d5\u05e8',
+        detail: formatLastSync(state.lastSyncAt) + ' • \u05de\u05e1\u05e0\u05db\u05e8\u05e0\u05d9\u05dd \u05de\u05d7\u05d3\u05e9 \u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05d5\u05e1\u05d8\u05d8\u05d5\u05e1\u05d9\u05dd.',
       };
     case 'disabled':
       return {
         mode: 'legacy',
         online: true,
-        label: 'Firestore פעיל',
-        detail: 'Socket.IO לא מוגדר כרגע. הצ׳אט עובד בזמן אמת דרך Firestore.',
+        label: 'Firestore \u05e4\u05e2\u05d9\u05dc',
+        detail: 'Socket.IO \u05dc\u05d0 \u05de\u05d5\u05d2\u05d3\u05e8 \u05db\u05e8\u05d2\u05e2. \u05d4\u05e6\u05f3\u05d0\u05d8 \u05e2\u05d5\u05d1\u05d3 \u05d1\u05d6\u05de\u05df \u05d0\u05de\u05ea \u05d3\u05e8\u05da Firestore.',
       };
     case 'idle':
       return {
         mode: 'preview',
         online: true,
-        label: 'Firestore פעיל / Socket ממתין',
-        detail: 'Socket.IO יופעל רק אחרי הגדרת URL ודגל מתאים. Firestore הוא הנתיב הפעיל.',
+        label: 'Firestore \u05e4\u05e2\u05d9\u05dc / Socket \u05de\u05de\u05ea\u05d9\u05df',
+        detail: 'Socket.IO \u05d9\u05d5\u05e4\u05e2\u05dc \u05e8\u05e7 \u05d0\u05d7\u05e8\u05d9 \u05d4\u05d2\u05d3\u05e8\u05ea URL \u05d5\u05d3\u05d2\u05dc \u05de\u05ea\u05d0\u05d9\u05dd. Firestore \u05d4\u05d5\u05d0 \u05d4\u05e0\u05ea\u05d9\u05d1 \u05d4\u05e4\u05e2\u05d9\u05dc.',
       };
     case 'degraded':
     case 'error':
       return {
         mode: 'degraded',
         online: true,
-        label: 'חיבור חלקי לצ׳אט',
-        detail: 'יש כרגע בעיית realtime. נשארים זמינים דרך Firestore וממשיכים לנסות להתייצב.',
+        label: '\u05d7\u05d9\u05d1\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9 \u05dc\u05e6\u05f3\u05d0\u05d8',
+        detail: '\u05d9\u05e9 \u05db\u05e8\u05d2\u05e2 \u05d1\u05e2\u05d9\u05d9\u05ea realtime. \u05e0\u05e9\u05d0\u05e8\u05d9\u05dd \u05d6\u05de\u05d9\u05e0\u05d9\u05dd \u05d3\u05e8\u05da Firestore \u05d5\u05de\u05de\u05e9\u05d9\u05db\u05d9\u05dd \u05dc\u05e0\u05e1\u05d5\u05ea \u05dc\u05d4\u05ea\u05d9\u05d9\u05e6\u05d1.',
       };
     default:
       return {
         mode: 'offline',
         online: false,
-        label: 'אין חיבור לרשת',
-        detail: 'הודעות חדשות יישלחו שוב אוטומטית כשהחיבור יחזור.',
+        label: '\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u05dc\u05e8\u05e9\u05ea',
+        detail: '\u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05d7\u05d3\u05e9\u05d5\u05ea \u05d9\u05d9\u05e9\u05dc\u05d7\u05d5 \u05e9\u05d5\u05d1 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea \u05db\u05e9\u05d4\u05d7\u05d9\u05d1\u05d5\u05e8 \u05d9\u05d7\u05d6\u05d5\u05e8.',
       };
   }
 }
@@ -328,7 +329,7 @@ function ChatContent() {
         }
       } catch (error) {
         console.error('[chat] Failed to create private chat:', error);
-        const message = error instanceof Error ? error.message : 'שגיאה ביצירת שיחה';
+        const message = error instanceof Error ? error.message : '\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d1\u05e4\u05e2\u05d5\u05dc\u05ea \u05d4\u05e6\u05f3\u05d0\u05d8';
         showToast(message, 'error');
       }
     },
@@ -353,7 +354,7 @@ function ChatContent() {
         }
       } catch (error) {
         console.error('[chat] Failed to create private chat:', error);
-        const message = error instanceof Error ? error.message : 'שגיאה ביצירת שיחה';
+        const message = error instanceof Error ? error.message : '\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d1\u05e4\u05e2\u05d5\u05dc\u05ea \u05d4\u05e6\u05f3\u05d0\u05d8';
         showToast(message, 'error');
       }
     },
@@ -378,7 +379,7 @@ function ChatContent() {
         }
       } catch (error) {
         console.error('[chat] Failed to create group:', error);
-        const message = error instanceof Error ? error.message : 'שגיאה ביצירת קבוצה';
+        const message = error instanceof Error ? error.message : '\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d1\u05e4\u05e2\u05d5\u05dc\u05ea \u05d4\u05e6\u05f3\u05d0\u05d8';
         showToast(message, 'error');
       }
     },
@@ -405,6 +406,8 @@ function ChatContent() {
       }
 
       const clientMessageId = buildLocalClientMessageId(activeChatId);
+      const traceId = createChatTraceId('ui-send');
+      chatTrace('ui-send', 'queued', { traceId, chatId: activeChatId, clientMessageId, type, hasFile: Boolean(file) });
       const payload: ChatOptimisticPayload = {
         clientMessageId,
         text: type === 'text' ? text : file?.name || text,
@@ -421,6 +424,12 @@ function ChatContent() {
 
       try {
         const result = await sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageId);
+        chatTrace('ui-send', 'send-resolved', {
+          traceId,
+          chatId: activeChatId,
+          clientMessageId,
+          messageId: result?.messageId,
+        });
         if (activeChatId && optimisticMessage?.optimisticId) {
           updateOptimisticMessage(activeChatId, optimisticMessage.optimisticId, (message) => ({
             ...markOptimisticSent(message),
@@ -431,6 +440,7 @@ function ChatContent() {
         }
       } catch (error) {
         console.error('[chat] Failed to send message:', error);
+        chatTrace('ui-send', 'send-failed', { traceId, chatId: activeChatId, clientMessageId, error }, { level: 'error' });
         if (activeChatId && optimisticMessage?.optimisticId) {
           updateOptimisticMessage(
             activeChatId,
@@ -441,7 +451,7 @@ function ChatContent() {
             )
           );
         }
-        const message = error instanceof Error ? error.message : 'שגיאה בשליחת ההודעה';
+        const message = error instanceof Error ? error.message : '\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d1\u05e4\u05e2\u05d5\u05dc\u05ea \u05d4\u05e6\u05f3\u05d0\u05d8';
         showToast(message, 'error');
       }
     },
@@ -484,7 +494,7 @@ function ChatContent() {
             error instanceof Error ? error.message : 'הניסיון החוזר נכשל'
           )
         );
-        const toastMessage = error instanceof Error ? error.message : 'שגיאה בשליחה החוזרת';
+        const toastMessage = error instanceof Error ? error.message : '\u05e9\u05d2\u05d9\u05d0\u05d4 \u05d1\u05e9\u05dc\u05d9\u05d7\u05d4 \u05d4\u05d7\u05d5\u05d6\u05e8\u05ea';
         showToast(toastMessage, 'error');
       }
     },

@@ -1076,7 +1076,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
                 status: 'failed',
                 errorCode: errorMessage,
                 localState: 'failed',
-                localStatusText: 'שליחה נכשלה',
+                localStatusText: '\u05e9\u05dc\u05d9\u05d7\u05d4 \u05e0\u05db\u05e9\u05dc\u05d4',
               })
           );
           throw error;
@@ -1274,7 +1274,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
               status: 'failed',
               errorCode: errorMessage,
               localState: 'failed',
-              localStatusText: 'שליחה נכשלה',
+              localStatusText: '\u05e9\u05dc\u05d9\u05d7\u05d4 \u05e0\u05db\u05e9\u05dc\u05d4',
               upload: message.upload
                 ? {
                     ...message.upload,

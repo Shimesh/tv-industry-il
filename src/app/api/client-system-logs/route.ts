@@ -12,6 +12,29 @@ function text(value: unknown, max = MAX_TEXT): string | null {
   return trimmed.slice(0, max);
 }
 
+function context(value: Record<string, unknown>): string | null {
+  const omitted = new Set([
+    'source',
+    'version',
+    'uid',
+    'name',
+    'message',
+    'stack',
+    'componentStack',
+    'href',
+    'pathname',
+    'userAgent',
+    'platform',
+    'language',
+  ]);
+  const extra: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (!omitted.has(key)) extra[key] = nested;
+  }
+  const serialized = JSON.stringify(extra);
+  return serialized === '{}' ? null : serialized.slice(0, 4000);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -33,6 +56,7 @@ export async function POST(request: NextRequest) {
       userAgent: text(body.userAgent, 1000) || text(request.headers.get('user-agent'), 1000),
       platform: text(body.platform, 200),
       language: text(body.language, 80),
+      context: context(body),
       ip: text(request.headers.get('x-forwarded-for'), 500) || text(request.headers.get('x-real-ip'), 200),
     }, docId);
 

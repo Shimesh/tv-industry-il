@@ -13,6 +13,13 @@ import {
   getKeyPair,
   decryptChatKey, encryptMessage, decryptMessage, looksEncrypted,
 } from '@/lib/encryption';
+import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } from '@/lib/chatTrace';
+
+const CHAT_SNAPSHOT_TIMEOUT_MS = 10_000;
+const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
+const SEND_STEP_TIMEOUT_MS = 12_000;
+const FILE_UPLOAD_TIMEOUT_MS = 90_000;
+const PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 
 export interface SendMessageResult {
   messageId: string;
@@ -80,6 +87,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   // Cache: chatId -> decrypted symmetric key
   const chatKeyCache = useRef<Map<string, string>>(new Map());
   const prevActiveChatRef = useRef<string | null>(null);
+  const restoredActiveChatRef = useRef(false);
+  const observedClientMessageIdsRef = useRef<Set<string>>(new Set());
   // Ref for getChatKey so the messages effect doesn't re-subscribe on every chats/allUsers change
   const getChatKeyRef = useRef<((chatId: string, encryptedKeys?: Record<string, string>) => Promise<string | null>) | null>(null);
 
@@ -138,16 +147,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
 
   getChatKeyRef.current = getChatKey;
 
-  // Restore last chat from localStorage
-  useEffect(() => {
-    const lastChat = localStorage.getItem('tv-chat-active');
-    if (lastChat) {
-      setActiveChatState(lastChat);
-    }
-  }, []);
-
   // Save active chat to localStorage
   const setActiveChat = useCallback((chatId: string | null) => {
+    chatTrace('selection', 'set-active-chat', { chatId });
     setActiveChatState(chatId);
     if (chatId) {
       localStorage.setItem('tv-chat-active', chatId);
@@ -174,15 +176,33 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     if (!user) {
       setChats([]);
       setChatsLoading(false);
+      restoredActiveChatRef.current = false;
       return;
     }
+    const traceId = createChatTraceId('chats');
+    let receivedFirstSnapshot = false;
+    const startedAt = performance.now();
     setChatsLoading(true);
     setChatError(null);
+    chatTrace('chats', 'subscribe:start', { traceId, uid: user.uid });
     const q = query(
       collection(db, 'chats'),
       where('members', 'array-contains', user.uid)
     );
+    const timeoutId = setTimeout(() => {
+      if (receivedFirstSnapshot) return;
+      chatTrace('chats', 'subscribe:timeout', {
+        traceId,
+        uid: user.uid,
+        durationMs: Math.round(performance.now() - startedAt),
+      }, { level: 'error' });
+      setChatError('טעינת השיחות נמשכת יותר מדי זמן. נסו לרענן או לפתוח שוב את הצ׳אט.');
+      setChatsLoading(false);
+      logChatPipelineIssue('chats', { traceId, step: 'subscribe-timeout', uid: user.uid });
+    }, CHAT_SNAPSHOT_TIMEOUT_MS);
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      receivedFirstSnapshot = true;
+      clearTimeout(timeoutId);
       const chatList: ChatRoom[] = [];
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
@@ -213,15 +233,59 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         (b.lastMessage?.timestamp || b.updatedAt || b.createdAt || 0) -
         (a.lastMessage?.timestamp || a.updatedAt || a.createdAt || 0)
       );
+      chatTrace('chats', 'snapshot', {
+        traceId,
+        count: chatList.length,
+        emptyChats: chatList.filter(chat => !chat.lastMessage).length,
+        selfChats: chatList.filter(chat => chat.type === 'private' && chat.members.every(uid => uid === user.uid)).length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       setChats(chatList);
       setChatsLoading(false);
     }, (error) => {
+      clearTimeout(timeoutId);
       console.error('[chat] Failed to subscribe to chats:', error);
+      chatTrace('chats', 'subscribe:error', { traceId, error }, { level: 'error' });
       setChatError('לא ניתן לטעון את רשימת השיחות כרגע');
       setChatsLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(timeoutId);
+      unsubscribe();
+    };
   }, [user]);
+
+  useEffect(() => {
+    if (!user || chatsLoading || restoredActiveChatRef.current) return;
+    restoredActiveChatRef.current = true;
+    const lastChat = localStorage.getItem('tv-chat-active');
+    if (!lastChat) return;
+    const restored = chats.find(chat => chat.id === lastChat && chat.members.includes(user.uid));
+    if (!restored) {
+      chatTrace('selection', 'restore:invalid', { chatId: lastChat, uid: user.uid }, { level: 'warn' });
+      localStorage.removeItem('tv-chat-active');
+      setActiveChatState(null);
+      return;
+    }
+    const isSelfChat = restored.type === 'private' && restored.members.every(uid => uid === user.uid);
+    if (isSelfChat) {
+      chatTrace('selection', 'restore:self-chat-skipped', { chatId: lastChat, uid: user.uid }, { level: 'warn' });
+      localStorage.removeItem('tv-chat-active');
+      setActiveChatState(null);
+      return;
+    }
+    chatTrace('selection', 'restore:ok', { chatId: lastChat, uid: user.uid });
+    setActiveChatState(lastChat);
+  }, [chats, chatsLoading, user]);
+
+  useEffect(() => {
+    if (!user || chatsLoading || !activeChat) return;
+    const selected = chats.find(chat => chat.id === activeChat);
+    if (selected?.members.includes(user.uid)) return;
+    chatTrace('selection', 'active-chat-invalid', { chatId: activeChat, uid: user.uid }, { level: 'warn' });
+    localStorage.removeItem('tv-chat-active');
+    setActiveChatState(null);
+  }, [activeChat, chats, chatsLoading, user]);
 
   // Subscribe to messages + mark delivery/read + decrypt
   useEffect(() => {
@@ -240,12 +304,31 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     setHasMore(false);
 
     let cancelled = false;
+    let receivedFirstSnapshot = false;
+    const traceId = createChatTraceId('messages');
+    const startedAt = performance.now();
+    observedClientMessageIdsRef.current.clear();
+    chatTrace('messages', 'subscribe:start', { traceId, chatId: activeChat, uid: user.uid });
     const q = query(
       collection(db, 'chats', activeChat, 'messages'),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
+    const timeoutId = setTimeout(() => {
+      if (receivedFirstSnapshot || cancelled) return;
+      chatTrace('messages', 'subscribe:timeout', {
+        traceId,
+        chatId: activeChat,
+        uid: user.uid,
+        durationMs: Math.round(performance.now() - startedAt),
+      }, { level: 'error' });
+      setChatError('טעינת ההודעות נמשכת יותר מדי זמן. נסו לבחור את השיחה מחדש.');
+      setMessagesLoading(false);
+      logChatPipelineIssue('messages', { traceId, step: 'subscribe-timeout', chatId: activeChat, uid: user.uid });
+    }, MESSAGE_SNAPSHOT_TIMEOUT_MS);
     const unsubscribe = onSnapshot(q, async (snapshot) => {
+      receivedFirstSnapshot = true;
+      clearTimeout(timeoutId);
       const ascDocs = snapshot.docs.slice().reverse();
       const now = Date.now();
       const oneDayAgo = now - 86400000;
@@ -276,6 +359,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
             ? data.deletedAt.toMillis()
             : (data.deletedAt ?? null),
         };
+        if (typeof data.clientMessageId === 'string') {
+          observedClientMessageIdsRef.current.add(data.clientMessageId);
+        }
       });
 
       // Set messages immediately so they appear without waiting for decryption.
@@ -299,6 +385,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         setLastVisible(oldestDoc ?? null);
         setHasMore(snapshot.docs.length === 50);
         setMessagesLoading(false);
+        chatTrace('messages', 'snapshot', {
+          traceId,
+          chatId: activeChat,
+          count: msgs.length,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
       }
 
       // Decrypt in background, then update messages again if needed
@@ -346,6 +438,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           });
         });
         batch.commit().catch(() => {});
+        chatTrace('receipts', 'delivered:queued', { traceId, chatId: activeChat, count: toDeliver.length });
       }
 
       // Batch-mark readBy for messages we're viewing
@@ -363,15 +456,18 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           });
         });
         readBatch.commit().catch(() => {});
+        chatTrace('receipts', 'read:queued', { traceId, chatId: activeChat, count: toRead.length });
       }
     }, (error) => {
+      clearTimeout(timeoutId);
       console.error('[chat] Failed to subscribe to messages:', error);
+      chatTrace('messages', 'subscribe:error', { traceId, chatId: activeChat, error }, { level: 'error' });
       if (!cancelled) {
         setChatError('לא ניתן לטעון את ההודעות כרגע');
         setMessagesLoading(false);
       }
     });
-    return () => { cancelled = true; unsubscribe(); };
+    return () => { cancelled = true; clearTimeout(timeoutId); unsubscribe(); };
   }, [activeChat, user]);
 
   // Subscribe to typing indicators
@@ -410,13 +506,33 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     mimeType?: string,
     clientMessageId?: string | null
   ): Promise<SendMessageResult | null> => {
-    if (!user || !activeChat) return null;
+    const traceId = createChatTraceId('send');
+    const startedAt = performance.now();
+    if (!user || !activeChat) {
+      chatTrace('send', 'blocked:no-active-chat', { traceId, hasUser: Boolean(user), activeChat }, { level: 'warn' });
+      return null;
+    }
+    chatTrace('send', 'start', {
+      traceId,
+      chatId: activeChat,
+      uid: user.uid,
+      clientMessageId,
+      type,
+      hasFile: Boolean(file),
+      file,
+    });
 
     let fileURL = null;
     let fileSize = null;
 
     const cachedChat = chats.find(c => c.id === activeChat);
-    const chatDoc = await getDoc(doc(db, 'chats', activeChat)).catch((error) => {
+    const chatDoc = await withChatTimeout(
+      getDoc(doc(db, 'chats', activeChat)),
+      SEND_STEP_TIMEOUT_MS,
+      'send',
+      'read-chat',
+      { traceId, chatId: activeChat, clientMessageId }
+    ).catch((error) => {
       console.error('[chat] Failed to read chat before sending:', error);
       return null;
     });
@@ -446,16 +562,30 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         const storageRef = ref(storage, storagePath);
         const uploadTask = uploadBytesResumable(storageRef, file);
 
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              setUploadProgress(Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100));
-            },
-            reject,
-            () => { setUploadProgress(null); resolve(); }
-          );
-        });
-        fileURL = await getDownloadURL(storageRef);
+        await withChatTimeout(
+          new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                setUploadProgress(progress);
+                chatTrace('send', 'upload:progress', { traceId, chatId: activeChat, clientMessageId, progress });
+              },
+              reject,
+              () => { setUploadProgress(null); resolve(); }
+            );
+          }),
+          FILE_UPLOAD_TIMEOUT_MS,
+          'send',
+          'upload-file',
+          { traceId, chatId: activeChat, clientMessageId, file }
+        );
+        fileURL = await withChatTimeout(
+          getDownloadURL(storageRef),
+          SEND_STEP_TIMEOUT_MS,
+          'send',
+          'get-download-url',
+          { traceId, chatId: activeChat, clientMessageId }
+        );
         fileSize = file.size;
       } catch (err) {
         console.error('Upload error:', err);
@@ -498,7 +628,20 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     };
 
     try {
-      const messageRef = await addDoc(collection(db, 'chats', activeChat, 'messages'), messageData);
+      const messageRef = await withChatTimeout(
+        addDoc(collection(db, 'chats', activeChat, 'messages'), messageData),
+        SEND_STEP_TIMEOUT_MS,
+        'send',
+        'add-message',
+        { traceId, chatId: activeChat, clientMessageId, type }
+      );
+      chatTrace('send', 'message-written', {
+        traceId,
+        chatId: activeChat,
+        clientMessageId,
+        messageId: messageRef.id,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
 
       const unreadUpdates: Record<string, unknown> = {};
       chatMembers.forEach(uid => {
@@ -507,25 +650,66 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
         }
       });
 
-      updateDoc(doc(db, 'chats', activeChat), {
-        lastMessage: {
-          text: previewText,
-          senderName: displayName,
-          senderId: user.uid,
-          timestamp: serverTimestamp(),
-          kind: type,
-        },
-        updatedAt: serverTimestamp(),
-        ...unreadUpdates,
-      }).catch((error) => {
+      withChatTimeout(
+        updateDoc(doc(db, 'chats', activeChat), {
+          lastMessage: {
+            text: previewText,
+            senderName: displayName,
+            senderId: user.uid,
+            timestamp: serverTimestamp(),
+            kind: type,
+            clientMessageId: clientMessageId || null,
+            messageId: messageRef.id,
+          },
+          updatedAt: serverTimestamp(),
+          ...unreadUpdates,
+        }),
+        SEND_STEP_TIMEOUT_MS,
+        'send',
+        'update-summary',
+        { traceId, chatId: activeChat, clientMessageId, messageId: messageRef.id }
+      ).catch((error) => {
         console.warn('[chat] Message was sent but chat summary update failed:', error);
       });
 
-      setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
-        isTyping: false,
-        name: displayName,
-        timestamp: serverTimestamp(),
-      }).catch(() => {});
+      withChatTimeout(
+        setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
+          isTyping: false,
+          name: displayName,
+          timestamp: serverTimestamp(),
+        }),
+        SEND_STEP_TIMEOUT_MS,
+        'send',
+        'clear-typing',
+        { traceId, chatId: activeChat, clientMessageId }
+      ).catch(() => {});
+
+      if (clientMessageId) {
+        setTimeout(() => {
+          if (observedClientMessageIdsRef.current.has(clientMessageId)) {
+            chatTrace('send', 'listener-observed-message', {
+              traceId,
+              chatId: activeChat,
+              clientMessageId,
+              messageId: messageRef.id,
+            });
+            return;
+          }
+          chatTrace('send', 'sent-but-listener-did-not-observe-message', {
+            traceId,
+            chatId: activeChat,
+            clientMessageId,
+            messageId: messageRef.id,
+          }, { level: 'warn' });
+          logChatPipelineIssue('send', {
+            traceId,
+            step: 'listener-missing-client-message',
+            chatId: activeChat,
+            clientMessageId,
+            messageId: messageRef.id,
+          });
+        }, 5_000);
+      }
 
       return {
         messageId: messageRef.id,
@@ -533,6 +717,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       };
     } catch (err) {
       console.error('Send message error:', err);
+      chatTrace('send', 'failed', { traceId, chatId: activeChat, clientMessageId, error: err }, { level: 'error' });
       throw err;
     }
   }, [user, activeChat, chats, displayName, displayPhoto, getChatKey]);
@@ -632,13 +817,20 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     const existing = chats.find(
       c => c.type === 'private' && c.members.includes(otherUserId) && c.members.includes(user.uid)
     );
-    if (existing) return existing.id;
+    if (existing) {
+      chatTrace('create-chat', 'private:existing', { chatId: existing.id, otherUserId, uid: user.uid });
+      return existing.id;
+    }
 
     try {
+      const traceId = createChatTraceId('create-private');
+      chatTrace('create-chat', 'private:start', { traceId, otherUserId, uid: user.uid });
       const result = await fetchChatApi<{ chatId?: string }>({ type: 'private', otherUserId });
+      chatTrace('create-chat', 'private:ok', { traceId, chatId: result.chatId, otherUserId });
       return result.chatId || null;
     } catch (err) {
       console.error('Create chat error:', err);
+      chatTrace('create-chat', 'private:failed', { otherUserId, error: err }, { level: 'error' });
       return null;
     }
   }, [user, chats, fetchChatApi]);
@@ -647,17 +839,24 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     if (!user) return null;
 
     try {
+      const traceId = createChatTraceId('create-group');
+      chatTrace('create-chat', 'group:start', { traceId, memberCount: memberIds.length, uid: user.uid });
       const result = await fetchChatApi<{ chatId?: string }>({ type: 'group', name, memberIds });
-      if (result.chatId) return result.chatId;
+      if (result.chatId) {
+        chatTrace('create-chat', 'group:ok', { traceId, chatId: result.chatId, memberCount: memberIds.length });
+        return result.chatId;
+      }
       throw new Error('Group creation did not return a chat id');
     } catch (apiError) {
       console.error('Create group API error:', apiError);
+      chatTrace('create-chat', 'group:failed', { memberCount: memberIds.length, error: apiError }, { level: 'error' });
       return null;
     }
   }, [user, fetchChatApi]);
 
   const setTyping = useCallback((isTyping: boolean) => {
     if (!activeChat || !user) return;
+    chatTrace('typing', isTyping ? 'start' : 'stop', { chatId: activeChat, uid: user.uid });
     setDoc(doc(db, 'chats', activeChat, 'typing', user.uid), {
       isTyping,
       name: displayName,
@@ -688,7 +887,15 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     const chat = enrichedChats.find(c => c.id === activeChat);
     return chat || null;
   }, [enrichedChats, activeChat]);
-  const onlineUsers = allUsers.filter(u => u.isOnline && u.uid !== user?.uid);
+  const onlineUsers = useMemo(() => {
+    const now = Date.now();
+    return allUsers.filter((u) => (
+      u.uid !== user?.uid &&
+      u.isOnline === true &&
+      typeof u.lastSeen === 'number' &&
+      now - u.lastSeen <= PRESENCE_WINDOW_MS
+    ));
+  }, [allUsers, user?.uid]);
 
   const messages = [...olderMessages, ...liveMessages];
 

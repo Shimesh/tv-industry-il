@@ -9,9 +9,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { useAuth, type UserProfile } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
+import { chatTrace, createChatTraceId } from '@/lib/chatTrace';
 
 const FIRESTORE_USERS_REST_BASE =
   'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents/users';
@@ -81,16 +82,28 @@ export function useChatUsers(): UserProfile[] {
     if (!user) return;
     let cancelled = false;
     let sdkLoaded = false;
+    const traceId = createChatTraceId('users');
+    const startedAt = performance.now();
+    chatTrace('users', 'subscribe:start', { traceId, uid: user.uid });
 
     const applyUsers = (next: UserProfile[]) => {
-      if (!cancelled) setAllUsers((cur) => mergeUserProfiles(next, cur));
+      if (!cancelled) {
+        chatTrace('users', 'apply', {
+          traceId,
+          count: next.length,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+        setAllUsers((cur) => mergeUserProfiles(next, cur));
+      }
     };
 
     const loadFallback = async () => {
       if (fallbackFiredRef.current) return;
       fallbackFiredRef.current = true;
+      chatTrace('users', 'fallback:start', { traceId });
       const users = await fetchViaRest();
       if (!cancelled && users.length) applyUsers(users);
+      if (!cancelled && !users.length) chatTrace('users', 'fallback:empty', { traceId }, { level: 'warn' });
     };
 
     const timer = setTimeout(() => { if (!sdkLoaded) void loadFallback(); }, 1500);
@@ -100,11 +113,24 @@ export function useChatUsers(): UserProfile[] {
       (snap) => {
         sdkLoaded = true;
         const users: UserProfile[] = [];
-        snap.forEach((d) => users.push({ uid: d.id, ...d.data() } as UserProfile));
+        snap.forEach((d) => {
+          const data = d.data();
+          const lastSeen = data.lastSeen instanceof Timestamp
+            ? data.lastSeen.toMillis()
+            : typeof data.lastSeen === 'number'
+              ? data.lastSeen
+              : typeof data.lastSeen === 'string'
+                ? Date.parse(data.lastSeen) || null
+                : null;
+          users.push({ uid: d.id, ...data, lastSeen } as UserProfile);
+        });
         if (users.length) { applyUsers(users); return; }
         void loadFallback();
       },
-      () => { void loadFallback(); }
+      (error) => {
+        chatTrace('users', 'subscribe:error', { traceId, error }, { level: 'error' });
+        void loadFallback();
+      }
     );
 
     return () => {

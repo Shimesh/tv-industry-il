@@ -35,7 +35,7 @@ function formatTime(timestamp: number): string {
 function getChatName(chat: ChatRoom, currentUserId: string): string {
   if (chat.type === 'private') {
     const other = chat.membersInfo?.find(m => m.uid !== currentUserId);
-    return other?.displayName || 'צ׳אט';
+    return other?.displayName || 'שיחה עם עצמי';
   }
   return chat.name || 'צ׳אט';
 }

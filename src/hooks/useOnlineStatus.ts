@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { auth } from '@/lib/firebase';
+import { chatTrace, createChatTraceId } from '@/lib/chatTrace';
 
 const FS_BASE =
   'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents';
@@ -16,11 +17,13 @@ export function useOnlineStatus(userId: string | undefined) {
     const url =
       `${FS_BASE}/users/${userId}` +
       '?updateMask.fieldPaths=isOnline&updateMask.fieldPaths=lastSeen';
+    const traceId = createChatTraceId('presence');
 
     /** PATCH isOnline + lastSeen via REST (bypasses SDK phantom-write queue). */
     const patch = (isOnline: boolean, keepalive = false) => {
       const token = tokenRef.current;
       if (!token) return;
+      chatTrace('presence', 'patch:start', { traceId, uid: userId, isOnline, keepalive });
       fetch(url, {
         method: 'PATCH',
         keepalive,   // keepalive=true → browser sends even during page unload
@@ -34,7 +37,16 @@ export function useOnlineStatus(userId: string | undefined) {
             lastSeen: { timestampValue: new Date().toISOString() },
           },
         }),
-      }).catch(() => {});
+      }).then((response) => {
+        chatTrace('presence', response.ok ? 'patch:ok' : 'patch:failed', {
+          traceId,
+          uid: userId,
+          isOnline,
+          status: response.status,
+        }, response.ok ? undefined : { level: 'warn' });
+      }).catch((error) => {
+        chatTrace('presence', 'patch:error', { traceId, uid: userId, isOnline, error }, { level: 'warn' });
+      });
     };
 
     /** Refresh the cached token then mark online. */
