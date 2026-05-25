@@ -27,6 +27,13 @@ export type TelegramRatingsResult = {
   };
   source: 'telegram';
   sourceMessageId: string;
+  skipped?: boolean;
+  reason?: string;
+};
+
+type TelegramImportOptions = {
+  expectedDate?: string;
+  skipIfAlreadyImported?: boolean;
 };
 
 function normalizeWhitespace(value: string): string {
@@ -199,7 +206,7 @@ export function hasTelegramRatingsConfig(): boolean {
   );
 }
 
-export async function importLatestTelegramRatings(): Promise<TelegramRatingsResult> {
+export async function importLatestTelegramRatings(options: TelegramImportOptions = {}): Promise<TelegramRatingsResult> {
   const apiId = Number.parseInt(process.env.TELEGRAM_API_ID || '', 10);
   const apiHash = process.env.TELEGRAM_API_HASH || '';
   const session = process.env.TELEGRAM_SESSION || '';
@@ -223,18 +230,40 @@ export async function importLatestTelegramRatings(): Promise<TelegramRatingsResu
     let sourceMessageId = '';
 
     for (const message of messages) {
-      parsed = parseScoptRatingsMessage(message.message || '', message.date ? new Date(message.date * 1000) : new Date());
-      if (parsed) {
-        sourceMessageId = String(message.id || '');
-        break;
-      }
+      const candidate = parseScoptRatingsMessage(message.message || '', message.date ? new Date(message.date * 1000) : new Date());
+      if (!candidate) continue;
+      if (options.expectedDate && candidate.date !== options.expectedDate) continue;
+      parsed = candidate;
+      sourceMessageId = String(message.id || '');
+      break;
     }
 
     if (!parsed) {
-      throw new Error(`No Scopt ratings message found in the latest ${messages.length} Telegram messages`);
+      throw new Error(options.expectedDate
+        ? `No Scopt ratings message found for ${options.expectedDate} in the latest ${messages.length} Telegram messages`
+        : `No Scopt ratings message found in the latest ${messages.length} Telegram messages`);
     }
 
     const existing = await getDocument<RatingsDailyDocument>(`ratings_daily/${parsed.date}`).catch(() => null);
+    const existingMessageId = String((existing as { sourceMessageId?: string } | null)?.sourceMessageId || '');
+    if (options.skipIfAlreadyImported && existingMessageId && existingMessageId === sourceMessageId) {
+      const rows = (existing?.telegramHouseholds?.length || 0) + (existing?.telegramPrime?.length || 0);
+      return {
+        daily: {
+          date: parsed.date,
+          sourceDate: parsed.sourceDate,
+          fallbackUsed: false,
+          rows,
+          matched: 0,
+          unmatched: rows,
+        },
+        source: 'telegram',
+        sourceMessageId,
+        skipped: true,
+        reason: 'already imported',
+      };
+    }
+
     const hasMidrug = hasMidrugRows(existing);
     const patch: Record<string, string | boolean | number | null | object[]> = {
       date: parsed.date,

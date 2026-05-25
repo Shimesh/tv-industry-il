@@ -1,0 +1,34 @@
+name: Watch Telegram Ratings
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # 09:00 Israel time during daylight saving
+    - cron: '0 7 * * *'    # 09:00 Israel time during winter time
+    - cron: '30 15-20 * * *' # evening safety sweep for holiday/late posts
+  workflow_dispatch:
+    inputs:
+      expectedDate:
+        description: 'Ratings date in YYYY-MM-DD, defaults to yesterday in Israel'
+        required: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Poll Vercel Telegram ratings cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EXPECTED_DATE: ${{ github.event.inputs.expectedDate }}
+          WATCH_MINUTES: 20
+          POLL_INTERVAL_SECONDS: 60
+        run: node scripts/poll-telegram-ratings-cron.mjs
+

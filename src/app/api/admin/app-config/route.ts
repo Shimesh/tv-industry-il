@@ -25,7 +25,7 @@ function normalizeRatingsAutomation(value: AppConfigPayload['ratingsAutomation']
       : currentConfig.weeklyMode === 'always'
         ? 'always'
         : 'sunday',
-    cronSchedule: '10 6 * * *',
+    cronSchedule: '0 6 * * *',
     cronTimezone: 'UTC',
   };
 }

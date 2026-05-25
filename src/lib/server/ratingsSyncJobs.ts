@@ -9,6 +9,9 @@ type RatingsJobInput = {
   route: string;
   trigger: 'admin' | 'cron';
   forceWeekly?: boolean;
+  expectedDate?: string;
+  skipIfAlreadyImported?: boolean;
+  waitingOk?: boolean;
 };
 
 function errorMessage(error: unknown): string {
@@ -91,6 +94,7 @@ export async function runTelegramRatingsJob(input: RatingsJobInput) {
   const detailBase = {
     source: 'telegram-scopt',
     trigger: input.trigger,
+    expectedDate: input.expectedDate ?? null,
     startedAt,
     steps: [
       'started',
@@ -112,13 +116,18 @@ export async function runTelegramRatingsJob(input: RatingsJobInput) {
       throw new Error('Telegram ratings configuration is missing');
     }
 
-    const result = await importLatestTelegramRatings();
+    const result = await importLatestTelegramRatings({
+      expectedDate: input.expectedDate,
+      skipIfAlreadyImported: input.skipIfAlreadyImported,
+    });
     const detail = {
       ...detailBase,
       completedAt: new Date().toISOString(),
       date: result.daily.date,
       rows: result.daily.rows,
       sourceMessageId: result.sourceMessageId,
+      skipped: Boolean(result.skipped),
+      reason: result.reason ?? null,
     };
 
     await Promise.all([
@@ -126,28 +135,35 @@ export async function runTelegramRatingsJob(input: RatingsJobInput) {
       recordJobMetric({
         job: RATINGS_TELEGRAM_JOB,
         ok: true,
-        message: `משיכת Scopt Telegram הושלמה: ${result.daily.rows} שורות`,
+        message: result.skipped
+          ? `Scopt Telegram כבר מעודכן: ${result.daily.rows} שורות`
+          : `משיכת Scopt Telegram הושלמה: ${result.daily.rows} שורות`,
         detail,
       }),
     ]);
 
     return { success: true, trigger: input.trigger, steps: detail.steps, ...result };
   } catch (error) {
+    const message = errorMessage(error);
+    const waitingForExpectedDate = Boolean(input.waitingOk && input.expectedDate && message.includes('No Scopt ratings message found for'));
     const detail = {
       ...detailBase,
-      failedAt: new Date().toISOString(),
-      error: errorMessage(error),
+      failedAt: waitingForExpectedDate ? null : new Date().toISOString(),
+      checkedAt: waitingForExpectedDate ? new Date().toISOString() : null,
+      waiting: waitingForExpectedDate,
+      error: message,
     };
     await Promise.all([
-      recordRouteMetric({ route: input.route, ok: false, statusCode: 500, error }),
+      recordRouteMetric({ route: input.route, ok: waitingForExpectedDate, statusCode: waitingForExpectedDate ? 202 : 500, error: waitingForExpectedDate ? undefined : error }),
       recordJobMetric({
         job: RATINGS_TELEGRAM_JOB,
-        ok: false,
-        message: 'משיכת רייטינג מ-Scopt Telegram נכשלה',
+        ok: waitingForExpectedDate,
+        message: waitingForExpectedDate
+          ? `Scopt Telegram: טרם נמצאו נתונים חדשים ל-${input.expectedDate}`
+          : 'משיכת רייטינג מ-Scopt Telegram נכשלה',
         detail,
       }),
     ]);
     throw error;
   }
 }
-

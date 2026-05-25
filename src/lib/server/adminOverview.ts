@@ -420,8 +420,8 @@ export async function getAdminOverview(): Promise<AdminOverview> {
       midrugEnabled: appConfigRaw?.ratingsAutomation?.midrugEnabled !== false,
       telegramEnabled: appConfigRaw?.ratingsAutomation?.telegramEnabled !== false,
       weeklyMode: appConfigRaw?.ratingsAutomation?.weeklyMode === 'always' ? 'always' : 'sunday',
-      cronSchedule: appConfigRaw?.ratingsAutomation?.cronSchedule || '10 6 * * *',
-      cronTimezone: appConfigRaw?.ratingsAutomation?.cronTimezone || 'UTC',
+      cronSchedule: '0 6 * * *',
+      cronTimezone: 'UTC',
     },
     updatedAt: appConfigRaw?.updatedAt || null,
   };

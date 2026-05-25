@@ -102,7 +102,7 @@ const EMPTY_OVERVIEW: AdminOverview = {
       midrugEnabled: true,
       telegramEnabled: true,
       weeklyMode: 'sunday',
-      cronSchedule: '10 6 * * *',
+      cronSchedule: '0 6 * * *',
       cronTimezone: 'UTC',
     },
     updatedAt: null,
@@ -1485,7 +1485,7 @@ export default function AdminPage() {
             <div className="mb-4 flex flex-col gap-1">
               <h3 className="text-sm font-bold text-white">הגדרות Cron</h3>
               <p className="text-xs leading-relaxed text-gray-400">
-                ההגדרות כאן קובעות מה ירוץ בקריאת ה־cron היומית. שינוי שעת ה־Vercel Cron עצמו דורש שינוי בקובץ `vercel.json` ו־deploy.
+                ההגדרות כאן קובעות מה ירוץ בקריאת ה־cron היומית. בנוסף, GitHub Actions מאזין בחלון 09:00-09:20 ובודק כל דקה אם נכנסה הודעת Scopt חדשה.
               </p>
             </div>
 
@@ -1563,7 +1563,7 @@ export default function AdminPage() {
             <div className="mt-3 grid gap-2 text-xs text-gray-400 sm:grid-cols-3">
               <span className="rounded-lg bg-white/5 px-3 py-2">Vercel schedule: <span dir="ltr">{overview.appConfig.ratingsAutomation.cronSchedule}</span></span>
               <span className="rounded-lg bg-white/5 px-3 py-2">Timezone: <span dir="ltr">{overview.appConfig.ratingsAutomation.cronTimezone}</span></span>
-              <span className="rounded-lg bg-white/5 px-3 py-2">בקיץ ישראל: בערך 09:10</span>
+              <span className="rounded-lg bg-white/5 px-3 py-2">חלון חם: 09:00-09:20</span>
             </div>
           </div>
 
