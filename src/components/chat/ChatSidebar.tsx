@@ -2,6 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { Search, Plus, MessageCircle, AlertTriangle, Loader2 } from 'lucide-react';
+
+function statusDotColor(isOnline?: boolean, status?: string): string | null {
+  if (!isOnline) return null; // no dot for offline in sidebar
+  if (status === 'busy') return '#ef4444'; // red
+  return 'var(--theme-success)'; // green
+}
 import type { ChatRoom } from '@/hooks/useChat';
 import type { UserProfile } from '@/contexts/AuthContext';
 import OnlineUsers from './OnlineUsers';
@@ -154,12 +160,14 @@ export default function ChatSidebar({
             const chatPhoto = getChatPhoto(chat, currentUserId);
             const chatInitial = getChatInitial(chat, currentUserId);
             const unreadCount = chat.unreadCountByUser?.[currentUserId] ?? chat.unreadCount;
-            const otherMemberUid = chat.type === 'private'
-              ? chat.membersInfo?.find(m => m.uid !== currentUserId)?.uid
+            const otherMember = chat.type === 'private'
+              ? chat.membersInfo?.find(m => m.uid !== currentUserId)
               : null;
+            const otherMemberUid = otherMember?.uid ?? null;
             const isOtherOnline = otherMemberUid
               ? onlineUserIds.has(otherMemberUid)
               : false;
+            const dotColor = statusDotColor(isOtherOnline, otherMember?.status);
 
             return (
               <button
@@ -187,8 +195,11 @@ export default function ChatSidebar({
                   >
                     {chatInitial}
                   </div>
-                  {isOtherOnline && (
-                    <span className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full bg-[var(--theme-success)] border-2 border-[var(--theme-bg)]" />
+                  {dotColor && (
+                    <span
+                      className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full border-2 border-[var(--theme-bg)]"
+                      style={{ backgroundColor: dotColor }}
+                    />
                   )}
                 </div>
 
@@ -206,10 +217,12 @@ export default function ChatSidebar({
                       </span>
                     )}
                   </div>
-                  {isOtherOnline && (
+                  {dotColor && (
                     <div className="mt-[1px] flex items-center gap-1 text-[11px]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-success)]" />
-                      <span className="text-[var(--theme-success)]">מחובר/ת עכשיו</span>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: dotColor }} />
+                      <span style={{ color: dotColor }}>
+                        {otherMember?.status === 'busy' ? 'תפוס/ה' : 'מחובר/ת עכשיו'}
+                      </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between mt-[2px]">

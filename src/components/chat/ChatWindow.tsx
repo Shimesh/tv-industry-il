@@ -18,11 +18,13 @@ import {
   WifiOff,
   Loader2,
   AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import MessageBubble from './MessageBubble';
 import ChatConnectionBanner from './ChatConnectionBanner';
+import ChatInfoPanel from './ChatInfoPanel';
 import type { ChatRoom } from '@/hooks/useChat';
 import { useCall } from '@/contexts/CallContext';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
@@ -66,6 +68,7 @@ interface ChatWindowProps {
   onLoadMore?: () => void;
   onlineUsers?: UserProfile[];
   allUsers?: UserProfile[];
+  onAddMembersToGroup?: (chatId: string, memberIds: string[]) => Promise<void>;
 }
 
 import emojiData from '@emoji-mart/data';
@@ -131,6 +134,12 @@ function toMillis(value: unknown): number | null {
   return null;
 }
 
+function statusDotColor(isOnline: boolean, status?: string): string {
+  if (!isOnline) return '#6b7280';
+  if (status === 'busy') return '#ef4444';
+  return 'var(--theme-success)';
+}
+
 function formatLastSeen(value: unknown): string {
   const timestamp = toMillis(value);
   if (!timestamp) return '';
@@ -165,6 +174,7 @@ export default function ChatWindow({
   onLoadMore,
   onlineUsers = [],
   allUsers = [],
+  onAddMembersToGroup,
 }: ChatWindowProps) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatUiMessage | null>(null);
@@ -174,6 +184,7 @@ export default function ChatWindow({
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOffline, setIsOffline] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     const goOffline = () => setIsOffline(true);
@@ -296,6 +307,11 @@ export default function ChatWindow({
     onSetTypingRef.current(false);
   }, [chat.id]);
 
+  // Close info panel when switching chats
+  useEffect(() => {
+    setShowInfo(false);
+  }, [chat.id]);
+
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -415,14 +431,14 @@ export default function ChatWindow({
           const isOtherOnline = !isGroup && otherMember?.uid
             ? onlineUsers.some(u => u.uid === otherMember.uid)
             : false;
-          const profileUid = !isGroup ? otherMember?.uid : null;
-          const handleProfileClick = profileUid
-            ? () => router.push(`/profile/${profileUid}`)
-            : undefined;
+          const dotColor = !isGroup && otherMember?.uid
+            ? statusDotColor(isOtherOnline, otherUserProfile?.status)
+            : null;
           return (
-            <div
-              className={`relative shrink-0 ${handleProfileClick ? 'cursor-pointer' : ''}`}
-              onClick={handleProfileClick}
+            <button
+              className="relative shrink-0 cursor-pointer rounded-full focus:outline-none"
+              onClick={() => setShowInfo(v => !v)}
+              title="מידע על השיחה"
             >
               {chatPhoto ? (
                 <img
@@ -445,16 +461,19 @@ export default function ChatWindow({
               >
                 {chatName.charAt(0)}
               </div>
-              {isOtherOnline && (
-                <span className="absolute bottom-0 right-0 h-[11px] w-[11px] rounded-full border-2 bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg-secondary)' }} />
+              {(!isGroup && otherMember?.uid) && (
+                <span
+                  className="absolute bottom-0 right-0 h-[11px] w-[11px] rounded-full border-2"
+                  style={{ backgroundColor: dotColor || 'var(--theme-success)', borderColor: 'var(--theme-bg-secondary)' }}
+                />
               )}
-            </div>
+            </button>
           );
         })()}
 
-        <div
-          className={`flex-1 min-w-0 ${!isGroup && otherMember?.uid ? 'cursor-pointer' : ''}`}
-          onClick={!isGroup && otherMember?.uid ? () => router.push(`/profile/${otherMember.uid}`) : undefined}
+        <button
+          className="flex-1 min-w-0 cursor-pointer text-right focus:outline-none"
+          onClick={() => setShowInfo(v => !v)}
         >
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-[15px] font-medium text-[var(--theme-text)]">{chatName}</h3>
@@ -475,7 +494,7 @@ export default function ChatWindow({
               'לא מחובר/ת'
             )}
           </p>
-        </div>
+        </button>
 
         {v2Enabled && connectionState?.mode === 'connected' && (
           <span className="hidden xl:inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
@@ -504,6 +523,13 @@ export default function ChatWindow({
           </>
         )}
 
+        <button
+          onClick={() => setShowInfo(v => !v)}
+          className={`rounded-full p-2 transition-colors ${showInfo ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)]'}`}
+          title="מידע על השיחה"
+        >
+          <Info className="w-5 h-5" />
+        </button>
         <button
           onClick={() => {
             setShowSearch((s) => !s);
@@ -843,6 +869,21 @@ export default function ChatWindow({
             </button>
           )}
         </div>
+      )}
+
+      {/* Info Panel — slides over the entire chat */}
+      {showInfo && (
+        <ChatInfoPanel
+          chat={chat}
+          currentUserId={currentUserId}
+          otherUser={otherUserProfile}
+          allUsers={allUsers}
+          onlineUsers={onlineUsers}
+          onClose={() => setShowInfo(false)}
+          onAddMembers={async (memberIds) => {
+            if (onAddMembersToGroup) await onAddMembersToGroup(chat.id, memberIds);
+          }}
+        />
       )}
     </div>
   );

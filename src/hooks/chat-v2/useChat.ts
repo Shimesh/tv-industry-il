@@ -1457,6 +1457,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     setActiveChat,
     sendMessage,
     deleteMessage: legacy.deleteMessage,
+    addMembersToGroup: legacy.addMembersToGroup,
     loadMoreMessages: legacy.loadMoreMessages,
     hasMore: legacy.hasMore,
     loadingMore: legacy.loadingMore,

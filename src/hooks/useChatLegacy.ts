@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import {
   collection, query, orderBy, onSnapshot, addDoc, doc, getDoc,
   serverTimestamp, where, setDoc, updateDoc, limit, Timestamp, increment, writeBatch,
-  getDocs, startAfter, type QueryDocumentSnapshot,
+  getDocs, startAfter, type QueryDocumentSnapshot, arrayUnion,
 } from 'firebase/firestore';
 import {
   getKeyPair,
@@ -31,7 +31,7 @@ export interface ChatRoom {
   name: string;
   photoURL: string | null;
   members: string[];
-  membersInfo: { uid?: string; displayName: string; photoURL: string | null; isOnline?: boolean; lastSeen?: number | null }[];
+  membersInfo: { uid?: string; displayName: string; photoURL: string | null; isOnline?: boolean; lastSeen?: number | null; status?: string }[];
   lastMessage?: {
     text: string;
     senderId: string;
@@ -1038,6 +1038,43 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     }).catch(() => {});
   }, [activeChat, user, displayName]);
 
+  const addMembersToGroup = useCallback(async (chatId: string, newMemberIds: string[]) => {
+    if (!user) throw new Error('לא מחובר');
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) throw new Error('קבוצה לא נמצאה');
+
+    const existingSet = new Set(chat.members);
+    const toAdd = newMemberIds.filter(id => !existingSet.has(id));
+    if (!toAdd.length) return;
+
+    const newMembersInfo = toAdd.map(uid => {
+      const u = allUsers.find(usr => usr.uid === uid);
+      return { uid, displayName: u?.displayName || 'משתמש', photoURL: u?.photoURL || null };
+    });
+    const updatedMembersInfo = [
+      ...chat.membersInfo,
+      ...newMembersInfo.filter(nm => !chat.membersInfo.some(m => m.uid === nm.uid)),
+    ];
+
+    await withChatTimeout(
+      updateDoc(doc(db, 'chats', chatId), {
+        members: arrayUnion(...toAdd),
+        membersInfo: updatedMembersInfo,
+        updatedAt: serverTimestamp(),
+      }),
+      SEND_STEP_TIMEOUT_MS, 'chats', 'add-members', { chatId }
+    );
+
+    const addedNames = newMembersInfo.map(m => m.displayName).join(', ');
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      senderId: 'system', senderName: 'מערכת', senderPhoto: null,
+      text: `${displayName} הוסיף/ה את ${addedNames} לקבוצה`,
+      type: 'system', fileURL: null, fileName: null, fileSize: null,
+      duration: null, mimeType: null, replyTo: null,
+      readBy: {}, deliveredTo: {}, createdAt: Date.now(),
+    });
+  }, [user, chats, allUsers, displayName]);
+
   const usersByUid = useMemo(() => new Map(allUsers.map(u => [u.uid, u])), [allUsers]);
 
   const enrichMembersInfo = useCallback((chat: ChatRoom): ChatRoom => {
@@ -1051,14 +1088,16 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       const newPhoto = current.photoURL ?? member.photoURL;
       const newIsOnline = current.isOnline ?? member.isOnline;
       const newLastSeen = current.lastSeen ?? member.lastSeen;
+      const newStatus = current.status ?? member.status;
       if (
         newName === member.displayName &&
         newPhoto === member.photoURL &&
         newIsOnline === member.isOnline &&
-        newLastSeen === member.lastSeen
+        newLastSeen === member.lastSeen &&
+        newStatus === member.status
       ) return member;
       changed = true;
-      return { ...member, displayName: newName, photoURL: newPhoto, isOnline: newIsOnline, lastSeen: newLastSeen };
+      return { ...member, displayName: newName, photoURL: newPhoto, isOnline: newIsOnline, lastSeen: newLastSeen, status: newStatus };
     });
     return changed ? { ...chat, membersInfo: enriched } : chat;
   }, [usersByUid]);
@@ -1101,6 +1140,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     createPrivateChat,
     createGroup,
     setTyping,
+    addMembersToGroup,
     displayName,
     displayPhoto,
     retryChats: useCallback(() => {

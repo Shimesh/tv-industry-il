@@ -157,6 +157,7 @@ function ChatContent() {
     messagesLoading,
     chatError,
     retryChats,
+    addMembersToGroup,
     onlineUsers,
     typingUsers,
     uploadProgress,
@@ -560,6 +561,7 @@ function ChatContent() {
             onLoadMore={loadMoreMessages}
             onlineUsers={onlineUsers}
             allUsers={allUsers}
+            onAddMembersToGroup={addMembersToGroup}
           />
         ) : (
           <ChatEmptyState />

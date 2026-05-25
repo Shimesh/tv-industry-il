@@ -43,8 +43,11 @@ export default function OnlineUsers({ users, onSelectUser }: OnlineUsersProps) {
                 {(onlineUser.displayName || 'מ').charAt(0)}
               </div>
               <span
-                className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[2.5px] bg-[var(--theme-success)]"
-                style={{ borderColor: 'var(--theme-bg)' }}
+                className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[2.5px]"
+                style={{
+                  backgroundColor: onlineUser.status === 'busy' ? '#ef4444' : 'var(--theme-success)',
+                  borderColor: 'var(--theme-bg)',
+                }}
               />
             </div>
             <span className="max-w-[56px] truncate text-[10px] text-[var(--theme-text-secondary)] transition-colors group-hover:text-[var(--theme-text)]">

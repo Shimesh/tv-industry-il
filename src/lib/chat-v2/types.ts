@@ -16,6 +16,7 @@ export interface ChatRoomMemberInfo {
   photoURL: string | null;
   isOnline?: boolean;
   lastSeen?: number | null;
+  status?: string;
 }
 
 export interface ChatRoomLastMessage {
