@@ -17,7 +17,7 @@ const EDGE_PROXY_BASE = process.env.VERCEL_URL
 const TARGET_AUDIENCE = 'משקי בית בכלל האוכלוסייה';
 const TARGET_AUDIENCE_ID = '1';
 const TZ = 'Asia/Jerusalem';
-const MIDRUG_TIMEOUT_MS = 12_000;
+const MIDRUG_TIMEOUT_MS = 5_000;
 const MIDRUG_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.6.0; +https://tv-industry-il.vercel.app)',
   Accept: 'text/html,application/xhtml+xml,*/*',
@@ -83,88 +83,93 @@ async function fetchMidrugHtml(baseUrl: string, method: 'GET' | 'POST' = 'GET', 
   const headers: Record<string, string> = { ...MIDRUG_HEADERS };
   if (bodyStr) headers['Content-Type'] = 'application/x-www-form-urlencoded';
   const errors: string[] = [];
-  const backoffs = [0, 2000];
+  const path = new URL(url).pathname;
+  const t0 = Date.now();
+  const log = (msg: string) => console.log(`[midrug ${path}] +${Date.now()-t0}ms ${msg}`);
 
+  const backoffs = [0, 2000];
   for (let attempt = 0; attempt < backoffs.length; attempt++) {
     if (backoffs[attempt]) await sleep(backoffs[attempt]);
+    log(`fetch#${attempt + 1} start`);
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: bodyStr,
-        cache: 'no-store',
-        signal: controller.signal,
-      });
+      const response = await fetch(url, { method, headers, body: bodyStr, cache: 'no-store', signal: controller.signal });
       clearTimeout(timeout);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      log(`fetch#${attempt + 1} OK ${response.status}`);
       return decodeWindows1255(await response.arrayBuffer());
     } catch (error) {
-      errors.push(`fetch#${attempt + 1}: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`fetch#${attempt + 1}: ${msg}`);
+      log(`fetch#${attempt + 1} FAIL ${msg}`);
     }
   }
 
   for (const allowInsecureTls of [false, true]) {
+    const label = allowInsecureTls ? 'https-insecure' : 'https';
+    log(`${label} start`);
     try {
       const buffer = await requestMidrugBuffer(url, method, bodyStr, allowInsecureTls);
+      log(`${label} OK`);
       return decodeWindows1255(buffer);
     } catch (error) {
-      errors.push(`${allowInsecureTls ? 'https-insecure' : 'https'}: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`${label}: ${msg}`);
+      log(`${label} FAIL ${msg}`);
     }
   }
 
+  log('http start');
   try {
     const httpUrl = url.replace('https://', 'http://');
     const buffer = await requestMidrugBuffer(httpUrl, method, bodyStr, false);
+    log('http OK');
     return decodeWindows1255(buffer);
   } catch (error) {
-    errors.push(`http: ${error instanceof Error ? error.message : String(error)}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    errors.push(`http: ${msg}`);
+    log(`http FAIL ${msg}`);
   }
 
+  log('edge-proxy start');
   try {
     const parsedUrl = new URL(url);
     const edgeParams = new URLSearchParams({ path: parsedUrl.pathname, params: parsedUrl.search.slice(1) });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
-    const response = await fetch(`${EDGE_PROXY_BASE}?${edgeParams}`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    const response = await fetch(`${EDGE_PROXY_BASE}?${edgeParams}`, { cache: 'no-store', signal: controller.signal });
     clearTimeout(timeout);
-    if (response.ok) {
-      return decodeWindows1255(await response.arrayBuffer());
-    }
+    if (response.ok) { log('edge-proxy OK'); return decodeWindows1255(await response.arrayBuffer()); }
     throw new Error(`edge-proxy HTTP ${response.status}`);
   } catch (error) {
-    errors.push(`edge-proxy: ${error instanceof Error ? error.message : String(error)}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    errors.push(`edge-proxy: ${msg}`);
+    log(`edge-proxy FAIL ${msg}`);
   }
 
   const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    { label: 'corsproxy', url: `https://corsproxy.io/?${encodeURIComponent(url)}` },
+    { label: 'allorigins', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
   ];
-  for (const proxyUrl of proxies) {
+  for (const proxy of proxies) {
+    log(`${proxy.label} start`);
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), MIDRUG_TIMEOUT_MS);
-      const response = await fetch(proxyUrl, {
-        method: 'GET',
-        cache: 'no-store',
-        signal: controller.signal,
-      });
+      const response = await fetch(proxy.url, { method: 'GET', cache: 'no-store', signal: controller.signal });
       clearTimeout(timeout);
       if (!response.ok) throw new Error(`proxy HTTP ${response.status}`);
+      log(`${proxy.label} OK`);
       return decodeWindows1255(await response.arrayBuffer());
     } catch (error) {
-      const label = proxyUrl.includes('corsproxy') ? 'corsproxy' : 'allorigins';
-      errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`${proxy.label}: ${msg}`);
+      log(`${proxy.label} FAIL ${msg}`);
     }
   }
 
-  const path = new URL(url).pathname;
+  log(`all methods failed: ${errors.join(' | ')}`);
   throw new Error(`Midrug fetch failed for ${path}: ${errors.join(' | ')}`);
 }
 
