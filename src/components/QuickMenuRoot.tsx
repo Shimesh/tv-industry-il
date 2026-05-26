@@ -69,7 +69,7 @@ export default function QuickMenuRoot() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed top-1/2 right-0 z-[9998] -translate-y-1/2 flex items-center justify-center rounded-l-lg border border-r-0 border-white/10 bg-slate-950/60 text-[var(--theme-accent)] shadow-lg backdrop-blur-xl transition-all hover:bg-white/10 hover:shadow-[0_0_20px_var(--theme-accent-glow)] active:scale-95"
+        className="fixed top-1/2 right-0 z-[9998] -translate-y-1/2 flex items-center justify-center rounded-l-lg border border-r-0 border-yellow-400/40 bg-white text-black shadow-[0_0_12px_2px_rgba(234,179,8,0.45)] backdrop-blur-xl transition-all hover:shadow-[0_0_22px_6px_rgba(234,179,8,0.7)] active:scale-95"
         style={{ width: 28, height: 56 }}
         aria-label="פתיחת תפריט מהיר"
         title="תפריט מהיר"
