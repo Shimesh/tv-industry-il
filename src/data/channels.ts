@@ -57,6 +57,16 @@ export function getChannelById(channelId: string | null | undefined): Channel | 
   return channels.find((channel) => channel.id === channelId) || null;
 }
 
+const exactChannelNameAliases: Record<string, string> = {
+  '11': 'kan11',
+  'kan': 'kan11',
+  'כאן': 'kan11',
+  '12': 'keshet12',
+  '13': 'reshet13',
+  '14': 'now14',
+  '24': 'i24',
+};
+
 const channelNameAliases: Array<{ channelId: string; aliases: string[] }> = [
   { channelId: 'kan11', aliases: ['כאן 11', 'ערוץ 11', 'kan 11'] },
   { channelId: 'keshet12', aliases: ['קשת 12', 'ערוץ 12', 'חדשות 12', 'keshet 12', 'keshet'] },
@@ -86,6 +96,9 @@ export function findChannelByName(value: string | null | undefined): Channel | n
   if (!value) return null;
   const normalized = normalizeChannelText(value);
   if (!normalized) return null;
+
+  const exactAlias = exactChannelNameAliases[normalized];
+  if (exactAlias) return getChannelById(exactAlias);
 
   const direct = channels.find((channel) =>
     normalizeChannelText(channel.id) === normalized ||
