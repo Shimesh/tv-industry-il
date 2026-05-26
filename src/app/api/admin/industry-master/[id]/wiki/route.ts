@@ -32,9 +32,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (info.network) update.network = info.network;
   if (info.genre) update.genre = info.genre;
   if (info.productionCompany) update.productionCompany = info.productionCompany;
-  // Apply logo only when title matched well and entry has no logo yet
-  if (info.logoUrl && isVerified && !entry.logoUrl) {
-    update.logoUrl = info.logoUrl;
+  // Admin explicitly re-ran the search — always apply the new result:
+  //   • Verified match → use new logo (overwrites any previously wrong image)
+  //   • No match (needs_review) → clear logo so wrong image is no longer shown
+  if (isVerified) {
+    update.logoUrl = info.logoUrl; // may be '' if infobox had no תמונה= field
+  } else {
+    update.logoUrl = ''; // clear potentially wrong logo
   }
 
   await patchDocument(`industry_master/${id}`, update);

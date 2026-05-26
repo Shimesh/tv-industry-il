@@ -20,8 +20,16 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const allEntries = await listDocuments<IndustryMasterEntry>('industry_master').catch(() => []);
-  // Skip entries already verified, already attempted (wikiUrl === 'none'), or already enriched
-  const needsWiki = allEntries.filter((e) => !e.isVerified && !e.network && e.wikiUrl !== 'none');
+  // Process entries that:
+  //  - haven't been attempted yet (no wikiUrl) — initial enrichment
+  //  - were previously flagged as 'needs_review' — retry with improved search
+  //  - have no logo yet — may have been enriched for metadata but logo was skipped
+  // Skip entries that are already verified AND have a logo AND have metadata
+  const needsWiki = allEntries.filter((e) => {
+    if (e.wikiUrl === 'none') return false; // Already tried, page not found on Wikipedia
+    if (e.isVerified && e.logoUrl && e.logoUrl !== 'none' && e.network) return false; // Fully enriched
+    return true;
+  });
   const pending = needsWiki.slice(0, BATCH_SIZE);
   const totalPending = needsWiki.length;
 
@@ -44,9 +52,15 @@ export async function POST(request: NextRequest) {
     if (info.network) update.network = info.network;
     if (info.genre) update.genre = info.genre;
     if (info.productionCompany) update.productionCompany = info.productionCompany;
-    // Only apply logo if title matched well and entry has no logo yet
-    if (info.logoUrl && !entry.logoUrl && isVerified) {
-      update.logoUrl = info.logoUrl;
+    // Update logo:
+    //   • Verified match + new logo found → always apply (may correct a previously wrong image)
+    //   • 'needs_review' and entry had an unverified logo → clear it to prevent wrong images
+    if (info.logoUrl && isVerified) {
+      if (!entry.logoUrl || entry.logoUrl === 'none' || entry.wikiTitleMatch === 'needs_review') {
+        update.logoUrl = info.logoUrl;
+      }
+    } else if (!isVerified && entry.logoUrl && entry.wikiTitleMatch === 'needs_review') {
+      update.logoUrl = ''; // Previously unverified logo — clear it
     }
     await patchDocument(`industry_master/${entry.id}`, update);
     if (info.network || info.logoUrl) enriched++;

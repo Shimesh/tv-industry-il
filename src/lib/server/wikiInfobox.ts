@@ -1,37 +1,75 @@
 // Fetches Hebrew Wikipedia infobox fields for a TV show.
-// Uses two distinct Wikipedia API calls:
-//   1. action=query&list=search  → find the best-matching page title
-//   2. action=parse&prop=wikitext → get raw infobox markup to extract fields
-//   3. action=query&prop=pageimages → get logo thumbnail URL
-// Title Match Verification: compares the Wikipedia page title to the requested show name.
-// If similarity < 70%, the result is flagged as 'needs_review' and the logo is withheld.
+// API calls:
+//   1. action=query&list=search  → fetch top-5 results for TWO queries, pick best title match
+//   2. action=parse&prop=wikitext → get raw infobox markup
+//   3. action=query&prop=imageinfo → resolve infobox | תמונה = filename → URL  (preferred)
+//   4. action=query&prop=pageimages → fallback if no infobox image field found
+//
+// Why infobox image over pageimages:
+//   pageimages returns the article's representative image, which for person/couple articles
+//   may be an unrelated cast photo (e.g. searching "חיים ומעיין" finds their article, whose
+//   representative image is a photo from "האח הגדול"). The infobox | תמונה = field is the
+//   show's actual logo/poster and only exists in TV-show articles.
+//
+// Title Match Verification: if Wikipedia page title is <70% similar to the show name,
+// result is flagged as 'needs_review' and the logo is withheld.
 
 import { stringSimilarity, stripProductionSuffixes } from '@/lib/productionNameNormalization';
 
 const WIKI_BASE = 'https://he.wikipedia.org/w/api.php';
-const UA = 'TVIndustryIL/2.4.5 (industry-master sync)';
+const UA = 'TVIndustryIL/2.5.0 (industry-master sync)';
 const TITLE_MATCH_THRESHOLD = 0.70;
 
-async function searchWikiPage(name: string): Promise<{ title: string; pageUrl: string } | null> {
+async function runWikiSearch(query: string): Promise<{ title: string }[]> {
   try {
     const url = new URL(WIKI_BASE);
     url.searchParams.set('action', 'query');
     url.searchParams.set('list', 'search');
-    url.searchParams.set('srsearch', `${name} טלוויזיה`);
-    url.searchParams.set('srlimit', '1');
+    url.searchParams.set('srsearch', query);
+    url.searchParams.set('srlimit', '5');
     url.searchParams.set('format', 'json');
     url.searchParams.set('origin', '*');
     const res = await fetch(url.toString(), {
       headers: { 'User-Agent': UA },
       signal: AbortSignal.timeout(6000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json() as { query?: { search?: { title: string }[] } };
-    const title = data.query?.search?.[0]?.title;
-    if (!title) return null;
+    return data.query?.search ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Search Wikipedia and pick the candidate whose title best matches the show name.
+// Runs two queries (with/without "טלוויזיה" suffix) and picks the best result across both.
+async function searchWikiPage(name: string): Promise<{ title: string; pageUrl: string } | null> {
+  try {
+    const [withTv, withoutTv] = await Promise.all([
+      runWikiSearch(`${name} טלוויזיה`),
+      runWikiSearch(name),
+    ]);
+
+    const seen = new Set<string>();
+    const candidates = [...withTv, ...withoutTv].filter((c) => {
+      if (seen.has(c.title)) return false;
+      seen.add(c.title);
+      return true;
+    });
+
+    if (!candidates.length) return null;
+
+    // Pick the candidate whose title is most similar to the show name
+    let best = candidates[0];
+    let bestScore = stringSimilarity(name, best.title);
+    for (const candidate of candidates.slice(1)) {
+      const score = stringSimilarity(name, candidate.title);
+      if (score > bestScore) { best = candidate; bestScore = score; }
+    }
+
     return {
-      title,
-      pageUrl: `https://he.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+      title: best.title,
+      pageUrl: `https://he.wikipedia.org/wiki/${encodeURIComponent(best.title.replace(/ /g, '_'))}`,
     };
   } catch {
     return null;
@@ -59,7 +97,6 @@ async function fetchWikiText(pageTitle: string): Promise<string> {
   }
 }
 
-// Strips [[Link|Display]] → Display, [[Link]] → Link, and trims whitespace
 function stripWikiMarkup(value: string): string {
   return value
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
@@ -75,7 +112,45 @@ function extractInfoboxField(wikitext: string, fieldName: string): string {
   return stripWikiMarkup(match[1]);
 }
 
-async function fetchWikiLogoUrl(pageTitle: string): Promise<string> {
+// Extract image filename from infobox | תמונה = ... (or | לוגו = ...) and resolve to thumbnail URL.
+// This is the show's actual logo/poster, more reliable than pageimages for TV articles.
+async function fetchInfoboxImageUrl(wikitext: string): Promise<string> {
+  // Matches: | תמונה = Filename.jpg  /  | לוגו = [[File:Img.png]]  /  | image = Img.png
+  const match = wikitext.match(
+    /\|\s*(?:תמונה|לוגו|logo|image)\s*=\s*\[?\[?(?:קובץ:|File:)?([^\n|{}\]]+)/i,
+  );
+  const raw = match?.[1]?.trim();
+  if (!raw) return '';
+  const filename = raw.replace(/^(?:קובץ:|File:)/i, '').trim();
+  if (!filename || filename.length < 3) return '';
+
+  try {
+    const url = new URL(WIKI_BASE);
+    url.searchParams.set('action', 'query');
+    url.searchParams.set('titles', `File:${filename}`);
+    url.searchParams.set('prop', 'imageinfo');
+    url.searchParams.set('iiprop', 'url');
+    url.searchParams.set('iiurlwidth', '300');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+    const res = await fetch(url.toString(), {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return '';
+    const data = await res.json() as {
+      query?: { pages?: Record<string, { imageinfo?: Array<{ thumburl?: string }> }> };
+    };
+    const pages = Object.values(data.query?.pages ?? {});
+    return pages[0]?.imageinfo?.[0]?.thumburl ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// Fallback: page's representative image via pageimages prop.
+// Only used when the article has no infobox image field.
+async function fetchWikiPageImage(pageTitle: string): Promise<string> {
   try {
     const url = new URL(WIKI_BASE);
     url.searchParams.set('action', 'query');
@@ -89,7 +164,9 @@ async function fetchWikiLogoUrl(pageTitle: string): Promise<string> {
       signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return '';
-    const data = await res.json() as { query?: { pages?: Record<string, { thumbnail?: { source?: string } }> } };
+    const data = await res.json() as {
+      query?: { pages?: Record<string, { thumbnail?: { source?: string } }> };
+    };
     const pages = Object.values(data.query?.pages ?? {});
     return pages[0]?.thumbnail?.source ?? '';
   } catch {
@@ -109,36 +186,37 @@ export type WikiInfoboxResult = {
 
 export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxResult> {
   const page = await searchWikiPage(showName);
-  if (!page) return { logoUrl: '', network: '', genre: '', productionCompany: '', wikiUrl: '', wikiTitleMatch: '' };
+  if (!page) {
+    return { logoUrl: '', network: '', genre: '', productionCompany: '', wikiUrl: '', wikiTitleMatch: '' };
+  }
 
   // --- Title Match Verification ---
-  // Compare canonical (suffix-stripped) show name to the Wikipedia page title found.
   const canonicalName = stripProductionSuffixes(showName);
   const similarity = stringSimilarity(canonicalName, page.title);
   const titleMatches = similarity >= TITLE_MATCH_THRESHOLD;
   const wikiTitleMatch: 'ok' | 'needs_review' = titleMatches ? 'ok' : 'needs_review';
 
-  const [wikitext, rawLogoUrl] = await Promise.all([
-    fetchWikiText(page.title),
-    // Only fetch logo if the title matched well enough
-    titleMatches ? fetchWikiLogoUrl(page.title) : Promise.resolve(''),
-  ]);
+  const wikitext = await fetchWikiText(page.title);
+
+  let logoUrl = '';
+  if (titleMatches) {
+    // Prefer the infobox | תמונה = image (the show's logo/poster).
+    // pageimages fallback is intentionally NOT used: for couple/person articles it returns
+    // a cast photo (e.g. an article about people who appeared on a show returns that show's
+    // photo as representative image, causing the wrong logo to be stored).
+    logoUrl = await fetchInfoboxImageUrl(wikitext);
+  }
 
   const network = extractInfoboxField(wikitext, 'רשת שידור');
-  // Hebrew Wikipedia uses several spellings for genre
   const genre =
     extractInfoboxField(wikitext, "ז'אנר") ||
     extractInfoboxField(wikitext, 'ז׳אנר') ||
     extractInfoboxField(wikitext, 'סוג');
-  // Extract production company (multiple field name variants)
   const productionCompany =
     extractInfoboxField(wikitext, 'חברת הפקה') ||
     extractInfoboxField(wikitext, 'הפקה') ||
     extractInfoboxField(wikitext, 'מפיק') ||
     extractInfoboxField(wikitext, 'מפיקים');
-
-  // Only use logo if title matched; otherwise leave blank so admin can fix manually
-  const logoUrl = titleMatches ? rawLogoUrl : '';
 
   return { logoUrl, network, genre, productionCompany, wikiUrl: page.pageUrl, wikiTitleMatch };
 }
