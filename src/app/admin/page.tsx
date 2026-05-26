@@ -570,7 +570,7 @@ export default function AdminPage() {
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', phone: '', role: '' });
+  const [newContact, setNewContact] = useState({ name: '', phone: '', role: '', department: '' });
   const [proCardDebug, setProCardDebug] = useState<Record<string, unknown> | null>(null);
   const [testingProCard, setTestingProCard] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
@@ -1048,12 +1048,12 @@ export default function AdminPage() {
         {
           method: 'POST',
           body: JSON.stringify({
-            records: [{ name: newContact.name.trim(), phone: newContact.phone.trim(), role: newContact.role.trim() || 'לא צוין' }],
+            records: [{ name: newContact.name.trim(), phone: newContact.phone.trim(), role: newContact.role.trim() || 'לא צוין', department: newContact.department.trim() || undefined }],
           }),
         },
       );
       showToast('ok', `${result.created ? 'נוצר' : result.updated ? 'עודכן' : 'כבר קיים'}: ${newContact.name}`);
-      setNewContact({ name: '', phone: '', role: '' });
+      setNewContact({ name: '', phone: '', role: '', department: '' });
       setShowAddContact(false);
       await loadOverview(true);
     } catch (addError) {
@@ -1619,59 +1619,6 @@ export default function AdminPage() {
           )}
         </section>
 
-        {showAddContact && (
-          <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4">
-            <h3 className="mb-3 text-sm font-bold text-green-400">הוספת איש קשר חדש</h3>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-0 sm:min-w-[140px]">
-                <label className="mb-1 block text-xs text-gray-400">שם מלא *</label>
-                <input
-                  type="text"
-                  value={newContact.name}
-                  onChange={e => setNewContact(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="ישראל ישראלי"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
-                  dir="rtl"
-                />
-              </div>
-              <div className="flex-1 min-w-0 sm:min-w-[140px]">
-                <label className="mb-1 block text-xs text-gray-400">טלפון *</label>
-                <input
-                  type="tel"
-                  value={newContact.phone}
-                  onChange={e => setNewContact(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="054-1234567"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
-                  dir="ltr"
-                />
-              </div>
-              <div className="flex-1 min-w-0 sm:min-w-[140px]">
-                <label className="mb-1 block text-xs text-gray-400">תפקיד</label>
-                <input
-                  type="text"
-                  value={newContact.role}
-                  onChange={e => setNewContact(prev => ({ ...prev, role: e.target.value }))}
-                  placeholder="צלם, במאי, טכנאי..."
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
-                  dir="rtl"
-                />
-              </div>
-              <button
-                onClick={() => void addSingleContact()}
-                disabled={addingContact}
-                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-60"
-              >
-                {addingContact ? 'מוסיף...' : 'הוסף'}
-              </button>
-              <button
-                onClick={() => { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '' }); }}
-                className="rounded-lg bg-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-600"
-              >
-                ביטול
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
           <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
@@ -1740,10 +1687,6 @@ export default function AdminPage() {
             <div className="border-b border-gray-800 px-5 py-3 text-xs text-gray-500">
               מחובר = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. לא פעיל מעל חודש = החיבור האחרון היה לפני יותר מ־30 יום או שלא קיים `lastSeen`.
             </div>
-            <div className="hidden">
-              מחוברים עכשיו = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. נוכחות ישנה = `isOnline` נשאר פעיל אבל `lastSeen` כבר לא עדכני.
-            </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1755,14 +1698,6 @@ export default function AdminPage() {
                     <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
                     <SortHeader label="נראה לאחרונה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden sm:table-cell" />
                     <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                  </tr>
-                  <tr className="hidden">
-                    <th className="px-5 py-3 text-right font-medium">משתמש</th>
-                    <th className="hidden px-4 py-3 text-right font-medium md:table-cell">אימייל</th>
-                    <th className="hidden px-4 py-3 text-right font-medium lg:table-cell">תפקיד / מחלקה</th>
-                    <th className="px-4 py-3 text-right font-medium">סטטוס</th>
-                    <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">נראה לאחרונה</th>
-                    <th className="px-4 py-3 text-right font-medium">הרשאה</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1894,25 +1829,6 @@ export default function AdminPage() {
                               </select>
                               <ChevronDown className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                             </div>
-                          <div className="hidden">
-                            {ROLE_OPTIONS.map((option) => {
-                              const selected = entry.siteRole === option.value;
-                              return (
-                                <button
-                                  key={`${entry.uid}-${option.value}`}
-                                  onClick={() => void updateUserRole(entry.uid, option.value)}
-                                  disabled={selected || updatingRole === entry.uid}
-                                  className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
-                                    selected
-                                      ? option.classes
-                                      : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                  } ${updatingRole === entry.uid ? 'opacity-60' : ''}`}
-                                >
-                                  {updatingRole === entry.uid && !selected ? 'מעדכן…' : option.label}
-                                </button>
-                              );
-                            })}
-                          </div>
                           </>
                         )}
                       </td>
@@ -2629,6 +2545,90 @@ export default function AdminPage() {
       </div>,
       document.body,
     )}
+
+      {showAddContact && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '', department: '' }); } }}>
+          <div className="w-full max-w-md rounded-xl p-6 shadow-xl" style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">הוספת איש קשר חדש</h3>
+              <button
+                onClick={() => { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '', department: '' }); }}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5 text-xs text-gray-400">
+                שם מלא *
+                <input
+                  type="text"
+                  value={newContact.name}
+                  onChange={e => setNewContact(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="ישראל ישראלי"
+                  autoFocus
+                  dir="rtl"
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-gray-400">
+                טלפון *
+                <input
+                  type="tel"
+                  value={newContact.phone}
+                  onChange={e => setNewContact(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="054-1234567"
+                  dir="ltr"
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter') void addSingleContact(); }}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-gray-400">
+                תפקיד
+                <input
+                  type="text"
+                  value={newContact.role}
+                  onChange={e => setNewContact(prev => ({ ...prev, role: e.target.value }))}
+                  placeholder="צלם, במאי, טכנאי..."
+                  dir="rtl"
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-gray-400">
+                מחלקה
+                <select
+                  value={newContact.department}
+                  onChange={e => setNewContact(prev => ({ ...prev, department: e.target.value }))}
+                  dir="rtl"
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+                >
+                  <option value="">בחר מחלקה (אופציונלי)</option>
+                  {INDUSTRY_DEPARTMENT_OPTIONS.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '', department: '' }); }}
+                className="rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)' }}
+              >
+                ביטול
+              </button>
+              <button
+                onClick={() => void addSingleContact()}
+                disabled={addingContact || !newContact.name.trim() || !newContact.phone.trim()}
+                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50"
+              >
+                {addingContact ? 'מוסיף...' : 'הוסף איש קשר'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

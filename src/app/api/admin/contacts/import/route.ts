@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-type ImportRecord = { name: string; phone: string; role: string };
+type ImportRecord = { name: string; phone: string; role: string; department?: string };
 
 // Matches the ghost avatar seed used throughout the app (ghostSeed in contactsSync.ts)
 function ghostAvatarSeed(normalizedName: string): number {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     // Resolve canonical role ("במאי" → "במאי/ת", department → "בימוי וניתוב")
     const roleResult = normalizeRoleToCanonical(record.role);
     const canonicalRole = roleResult.canonicalRole || record.role;
-    const department = roleResult.department || getDepartmentForRole(canonicalRole) || 'בימוי וניתוב';
+    const department = record.department || roleResult.department || getDepartmentForRole(canonicalRole) || '';
 
     const existingByPhone = normalizedPh ? contactByPhone.get(normalizedPh) : null;
 
