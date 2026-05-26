@@ -1,9 +1,6 @@
 name: Deploy Firebase Functions
 
 on:
-  push:
-    branches: [master]
-    paths: ['functions/**']
   workflow_dispatch:
 
 jobs:
@@ -27,11 +24,12 @@ jobs:
           FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: |
           node -e "
+            const pk = process.env.FIREBASE_PRIVATE_KEY || '';
             const key = {
               type: 'service_account',
               project_id: process.env.FIREBASE_PROJECT_ID,
               private_key_id: 'ci',
-              private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\\\n/g, '\n'),
+              private_key: pk.includes('\\n') ? pk.replace(/\\n/g, '\n') : pk,
               client_email: process.env.FIREBASE_CLIENT_EMAIL,
               client_id: '',
               auth_uri: 'https://accounts.google.com/o/oauth2/auth',
@@ -39,7 +37,7 @@ jobs:
               auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
             };
             require('fs').writeFileSync('/tmp/sa-key.json', JSON.stringify(key));
-            console.log('Service account key created for', process.env.FIREBASE_CLIENT_EMAIL);
+            console.log('Key created for', process.env.FIREBASE_CLIENT_EMAIL);
           "
 
       - name: Deploy Firebase Functions
