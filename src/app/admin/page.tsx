@@ -19,11 +19,10 @@ import {
   Crown,
   Database,
   FileText,
-  GitBranch,
+  Cloud,
   Mail,
   Megaphone,
   MessageCircle,
-  MousePointerClick,
   RefreshCw,
   Search,
   Settings,
@@ -560,10 +559,9 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [runningSync, setRunningSync] = useState(false);
-  const [runningMidrugSync, setRunningMidrugSync] = useState(false);
+  const [runningFirebaseSync, setRunningFirebaseSync] = useState(false);
   const [runningTelegramSync, setRunningTelegramSync] = useState(false);
   const [runningRatingsIngest, setRunningRatingsIngest] = useState(false);
-  const [runningGithubAction, setRunningGithubAction] = useState(false);
   const [ratingsJobsLive, setRatingsJobsLive] = useState<Record<string, RatingsJobLive>>({});
   const [showManualPaste, setShowManualPaste] = useState(false);
   const [manualHtml, setManualHtml] = useState('');
@@ -929,89 +927,24 @@ export default function AdminPage() {
     }
   }
 
-  async function fetchMidrugFromBrowser(dateStr: string): Promise<string> {
-    const params = new URLSearchParams({
-      param: '81', ShowTable: '1', TheDate: dateStr, Crowd: '1', tmp: String(Date.now()),
-    });
-    const sources = [
-      `/api/proxy/midrug?path=/ajax_info.asp&params=${encodeURIComponent(params.toString())}`,
-      `https://corsproxy.io/?${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${params}`)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${params}`)}`,
-    ];
-    for (const sourceUrl of sources) {
-      try {
-        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
-        if (res.ok) {
-          const text = await res.text();
-          if (/<(?:table|tbody|tr|td|th)\b/i.test(text)) return text;
-        }
-      } catch { /* try next */ }
-    }
-    throw new Error('PROXY_FAILED');
-  }
-
-  async function fetchMidrugWeeklyFromBrowser(): Promise<{ weekId: string; weekLabel: string; weeklyHtml: string } | null> {
-    const appSources = [
-      `/api/proxy/midrug?path=/app/`,
-      `https://corsproxy.io/?${encodeURIComponent('https://midrug.safenet.co.il/app/')}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent('https://midrug.safenet.co.il/app/')}`,
-    ];
-
-    let weekOptions: Array<{ id: string; label: string }> = [];
-    for (const sourceUrl of appSources) {
-      try {
-        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
-        if (!res.ok) continue;
-        const html = await res.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const select = doc.querySelector('#TheWeek');
-        if (!select) continue;
-        weekOptions = Array.from(select.querySelectorAll('option'))
-          .map((o) => ({ id: (o.getAttribute('value') || '').trim(), label: o.textContent?.replace(/\s+/g, ' ').trim() || '' }))
-          .filter((o) => o.id && o.id !== '0' && o.label);
-        if (weekOptions.length > 0) break;
-      } catch { /* try next */ }
-    }
-
-    const latestWeek = weekOptions.at(-1);
-    if (!latestWeek) return null;
-
-    const weekParams = new URLSearchParams({
-      param: '82', ShowTable: '2', TheWeek: latestWeek.id, Crowd: '1', tmp: String(Date.now()),
-    });
-    const weeklySources = [
-      `/api/proxy/midrug?path=/ajax_info.asp&params=${encodeURIComponent(weekParams.toString())}`,
-      `https://corsproxy.io/?${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${weekParams}`)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://midrug.safenet.co.il/ajax_info.asp?${weekParams}`)}`,
-    ];
-    for (const sourceUrl of weeklySources) {
-      try {
-        const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
-        if (res.ok) {
-          const text = await res.text();
-          if (/<(?:table|tbody|tr|td|th)\b/i.test(text)) {
-            return { weekId: latestWeek.id, weekLabel: latestWeek.label, weeklyHtml: text };
-          }
-        }
-      } catch { /* try next */ }
-    }
-    return null;
-  }
-
-  async function runMidrugRatingsSync() {
-    setRunningMidrugSync(true);
+  async function runFirebaseRatingsSync() {
+    setRunningFirebaseSync(true);
     try {
-      const result = await fetchWithAuth<{ daily?: { rows?: number }; weekly?: { rows?: number } }>(
-        '/api/admin/ratings-sync/midrug',
-        { method: 'POST', body: JSON.stringify({ forceWeekly: true }) },
+      const result = await fetchWithAuth<{ rows?: number; weekly?: { rows?: number } }>(
+        '/api/admin/ratings-sync/firebase',
+        { method: 'POST' },
       );
-      showToast('ok', `מדרוג עודכן: ${result.daily?.rows || 0} שורות יומיות${result.weekly ? `, ${result.weekly.rows || 0} שבועיות` : ''}`);
+      showToast('ok', `Firebase עודכן: ${result.rows || 0} יומיות${result.weekly ? `, ${result.weekly.rows || 0} שבועיות` : ''}`);
       await loadOverview(true);
-    } catch (syncError) {
-      showToast('err', syncError instanceof Error ? syncError.message : 'משיכת מדרוג נכשלה');
+    } catch (err) {
+      showToast('err', err instanceof Error ? err.message : 'Firebase sync נכשל');
     } finally {
-      setRunningMidrugSync(false);
+      setRunningFirebaseSync(false);
     }
+  }
+
+  async function runRatingsSync() {
+    return runFirebaseRatingsSync();
   }
 
   async function saveRatingsAutomation(next: Partial<AdminOverview['appConfig']['ratingsAutomation']>) {
@@ -1043,52 +976,6 @@ export default function AdminPage() {
     return runMidrugRatingsSync();
   }
 
-  async function runBrowserRatingsSync() {
-    setRunningRatingsIngest(true);
-    try {
-      const now = new Date();
-      const ilDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-      const [y, m, d] = ilDate.split('-');
-      const yesterday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 1, 12));
-      const prevDay = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) - 2, 12));
-      const fmt = (dt: Date) => {
-        const iso = dt.toISOString().slice(0, 10);
-        const [yy, mm, dd] = iso.split('-');
-        return `${dd}/${mm}/${yy}`;
-      };
-
-      let dailyHtml = await fetchMidrugFromBrowser(fmt(yesterday));
-      if (!dailyHtml.includes('<table') && !dailyHtml.includes('<tr')) {
-        dailyHtml = await fetchMidrugFromBrowser(fmt(prevDay));
-      }
-
-      const weeklyData = await fetchMidrugWeeklyFromBrowser().catch(() => null);
-
-      const ingestResult = await fetchWithAuth<{
-        daily?: { rows?: number; matched?: number };
-        weekly?: { rows?: number; matched?: number };
-      }>(
-        '/api/admin/ratings-ingest',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            dailyHtml,
-            ...(weeklyData ? { weeklyHtml: weeklyData.weeklyHtml, weekId: weeklyData.weekId, weekLabel: weeklyData.weekLabel } : {}),
-          }),
-        },
-      );
-
-      const dailyRows = ingestResult.daily?.rows || 0;
-      const weeklyRows = ingestResult.weekly?.rows;
-      showToast('ok', `ייבוא מדרוג מהדפדפן הושלם: ${dailyRows} תוכניות${weeklyRows ? `, ${weeklyRows} שבועיות` : ''}`);
-      setShowManualPaste(false);
-      await loadOverview(true);
-    } catch (syncError) {
-      showToast('err', syncError instanceof Error ? syncError.message : 'ייבוא מדרוג מהדפדפן נכשל');
-    } finally {
-      setRunningRatingsIngest(false);
-    }
-  }
 
   async function submitManualHtml() {
     if (!manualHtml.trim()) return;
@@ -1111,18 +998,6 @@ export default function AdminPage() {
       showToast('err', error instanceof Error ? error.message : 'שגיאה בייבוא');
     } finally {
       setRunningRatingsIngest(false);
-    }
-  }
-
-  async function triggerGithubRatingsScrape() {
-    setRunningGithubAction(true);
-    try {
-      await fetchWithAuth('/api/admin/trigger-ratings-scrape', { method: 'POST' });
-      showToast('ok', 'GitHub Actions הופעל — ייקח ~2 דקות לסיים. הנתונים יתעדכנו אוטומטית.');
-    } catch (err) {
-      showToast('err', err instanceof Error ? err.message : 'הפעלת GitHub Actions נכשלה');
-    } finally {
-      setRunningGithubAction(false);
     }
   }
 
@@ -1328,7 +1203,7 @@ export default function AdminPage() {
     ?? overview.usage.jobs.find((job) => job.key === RATINGS_TELEGRAM_JOB)
     ?? null;
   const effectiveRatingsJob = midrugRatingsJob;
-  const runningRatingsSync = runningMidrugSync;
+  const runningRatingsSync = runningFirebaseSync;
 
   if (authLoading || loading) {
     return (
@@ -1495,29 +1370,20 @@ export default function AdminPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <RatingsJobCard
               title="מדרוג רשמי"
-              description="משיכת AJAX יומית ושבועית ממערכת מדרוג, כולל fallback לתאריך קודם והצלבה מול industry_master."
+              description="Firebase Cloud Function (me-west1 / ת״א) מושכת יומי + שבועי ישירות ממדרוג עם IP ישראלי."
               job={midrugRatingsJob}
-              running={runningMidrugSync || midrugRatingsJob?.lastStatus === 'running'}
+              running={runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running'}
               icon={<BarChart3 className="h-4 w-4 text-purple-300" />}
               action={(
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void runMidrugRatingsSync()}
-                    disabled={runningMidrugSync || midrugRatingsJob?.lastStatus === 'running'}
+                    onClick={() => void runFirebaseRatingsSync()}
+                    disabled={runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running'}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition-colors hover:bg-purple-500 disabled:opacity-60"
                   >
-                    <RefreshCw className={`h-4 w-4 ${(runningMidrugSync || midrugRatingsJob?.lastStatus === 'running') ? 'animate-spin' : ''}`} />
-                    משוך ממדרוג
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void runBrowserRatingsSync()}
-                    disabled={runningRatingsIngest}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-60"
-                  >
-                    <MousePointerClick className={`h-4 w-4 ${runningRatingsIngest ? 'animate-pulse' : ''}`} />
-                    דפדפן
+                    <Cloud className={`h-4 w-4 ${(runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running') ? 'animate-pulse' : ''}`} />
+                    {runningFirebaseSync ? 'מושך...' : 'סנכרן עכשיו'}
                   </button>
                   <button
                     type="button"
@@ -1526,16 +1392,6 @@ export default function AdminPage() {
                   >
                     <FileText className="h-4 w-4" />
                     ידני
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void triggerGithubRatingsScrape()}
-                    disabled={runningGithubAction}
-                    title="מפעיל GitHub Actions עם ScraperAPI (IP ישראלי) — עוקף חסימת סייפנט"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-700/50 bg-green-900/20 px-3 py-2.5 text-xs font-bold text-green-300 transition-colors hover:bg-green-900/40 disabled:opacity-60"
-                  >
-                    <GitBranch className={`h-4 w-4 ${runningGithubAction ? 'animate-pulse' : ''}`} />
-                    GitHub
                   </button>
                 </div>
               )}
