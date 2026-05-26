@@ -117,10 +117,16 @@ function parseRatingsTable(html, limit) {
 
 function israelDateParts() {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
   }).formatToParts(new Date());
   const get = (t) => parts.find((p) => p.type === t)?.value || '';
-  return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')) };
+  const weekdays = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    weekday: weekdays[get('weekday')] ?? new Date().getUTCDay(),
+  };
 }
 
 function toMidrugDate(y, m, d) {
@@ -136,8 +142,17 @@ function prevDay(y, m, d) {
   return { year: dt.getUTCFullYear(), month: dt.getUTCMonth() + 1, day: dt.getUTCDate() };
 }
 
-async function scrapeAndSave() {
-  const { year, month, day } = israelDateParts();
+async function fetchWeeklyOptions() {
+  const html = await fetchMidrug(MIDRUG_APP_URL);
+  const $ = cheerio.load(html);
+  return $('#TheWeek option')
+    .map((_, el) => ({ id: $(el).attr('value')?.trim() || '', label: $(el).text().replace(/\s+/g, ' ').trim() }))
+    .get()
+    .filter((o) => o.id && o.id !== '0' && o.label);
+}
+
+async function scrapeAndSave({ forceWeekly = false } = {}) {
+  const { year, month, day, weekday } = israelDateParts();
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
 
@@ -172,6 +187,32 @@ async function scrapeAndSave() {
     fetchedAt,
   }, { merge: true });
 
+  let weeklyResult = null;
+  if (forceWeekly || weekday === 0 || weekday === 1) {
+    try {
+      const weeklyOptions = await fetchWeeklyOptions();
+      const latestWeek = weeklyOptions.at(-1);
+      if (!latestWeek) throw new Error('No weekly options found');
+      const weeklyParams = new URLSearchParams({
+        param: '82', ShowTable: '2', TheWeek: latestWeek.id, Crowd: '1', tmp: String(Date.now()),
+      });
+      const weeklyHtml = await fetchMidrug(MIDRUG_AJAX_URL, weeklyParams);
+      const weeklyRows = parseRatingsTable(weeklyHtml, 25);
+      if (weeklyRows.length === 0) throw new Error(`No rows for week ${latestWeek.label}`);
+      await db.doc(`ratings_weekly/week-${latestWeek.id}`).set({
+        weekId: latestWeek.id,
+        weekRange: latestWeek.label,
+        targetAudience: 'משקי בית בכלל האוכלוסייה',
+        top25: weeklyRows,
+        fetchedAt,
+      }, { merge: true });
+      weeklyResult = { weekId: latestWeek.id, weekRange: latestWeek.label, rows: weeklyRows.length };
+      console.log(`Weekly saved: ${weeklyRows.length} rows for ${latestWeek.label}`);
+    } catch (weeklyErr) {
+      console.warn('Weekly scrape failed (non-fatal):', weeklyErr.message);
+    }
+  }
+
   await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
     key: 'ratings-midrug-scrape',
     metricType: 'job',
@@ -179,16 +220,17 @@ async function scrapeAndSave() {
     lastSuccessAt: fetchedAt,
     lastStatus: 'success',
     lastError: null,
-    lastMessage: `Firebase Midrug saved ${rows.length} rows`,
-    lastDetail: JSON.stringify({ source: 'midrug', trigger: 'firebase-function', dailyDate: isoDate, dailyRows: rows.length, fallbackUsed }),
+    lastMessage: `Firebase Midrug saved ${rows.length} rows${weeklyResult ? `, ${weeklyResult.rows} weekly` : ''}`,
+    lastDetail: JSON.stringify({ source: 'midrug', trigger: 'firebase-function', dailyDate: isoDate, dailyRows: rows.length, fallbackUsed, weekly: weeklyResult }),
   }, { merge: true });
 
-  return { date: isoDate, rows: rows.length, fallbackUsed };
+  return { date: isoDate, rows: rows.length, fallbackUsed, weekly: weeklyResult };
 }
 
 export const scrapeRatings = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
   try {
-    const result = await scrapeAndSave();
+    const forceWeekly = req.query.forceWeekly === '1' || req.body?.forceWeekly === true;
+    const result = await scrapeAndSave({ forceWeekly });
     res.json({ success: true, ...result, region: 'me-west1' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
