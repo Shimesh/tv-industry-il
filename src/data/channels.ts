@@ -2,6 +2,10 @@ export interface Channel {
   id: string;
   name: string;
   number: number;
+  /**
+   * Either a path under /public (starts with "/") → renders as <img>,
+   * or an emoji glyph → renders as text.
+   */
   logo: string;
   category: 'main' | 'sport' | 'news' | 'public' | 'international';
   color: string;
@@ -18,22 +22,22 @@ export interface ScheduleItem {
 }
 
 export const channels: Channel[] = [
-  { id: 'kan11', name: 'כאן 11', number: 11, logo: '📺', category: 'main', color: '#1e40af', group: 'ערוצים ראשיים' },
-  { id: 'keshet12', name: 'קשת 12', number: 12, logo: '📺', category: 'main', color: '#dc2626', group: 'ערוצים ראשיים' },
-  { id: 'reshet13', name: 'רשת 13', number: 13, logo: '📺', category: 'main', color: '#059669', group: 'ערוצים ראשיים' },
-  { id: 'now14', name: 'עכשיו 14', number: 14, logo: '📺', category: 'main', color: '#7c3aed', group: 'ערוצים ראשיים' },
-  { id: 'i24', name: 'i24NEWS', number: 15, logo: '🌐', category: 'news', color: '#0891b2', group: 'חדשות' },
+  { id: 'kan11', name: 'כאן 11', number: 11, logo: '/channel-logos/kan-11.jpg', category: 'main', color: '#1e40af', group: 'ערוצים ראשיים' },
+  { id: 'keshet12', name: 'קשת 12', number: 12, logo: '/channel-logos/keshet-12.png', category: 'main', color: '#dc2626', group: 'ערוצים ראשיים' },
+  { id: 'reshet13', name: 'רשת 13', number: 13, logo: '/channel-logos/reshet-13.jpg', category: 'main', color: '#059669', group: 'ערוצים ראשיים' },
+  { id: 'now14', name: 'עכשיו 14', number: 14, logo: '/channel-logos/now-14.png', category: 'main', color: '#7c3aed', group: 'ערוצים ראשיים' },
+  { id: 'i24', name: 'i24NEWS', number: 15, logo: '/channel-logos/i24news.png', category: 'news', color: '#0891b2', group: 'חדשות' },
   { id: 'knesset', name: 'ערוץ הכנסת', number: 99, logo: '🏛️', category: 'public', color: '#6366f1', group: 'ציבורי' },
   { id: 'kan33', name: 'כאן 33', number: 33, logo: '🎭', category: 'public', color: '#8b5cf6', group: 'ציבורי' },
-  { id: 'sport55', name: 'ספורט 5', number: 55, logo: '⚽', category: 'sport', color: '#ea580c', group: 'ספורט' },
-  { id: 'sport56', name: 'ספורט 5+', number: 56, logo: '⚽', category: 'sport', color: '#d97706', group: 'ספורט' },
-  { id: 'gold', name: 'ספורט 5 GOLD', number: 0, logo: '🏆', category: 'sport', color: '#ca8a04', group: 'ספורט' },
-  { id: 'live', name: 'ספורט 5 LIVE', number: 0, logo: '🔴', category: 'sport', color: '#e11d48', group: 'ספורט' },
-  { id: 'charlton1', name: "צ'רלטון 1", number: 0, logo: '🏅', category: 'sport', color: '#2563eb', group: 'ספורט' },
-  { id: 'charlton2', name: "צ'רלטון 2", number: 0, logo: '🏅', category: 'sport', color: '#4f46e5', group: 'ספורט' },
-  { id: 'charlton3', name: "צ'רלטון 3", number: 0, logo: '🏅', category: 'sport', color: '#6d28d9', group: 'ספורט' },
-  { id: 'charlton4', name: "צ'רלטון 4", number: 0, logo: '🏅', category: 'sport', color: '#7e22ce', group: 'ספורט' },
-  { id: 'charlton6', name: "צ'רלטון 6", number: 0, logo: '🏅', category: 'sport', color: '#9333ea', group: 'ספורט' },
+  { id: 'sport55', name: 'ספורט 5', number: 55, logo: '/channel-logos/sport-5.png', category: 'sport', color: '#ea580c', group: 'ספורט' },
+  { id: 'sport56', name: 'ספורט 5+', number: 56, logo: '/channel-logos/sport-5.png', category: 'sport', color: '#d97706', group: 'ספורט' },
+  { id: 'gold', name: 'ספורט 5 GOLD', number: 0, logo: '/channel-logos/sport-5.png', category: 'sport', color: '#ca8a04', group: 'ספורט' },
+  { id: 'live', name: 'ספורט 5 LIVE', number: 0, logo: '/channel-logos/sport-5.png', category: 'sport', color: '#e11d48', group: 'ספורט' },
+  { id: 'charlton1', name: "צ'רלטון 1", number: 0, logo: '/channel-logos/charlton-sport-1-4.png', category: 'sport', color: '#2563eb', group: 'ספורט' },
+  { id: 'charlton2', name: "צ'רלטון 2", number: 0, logo: '/channel-logos/charlton-sport-1-4.png', category: 'sport', color: '#4f46e5', group: 'ספורט' },
+  { id: 'charlton3', name: "צ'רלטון 3", number: 0, logo: '/channel-logos/charlton-sport-1-4.png', category: 'sport', color: '#6d28d9', group: 'ספורט' },
+  { id: 'charlton4', name: "צ'רלטון 4", number: 0, logo: '/channel-logos/charlton-sport-1-4.png', category: 'sport', color: '#7e22ce', group: 'ספורט' },
+  { id: 'charlton6', name: "צ'רלטון 6", number: 0, logo: '/channel-logos/charlton-sport-1-4.png', category: 'sport', color: '#9333ea', group: 'ספורט' },
 ];
 
 export const channelGroups = [
@@ -42,6 +46,11 @@ export const channelGroups = [
   { id: 'public', label: 'ציבורי', channels: ['knesset', 'kan33'] },
   { id: 'sport', label: 'ספורט', channels: ['sport55', 'sport56', 'gold', 'live', 'charlton1', 'charlton2', 'charlton3', 'charlton4', 'charlton6'] },
 ];
+
+/** True when the logo string is a public-path bitmap (rather than an emoji). */
+export function isLogoImage(logo: string): boolean {
+  return logo.startsWith('/');
+}
 
 export function generateSchedule(channelId: string): ScheduleItem[] {
   const schedules: Record<string, ScheduleItem[]> = {

@@ -108,7 +108,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   sport55: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://sport5.maariv.co.il/LiveTV/',
+    websiteUrl: 'https://www.sport5.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: 'ספורט 5',
@@ -126,7 +126,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   gold: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://sport5.maariv.co.il/LiveTV/',
+    websiteUrl: 'https://www.sport5.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: 'ספורט 5',
@@ -135,7 +135,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   live: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://sport5.maariv.co.il/LiveTV/',
+    websiteUrl: 'https://www.sport5.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: 'ספורט 5',
@@ -144,7 +144,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton1: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.isramedia.net/56/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-1-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    websiteUrl: 'https://sport1.maariv.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -153,7 +153,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton2: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.isramedia.net/91/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-2-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    websiteUrl: 'https://sport1.maariv.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -162,7 +162,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton3: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.isramedia.net/14950/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-3-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    websiteUrl: 'https://sport1.maariv.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -171,7 +171,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton4: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.isramedia.net/14951/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-4-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    websiteUrl: 'https://sport1.maariv.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",
@@ -180,7 +180,7 @@ export const streamConfigs: Record<string, StreamConfig> = {
   charlton6: {
     type: 'external-paid',
     streamUrl: null,
-    websiteUrl: 'https://www.isramedia.net/14953/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%A1%D7%A4%D7%95%D7%A8%D7%98/%D7%A1%D7%A4%D7%95%D7%A8%D7%98-6-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    websiteUrl: 'https://sport1.maariv.co.il/',
     requiresAuth: true,
     hasLiveStream: false,
     provider: "צ'רלטון",

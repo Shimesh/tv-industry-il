@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
 import type { Channel } from '@/data/channels';
 import type { StreamConfig } from '@/data/streams';
 
@@ -533,7 +534,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
           />
 
           <div className="relative z-10 text-center px-6">
-            <div className="text-7xl mb-4 drop-shadow-2xl">{channel.logo}</div>
+            <ChannelLogo channel={channel} size={96} rounded={16} className="mb-4 drop-shadow-2xl" />
             <h3 className="text-2xl font-black mb-1 tracking-tight">{channel.name}</h3>
             {currentProgram && (
               <p className="text-white/50 text-sm mb-5">כרגע: {currentProgram}</p>
@@ -607,7 +608,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
                   LIVE
                 </span>
               )}
-              <span className="text-lg">{channel.logo}</span>
+              <ChannelLogo channel={channel} size={28} rounded={6} />
               <span className="font-bold text-sm">{channel.name}</span>
               {currentProgram && (
                 <span className="text-white/50 text-xs hidden sm:inline">• {currentProgram}</span>

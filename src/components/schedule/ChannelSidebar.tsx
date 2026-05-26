@@ -4,6 +4,7 @@ import { channels, channelGroups } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import type { Channel } from '@/data/channels';
 import type { BroadcastChannelState } from '@/lib/broadcasts';
+import ChannelLogo from '@/components/ChannelLogo';
 
 interface ChannelSidebarProps {
   selectedChannelId: string;
@@ -51,7 +52,7 @@ function ChannelCard({
     >
       <div className="flex items-center gap-2.5">
         <div className="relative shrink-0">
-          <span className="text-xl">{channel.logo}</span>
+          <ChannelLogo channel={channel} size={32} rounded={8} />
           {hasLive && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border bg-[var(--theme-success)]" style={{ borderColor: 'var(--theme-bg)' }} />}
         </div>
 
@@ -89,7 +90,7 @@ export function ChannelSidebar({ selectedChannelId, onSelectChannel, isMobile, b
               }}
             >
               <div className="relative">
-                <span className="text-lg">{channel.logo}</span>
+                <ChannelLogo channel={channel} size={28} rounded={7} />
                 {stream?.hasLiveStream && <span className="absolute -right-1 -top-0.5 h-1.5 w-1.5 rounded-full bg-green-400" />}
               </div>
               <span className={`whitespace-nowrap text-[10px] font-medium ${isSelected ? 'text-[var(--theme-text)]' : 'text-[var(--theme-text-secondary)]'}`}>{channel.name}</span>
