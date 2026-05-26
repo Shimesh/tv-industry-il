@@ -24,12 +24,12 @@ jobs:
           FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: |
           node -e "
-            const pk = process.env.FIREBASE_PRIVATE_KEY || '';
+            const pk = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\\\n/g, '\n');
             const key = {
               type: 'service_account',
               project_id: process.env.FIREBASE_PROJECT_ID,
               private_key_id: 'ci',
-              private_key: pk.includes('\\n') ? pk.replace(/\\n/g, '\n') : pk,
+              private_key: pk,
               client_email: process.env.FIREBASE_CLIENT_EMAIL,
               client_id: '',
               auth_uri: 'https://accounts.google.com/o/oauth2/auth',
@@ -38,6 +38,9 @@ jobs:
             };
             require('fs').writeFileSync('/tmp/sa-key.json', JSON.stringify(key));
             console.log('Key created for', process.env.FIREBASE_CLIENT_EMAIL);
+            const written = require('fs').readFileSync('/tmp/sa-key.json', 'utf8');
+            const parsed = JSON.parse(written);
+            console.log('private_key starts with:', parsed.private_key.slice(0, 40));
           "
 
       - name: Deploy Firebase Functions
@@ -46,4 +49,5 @@ jobs:
         run: |
           npx firebase-tools deploy --only functions \
             --project ${{ secrets.FIREBASE_PROJECT_ID }} \
-            --non-interactive
+            --non-interactive \
+            --debug 2>&1 | tail -50
