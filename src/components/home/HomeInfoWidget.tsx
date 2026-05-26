@@ -22,7 +22,7 @@ type WeatherState = {
   fetchedAt: number;
 };
 
-const WEATHER_CACHE_KEY = 'tv-home-weather-cache-v4';
+const WEATHER_CACHE_KEY = 'tv-home-weather-cache-v8';
 const WEATHER_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const WEATHER_CITIES: WeatherCity[] = [
@@ -35,7 +35,7 @@ const WEATHER_CITIES: WeatherCity[] = [
 function getWeatherKind(code: number | null): WeatherKind {
   if (code === null) return 'cloudy';
   if (code === 0 || code === 1) return 'sunny';
-  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || (code >= 61 && code <= 65)) return 'rain';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
   if (code >= 95 && code <= 99) return 'thunder';
   return 'cloudy';
 }
@@ -49,6 +49,7 @@ function readWeatherCache(): WeatherState[] | null {
 
     const parsed = JSON.parse(raw) as Partial<WeatherState>[];
     if (!Array.isArray(parsed) || parsed.length !== WEATHER_CITIES.length) return null;
+    if (!parsed.some((item) => typeof item?.temperature === 'number')) return null;
     const fetchedAt = parsed[0]?.fetchedAt;
     if (typeof fetchedAt !== 'number' || Date.now() - fetchedAt >= WEATHER_CACHE_TTL_MS) return null;
 
@@ -71,16 +72,32 @@ function readWeatherCache(): WeatherState[] | null {
 
 function writeWeatherCache(weather: WeatherState[]) {
   if (typeof window === 'undefined') return;
+  if (!weather.some((item) => typeof item.temperature === 'number')) return;
 
   try {
     window.sessionStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(weather));
   } catch {}
 }
 
+function emptyWeatherState(city: WeatherCity): WeatherState {
+  return {
+    key: city.key,
+    city: city.city,
+    temperature: null,
+    code: null,
+    sunrise: null,
+    sunset: null,
+    fetchedAt: Date.now(),
+  };
+}
+
 async function fetchCityWeather(city: WeatherCity): Promise<WeatherState> {
   const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`,
+    `/api/weather?latitude=${city.latitude}&longitude=${city.longitude}&astronomy=1`,
   );
+
+  if (!response.ok) throw new Error(`Weather request failed for ${city.key}`);
+
   const weatherData = await response.json();
   const current = weatherData?.current;
   const temperature = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : null;
@@ -92,12 +109,17 @@ async function fetchCityWeather(city: WeatherCity): Promise<WeatherState> {
 }
 
 async function fetchWeather(): Promise<WeatherState[]> {
-  return Promise.all(WEATHER_CITIES.map(fetchCityWeather));
+  const results = await Promise.allSettled(WEATHER_CITIES.map(fetchCityWeather));
+
+  return WEATHER_CITIES.map((city, index) => {
+    const result = results[index];
+    return result.status === 'fulfilled' ? result.value : emptyWeatherState(city);
+  });
 }
 
 function formatSunTime(value: string | null | undefined): string {
   if (!value) return '--:--';
-  const parsed = Date.parse(value);
+  const parsed = Date.parse(value.includes('T') ? value : `1970-01-01 ${value}`);
   if (Number.isNaN(parsed)) return '--:--';
   return new Date(parsed).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 }
@@ -145,16 +167,7 @@ export default function HomeInfoWidget() {
         writeWeatherCache(nextWeather);
       })
       .catch(() => {
-        const fallbackWeather = WEATHER_CITIES.map((city) => ({
-          key: city.key,
-          city: city.city,
-          temperature: null,
-          code: null,
-          sunrise: null,
-          sunset: null,
-          fetchedAt: Date.now(),
-        }));
-        if (!cancelled) setWeather(fallbackWeather);
+        if (!cancelled) setWeather(WEATHER_CITIES.map(emptyWeatherState));
       });
 
     return () => {

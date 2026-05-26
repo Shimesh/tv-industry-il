@@ -460,6 +460,7 @@ const WMO_CODES: Record<number, { label: string; emoji: string; icon: typeof Sun
   65: { label: 'גשם חזק', emoji: '🌧️', icon: CloudRain },
   80: { label: 'ממטרים', emoji: '🌦️', icon: CloudRain },
   81: { label: 'ממטרים חזקים', emoji: '🌧️', icon: CloudRain },
+  82: { label: 'ממטרים עזים', emoji: '🌧️', icon: CloudRain },
   95: { label: 'סופת רעמים', emoji: '⛈️', icon: CloudRain },
 };
 
@@ -485,23 +486,31 @@ function WeatherWidget() {
     setLoading(true);
     try {
       const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia/Jerusalem&forecast_days=7`
+        `/api/weather?latitude=${city.lat}&longitude=${city.lon}&daily=1`
       );
+      if (!res.ok) throw new Error(`Weather request failed for ${city.name}`);
+
       const data = await res.json();
+      const current = data?.current;
+      const daily = data?.daily;
+      if (!current || !daily || !Array.isArray(daily.time)) throw new Error('Weather response is missing fields');
+
       setWeather({
-        temp: Math.round(data.current.temperature_2m),
-        humidity: data.current.relative_humidity_2m,
-        windSpeed: Math.round(data.current.wind_speed_10m),
-        weatherCode: data.current.weather_code,
-        daily: data.daily.time.map((date: string, i: number) => ({
+        temp: Math.round(current.temperature_2m),
+        humidity: Math.round(current.relative_humidity_2m),
+        windSpeed: Math.round(current.wind_speed_10m),
+        weatherCode: current.weather_code,
+        daily: daily.time.map((date: string, i: number) => ({
           date,
-          maxTemp: Math.round(data.daily.temperature_2m_max[i]),
-          minTemp: Math.round(data.daily.temperature_2m_min[i]),
-          weatherCode: data.daily.weather_code[i],
+          maxTemp: Math.round(daily.temperature_2m_max[i]),
+          minTemp: Math.round(daily.temperature_2m_min[i]),
+          weatherCode: daily.weather_code[i],
         })),
       });
       setLastUpdate(new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }));
-    } catch { setWeather(null); }
+    } catch {
+      setWeather(null);
+    }
     setLoading(false);
   };
 
@@ -519,22 +528,21 @@ function WeatherWidget() {
 
   const city = CITIES[cityIdx];
   const current = weather ? getWmoInfo(weather.weatherCode) : null;
-  const CurrentIcon = current?.icon || Sun;
 
   return (
     <ToolCard title="מזג אוויר לצילומים" icon={<Cloud className="w-5 h-5" />} color="from-cyan-500 to-blue-500">
-      <div>
+      <div dir="rtl">
         {/* City selector */}
         <div className="flex items-center gap-2 mb-3">
           <select
             value={cityIdx}
             onChange={e => setCityIdx(Number(e.target.value))}
-            className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer"
+            className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer text-right"
             style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
           >
             {CITIES.map((c, i) => <option key={c.name} value={i}>{c.name}</option>)}
           </select>
-          {lastUpdate && <span className="text-[10px] text-[var(--theme-text-secondary)]">עודכן {lastUpdate}</span>}
+          {lastUpdate && <span className="text-[10px] text-[var(--theme-text-secondary)]">עודכן <span dir="ltr">{lastUpdate}</span></span>}
         </div>
 
         {loading ? (
@@ -546,10 +554,10 @@ function WeatherWidget() {
           <>
             <div className="text-center mb-3">
               <div className="flex items-center justify-center gap-4 mb-1">
-                <div className="text-4xl">{current.emoji}</div>
+                <div className="text-4xl" aria-hidden="true">{current.emoji}</div>
                 <div>
-                  <p className="text-3xl font-black text-[var(--theme-text)]">{weather.temp}°C</p>
-                  <p className="text-sm text-[var(--theme-text-secondary)]">{city.name} • {current.label}</p>
+                  <p className="text-3xl font-black text-[var(--theme-text)]" dir="ltr">{weather.temp}°C</p>
+                  <p className="text-sm text-[var(--theme-text-secondary)]">{city.name} · {current.label}</p>
                 </div>
               </div>
               <div className="flex items-center justify-center gap-4 text-xs text-[var(--theme-text-secondary)]">
@@ -565,9 +573,9 @@ function WeatherWidget() {
                 return (
                   <div key={day.date} className="text-center p-1.5 rounded-lg bg-[var(--theme-bg)]">
                     <p className="text-[10px] text-[var(--theme-text-secondary)] mb-0.5 truncate">{dayName(day.date, i)}</p>
-                    <div className="text-base mb-0.5">{info.emoji}</div>
-                    <p className="text-[10px] font-bold text-[var(--theme-text)]">{day.maxTemp}°</p>
-                    <p className="text-[10px] text-[var(--theme-text-secondary)]">{day.minTemp}°</p>
+                    <div className="text-base mb-0.5" aria-hidden="true">{info.emoji}</div>
+                    <p className="text-[10px] font-bold text-[var(--theme-text)]" dir="ltr">{day.maxTemp}°</p>
+                    <p className="text-[10px] text-[var(--theme-text-secondary)]" dir="ltr">{day.minTemp}°</p>
                   </div>
                 );
               })}
