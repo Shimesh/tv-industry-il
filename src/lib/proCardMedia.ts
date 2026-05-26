@@ -84,6 +84,43 @@ const productionRegistry: ProductionMediaEntry[] = [
     channelId: 'reshet13',
     major: true,
   },
+  {
+    // Matches any football production regardless of city/stadium:
+    // "כדורגל ב"ש", "כדורגל אשדוד", "כדורגל - מכבי ת"א" etc.
+    aliases: ['כדורגל'],
+    label: 'כדורגל',
+    shortLabel: 'כד',
+    color: '#16a34a',
+    gradient: 'linear-gradient(135deg, #16a34a 0%, #064e3b 100%)',
+    major: false,
+  },
+  {
+    aliases: ['הכוכב הבא', 'כוכב הבא'],
+    label: 'הכוכב הבא',
+    shortLabel: 'כוכב',
+    color: '#f59e0b',
+    gradient: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
+    channelId: 'keshet12',
+    major: true,
+  },
+  {
+    aliases: ['זהו זה'],
+    label: 'זהו זה',
+    shortLabel: 'זז',
+    color: '#7c3aed',
+    gradient: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
+    major: true,
+  },
+  {
+    // "רצועת ערב", "רצועת בוקר", "רצועת צהריים", "רצועת שישי" etc.
+    // These are broadcast strip slots, not individual show titles.
+    aliases: ['רצועת ערב', 'רצועת בוקר', 'רצועת צהריים', 'רצועת לילה', 'רצועת שישי', 'רצועת'],
+    label: 'רצועת שידור',
+    shortLabel: 'רצ',
+    color: '#64748b',
+    gradient: 'linear-gradient(135deg, #475569 0%, #0ea5e9 100%)',
+    major: false,
+  },
 ];
 
 const channelAliases: Array<{ channelId: string; aliases: string[] }> = [

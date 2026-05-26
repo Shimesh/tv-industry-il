@@ -3,7 +3,7 @@ import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { getChannelName, inferChannelIdFromTitle, isMajorProductionTitle, resolveProCardMedia } from '@/lib/proCardMedia';
 import type { IndustryMasterEntry, NearMiss, ProCardBoardActivity, ProCardHistoryResponse, ProCardProductionCredit, ProductionRegistryEntry } from '@/lib/proCardTypes';
-import { stripProductionSuffixes, stringSimilarity } from '@/lib/productionNameNormalization';
+import { collapseProductionName, stripProductionSuffixes, stringSimilarity } from '@/lib/productionNameNormalization';
 import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import { loadContactsSnapshot } from '@/lib/server/sessionBootstrap';
 import type { GlobalProductionDoc, GlobalProductionCrewEntry } from '@/lib/globalProductions';
@@ -281,7 +281,7 @@ function applyRegistryOverrides(
       ?? credit.logoUrl;
     const channelName = mst?.network || reg?.channel || credit.channelName;
     const isMajor = credit.isMajor || Boolean(reg?.isMajor);
-    const productionName = (mst?.masterName || mst?.showName || reg?.name || stripProductionSuffixes(credit.productionName)).trim();
+    const productionName = (mst?.masterName || mst?.showName || reg?.name || collapseProductionName(credit.productionName)).trim();
     return { ...credit, productionName, logoUrl, channelName, isMajor };
   });
 }
@@ -436,15 +436,20 @@ export async function GET(request: NextRequest) {
 
         const date = asDateValue(production.date);
         const year = date.slice(0, 4);
-        const channelId = inferChannelIdFromTitle(production.name || '', production.studio || '');
+        // Normalize the production name early — before dedup — so that variants like
+        // "רצועת ערב- גיא פינס" and "רצועת ערב-- הקומה ה-12" both collapse to "רצועת ערב"
+        // and are merged into one entry with the correct shiftCount.
+        const rawName = production.name || 'הפקה';
+        const productionName = collapseProductionName(rawName);
+        const channelId = inferChannelIdFromTitle(rawName, production.studio || '');
         const role = cleanString(crewEntry.profession) || 'קרדיט';
         const isMajor = Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).isMajor)
           || Boolean((production as unknown as { isMajor?: boolean; majorProduction?: boolean }).majorProduction)
-          || isMajorProductionTitle(production.name || '');
+          || isMajorProductionTitle(rawName);
 
         return [{
-          id: production.id || `${production.name}-${date}-${role}`,
-          productionName: production.name || 'הפקה',
+          id: production.id || `${rawName}-${date}-${role}`,
+          productionName,
           date,
           dateFrom: date,
           dateTo: date,
@@ -454,7 +459,7 @@ export async function GET(request: NextRequest) {
           channelId,
           channelName: getChannelName(channelId),
           isMajor,
-          media: resolveProCardMedia(production.name || '', channelId),
+          media: resolveProCardMedia(productionName, channelId),
           shiftCount: 1,
         }];
       }),

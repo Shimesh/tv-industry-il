@@ -6,9 +6,11 @@
  *  • industry_master sync (deduplication before write)
  *  • pro-card-history masterMap lookup (so credits resolve to canonical entry)
  *  • wiki sync (search Wikipedia by clean canonical name)
+ *  • pro-card-history raw credit creation (collapseProductionName, before dedup)
  */
 
 const SUFFIX_PATTERNS: RegExp[] = [
+  // Operational suffixes with dash separator
   / - טסטים$/i,
   / - הקמה$/i,
   / - חזרות$/i,
@@ -22,14 +24,59 @@ const SUFFIX_PATTERNS: RegExp[] = [
   / - לייב$/i,
   / - live$/i,
   / - pilot$/i,
+  / - מיוחד$/i,
+  / - גאלה$/i,
+  / - בכורה$/i,
+  / - סיום$/i,
+  // Same suffixes without leading space-dash (e.g. "האח הגדול פיילוט")
+  / פיילוט$/i,
+  / pilot$/i,
+  // Audio/lighting check suffix, with or without space before dash
+  / ?-+\s*בלאנס$/i,
+  // Season / session / episode numbers — strip the number and everything after
+  / עונה\s+\d+.*/i,
+  / סשן\s+\d+.*/i,
+  /\s+s\d+\b.*/i,
 ];
 
-/** Strip known operational suffixes from a production title */
+/** Strip known operational suffixes from a production title (multi-pass until stable). */
 export function stripProductionSuffixes(name: string): string {
   let result = name.trim();
-  for (const pattern of SUFFIX_PATTERNS) {
-    result = result.replace(pattern, '').trim();
+  let prev = '';
+  // Multi-pass: handles stacked suffixes like "... - פיילוט עונה 3"
+  while (result !== prev) {
+    prev = result;
+    for (const pattern of SUFFIX_PATTERNS) {
+      result = result.replace(pattern, '').trim();
+    }
   }
+  return result;
+}
+
+/**
+ * Collapse "slot" production names that represent generic broadcast blocks
+ * (not actual show titles) and strip season/session numbers.
+ *
+ * Examples:
+ *  "רצועת ערב- גיא פינס"              → "רצועת ערב"
+ *  "רצועת בוקר-- הקומה ה-12, גיא פינס" → "רצועת בוקר"
+ *  "רצועת ערב- עידית הבריאות, גיא פינס" → "רצועת ערב"
+ *  "זהו זה עונה 8 סשן 16"             → "זהו זה"  (via stripProductionSuffixes)
+ *  "האח הגדול פיילוט"                  → "האח הגדול" (via stripProductionSuffixes)
+ *
+ * Applied to raw production names BEFORE deduplication so that multiple
+ * appearances of "רצועת ערב - X" and "רצועת ערב - Y" collapse into one
+ * merged entry with the correct shift count.
+ */
+export function collapseProductionName(name: string): string {
+  let result = stripProductionSuffixes(name.trim());
+
+  // Collapse "רצועת X..." → "רצועת X"
+  // Match "רצועת" followed by one Hebrew word, then strip anything after it.
+  // [א-ת]+ matches only Hebrew letters, stopping at dashes/digits/spaces.
+  const stripMatch = result.match(/^(רצועת\s+[א-ת]+)/u);
+  if (stripMatch) return stripMatch[1].trim();
+
   return result;
 }
 
