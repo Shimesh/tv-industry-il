@@ -907,11 +907,20 @@ export default function AdminPage() {
     setRunningFirebaseSync(true);
     try {
       await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'POST' });
-      showToast('ok', 'הסנכרון התחיל — הסטטוס יתעדכן בכרטיס');
+      showToast('ok', 'בקשה נשלחה — Oracle VM יסנכרן תוך ~5 דקות');
     } catch (err) {
       showToast('err', err instanceof Error ? err.message : 'שגיאה בסנכרון');
     } finally {
       setRunningFirebaseSync(false);
+    }
+  }
+
+  async function resetMidrugJobStatus() {
+    try {
+      await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'DELETE' });
+      showToast('ok', 'סטטוס אופס');
+    } catch (err) {
+      showToast('err', err instanceof Error ? err.message : 'שגיאה באיפוס');
     }
   }
 
@@ -1170,12 +1179,12 @@ export default function AdminPage() {
     ?? overview.usage.jobs.find((job) => job.key === RATINGS_TELEGRAM_JOB)
     ?? null;
 
-  // Treat a 'running' Firestore status as stale if it's been > 5 minutes —
-  // prevents the button from staying locked after a crashed or timed-out run.
+  // 'running' in Firestore locks the button. Treat it as stale after 3 min
+  // (Vercel timeout is 60s, Firebase function ~90s, so 3 min is generous).
   const midrugJobIsStale =
     midrugRatingsJob?.lastStatus === 'running' &&
     !!midrugRatingsJob.lastRunAt &&
-    Date.now() - new Date(midrugRatingsJob.lastRunAt).getTime() > 5 * 60 * 1000;
+    Date.now() - new Date(midrugRatingsJob.lastRunAt).getTime() > 3 * 60 * 1000;
   const midrugJobRunning =
     runningFirebaseSync ||
     (midrugRatingsJob?.lastStatus === 'running' && !midrugJobIsStale);
@@ -1372,8 +1381,18 @@ export default function AdminPage() {
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition-colors hover:bg-purple-500 disabled:opacity-60"
                   >
                     <Cloud className={`h-4 w-4 ${midrugJobRunning ? 'animate-pulse' : ''}`} />
-                    {runningFirebaseSync ? 'מושך...' : 'סנכרן עכשיו'}
+                    {runningFirebaseSync ? 'שולח...' : 'סנכרן עכשיו'}
                   </button>
+                  {midrugJobIsStale && (
+                    <button
+                      type="button"
+                      onClick={() => void resetMidrugJobStatus()}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-yellow-700 bg-yellow-900/30 px-3 py-2.5 text-xs font-bold text-yellow-300 transition-colors hover:bg-yellow-900/60"
+                      title="הסטטוס תקוע — לחץ לאיפוס"
+                    >
+                      ⚠ אפס
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setShowManualPaste((value) => !value)}
