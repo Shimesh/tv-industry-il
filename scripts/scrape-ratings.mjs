@@ -47,7 +47,6 @@ async function fetchMidrug(postBody) {
   proxyUrl.searchParams.set('api_key', SCRAPERAPI_KEY);
   proxyUrl.searchParams.set('url', MIDRUG_AJAX_URL);
   proxyUrl.searchParams.set('country_code', 'il');
-  proxyUrl.searchParams.set('ultra_premium', 'true');
   proxyUrl.searchParams.set('render', 'false');
 
   const controller = new AbortController();
@@ -140,7 +139,6 @@ async function fetchWeeklyOptions() {
   proxyUrl.searchParams.set('api_key', SCRAPERAPI_KEY);
   proxyUrl.searchParams.set('url', MIDRUG_APP_URL);
   proxyUrl.searchParams.set('country_code', 'il');
-  proxyUrl.searchParams.set('ultra_premium', 'true');
   proxyUrl.searchParams.set('render', 'false');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
