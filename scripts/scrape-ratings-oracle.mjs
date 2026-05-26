@@ -135,6 +135,7 @@ async function fetchWeeklyOptions() {
 }
 
 async function main() {
+  const forceWeekly = process.env.FORCE_WEEKLY === '1';
   const { year, month, day, weekday } = israelDateParts();
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
@@ -186,8 +187,7 @@ async function main() {
 
   console.log(`✓ Daily: saved ${rows.length} rows for ${isoDate} (fallback=${fallbackUsed})`);
 
-  // Scrape weekly on Sunday (0) and Monday (1) to catch late Sunday publications.
-  if (weekday === 0 || weekday === 1) {
+  if (forceWeekly || weekday === 0 || weekday === 1) {
     console.log(`\n[${new Date().toISOString()}] Fetching weekly ratings (weekday=${weekday})...`);
     try {
       const weeklyOptions = await fetchWeeklyOptions();

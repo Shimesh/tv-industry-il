@@ -931,14 +931,10 @@ export default function AdminPage() {
   async function runFirebaseRatingsSync() {
     setRunningFirebaseSync(true);
     try {
-      const result = await fetchWithAuth<{ rows?: number; weekly?: { rows?: number } }>(
-        '/api/admin/ratings-sync/firebase',
-        { method: 'POST' },
-      );
-      showToast('ok', `Firebase עודכן: ${result.rows || 0} יומיות${result.weekly ? `, ${result.weekly.rows || 0} שבועיות` : ''}`);
-      await loadOverview(true);
+      await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'POST' });
+      showToast('ok', 'בקשה נשלחה — Oracle VM יסנכרן תוך ~5 דקות');
     } catch (err) {
-      showToast('err', err instanceof Error ? err.message : 'Firebase sync נכשל');
+      showToast('err', err instanceof Error ? err.message : 'שגיאה בשליחת הבקשה');
     } finally {
       setRunningFirebaseSync(false);
     }
