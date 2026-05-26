@@ -202,31 +202,6 @@ function statusRank(user: AdminUserSummary): number {
 
 function PresenceBadge({ user }: { user: AdminUserSummary }) {
   return <PresenceBadges user={user} />;
-
-  if (user.onlineNow) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs text-green-300">
-        <Wifi className="h-3 w-3" />
-        מחובר
-      </span>
-    );
-  }
-
-  if (user.stalePresence) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs text-orange-300">
-        <AlertTriangle className="h-3 w-3" />
-        נוכחות ישנה
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
-      <WifiOff className="h-3 w-3" />
-      לא מחובר
-    </span>
-  );
 }
 
 function RoleBadge({ role }: { role: AdminRole }) {
@@ -370,15 +345,15 @@ function StatCard({
   live?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-2xl border border-gray-800 bg-gray-900 p-3 sm:gap-4 sm:p-5">
-      <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 sm:rounded-xl ${color}`}>
-        <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-800/80 bg-gray-900 p-3 sm:p-4 hover:border-gray-700 transition-colors">
+      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${color}`}>
+        <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-lg font-bold text-white sm:text-2xl">{value}</p>
-        <p className="mt-0.5 text-[10px] leading-tight text-gray-400 sm:text-xs">{label}</p>
+        <p className="text-xl font-bold tabular-nums text-white sm:text-2xl">{value.toLocaleString()}</p>
+        <p className="mt-0.5 truncate text-[11px] leading-tight text-gray-400">{label}</p>
       </div>
-      {live ? <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400 animate-pulse" /> : null}
+      {live ? <span className="h-2 w-2 flex-shrink-0 animate-pulse rounded-full bg-green-400" /> : null}
     </div>
   );
 }
@@ -1276,63 +1251,74 @@ export default function AdminPage() {
           </div>
         ) : null}
 
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="mb-1 flex items-center gap-2">
-              <ShieldCheck className="h-7 w-7 text-yellow-400" />
-              <h1 className="text-3xl font-bold">לוח ניהול</h1>
-              <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+            <div className="mb-1.5 flex items-center gap-2.5">
+              <ShieldCheck className="h-6 w-6 text-yellow-400" />
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">לוח ניהול</h1>
+              <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
               <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-xs font-bold text-yellow-300" dir="ltr">
                 v{APP_VERSION}
               </span>
             </div>
             <p className="text-sm text-gray-400">
-              מקור אמת שרתי • עודכן {formatRelativeTime(overview.generatedAt)}
-              {refreshing ? ' • מרענן…' : ''}
+              עודכן {formatRelativeTime(overview.generatedAt)}{refreshing ? ' • מרענן…' : ''}
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-gray-700 bg-gray-900 px-3 py-1 text-gray-300">
-                רשומים: {overview.stats.totalUsers}
+              <span className="rounded-full border border-gray-700 bg-gray-800 px-3 py-1 text-gray-300">
+                {overview.stats.totalUsers} משתמשים
               </span>
               <span className="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-green-300">
-                פעילים עכשיו: {overview.stats.onlineNow}
+                {overview.stats.onlineNow} מחוברים
               </span>
               <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-teal-300">
-                פעילים ב־24 שעות: {overview.stats.active24h}
+                {overview.stats.active24h} פעילים ב-24ש
+              </span>
+              <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-purple-300">
+                {overview.stats.totalContacts} אנשי קשר
               </span>
             </div>
           </div>
           {/* Actions */}
-          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          <div className="flex flex-col gap-2">
+            {/* Primary action */}
             <button
               onClick={() => void runFullSync()}
               disabled={fullSyncRunning || runningSync}
-              className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 sm:w-auto"
             >
               {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               {fullSyncStep || 'סנכרון מלא'}
             </button>
-            <button onClick={() => void loadOverview(true)} className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-200 hover:bg-gray-700">
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> רענון
-            </button>
-            <button onClick={() => void testProCard()} disabled={testingProCard} className="flex items-center justify-center gap-1.5 rounded-xl bg-sky-700/80 px-3 py-2 text-xs font-semibold hover:bg-sky-600 disabled:opacity-60">
-              <Search className="h-3.5 w-3.5" /> {testingProCard ? 'בודק...' : 'בדוק Pro Card'}
-            </button>
-            <button onClick={() => setShowAddContact(!showAddContact)} className="flex items-center justify-center gap-1.5 rounded-xl bg-green-700/80 px-3 py-2 text-xs font-semibold hover:bg-green-600">
-              <Contact2 className="h-3.5 w-3.5" /> + איש קשר
-            </button>
-            <button onClick={() => void runDirectorsImport()} disabled={fullSyncRunning} className="flex items-center justify-center gap-1.5 rounded-xl bg-rose-700/80 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60">
-              <Clapperboard className="h-3.5 w-3.5" /> ייבוא במאים
-            </button>
-            <Link href="/admin/users" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
-              <Users className="h-3.5 w-3.5" /> משתמשים
-            </Link>
-            <Link href="/admin/industry-master" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
-              <Database className="h-3.5 w-3.5" /> מנהל הפקות
-            </Link>
-            <Link href="/admin/sync" className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700">
-              <Settings className="h-3.5 w-3.5" /> כלי סנכרון
-            </Link>
+            {/* Quick actions */}
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => void loadOverview(true)} className="flex items-center gap-1.5 rounded-xl bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 transition-colors">
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> רענון
+              </button>
+              <button onClick={() => setShowAddContact(true)} className="flex items-center gap-1.5 rounded-xl bg-green-700/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 transition-colors">
+                <Contact2 className="h-3.5 w-3.5" /> + איש קשר
+              </button>
+              <button onClick={() => void runDirectorsImport()} disabled={fullSyncRunning} className="flex items-center gap-1.5 rounded-xl bg-rose-800/70 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
+                <Clapperboard className="h-3.5 w-3.5" /> ייבוא במאים
+              </button>
+              <button onClick={() => void testProCard()} disabled={testingProCard} className="flex items-center gap-1.5 rounded-xl border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                <Search className="h-3.5 w-3.5" /> {testingProCard ? 'בודק...' : 'Pro Card'}
+              </button>
+            </div>
+            {/* Navigation links */}
+            <div className="flex flex-wrap gap-1.5">
+              <Link href="/admin/users" className="flex items-center gap-1.5 rounded-xl border border-gray-700/60 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-200 transition-colors">
+                <Users className="h-3.5 w-3.5" /> משתמשים
+              </Link>
+              <Link href="/admin/industry-master" className="flex items-center gap-1.5 rounded-xl border border-gray-700/60 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-200 transition-colors">
+                <Database className="h-3.5 w-3.5" /> מנהל הפקות
+              </Link>
+              <Link href="/admin/sync" className="flex items-center gap-1.5 rounded-xl border border-gray-700/60 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-200 transition-colors">
+                <Settings className="h-3.5 w-3.5" /> כלי סנכרון
+              </Link>
+            </div>
+          </div>
           </div>
         </div>
 
@@ -1348,7 +1334,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-slate-700/80 bg-slate-950/70 p-4 shadow-xl shadow-purple-950/20">
+        <section className="rounded-2xl border border-gray-800 bg-gray-900/80 p-4 shadow-lg">
           <div className="mb-4 flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-purple-300" />
@@ -1632,29 +1618,30 @@ export default function AdminPage() {
         </div>
 
         {/* גילויים חדשים */}
-        <section className="w-full rounded-2xl border p-3 space-y-3 sm:p-5" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }} dir="rtl">
-          <div className="flex items-center gap-2">
-            <Contact2 className="w-5 h-5 text-emerald-400" />
-            <h2 className="font-bold text-[var(--theme-text)]">גילויים חדשים היום</h2>
-            {!discoveriesLoading && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
+        <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5" dir="rtl">
+          <div className="mb-3 flex items-center gap-2">
+            <Contact2 className="h-5 w-5 text-emerald-400" />
+            <h2 className="font-bold text-white">גילויים חדשים היום</h2>
+            {discoveriesLoading ? (
+              <span className="text-xs text-gray-500">טוען...</span>
+            ) : (
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
                 {discoveries.length}
               </span>
             )}
-            {discoveriesLoading && <span className="text-xs text-[var(--theme-text-secondary)]">טוען...</span>}
           </div>
           {discoveries.length === 0 && !discoveriesLoading && (
-            <p className="text-sm text-[var(--theme-text-secondary)]">אין גילויים חדשים היום.</p>
+            <p className="text-sm text-gray-500">אין גילויים חדשים היום.</p>
           )}
           {discoveries.length > 0 && (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="max-h-52 space-y-1 overflow-y-auto">
               {discoveries.map((d) => (
-                <div key={d.id} className="flex items-center justify-between text-sm border-b border-[var(--theme-border)] pb-2 last:border-0 last:pb-0">
-                  <div>
-                    <span className="font-medium text-[var(--theme-text)]">{d.name}</span>
-                    <span className="text-[var(--theme-text-secondary)] mr-2">— {d.role || 'ללא תפקיד'}</span>
+                <div key={d.id} className="flex items-center justify-between rounded-xl border border-transparent px-3 py-2 text-sm hover:border-gray-800 hover:bg-gray-800/50">
+                  <div className="min-w-0">
+                    <span className="font-medium text-white">{d.name}</span>
+                    <span className="mr-2 text-gray-400">— {d.role || 'ללא תפקיד'}</span>
                   </div>
-                  <span className="text-xs text-emerald-400 shrink-0">{d.sourceBoardName ?? d.sourceBoard}</span>
+                  <span className="mr-3 shrink-0 text-xs text-emerald-400">{d.sourceBoardName ?? d.sourceBoard}</span>
                 </div>
               ))}
             </div>
@@ -1684,12 +1671,9 @@ export default function AdminPage() {
                 />
               </div>
             </div>
-            <div className="border-b border-gray-800 px-5 py-3 text-xs text-gray-500">
-              מחובר = `isOnline` פעיל וגם `lastSeen` בתוך 2 דקות. לא פעיל מעל חודש = החיבור האחרון היה לפני יותר מ־30 יום או שלא קיים `lastSeen`.
-            </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[560px] overflow-x-auto overflow-y-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-gray-900">
                   <tr className="border-b border-gray-800 text-xs text-gray-500">
                     <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-5" />
                     <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
@@ -1904,9 +1888,10 @@ export default function AdminPage() {
                   <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>
                 ) : null}
                 {overview.staleUsers.length > 0 ? (
-                  <p className="text-xs text-orange-300">
-                    {overview.staleUsers.length} משתמשים מסומנים כ־`isOnline`, אבל `lastSeen` שלהם כבר ישן.
-                  </p>
+                  <div className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    {overview.staleUsers.length} משתמשים עם נוכחות מיושנת
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -1921,21 +1906,18 @@ export default function AdminPage() {
             </div>
             <div className="space-y-5">
               <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-medium">מצב תחזוקה</span>
-                  <span className={`text-sm ${overview.appConfig.maintenanceMode ? 'text-orange-300' : 'text-gray-400'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${overview.appConfig.maintenanceMode ? 'bg-orange-500/20 text-orange-300' : 'bg-gray-800 text-gray-400'}`}>
                     {overview.appConfig.maintenanceMode ? 'פעיל' : 'כבוי'}
                   </span>
                 </div>
-                <p className="mb-3 text-xs leading-relaxed text-gray-500">
-                  מצב התחזוקה נשמר במסמך `appConfig/global` ומוכן לשימוש גלובלי בכל האפליקציה.
-                </p>
                 <button
                   onClick={() => void saveAppConfig({ maintenanceMode: !overview.appConfig.maintenanceMode })}
                   disabled={savingConfig}
                   className={`w-full rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
                     overview.appConfig.maintenanceMode
-                      ? 'bg-orange-500/20 text-orange-200 hover:bg-orange-500/30'
+                      ? 'border border-orange-500/30 bg-orange-500/15 text-orange-200 hover:bg-orange-500/25'
                       : 'bg-gray-800 text-gray-200 hover:bg-gray-700'
                   } disabled:opacity-60`}
                 >
