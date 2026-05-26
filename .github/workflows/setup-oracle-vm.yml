@@ -1,0 +1,94 @@
+name: Setup Oracle VM — Ratings Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to run on the VM'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy          # copy scripts + install cron
+          - deploy-and-run  # copy scripts + install cron + run scrape now
+
+# Required GitHub Secrets:
+#   ORACLE_HOST       — VM public IP (e.g. 132.145.x.x)
+#   ORACLE_USER       — SSH username (e.g. ubuntu or opc)
+#   ORACLE_SSH_KEY    — private SSH key (PEM, begins with -----BEGIN ...)
+#
+# Required for scrape:
+#   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Copy scripts to Oracle VM ──────────────────────────────────────────
+      - name: Copy scripts via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:    ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key:     ${{ secrets.ORACLE_SSH_KEY }}
+          source:  "scripts/scrape-ratings-oracle.mjs,scripts/oracle-sync-trigger.mjs"
+          target:  "~/ratings-scraper/"
+          strip_components: 1   # removes leading "scripts/" so files land flat in ~/ratings-scraper/
+
+      # ── Install cron + optional immediate run ─────────────────────────────
+      - name: Configure VM
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          FORCE_RUN:             ${{ github.event.inputs.action == 'deploy-and-run' && '1' || '0' }}
+          FIREBASE_PROJECT_ID:   ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        with:
+          host:    ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key:     ${{ secrets.ORACLE_SSH_KEY }}
+          envs:    FORCE_RUN,FIREBASE_PROJECT_ID,FIREBASE_CLIENT_EMAIL,FIREBASE_PRIVATE_KEY
+          script: |
+            set -e
+            mkdir -p ~/ratings-scraper
+
+            # ── Ensure firebase-admin + cheerio are installed ──────────────
+            cd ~/ratings-scraper
+            if ! node -e "require('firebase-admin')" 2>/dev/null; then
+              echo "Installing npm packages..."
+              npm install --prefix ~/ratings-scraper firebase-admin cheerio
+            else
+              echo "npm packages already installed."
+            fi
+
+            # ── Write .env if Firebase credentials are supplied ────────────
+            if [ -n "$FIREBASE_PROJECT_ID" ]; then
+              cat > ~/ratings-scraper/.env <<ENVEOF
+            FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+            FIREBASE_CLIENT_EMAIL=$FIREBASE_CLIENT_EMAIL
+            FIREBASE_PRIVATE_KEY=$FIREBASE_PRIVATE_KEY
+            ENVEOF
+              echo ".env written."
+            fi
+
+            # ── Install sync-trigger cron (every 5 min) ───────────────────
+            CRON_LINE="*/5 * * * * cd ~/ratings-scraper && node oracle-sync-trigger.mjs >> ~/sync-trigger.log 2>&1"
+            if crontab -l 2>/dev/null | grep -qF 'oracle-sync-trigger.mjs'; then
+              echo "Cron entry already present."
+            else
+              ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab -
+              echo "Cron entry added: $CRON_LINE"
+            fi
+
+            # ── Optionally run the scraper right now ──────────────────────
+            if [ "$FORCE_RUN" = "1" ]; then
+              echo "Running scraper immediately (FORCE_WEEKLY=1)..."
+              FORCE_WEEKLY=1 node ~/ratings-scraper/scrape-ratings-oracle.mjs
+            fi
+
+            echo "Done. Current crontab:"
+            crontab -l
