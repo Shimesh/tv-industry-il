@@ -23,6 +23,7 @@ import {
   Mail,
   Megaphone,
   MessageCircle,
+  MousePointerClick,
   RefreshCw,
   Search,
   Settings,
