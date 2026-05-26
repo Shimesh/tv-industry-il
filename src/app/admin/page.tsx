@@ -906,11 +906,8 @@ export default function AdminPage() {
   async function runFirebaseRatingsSync() {
     setRunningFirebaseSync(true);
     try {
-      const result = await fetchWithAuth<{ date?: string; rows?: number; weekly?: { weekRange?: string; rows?: number } | null }>(
-        '/api/admin/ratings-sync/firebase', { method: 'POST' },
-      );
-      const weeklyMsg = result.weekly ? ` | שבועי: ${result.weekly.rows} שורות (${result.weekly.weekRange || ''})` : '';
-      showToast('ok', `עודכן: ${result.rows ?? '?'} שורות (${result.date ?? ''})${weeklyMsg}`);
+      await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'POST' });
+      showToast('ok', 'הסנכרון התחיל — הסטטוס יתעדכן בכרטיס');
     } catch (err) {
       showToast('err', err instanceof Error ? err.message : 'שגיאה בסנכרון');
     } finally {
