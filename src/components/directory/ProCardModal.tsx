@@ -26,9 +26,11 @@ import {
   X,
 } from 'lucide-react';
 import type { Contact } from '@/data/contacts';
+import ChannelLogo from '@/components/ChannelLogo';
 import type { ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proCardTypes';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import { useAuth } from '@/contexts/AuthContext';
+import { findChannelByName, getChannelById } from '@/data/channels';
 
 type Props = {
   contact: Contact;
@@ -47,6 +49,7 @@ type GroupedCredits = Array<{
   year: string;
   channels: Array<{
     channelName: string;
+    channelId: string | null;
     credits: ProCardProductionCredit[];
   }>;
 }>;
@@ -117,6 +120,7 @@ function groupCredits(credits: ProCardProductionCredit[]): GroupedCredits {
         })
         .map(([channelName, channelCredits]) => ({
           channelName,
+          channelId: channelCredits.find((credit) => credit.channelId)?.channelId || null,
           credits: channelCredits.sort((a, b) => b.date.localeCompare(a.date)),
         })),
     }));
@@ -135,6 +139,11 @@ function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
         <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" referrerPolicy="no-referrer" />
       </div>
     );
+  }
+
+  const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
+  if (channel) {
+    return <ChannelLogo channel={channel} size={40} rounded={12} />;
   }
 
   if (credit.media.kind === 'fallback') {
@@ -642,6 +651,10 @@ export default function ProCardModal({
                                   {/* Channel sub-header — only when showing all channels and there are multiple */}
                                   {activeChannel === 'all' && allChannels.length > 1 && channelGroup.channelName !== 'ללא ערוץ' && (
                                     <div className="mb-1.5 flex items-center gap-2 pr-1">
+                                      {(() => {
+                                        const channel = getChannelById(channelGroup.channelId) || findChannelByName(channelGroup.channelName);
+                                        return channel ? <ChannelLogo channel={channel} size={22} rounded={6} /> : null;
+                                      })()}
                                       <span className="text-[11px] font-bold text-sky-300/70">{channelGroup.channelName}</span>
                                       <div className="h-px flex-1 bg-white/8" />
                                     </div>
@@ -666,7 +679,13 @@ export default function ProCardModal({
                                           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
                                             <span className="font-bold text-sky-100/85">{credit.role}</span>
                                             {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
-                                              <span>{credit.channelName}</span>
+                                              <span className="inline-flex items-center gap-1.5">
+                                                {(() => {
+                                                  const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
+                                                  return channel ? <ChannelLogo channel={channel} size={18} rounded={5} /> : null;
+                                                })()}
+                                                <span>{credit.channelName}</span>
+                                              </span>
                                             )}
                                             {credit.studio && <span>{credit.studio}</span>}
                                             {credit.shiftCount > 1 ? (

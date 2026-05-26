@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, BarChart3, RefreshCw } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
 import RatingLogo from '@/components/ratings/RatingLogo';
+import { findChannelByName } from '@/data/channels';
 import type { RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
 import { buildUnifiedDailyRatings, sourceSummary, type UnifiedRatingRow } from '@/lib/ratingsMerge';
 
@@ -11,6 +13,18 @@ const MODES: Array<{ key: RatingsMode; label: string }> = [
   { key: 'daily', label: 'רייטינג יומי' },
   { key: 'weekly', label: 'רייטינג שבועי' },
 ];
+
+function ChannelInline({ channelName }: { channelName?: string }) {
+  const channel = findChannelByName(channelName);
+  if (!channelName) return null;
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {channel ? <ChannelLogo channel={channel} size={18} rounded={5} /> : null}
+      <span className="truncate">{channelName}</span>
+    </span>
+  );
+}
 
 export default function RatingsWidget() {
   const [mode, setMode] = useState<RatingsMode>('daily');
@@ -91,8 +105,8 @@ export default function RatingsWidget() {
                 <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName} channel={row.channel} compact />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-white">{(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName}</p>
-                  <p className="truncate text-[11px] text-purple-100/60">
-                    {row.channel}
+                  <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-purple-100/60">
+                    <ChannelInline channelName={row.channel} />
                     {isUnified && sourceSummary(unifiedRow) ? ` · ${sourceSummary(unifiedRow)}` : ''}
                     {viewersK != null ? ' · ' : ''}
                     {viewersK != null ? <span dir="ltr">{viewersK}K</span> : null}

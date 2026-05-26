@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { CalendarDays, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Tv, Zap } from 'lucide-react';
+import { CalendarDays, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Zap } from 'lucide-react';
 import { channels } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
+import ChannelLogo from '@/components/ChannelLogo';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
 import type { WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
 
@@ -627,7 +628,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
                 <h2 className="truncate text-lg font-black text-white sm:text-xl">{stageLabel(selectedMatch.stage)}{selectedMatch.group ? ` · בית ${selectedMatch.group}` : ''}</h2>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2 py-1">
-                <Tv className="h-4 w-4 text-[#D4AF37]" />
+                <ChannelLogo channel={kan11} size={22} rounded={6} />
                 <span className="text-[11px] font-bold text-white/80">כאן 11</span>
               </div>
             </div>

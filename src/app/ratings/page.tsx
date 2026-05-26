@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, RefreshCw, Trophy } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
 import RatingLogo from '@/components/ratings/RatingLogo';
+import { findChannelByName } from '@/data/channels';
 import type { RatingRow, RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
 import { buildUnifiedDailyRatings, sourceSummary, type UnifiedRatingRow } from '@/lib/ratingsMerge';
 
@@ -19,6 +21,18 @@ function formatDate(value: string | undefined): string {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return value;
   return new Date(parsed).toLocaleDateString('he-IL');
+}
+
+function ChannelNameWithLogo({ channelName }: { channelName?: string }) {
+  const channel = findChannelByName(channelName);
+  if (!channelName) return null;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      {channel ? <ChannelLogo channel={channel} size={26} rounded={7} /> : null}
+      <span>{channelName}</span>
+    </span>
+  );
 }
 
 function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
@@ -70,7 +84,7 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-300">
-                  {row.channel}
+                  <ChannelNameWithLogo channelName={row.channel} />
                   {unifiedRow.category ? <span className="mr-2 rounded-full bg-blue-400/10 px-2 py-0.5 text-xs text-blue-200">{unifiedRow.category}</span> : null}
                 </td>
                 <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(row.date)}</td>

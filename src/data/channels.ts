@@ -52,6 +52,53 @@ export function isLogoImage(logo: string): boolean {
   return logo.startsWith('/');
 }
 
+export function getChannelById(channelId: string | null | undefined): Channel | null {
+  if (!channelId) return null;
+  return channels.find((channel) => channel.id === channelId) || null;
+}
+
+const channelNameAliases: Array<{ channelId: string; aliases: string[] }> = [
+  { channelId: 'kan11', aliases: ['כאן 11', 'ערוץ 11', 'kan 11'] },
+  { channelId: 'keshet12', aliases: ['קשת 12', 'ערוץ 12', 'חדשות 12', 'keshet 12', 'keshet'] },
+  { channelId: 'reshet13', aliases: ['רשת 13', 'ערוץ 13', 'חדשות 13', 'reshet 13', 'reshet'] },
+  { channelId: 'now14', aliases: ['עכשיו 14', 'ערוץ 14', 'now 14'] },
+  { channelId: 'i24', aliases: ['i24news', 'i24 news', 'i24'] },
+  { channelId: 'gold', aliases: ['ספורט 5 gold', 'ספורט 5 גולד', '5 גולד'] },
+  { channelId: 'live', aliases: ['ספורט 5+ live', 'ספורט 5 live', 'ספורט 5+ לייב', 'ספורט 5 לייב', '5 לייב'] },
+  { channelId: 'sport56', aliases: ['ספורט 5+', 'ספורט 5 פלוס', '5 פלוס'] },
+  { channelId: 'sport55', aliases: ['ספורט 5', 'ערוץ הספורט'] },
+  { channelId: 'charlton1', aliases: ['צ׳רלטון 1', "צ'רלטון 1", 'ספורט 1', 'sport 1'] },
+  { channelId: 'charlton2', aliases: ['צ׳רלטון 2', "צ'רלטון 2", 'ספורט 2', 'sport 2'] },
+  { channelId: 'charlton3', aliases: ['צ׳רלטון 3', "צ'רלטון 3", 'ספורט 3', 'sport 3'] },
+  { channelId: 'charlton4', aliases: ['צ׳רלטון 4', "צ'רלטון 4", 'ספורט 4', 'sport 4'] },
+  { channelId: 'charlton6', aliases: ['צ׳רלטון 6', "צ'רלטון 6", 'ספורט 6', 'sport 6'] },
+];
+
+function normalizeChannelText(value: string): string {
+  return value
+    .toLocaleLowerCase('he')
+    .replace(/[׳׳'"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function findChannelByName(value: string | null | undefined): Channel | null {
+  if (!value) return null;
+  const normalized = normalizeChannelText(value);
+  if (!normalized) return null;
+
+  const direct = channels.find((channel) =>
+    normalizeChannelText(channel.id) === normalized ||
+    normalizeChannelText(channel.name) === normalized
+  );
+  if (direct) return direct;
+
+  const alias = channelNameAliases.find((entry) =>
+    entry.aliases.some((candidate) => normalized.includes(normalizeChannelText(candidate)))
+  );
+  return alias ? getChannelById(alias.channelId) : null;
+}
+
 export function generateSchedule(channelId: string): ScheduleItem[] {
   const schedules: Record<string, ScheduleItem[]> = {
     kan11: [

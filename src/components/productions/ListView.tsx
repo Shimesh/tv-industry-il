@@ -2,6 +2,8 @@
 
 import { useMemo, useRef, useEffect } from 'react';
 import { MapPin, Clock, Users, Info, Loader2 } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
+import { findChannelByName } from '@/data/channels';
 import { Production, formatDateShort, getHebrewDay } from '@/lib/productionDiff';
 
 interface ListViewProps {
@@ -136,6 +138,7 @@ export default function ListView({
             const highlighted = isUserShift(prod);
             const cancelled = prod.status === 'cancelled';
             const role = getUserRole(prod);
+            const channel = findChannelByName(`${prod.name} ${prod.studio}`);
 
             return (
               <div
@@ -161,6 +164,7 @@ export default function ListView({
                 {/* Main content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
+                    {channel ? <ChannelLogo channel={channel} size={24} rounded={6} /> : null}
                     <span
                       className="font-semibold text-sm truncate"
                       style={{

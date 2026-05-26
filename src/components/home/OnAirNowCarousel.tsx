@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Hls from 'hls.js';
 import { ChevronLeft, ChevronRight, ExternalLink, VolumeX } from 'lucide-react';
 
+import ChannelLogo from '@/components/ChannelLogo';
 import { channels as channelCatalog } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import type { BroadcastChannelState } from '@/lib/broadcasts';
@@ -447,6 +448,7 @@ export default function OnAirNowCarousel({
                     <span className="text-[10px] text-white/70">
                       {program ? formatBroadcastTime(program.startAt) : ''}
                     </span>
+                    <ChannelLogo channel={metadata} size={24} rounded={6} />
                     <span className="text-xs font-semibold text-white/90">
                       {getChannelDisplayName(state.channelId, metadata.name)}
                     </span>

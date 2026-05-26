@@ -69,7 +69,7 @@ export function stripProductionSuffixes(name: string): string {
  * merged entry with the correct shift count.
  */
 export function collapseProductionName(name: string): string {
-  let result = stripProductionSuffixes(name.trim());
+  const result = stripProductionSuffixes(name.trim());
 
   // Collapse "רצועת X..." → "רצועת X"
   // Match "רצועת" followed by one Hebrew word, then strip anything after it.

@@ -2,6 +2,8 @@
 
 import { Production, CrewMember } from '@/lib/productionDiff';
 import { Users, Clock, Info, MapPin, Clapperboard } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
+import { findChannelByName } from '@/data/channels';
 
 const DIRECTOR_ROLES = ['במאי', 'במאית', 'במאי/ת', 'בימוי', 'director'];
 
@@ -45,6 +47,7 @@ export default function ProductionBlock({
 }: ProductionBlockProps) {
   const isCancelled = production.status === 'cancelled';
   const directors = getDirectorNames(production.crew);
+  const channel = findChannelByName(`${production.name} ${production.studio}`);
 
   // Highlighted = current user's shift → solid amber, bold
   // Muted = other productions → dark gray
@@ -69,12 +72,15 @@ export default function ProductionBlock({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {/* Production name */}
-          <h4
-            className={`text-sm truncate ${isCancelled ? 'line-through' : ''} ${isHighlighted ? 'font-black' : 'font-bold'}`}
-            style={{ color: isHighlighted ? '#1f2937' : 'var(--theme-text)' }}
-          >
-            {production.name}
-          </h4>
+          <div className="flex min-w-0 items-center gap-2">
+            {channel ? <ChannelLogo channel={channel} size={24} rounded={6} /> : null}
+            <h4
+              className={`min-w-0 flex-1 truncate text-sm ${isCancelled ? 'line-through' : ''} ${isHighlighted ? 'font-black' : 'font-bold'}`}
+              style={{ color: isHighlighted ? '#1f2937' : 'var(--theme-text)' }}
+            >
+              {production.name}
+            </h4>
+          </div>
 
           {directors.length > 0 && (
             <div className="flex items-center gap-1 mt-0.5">

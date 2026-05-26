@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import ChannelLogo from '@/components/ChannelLogo';
+import { findChannelByName } from '@/data/channels';
 import { Production, formatDateShort } from '@/lib/productionDiff';
 
 interface MonthViewProps {
@@ -262,7 +264,9 @@ function DayCellComponent({
 
       {/* Mini production blocks */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {productions.slice(0, 3).map((prod) => (
+        {productions.slice(0, 3).map((prod) => {
+          const channel = findChannelByName(`${prod.name} ${prod.studio}`);
+          return (
           <button
             key={prod.id}
             onClick={(e) => {
@@ -298,6 +302,7 @@ function DayCellComponent({
             }}
             title={`${prod.name} | ${prod.studio} | ${prod.startTime}-${prod.endTime}`}
           >
+            {channel ? <ChannelLogo channel={channel} size={16} rounded={4} /> : null}
             <span
               style={{
                 fontSize: '0.65rem',
@@ -321,7 +326,8 @@ function DayCellComponent({
               {prod.startTime}
             </span>
           </button>
-        ))}
+          );
+        })}
         {productions.length > 3 && (
           <span
             style={{

@@ -1,6 +1,8 @@
 'use client';
 
 import { Tv } from 'lucide-react';
+import ChannelLogo from '@/components/ChannelLogo';
+import { findChannelByName } from '@/data/channels';
 
 type ChannelBrand = {
   label: string;
@@ -72,11 +74,23 @@ export default function RatingLogo({
   compact?: boolean;
 }) {
   const size = compact ? 'h-8 w-8' : 'h-12 w-12';
+  const channelLogo = findChannelByName(channel);
   if (src) {
     return (
       <div className={`${size} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/95 p-1.5`}>
         <img src={src} alt={name} className="h-full w-full object-contain" loading="lazy" referrerPolicy="no-referrer" />
       </div>
+    );
+  }
+
+  if (channelLogo) {
+    return (
+      <ChannelLogo
+        channel={channelLogo}
+        size={compact ? 32 : 48}
+        rounded={8}
+        className="shadow-lg shadow-black/10"
+      />
     );
   }
 
