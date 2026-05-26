@@ -94,7 +94,8 @@ function parseRatingsTable(html, limit) {
 
 function israelDateParts() {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    weekday: 'short', hour: 'numeric', minute: 'numeric',
   }).formatToParts(new Date());
   const get = t => parts.find(p => p.type === t)?.value || '';
   const weekdays = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -103,6 +104,8 @@ function israelDateParts() {
     month: Number(get('month')),
     day: Number(get('day')),
     weekday: weekdays[get('weekday')] ?? new Date().getUTCDay(),
+    hour: Number(get('hour')),
+    minute: Number(get('minute')),
   };
 }
 function prevDay(y, m, d) {
@@ -153,7 +156,15 @@ async function main() {
     console.warn('Could not read appConfig/global:', e.message);
   }
 
-  const { year, month, day, weekday } = israelDateParts();
+  const { year, month, day, weekday, hour, minute } = israelDateParts();
+
+  // Between 09:00–09:15 IST: always run weekly (Midrug publishes around 9 AM)
+  const inMorningWindow = hour === 9 && minute <= 15;
+  if (inMorningWindow) {
+    console.log(`[${new Date().toISOString()}] Morning window 09:00–09:15 — forcing weekly`);
+    forceWeekly = true;
+  }
+
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
 

@@ -906,8 +906,12 @@ export default function AdminPage() {
   async function runFirebaseRatingsSync() {
     setRunningFirebaseSync(true);
     try {
-      await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'POST' });
-      showToast('ok', 'בקשה נשלחה — Oracle VM יסנכרן תוך ~5 דקות');
+      const result = await fetchWithAuth<{ daily?: { rows?: number; date?: string }; weekly?: { rows?: number; weekRange?: string } | null }>(
+        '/api/admin/ratings-sync/firebase', { method: 'POST' },
+      );
+      const weeklyMsg = result.weekly ? ` | שבועי: ${result.weekly.rows} שורות (${result.weekly.weekRange ?? ''})` : '';
+      showToast('ok', `עודכן: ${result.daily?.rows ?? '?'} שורות (${result.daily?.date ?? ''})${weeklyMsg}`);
+      await loadOverview(true);
     } catch (err) {
       showToast('err', err instanceof Error ? err.message : 'שגיאה בסנכרון');
     } finally {
