@@ -19,15 +19,15 @@ export async function POST(request: NextRequest) {
   const auth = await requirePrimaryAdminRequest(request);
   if (auth instanceof NextResponse) return auth;
 
+  const body = await request.json().catch(() => ({})) as { force?: boolean };
+  const force = body.force === true;
+
   const allEntries = await listDocuments<IndustryMasterEntry>('industry_master').catch(() => []);
-  // Process entries that:
-  //  - haven't been attempted yet (no wikiUrl) — initial enrichment
-  //  - were previously flagged as 'needs_review' — retry with improved search
-  //  - have no logo yet — may have been enriched for metadata but logo was skipped
-  // Skip entries that are already verified AND have a logo AND have metadata
+  // Normal mode: skip entries that are already verified AND have a logo AND have metadata.
+  // Force mode: reprocess ALL entries (used to correct wrong logos from old search algorithm).
   const needsWiki = allEntries.filter((e) => {
-    if (e.wikiUrl === 'none') return false; // Already tried, page not found on Wikipedia
-    if (e.isVerified && e.logoUrl && e.logoUrl !== 'none' && e.network) return false; // Fully enriched
+    if (!force && e.wikiUrl === 'none') return false; // Already tried, page not found — skip in normal mode
+    if (!force && e.isVerified && e.logoUrl && e.logoUrl !== 'none' && e.network) return false; // Fully enriched
     return true;
   });
   const pending = needsWiki.slice(0, BATCH_SIZE);
@@ -53,14 +53,12 @@ export async function POST(request: NextRequest) {
     if (info.genre) update.genre = info.genre;
     if (info.productionCompany) update.productionCompany = info.productionCompany;
     // Update logo:
-    //   • Verified match + new logo found → always apply (may correct a previously wrong image)
-    //   • 'needs_review' and entry had an unverified logo → clear it to prevent wrong images
-    if (info.logoUrl && isVerified) {
-      if (!entry.logoUrl || entry.logoUrl === 'none' || entry.wikiTitleMatch === 'needs_review') {
-        update.logoUrl = info.logoUrl;
-      }
-    } else if (!isVerified && entry.logoUrl && entry.wikiTitleMatch === 'needs_review') {
-      update.logoUrl = ''; // Previously unverified logo — clear it
+    //   • Force mode OR verified match: always apply new logo (corrects previously wrong images)
+    //   • Not verified: clear existing logo to prevent wrong images from being displayed
+    if (isVerified) {
+      update.logoUrl = info.logoUrl; // may be '' if no infobox image — that's correct
+    } else {
+      update.logoUrl = ''; // Title mismatch → wipe wrong logo
     }
     await patchDocument(`industry_master/${entry.id}`, update);
     if (info.network || info.logoUrl) enriched++;

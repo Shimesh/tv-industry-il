@@ -66,6 +66,7 @@ export default function UnifiedIndustryMasterPage() {
   const [syncingSource, setSyncingSource] = useState(false);
   const [syncingProCards, setSyncingProCards] = useState(false);
   const [bulkWikiRunning, setBulkWikiRunning] = useState(false);
+  const [bulkWikiForce, setBulkWikiForce] = useState(false);
   const [bulkWikiProgress, setBulkWikiProgress] = useState<{ processed: number; remaining: number } | null>(null);
   const [addModal, setAddModal] = useState<AddModalState>(EMPTY_ADD);
   const [editModal, setEditModal] = useState<EditModalState>(EMPTY_EDIT);
@@ -174,14 +175,18 @@ export default function UnifiedIndustryMasterPage() {
     }
   };
 
-  const handleBulkWiki = async () => {
+  const handleBulkWiki = async (force = false) => {
     setBulkWikiRunning(true);
+    setBulkWikiForce(force);
     bulkAbortRef.current = false;
     setBulkWikiProgress({ processed: 0, remaining: Infinity });
     let totalProcessed = 0;
     try {
       while (!bulkAbortRef.current) {
-        const res = await authFetch('/api/admin/industry-master/sync/wiki', { method: 'POST' });
+        const res = await authFetch('/api/admin/industry-master/sync/wiki', {
+          method: 'POST',
+          body: JSON.stringify({ force }),
+        });
         const data = await res.json() as { error?: string; processed?: number; remaining?: number };
         if (!res.ok) throw new Error(data.error || 'שגיאה');
         totalProcessed += data.processed ?? 0;
@@ -194,6 +199,7 @@ export default function UnifiedIndustryMasterPage() {
       showToast('err', e instanceof Error ? e.message : 'שגיאה בוויקיפדיה');
     } finally {
       setBulkWikiRunning(false);
+      setBulkWikiForce(false);
       setBulkWikiProgress(null);
     }
   };
@@ -386,20 +392,41 @@ export default function UnifiedIndustryMasterPage() {
           </button>
 
           <button
-            onClick={bulkWikiRunning ? () => { bulkAbortRef.current = true; } : handleBulkWiki}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border"
-            style={bulkWikiRunning
+            onClick={bulkWikiRunning ? () => { bulkAbortRef.current = true; } : () => handleBulkWiki(false)}
+            disabled={bulkWikiRunning && bulkWikiForce}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border disabled:opacity-40"
+            style={bulkWikiRunning && !bulkWikiForce
               ? { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#f87171' }
               : { background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.3)', color: '#c4b5fd' }
             }
           >
-            {bulkWikiRunning ? (
+            {bulkWikiRunning && !bulkWikiForce ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 עצור ({bulkWikiProgress?.remaining === Infinity ? '...' : bulkWikiProgress?.remaining} נותרו)
               </>
             ) : (
               <><Globe className="w-4 h-4" />ויקיפדיה לכולם</>
+            )}
+          </button>
+
+          <button
+            onClick={bulkWikiRunning ? () => { bulkAbortRef.current = true; } : () => handleBulkWiki(true)}
+            disabled={bulkWikiRunning && !bulkWikiForce}
+            title="בודק מחדש גם ערכים שכבר עודכנו — מתקן לוגואים שגויים"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border disabled:opacity-40"
+            style={bulkWikiRunning && bulkWikiForce
+              ? { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#f87171' }
+              : { background: 'rgba(234,179,8,0.12)', borderColor: 'rgba(234,179,8,0.3)', color: '#fde047' }
+            }
+          >
+            {bulkWikiRunning && bulkWikiForce ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                עצור ({bulkWikiProgress?.remaining === Infinity ? '...' : bulkWikiProgress?.remaining} נותרו)
+              </>
+            ) : (
+              <><RefreshCw className="w-4 h-4" />ויקי מחדש לכולם</>
             )}
           </button>
 
@@ -422,7 +449,7 @@ export default function UnifiedIndustryMasterPage() {
             <div className="flex items-center justify-between text-sm mb-2" style={{ color: '#c4b5fd' }}>
               <span className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                מעבד ויקיפדיה: {bulkWikiProgress.processed} הושלמו
+                {bulkWikiForce ? 'ויקי מחדש' : 'ויקיפדיה'}: {bulkWikiProgress.processed} הושלמו
                 {bulkWikiProgress.remaining !== Infinity && `, ${bulkWikiProgress.remaining} נותרו`}
               </span>
               <span>
