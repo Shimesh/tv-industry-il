@@ -135,7 +135,24 @@ async function fetchWeeklyOptions() {
 }
 
 async function main() {
-  const forceWeekly = process.env.FORCE_WEEKLY === '1';
+  // Check Firestore for a pending manual sync request
+  let forceWeekly = process.env.FORCE_WEEKLY === '1';
+  try {
+    const snap = await db.doc('appConfig/global').get();
+    const cfg = snap.data() || {};
+    if (cfg.ratingsSyncRequested) {
+      console.log(`[${new Date().toISOString()}] Manual sync requested — running with FORCE_WEEKLY=1`);
+      forceWeekly = true;
+      await db.doc('appConfig/global').update({
+        ratingsSyncRequested: false,
+        ratingsSyncInProgress: true,
+        ratingsSyncStartedAt: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn('Could not read appConfig/global:', e.message);
+  }
+
   const { year, month, day, weekday } = israelDateParts();
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
@@ -215,6 +232,13 @@ async function main() {
       console.warn(`⚠ Weekly failed (non-fatal): ${weeklyErr.message}`);
     }
   }
+
+  // Clear manual sync flag if it was set
+  await db.doc('appConfig/global').update({
+    ratingsSyncInProgress: false,
+    ratingsSyncLastTriggeredAt: new Date().toISOString(),
+    ratingsSyncLastStatus: 'success',
+  }).catch(() => {});
 
   process.exit(0);
 }
