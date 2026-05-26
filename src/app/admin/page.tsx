@@ -906,10 +906,13 @@ export default function AdminPage() {
   async function runFirebaseRatingsSync() {
     setRunningFirebaseSync(true);
     try {
-      await fetchWithAuth('/api/admin/ratings-sync/firebase', { method: 'POST' });
-      showToast('ok', 'בקשה נשלחה — Oracle VM יסנכרן תוך ~5 דקות');
+      const result = await fetchWithAuth<{ date?: string; rows?: number; weekly?: { weekRange?: string; rows?: number } | null }>(
+        '/api/admin/ratings-sync/firebase', { method: 'POST' },
+      );
+      const weeklyMsg = result.weekly ? ` | שבועי: ${result.weekly.rows} שורות (${result.weekly.weekRange || ''})` : '';
+      showToast('ok', `עודכן: ${result.rows ?? '?'} שורות (${result.date ?? ''})${weeklyMsg}`);
     } catch (err) {
-      showToast('err', err instanceof Error ? err.message : 'שגיאה בשליחת הבקשה');
+      showToast('err', err instanceof Error ? err.message : 'שגיאה בסנכרון');
     } finally {
       setRunningFirebaseSync(false);
     }
