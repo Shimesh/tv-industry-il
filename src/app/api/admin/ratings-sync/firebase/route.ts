@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       trigger: 'admin',
       forceWeekly: true,
     });
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Midrug sync failed' },
