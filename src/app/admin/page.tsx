@@ -972,11 +972,6 @@ export default function AdminPage() {
     }
   }
 
-  async function runRatingsSync() {
-    return runMidrugRatingsSync();
-  }
-
-
   async function submitManualHtml() {
     if (!manualHtml.trim()) return;
     setRunningRatingsIngest(true);
