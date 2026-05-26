@@ -1169,6 +1169,17 @@ export default function AdminPage() {
   const telegramRatingsJob = ratingsJobsLive[RATINGS_TELEGRAM_JOB]
     ?? overview.usage.jobs.find((job) => job.key === RATINGS_TELEGRAM_JOB)
     ?? null;
+
+  // Treat a 'running' Firestore status as stale if it's been > 5 minutes —
+  // prevents the button from staying locked after a crashed or timed-out run.
+  const midrugJobIsStale =
+    midrugRatingsJob?.lastStatus === 'running' &&
+    !!midrugRatingsJob.lastRunAt &&
+    Date.now() - new Date(midrugRatingsJob.lastRunAt).getTime() > 5 * 60 * 1000;
+  const midrugJobRunning =
+    runningFirebaseSync ||
+    (midrugRatingsJob?.lastStatus === 'running' && !midrugJobIsStale);
+
   const effectiveRatingsJob = midrugRatingsJob;
   const runningRatingsSync = runningFirebaseSync;
 
@@ -1350,17 +1361,17 @@ export default function AdminPage() {
               title="מדרוג רשמי"
               description="Firebase Cloud Function (me-west1 / ת״א) מושכת יומי + שבועי ישירות ממדרוג עם IP ישראלי."
               job={midrugRatingsJob}
-              running={runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running'}
+              running={midrugJobRunning}
               icon={<BarChart3 className="h-4 w-4 text-purple-300" />}
               action={(
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => void runFirebaseRatingsSync()}
-                    disabled={runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running'}
+                    disabled={midrugJobRunning}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition-colors hover:bg-purple-500 disabled:opacity-60"
                   >
-                    <Cloud className={`h-4 w-4 ${(runningFirebaseSync || midrugRatingsJob?.lastStatus === 'running') ? 'animate-pulse' : ''}`} />
+                    <Cloud className={`h-4 w-4 ${midrugJobRunning ? 'animate-pulse' : ''}`} />
                     {runningFirebaseSync ? 'מושך...' : 'סנכרן עכשיו'}
                   </button>
                   <button

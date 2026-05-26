@@ -152,6 +152,13 @@ async function fetchWeeklyOptions() {
 }
 
 async function scrapeAndSave({ forceWeekly = false } = {}) {
+  // Mark as running immediately so the admin UI shows live state
+  await db.doc('adminMetrics/job-ratings-midrug-scrape').set({
+    key: 'ratings-midrug-scrape', metricType: 'job', label: 'ratings-midrug-scrape',
+    lastRunAt: new Date().toISOString(), lastStatus: 'running', lastError: null,
+    lastMessage: 'מושך נתונים ממדרוג...', source: 'firebase-function',
+  }, { merge: true }).catch(() => {});
+
   const { year, month, day, weekday } = israelDateParts();
   const yesterday = prevDay(year, month, day);
   const dayBefore = prevDay(yesterday.year, yesterday.month, yesterday.day);
