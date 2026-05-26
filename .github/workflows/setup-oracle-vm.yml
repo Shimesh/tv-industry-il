@@ -8,53 +8,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Setup and run on Oracle VM
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/oracle_key
+          chmod 600 ~/.ssh/oracle_key
+          ssh-keyscan -H "${{ secrets.ORACLE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy scripts and configure cron
+        run: |
+          ssh -i ~/.ssh/oracle_key \
+              -o StrictHostKeyChecking=no \
+              "${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}" \
+              "bash -s" << 'REMOTE'
+          set -e
+          mkdir -p ~/ratings-scraper
+          cd ~/ratings-scraper
+
+          curl -fsSL "https://raw.githubusercontent.com/Shimesh/tv-industry-il/master/scripts/scrape-ratings-oracle.mjs" -o scrape-ratings-oracle.mjs
+          curl -fsSL "https://raw.githubusercontent.com/Shimesh/tv-industry-il/master/scripts/oracle-sync-trigger.mjs" -o oracle-sync-trigger.mjs
+          echo "Scripts downloaded"
+
+          node -e "require('firebase-admin')" 2>/dev/null || npm install firebase-admin cheerio
+          echo "npm OK"
+
+          if crontab -l 2>/dev/null | grep -qF "oracle-sync-trigger"; then
+            echo "Cron already present"
+          else
+            (crontab -l 2>/dev/null; echo "*/5 * * * * cd ~/ratings-scraper && node oracle-sync-trigger.mjs >> ~/sync-trigger.log 2>&1") | crontab -
+            echo "Cron added"
+          fi
+          crontab -l
+          REMOTE
+
+      - name: Write .env and run scraper
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ${{ secrets.ORACLE_USER }}
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          envs: FIREBASE_PROJECT_ID,FIREBASE_CLIENT_EMAIL,FIREBASE_PRIVATE_KEY
-          command_timeout: 8m
-          script: |
-            set -e
-            mkdir -p ~/ratings-scraper
-            cd ~/ratings-scraper
+        run: |
+          ssh -i ~/.ssh/oracle_key \
+              -o StrictHostKeyChecking=no \
+              "${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}" \
+              "cat > ~/ratings-scraper/.env" << ENVEOF
+          FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+          FIREBASE_CLIENT_EMAIL=$FIREBASE_CLIENT_EMAIL
+          FIREBASE_PRIVATE_KEY=$FIREBASE_PRIVATE_KEY
+          ENVEOF
 
-            # Pull latest scripts from GitHub (repo is public)
-            curl -fsSL "https://raw.githubusercontent.com/Shimesh/tv-industry-il/master/scripts/scrape-ratings-oracle.mjs" -o scrape-ratings-oracle.mjs
-            curl -fsSL "https://raw.githubusercontent.com/Shimesh/tv-industry-il/master/scripts/oracle-sync-trigger.mjs" -o oracle-sync-trigger.mjs
-            echo "Scripts downloaded"
-
-            # Install npm packages if missing
-            node -e "require('firebase-admin')" 2>/dev/null || npm install firebase-admin cheerio
-            echo "npm packages OK"
-
-            # Write .env
-            if [ -n "$FIREBASE_PROJECT_ID" ]; then
-              cat > ~/ratings-scraper/.env <<ENVEOF
-            FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
-            FIREBASE_CLIENT_EMAIL=$FIREBASE_CLIENT_EMAIL
-            FIREBASE_PRIVATE_KEY=$FIREBASE_PRIVATE_KEY
-            ENVEOF
-              echo ".env written"
-            fi
-
-            # Add cron for sync-trigger every 5 min
-            if crontab -l 2>/dev/null | grep -qF "oracle-sync-trigger"; then
-              echo "Cron already present"
-            else
-              (crontab -l 2>/dev/null; echo "*/5 * * * * cd ~/ratings-scraper && node oracle-sync-trigger.mjs >> ~/sync-trigger.log 2>&1") | crontab -
-              echo "Cron added"
-            fi
-
-            echo "=== Crontab ==="
-            crontab -l
-
-            # Run scraper now with weekly forced
-            echo "=== Running scraper now ==="
-            FORCE_WEEKLY=1 node scrape-ratings-oracle.mjs
+          ssh -i ~/.ssh/oracle_key \
+              -o StrictHostKeyChecking=no \
+              "${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}" \
+              "cd ~/ratings-scraper && FORCE_WEEKLY=1 node scrape-ratings-oracle.mjs"
