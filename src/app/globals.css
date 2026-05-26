@@ -632,3 +632,9 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
   80% { transform: translateX(5%) scaleX(0.9); }
   100% { transform: translateX(0%) scaleX(1); }
 }
+
+/* Pro Card modal gradient animation — CSS-native, no JS overhead */
+@keyframes proCardGradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}

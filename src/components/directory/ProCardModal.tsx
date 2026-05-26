@@ -52,26 +52,24 @@ type GroupedCredits = Array<{
 }>;
 
 const overlayVariants = {
-  hidden: { opacity: 0, backdropFilter: 'blur(0px)' },
-  visible: { opacity: 1, backdropFilter: 'blur(18px)', transition: { duration: 0.25 } },
-  exit: { opacity: 0, backdropFilter: 'blur(0px)', transition: { duration: 0.18 } },
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.22 } },
+  exit: { opacity: 0, transition: { duration: 0.16 } },
 };
 
 const modalVariants = {
-  hidden: { opacity: 0, scale: 0.78, y: 40, filter: 'blur(14px)' },
+  hidden: { opacity: 0, scale: 0.88, y: 32 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    filter: 'blur(0px)',
-    transition: { duration: 0.42, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+    transition: { duration: 0.36, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
   },
   exit: {
     opacity: 0,
-    scale: 0.9,
-    y: 20,
-    filter: 'blur(8px)',
-    transition: { duration: 0.18 },
+    scale: 0.95,
+    y: 16,
+    transition: { duration: 0.16 },
   },
 };
 
@@ -386,7 +384,7 @@ export default function ProCardModal({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="fixed inset-0 z-[12000] flex items-start justify-center overflow-y-auto bg-slate-950/78 p-3 pt-[calc(var(--app-header-offset)+0.75rem)] sm:p-6 sm:pt-[calc(var(--app-header-offset)+1rem)]"
+        className="fixed inset-0 z-[12000] flex items-start justify-center overflow-y-auto bg-slate-950/78 backdrop-blur-[18px] p-3 pt-[calc(var(--app-header-offset)+0.75rem)] sm:p-6 sm:pt-[calc(var(--app-header-offset)+1rem)]"
         onClick={onClose}
       >
         <motion.div
@@ -401,14 +399,13 @@ export default function ProCardModal({
           aria-modal="true"
           dir="rtl"
         >
-          <motion.div
+          <div
             className="absolute inset-0 opacity-60"
-            animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
             style={{
               background:
                 'linear-gradient(120deg, rgba(250,204,21,0.16), rgba(37,99,235,0.22), rgba(14,165,233,0.14), rgba(250,204,21,0.12))',
               backgroundSize: '300% 300%',
+              animation: 'proCardGradient 9s ease-in-out infinite',
             }}
           />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(250,204,21,0.18),transparent_34%),radial-gradient(circle_at_90%_18%,rgba(56,189,248,0.22),transparent_38%)]" />
