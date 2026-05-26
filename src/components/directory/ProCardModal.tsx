@@ -98,10 +98,12 @@ function formatWhatsApp(phone?: string): string {
 function groupCredits(credits: ProCardProductionCredit[]): GroupedCredits {
   const years = new Map<string, Map<string, ProCardProductionCredit[]>>();
   for (const credit of credits) {
-    if (!years.has(credit.year)) years.set(credit.year, new Map());
-    const channels = years.get(credit.year)!;
-    if (!channels.has(credit.channelName)) channels.set(credit.channelName, []);
-    channels.get(credit.channelName)!.push(credit);
+    const year = /^\d{4}$/.test(credit.year) ? credit.year : 'ללא תאריך';
+    if (!years.has(year)) years.set(year, new Map());
+    const channels = years.get(year)!;
+    const chName = credit.channelName || 'ללא ערוץ';
+    if (!channels.has(chName)) channels.set(chName, []);
+    channels.get(chName)!.push(credit);
   }
 
   return Array.from(years.entries())
@@ -109,7 +111,12 @@ function groupCredits(credits: ProCardProductionCredit[]): GroupedCredits {
     .map(([year, channels]) => ({
       year,
       channels: Array.from(channels.entries())
-        .sort(([a], [b]) => a.localeCompare(b, 'he'))
+        .sort(([a], [b]) => {
+          // Push "ללא ערוץ" to the end
+          if (a === 'ללא ערוץ') return 1;
+          if (b === 'ללא ערוץ') return -1;
+          return a.localeCompare(b, 'he');
+        })
         .map(([channelName, channelCredits]) => ({
           channelName,
           credits: channelCredits.sort((a, b) => b.date.localeCompare(a.date)),
@@ -180,6 +187,31 @@ export default function ProCardModal({
   const fallbackAvatarUrl = diceBearAvatarUrl(`${contact.id || name}-${name}`);
   const gradientClass = deptColors[primaryDepartment] || 'from-blue-500 to-cyan-500';
   const groupedCredits = useMemo(() => groupCredits(history.productionCredits), [history.productionCredits]);
+  const [activeYear, setActiveYear] = useState<string>('all');
+  const [activeChannel, setActiveChannel] = useState<string>('all');
+
+  const allYears = useMemo(() => groupedCredits.map((g) => g.year), [groupedCredits]);
+
+  const allChannels = useMemo(() => {
+    const set = new Set<string>();
+    groupedCredits.forEach((yg) =>
+      yg.channels.forEach((cg) => {
+        if (cg.channelName && cg.channelName !== 'ללא ערוץ') set.add(cg.channelName);
+      }),
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'));
+  }, [groupedCredits]);
+
+  const filteredGroups = useMemo(() => {
+    return groupedCredits
+      .filter((yg) => activeYear === 'all' || yg.year === activeYear)
+      .map((yg) => ({
+        ...yg,
+        channels: yg.channels.filter((cg) => activeChannel === 'all' || cg.channelName === activeChannel),
+      }))
+      .filter((yg) => yg.channels.length > 0);
+  }, [groupedCredits, activeYear, activeChannel]);
+
   const verified = isCurrentUser || contact.source === 'user-profile' || Boolean(contact.profileId);
 
   useEffect(() => {
@@ -189,6 +221,11 @@ export default function ProCardModal({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    setActiveYear('all');
+    setActiveChannel('all');
+  }, [contact.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -541,49 +578,124 @@ export default function ProCardModal({
                     <div className="h-14 animate-pulse rounded-xl bg-white/8" />
                   </div>
                 ) : groupedCredits.length > 0 ? (
-                  <div className="space-y-4">
-                    {groupedCredits.map((yearGroup) => {
-                      const yearCredits = yearGroup.channels.flatMap((channelGroup) => channelGroup.credits);
-                      return (
-                        <div key={yearGroup.year} className="rounded-2xl border border-white/10 bg-slate-950/42 p-3">
-                          <div className="mb-3 flex items-center justify-between gap-3">
-                            <div className="rounded-full bg-amber-300/12 px-3 py-1 text-sm font-black text-amber-100" dir="ltr">{yearGroup.year}</div>
-                            <div className="text-xs font-bold text-white/45">{yearCredits.length} קרדיטים</div>
-                          </div>
-                          <div className="grid gap-2">
-                            {yearCredits.map((credit) => (
-                              <div key={`${credit.id}-${credit.role}`} className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.055] p-3">
-                                <ProductionMark credit={credit} />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="truncate text-sm font-black text-white">{credit.productionName}</span>
-                                    {credit.isMajor && (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-100">
-                                        <Trophy className="h-3 w-3" />
-                                        מרכזית
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
-                                    <span className="font-bold text-sky-100/85">{credit.role}</span>
-                                    <span>{credit.channelName}</span>
-                                    {credit.studio && <span>{credit.studio}</span>}
-                                    {credit.shiftCount > 1 ? (
-                                      <span dir="ltr" className="text-sky-300/80">
-                                        {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} - {formatDate(credit.dateTo)}
-                                      </span>
-                                    ) : (
-                                      <span dir="ltr">{formatDate(credit.date)}</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
+                  <>
+                    {/* Filter chips — show when there are 2+ years or 2+ known channels */}
+                    {(allYears.length > 1 || allChannels.length > 1) && (
+                      <div className="mb-3 space-y-2">
+                        {allYears.length > 1 && (
+                          <div className="no-scrollbar flex flex-wrap gap-1.5" dir="ltr">
+                            <button
+                              type="button"
+                              onClick={() => setActiveYear('all')}
+                              className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeYear === 'all' ? 'bg-amber-300/22 text-amber-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
+                            >
+                              כל השנים
+                            </button>
+                            {allYears.map((yr) => (
+                              <button
+                                key={yr}
+                                type="button"
+                                onClick={() => { setActiveYear(yr); setActiveChannel('all'); }}
+                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeYear === yr ? 'bg-amber-300/22 text-amber-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
+                              >
+                                {yr}
+                              </button>
                             ))}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        )}
+                        {allChannels.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setActiveChannel('all')}
+                              className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeChannel === 'all' ? 'bg-sky-400/18 text-sky-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
+                            >
+                              כל הערוצים
+                            </button>
+                            {allChannels.map((ch) => (
+                              <button
+                                key={ch}
+                                type="button"
+                                onClick={() => setActiveChannel(ch)}
+                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeChannel === ch ? 'bg-sky-400/18 text-sky-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
+                              >
+                                {ch}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {filteredGroups.length > 0 ? (
+                      <div className="space-y-4">
+                        {filteredGroups.map((yearGroup) => (
+                          <div key={yearGroup.year} className="rounded-2xl border border-white/10 bg-slate-950/42 p-3">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <div className="rounded-full bg-amber-300/12 px-3 py-1 text-sm font-black text-amber-100" dir="ltr">
+                                {yearGroup.year}
+                              </div>
+                              <div className="text-xs font-bold text-white/45">
+                                {yearGroup.channels.reduce((sum, cg) => sum + cg.credits.length, 0)} קרדיטים
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              {yearGroup.channels.map((channelGroup) => (
+                                <div key={channelGroup.channelName}>
+                                  {/* Channel sub-header — only when showing all channels and there are multiple */}
+                                  {activeChannel === 'all' && allChannels.length > 1 && channelGroup.channelName !== 'ללא ערוץ' && (
+                                    <div className="mb-1.5 flex items-center gap-2 pr-1">
+                                      <span className="text-[11px] font-bold text-sky-300/70">{channelGroup.channelName}</span>
+                                      <div className="h-px flex-1 bg-white/8" />
+                                    </div>
+                                  )}
+                                  <div className="grid gap-2">
+                                    {channelGroup.credits.map((credit) => (
+                                      <div
+                                        key={`${credit.id}-${credit.role}`}
+                                        className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.055] p-3"
+                                      >
+                                        <ProductionMark credit={credit} />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="truncate text-sm font-black text-white">{credit.productionName}</span>
+                                            {credit.isMajor && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-100">
+                                                <Trophy className="h-3 w-3" />
+                                                מרכזית
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
+                                            <span className="font-bold text-sky-100/85">{credit.role}</span>
+                                            {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
+                                              <span>{credit.channelName}</span>
+                                            )}
+                                            {credit.studio && <span>{credit.studio}</span>}
+                                            {credit.shiftCount > 1 ? (
+                                              <span dir="ltr" className="text-sky-300/80">
+                                                {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} - {formatDate(credit.dateTo)}
+                                              </span>
+                                            ) : (
+                                              <span dir="ltr">{formatDate(credit.date)}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-white/14 p-5 text-center text-sm text-white/58">
+                        לא נמצאו קרדיטים עבור הסינון הנבחר.
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/14 p-5 text-center text-sm text-white/58">
                     עדיין אין היסטוריית הפקות מחוברת לכרטיס הזה.

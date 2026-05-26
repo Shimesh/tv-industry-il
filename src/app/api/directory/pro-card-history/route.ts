@@ -281,7 +281,7 @@ function applyRegistryOverrides(
       ?? credit.logoUrl;
     const channelName = mst?.network || reg?.channel || credit.channelName;
     const isMajor = credit.isMajor || Boolean(reg?.isMajor);
-    const productionName = (mst?.masterName || mst?.showName || reg?.name || credit.productionName).trim();
+    const productionName = (mst?.masterName || mst?.showName || reg?.name || stripProductionSuffixes(credit.productionName)).trim();
     return { ...credit, productionName, logoUrl, channelName, isMajor };
   });
 }
