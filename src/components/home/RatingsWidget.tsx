@@ -104,6 +104,7 @@ export default function RatingsWidget() {
                   <p className="min-w-0 truncate text-[11px] text-purple-100/60">
                     {[
                       channelLabel(row.channel),
+                      mode === 'weekly' && row.date ? row.date.slice(8, 10) + '/' + row.date.slice(5, 7) : null,
                       viewersK ? `${viewersK}K` : null,
                       unifiedRow.category ?? null,
                       isUnified && sourceSummary(unifiedRow) ? sourceSummary(unifiedRow) : null,
