@@ -65,12 +65,9 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <RatingLogo src={row.logoUrl} name={row.canonicalShowName || row.showName} channel={row.channel} />
+                    <RatingLogo src={row.logoUrl} name={row.showName} channel={row.channel} />
                     <div className="min-w-0">
-                      <div className="font-bold text-white">{row.canonicalShowName || row.showName}</div>
-                      {row.canonicalShowName && row.canonicalShowName !== row.showName ? (
-                        <div className="mt-0.5 text-xs text-slate-400">{row.showName}</div>
-                      ) : null}
+                      <div className="font-bold text-white">{row.showName}</div>
                       {hasDifferentValues ? (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-blue-200/80">
                           {sources.map((source) => (

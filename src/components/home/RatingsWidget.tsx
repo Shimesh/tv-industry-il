@@ -102,9 +102,9 @@ export default function RatingsWidget() {
             return (
               <div key={`${mode}-${row.rank}-${row.showName}`} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] p-1">
                 <div className="w-5 shrink-0 text-center text-sm font-black text-purple-200" dir="ltr">{isUnified ? unifiedRow.displayRank : row.rank}</div>
-                <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName} channel={row.channel} compact />
+                <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={row.showName} channel={row.channel} compact />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-white">{(row as import('@/lib/ratingsTypes').RatingRow).canonicalShowName || row.showName}</p>
+                  <p className="truncate text-xs font-bold text-white">{row.showName}</p>
                   <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-purple-100/60">
                     <ChannelInline channelName={row.channel} />
                     {isUnified && sourceSummary(unifiedRow) ? ` · ${sourceSummary(unifiedRow)}` : ''}
