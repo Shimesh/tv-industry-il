@@ -92,23 +92,81 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen overflow-x-hidden">
+
+      {/* ── CINEMATIC HERO ── */}
       <header className="app-hero">
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-8">
-          <div className="grid grid-cols-1 gap-5">
-            <div className="mx-auto max-w-4xl pt-1 text-center lg:pt-2">
+        {/* Ambient glow orbs */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+          <div
+            className="absolute -top-24 -right-24 w-[44rem] h-[44rem] rounded-full"
+            style={{
+              background: 'radial-gradient(circle, rgba(157,78,221,0.22) 0%, transparent 65%)',
+              filter: 'blur(80px)',
+            }}
+          />
+          <div
+            className="absolute -top-16 -left-16 w-[38rem] h-[38rem] rounded-full"
+            style={{
+              background: 'radial-gradient(circle, rgba(0,240,255,0.15) 0%, transparent 65%)',
+              filter: 'blur(80px)',
+            }}
+          />
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-12">
+          <div className="grid grid-cols-1 gap-6">
+
+            {/* Hero text + CTAs */}
+            <div className="mx-auto max-w-4xl text-center">
               <div className="app-section-kicker mb-4">
-                <Sparkles className="h-4 w-4 text-amber-400" />
+                <Sparkles className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
                 מרכז העבודה של תעשיית הטלוויזיה
               </div>
+
               <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
-                <span className="block">מה קורה היום בתעשייה?</span>
+                <span className="block mt-1">מה קורה היום בתעשייה?</span>
               </h1>
-              <p className="mx-auto mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
-                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
+
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי — בממשק אחד, מהיר וויזואלי.
               </p>
+
+              {/* CTA Buttons */}
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+                <Link
+                  href="/schedule"
+                  className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200 hover:scale-105 active:scale-95"
+                  style={{
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    border: '1px solid rgba(0, 240, 255, 0.35)',
+                    color: 'var(--theme-accent)',
+                    boxShadow: '0 0 24px rgba(0, 240, 255, 0.12)',
+                  }}
+                >
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                  </span>
+                  שידורים חיים
+                </Link>
+
+                <Link
+                  href="/phonebook"
+                  className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200 hover:scale-105 active:scale-95"
+                  style={{
+                    background: 'rgba(157, 78, 221, 0.08)',
+                    border: '1px solid rgba(157, 78, 221, 0.35)',
+                    color: 'var(--theme-accent-secondary)',
+                    boxShadow: '0 0 24px rgba(157, 78, 221, 0.12)',
+                  }}
+                >
+                  אלפון מקצועי
+                </Link>
+              </div>
             </div>
 
+            {/* Widget row */}
             <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
               <RatingsWidget />
               <PersonalProCardWidget />
@@ -119,9 +177,16 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* ── NEWS TICKER ── */}
       <div className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
-        <div className="mx-auto flex max-w-7xl items-center overflow-hidden rounded-none sm:mt-4 sm:rounded-2xl sm:border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
-          <div className="flex shrink-0 items-center gap-1.5 bg-gradient-to-l from-purple-600 via-fuchsia-600 to-blue-600 px-3 py-2">
+        <div
+          className="mx-auto flex max-w-7xl items-center overflow-hidden rounded-none sm:mt-4 sm:rounded-2xl sm:border"
+          style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}
+        >
+          <div
+            className="flex shrink-0 items-center gap-1.5 px-3 py-2"
+            style={{ background: 'linear-gradient(to left, var(--theme-accent-secondary), #5a9fff, var(--theme-accent))' }}
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-white pulse-live" />
             <span className="text-white font-bold text-xs whitespace-nowrap">חדשות</span>
           </div>
@@ -135,32 +200,55 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* ── WEEKLY CALENDAR ── */}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6">
         <WeeklyCalendarWidget />
       </div>
 
+      {/* ── MAIN CONTENT ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+
+        {/* On Air Now */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+        >
           <div className="flex items-center gap-2 mb-3">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
             </span>
             <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--theme-text-secondary)' }}>עכשיו בשידור</h2>
-            <Link href="/schedule" className="text-xs font-medium flex items-center gap-0.5 mr-auto opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+            <Link
+              href="/schedule"
+              className="text-xs font-medium flex items-center gap-0.5 mr-auto opacity-60 hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--theme-accent)' }}
+            >
               לוח מלא <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
           <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+        {/* Latest News */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+        >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--theme-text-secondary)' }}>
-              <TrendingUp className="w-4 h-4 text-purple-400" />
+              <TrendingUp className="w-4 h-4" style={{ color: 'var(--theme-accent)' }} />
               חדשות אחרונות
             </h2>
-            <Link href="/news" className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+            <Link
+              href="/news"
+              className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--theme-accent)' }}
+            >
               כל החדשות <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -174,13 +262,24 @@ export default function HomePage() {
           )}
         </motion.section>
 
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="pb-10">
+        {/* Upcoming Events */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+          className="pb-10"
+        >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--theme-text-secondary)' }}>
-              <Calendar className="w-4 h-4 text-blue-400" />
+              <Calendar className="w-4 h-4" style={{ color: 'var(--theme-accent-secondary)' }} />
               אירועים קרובים
             </h2>
-            <Link href="/news" className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+            <Link
+              href="/news"
+              className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--theme-accent)' }}
+            >
               כל האירועים <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
