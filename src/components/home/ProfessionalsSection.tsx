@@ -46,7 +46,7 @@ export default function ProfessionalsSection() {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href="/phonebook"
+            href="/directory"
             className="text-xs font-medium opacity-60 hover:opacity-100 transition-opacity ml-2"
             style={{ color: '#9d4edd' }}
           >

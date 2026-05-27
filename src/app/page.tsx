@@ -14,7 +14,7 @@ import HomeInfoWidget from '@/components/home/HomeInfoWidget';
 import PersonalProCardWidget from '@/components/home/PersonalProCardWidget';
 import RatingsWidget from '@/components/home/RatingsWidget';
 import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
-import NewsImageCollage from '@/components/home/NewsImageCollage';
+import LiveBroadcastPanel from '@/components/home/LiveBroadcastPanel';
 import CinematicProjectsSection from '@/components/home/CinematicProjectsSection';
 import ProfessionalsSection from '@/components/home/ProfessionalsSection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -226,7 +226,7 @@ export default function HomePage() {
               {/* CTAs */}
               <div className="flex flex-wrap items-center justify-center lg:justify-end gap-3 mt-7">
                 <Link
-                  href="/phonebook"
+                  href="/directory"
                   className="inline-flex items-center gap-2 rounded-full font-bold transition-all duration-300 hover:scale-105 active:scale-95"
                   style={{
                     padding: '0.65rem 1.6rem',
@@ -259,9 +259,9 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* RIGHT side in LTR = LEFT in RTL → Image collage */}
-            <div className="flex-1 w-full order-1 lg:order-2 lg:max-w-[520px]">
-              <NewsImageCollage items={liveNews} />
+            {/* RIGHT side in LTR = LEFT in RTL → Live broadcast panel */}
+            <div className="flex-1 w-full order-1 lg:order-2 lg:max-w-[480px]">
+              <LiveBroadcastPanel channels={broadcastChannels} />
             </div>
           </div>
 
