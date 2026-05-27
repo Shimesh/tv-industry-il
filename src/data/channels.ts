@@ -76,7 +76,7 @@ const channelNameAliases: Array<{ channelId: string; aliases: string[] }> = [
   { channelId: 'gold', aliases: ['ספורט 5 gold', 'ספורט 5 גולד', '5 גולד'] },
   { channelId: 'live', aliases: ['ספורט 5+ live', 'ספורט 5 live', 'ספורט 5+ לייב', 'ספורט 5 לייב', '5 לייב'] },
   { channelId: 'sport56', aliases: ['ספורט 5+', 'ספורט 5 פלוס', '5 פלוס'] },
-  { channelId: 'sport55', aliases: ['ספורט 5', 'ערוץ הספורט'] },
+  { channelId: 'sport55', aliases: ['ספורט 5', 'ערוץ הספורט', '55'] },
   { channelId: 'charlton1', aliases: ['צ׳רלטון 1', "צ'רלטון 1", 'ספורט 1', 'sport 1'] },
   { channelId: 'charlton2', aliases: ['צ׳רלטון 2', "צ'רלטון 2", 'ספורט 2', 'sport 2'] },
   { channelId: 'charlton3', aliases: ['צ׳רלטון 3', "צ'רלטון 3", 'ספורט 3', 'sport 3'] },
