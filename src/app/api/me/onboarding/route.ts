@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       displayName: cleanText(body.displayName),
       department: cleanText(body.department),
       role: cleanText(body.role),
+      phone: cleanText(body.phone, 20),
     });
 
     await recordRouteMetric({ route: '/api/me/onboarding', ok: true, statusCode: 200 });

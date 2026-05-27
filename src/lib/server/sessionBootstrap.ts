@@ -12,6 +12,7 @@ export type OnboardingProfileInput = {
   displayName?: string;
   department?: string;
   role?: string;
+  phone?: string;
 };
 
 export type SessionProfile = {
@@ -180,7 +181,7 @@ export async function finalizeUserOnboardingProfile(
       departments: professional.departments,
       role: professional.role,
       roles: professional.roles,
-      phone: authUser.phoneNumber || '',
+      phone: authUser.phoneNumber || input.phone || '',
       is_consented: false,
       skills: [],
       bio: '',

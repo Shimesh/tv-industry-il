@@ -83,7 +83,7 @@ interface AuthContextType {
   bootstrapContactsTotal: number | null;
   bootstrapContactsUpdatedAt: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string, department: string, role: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, phone: string, department: string, role: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
@@ -103,7 +103,7 @@ const AuthContext = createContext<AuthContextType>({
   bootstrapContactsTotal: null,
   bootstrapContactsUpdatedAt: null,
   signIn: async () => {},
-  signUp: async () => {},
+  signUp: async (_email: string, _password: string, _name: string, _phone: string, _department: string, _role: string) => {},
   signInWithGoogle: async () => {},
   logout: async () => {},
   updateUserProfile: async () => {},
@@ -395,7 +395,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signUp = async (email: string, password: string, name: string, department: string, role: string) => {
+  const signUp = async (email: string, password: string, name: string, phone: string, department: string, role: string) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
 
@@ -408,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       body: JSON.stringify({
         displayName: name,
+        phone,
         department,
         role,
       }),
@@ -422,6 +423,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...defaultProfile(result.user),
       displayName: name,
       email,
+      phone,
       department,
       departments: department ? [department] : [],
       role,
