@@ -541,6 +541,10 @@ export default function AdminPage() {
   const [ratingsJobsLive, setRatingsJobsLive] = useState<Record<string, RatingsJobLive>>({});
   const [showManualPaste, setShowManualPaste] = useState(false);
   const [manualHtml, setManualHtml] = useState('');
+  const [manualDailyText, setManualDailyText] = useState('');
+  const [manualWeeklyText, setManualWeeklyText] = useState('');
+  const [manualWeeklyRange, setManualWeeklyRange] = useState('');
+  const [submittingManualText, setSubmittingManualText] = useState(false);
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
@@ -980,6 +984,62 @@ export default function AdminPage() {
       setRunningRatingsIngest(false);
     }
   }
+
+  function parseMidrugText(text: string) {
+    return text.split('\n')
+      .filter(line => /^\d+\t/.test(line.trim()))
+      .map(line => {
+        const cols = line.trim().split('\t');
+        const rank = parseInt(cols[0]);
+        const showName = (cols[1] || '').trim();
+        const channel = (cols[2] || '').trim();
+        const rawDate = (cols[4] || '').trim();
+        const m = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        const date = m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+        const duration = parseInt(cols[5] || '0') || 0;
+        const ratingPercent = parseFloat(cols[6] || '0') || 0;
+        return { rank, showName, channel, date, duration, ratingPercent };
+      })
+      .filter(r => r.rank > 0 && r.showName && r.channel);
+  }
+
+  async function submitManualText() {
+    const dailyRows = manualDailyText.trim() ? parseMidrugText(manualDailyText) : [];
+    const weeklyRows = manualWeeklyText.trim() ? parseMidrugText(manualWeeklyText) : [];
+    if (dailyRows.length === 0 && weeklyRows.length === 0) {
+      showToast('err', 'לא נמצאו שורות — ודא שהדבקת טקסט טבלה מהאתר');
+      return;
+    }
+    setSubmittingManualText(true);
+    try {
+      if (dailyRows.length > 0) {
+        const date = dailyRows.find(r => r.date)?.date || '';
+        const res = await fetchWithAuth<{ rows?: number; matched?: number }>(
+          '/api/admin/ratings-sync/manual',
+          { method: 'POST', body: JSON.stringify({ type: 'daily', date, rows: dailyRows }) },
+        );
+        showToast('ok', `יומי נשמר: ${res.rows} תוכניות, ${res.matched} הותאמו`);
+      }
+      if (weeklyRows.length > 0) {
+        const weekId = manualWeeklyRange.match(/(\d+)\/(\d{4})/)?.[0]?.replace('/', '-') || 'manual';
+        const res = await fetchWithAuth<{ rows?: number; matched?: number }>(
+          '/api/admin/ratings-sync/manual',
+          { method: 'POST', body: JSON.stringify({ type: 'weekly', weekId, weekRange: manualWeeklyRange || weekId, rows: weeklyRows }) },
+        );
+        showToast('ok', `שבועי נשמר: ${res.rows} תוכניות, ${res.matched} הותאמו`);
+      }
+      setShowManualPaste(false);
+      setManualDailyText('');
+      setManualWeeklyText('');
+      setManualWeeklyRange('');
+      await loadOverview(true);
+    } catch (error) {
+      showToast('err', error instanceof Error ? error.message : 'שגיאה בשמירה');
+    } finally {
+      setSubmittingManualText(false);
+    }
+  }
+
 
   async function runFullSync() {
     if (!window.confirm('להריץ סנכרון מלא?\n\nשלב 1: מיגרציית הפקות → global_productions\nשלב 2: סנכרון אנשי קשר מלוחות עבודה\n\nתהליך זה יעדכן את ה-Pro Cards ואת רשימת אנשי הקשר.')) return;
@@ -1517,31 +1577,65 @@ export default function AdminPage() {
           </div>
 
           {showManualPaste && (
-            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-              <h3 className="mb-2 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
-              <p className="mb-3 text-xs leading-relaxed text-gray-400">
-                פתח את{' '}
-                <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>
-                {' '}והדבק כאן את קוד מקור הטבלה אם המשיכה האוטומטית לא מצליחה.
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" dir="rtl">
+              <h3 className="mb-1 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
+              <p className="mb-4 text-xs text-gray-400">
+                פתח את <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>,
+                סמן את שורות הטבלה (מ-1 עד 20/25), העתק והדבק כאן.
               </p>
-              <textarea
-                value={manualHtml}
-                onChange={(e) => setManualHtml(e.target.value)}
-                placeholder="הדבק כאן את קוד המקור של טבלת מדרוג..."
-                dir="ltr"
-                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
-                rows={5}
-              />
-              <div className="mt-2 flex gap-2">
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג יומי</label>
+                  <textarea
+                    value={manualDailyText}
+                    onChange={(e) => setManualDailyText(e.target.value)}
+                    placeholder={'1\tחדשות 12\tקשת 12\t19:50\t25/05/2026\t109\t10.1\t251\n2\tהבת\tקשת 12\t21:50\t25/05/2026\t58\t9.3\t231'}
+                    dir="ltr"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    rows={5}
+                  />
+                  {manualDailyText.trim() && (
+                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualDailyText).length} שורות זוהו</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג שבועי <span className="font-normal text-gray-500">(אופציונלי)</span></label>
+                  <textarea
+                    value={manualWeeklyText}
+                    onChange={(e) => setManualWeeklyText(e.target.value)}
+                    placeholder={'1\tחתונה ממבט ראשון עונה 8\tקשת 12\t\t\t75\t13.4\t334\n2\tחדשות שבת 12\tקשת 12\tש\t23/05/2026\t96\t11\t276'}
+                    dir="ltr"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    rows={5}
+                  />
+                  {manualWeeklyText.trim() && (
+                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualWeeklyText).length} שורות זוהו</p>
+                  )}
+                  {manualWeeklyText.trim() && (
+                    <input
+                      type="text"
+                      value={manualWeeklyRange}
+                      onChange={(e) => setManualWeeklyRange(e.target.value)}
+                      placeholder="מזהה שבוע — לדוגמה: 21/2026"
+                      dir="ltr"
+                      className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => void submitManualHtml()}
-                  disabled={!manualHtml.trim() || runningRatingsIngest}
+                  onClick={() => void submitManualText()}
+                  disabled={(!manualDailyText.trim() && !manualWeeklyText.trim()) || submittingManualText}
                   className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
                 >
-                  {runningRatingsIngest ? 'מעבד...' : 'ייבוא'}
+                  {submittingManualText ? 'שומר...' : 'שמור'}
                 </button>
                 <button
-                  onClick={() => { setShowManualPaste(false); setManualHtml(''); }}
+                  onClick={() => { setShowManualPaste(false); setManualDailyText(''); setManualWeeklyText(''); setManualWeeklyRange(''); }}
                   className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
                 >
                   ביטול
