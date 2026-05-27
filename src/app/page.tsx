@@ -93,36 +93,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen overflow-x-hidden">
-      <header className="app-hero">
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-8">
-          <div className="grid grid-cols-1 gap-5">
-            <div className="mx-auto max-w-4xl pt-1 text-center lg:pt-2">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                </span>
-                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                מרכז העבודה של תעשיית הטלוויזיה הישראלית
-              </div>
-              <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
-                <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
-                <span className="block">מה קורה היום בתעשייה?</span>
-              </h1>
-              <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
-                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
-                <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
-              </p>
-            </div>
 
-            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:items-stretch">
-              <WorldCupCountdown />
-              <PersonalProCardWidget />
-            </aside>
-          </div>
-        </div>
-      </header>
-
+      {/* 1 → RSS Ticker */}
       <div className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
         <div className="mx-auto flex max-w-7xl items-center overflow-hidden rounded-none sm:mt-4 sm:rounded-2xl sm:border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
           <div className="flex shrink-0 items-center gap-1.5 bg-gradient-to-l from-purple-600 via-fuchsia-600 to-blue-600 px-3 py-2">
@@ -139,13 +111,14 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 2 → Calendar */}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6">
         <WeeklyCalendarWidget />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
 
-        {/* Ratings + Weather */}
+        {/* 3 → Ratings + Weather */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-[0_0_14px_rgba(168,85,247,0.40)]">
@@ -165,7 +138,7 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* On Air Now */}
+        {/* 4 → On Air Now */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 shadow-[0_0_14px_rgba(239,68,68,0.40)]">
@@ -185,7 +158,43 @@ export default function HomePage() {
           <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
-        {/* Latest News */}
+        {/* 5 → Hero (WorldCup + ProCard + greeting) */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+          className="app-hero overflow-hidden rounded-[1.5rem]"
+        >
+          <div className="relative z-10 px-4 py-8 sm:px-6 lg:py-10">
+            <div className="grid grid-cols-1 gap-5">
+              <div className="mx-auto max-w-4xl text-center">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                  </span>
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  מרכז העבודה של תעשיית הטלוויזיה הישראלית
+                </div>
+                <h2 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
+                  <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
+                  <span className="block">מה קורה היום בתעשייה?</span>
+                </h2>
+                <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+                  שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
+                  <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
+                </p>
+              </div>
+              <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:items-stretch">
+                <WorldCupCountdown />
+                <PersonalProCardWidget />
+              </aside>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* 6 → Latest News */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-[0_0_14px_rgba(99,102,241,0.40)]">
@@ -208,7 +217,7 @@ export default function HomePage() {
           )}
         </motion.section>
 
-        {/* Upcoming Events */}
+        {/* 7 → Upcoming Events */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="pb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_0_14px_rgba(59,130,246,0.40)]">
