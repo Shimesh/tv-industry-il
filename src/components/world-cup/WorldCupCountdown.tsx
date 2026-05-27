@@ -78,6 +78,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   const router = useRouter();
   const { activeMatch, nextMatch } = useWorldCup();
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
+  const [trophyError, setTrophyError] = useState(false);
 
   useEffect(() => {
     setDiff(getDiff());
@@ -126,12 +127,18 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         <span className="flex min-w-0 items-center gap-2.5">
           {compact ? (
             <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-              <img
-                src={TROPHY_IMG}
-                alt="גביע העולם"
-                className="h-full w-auto object-contain drop-shadow-[0_0_10px_rgba(212,175,55,0.65)]"
-                loading="eager"
-              />
+              {trophyError ? (
+                <span className="text-2xl drop-shadow-[0_0_10px_rgba(212,175,55,0.65)]">🏆</span>
+              ) : (
+                <img
+                  src={TROPHY_IMG}
+                  alt="גביע העולם"
+                  referrerPolicy="no-referrer"
+                  className="h-full w-auto object-contain drop-shadow-[0_0_10px_rgba(212,175,55,0.65)]"
+                  loading="eager"
+                  onError={() => setTrophyError(true)}
+                />
+              )}
             </span>
           ) : null}
           <span className={compact ? 'min-w-0 text-right' : 'min-w-0 text-right'}>
@@ -159,12 +166,20 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         >
           <span className="pointer-events-none absolute inset-x-8 inset-y-0 rounded-full bg-[#D4AF37] opacity-[0.08] blur-2xl" />
           <span className="pointer-events-none absolute bottom-0 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#D4AF37] opacity-20 blur-2xl" />
-          <img
-            src={TROPHY_IMG}
-            alt="גביע העולם FIFA"
-            className="relative z-10 h-full w-auto object-contain drop-shadow-[0_4px_30px_rgba(212,175,55,0.68)] transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_8px_44px_rgba(212,175,55,0.92)]"
-            loading="eager"
-          />
+          {trophyError ? (
+            <span className="relative z-10 text-[88px] leading-none drop-shadow-[0_4px_30px_rgba(212,175,55,0.68)] transition-all duration-500 group-hover:scale-105">
+              🏆
+            </span>
+          ) : (
+            <img
+              src={TROPHY_IMG}
+              alt="גביע העולם FIFA"
+              referrerPolicy="no-referrer"
+              className="relative z-10 h-full w-auto object-contain drop-shadow-[0_4px_30px_rgba(212,175,55,0.68)] transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_8px_44px_rgba(212,175,55,0.92)]"
+              loading="eager"
+              onError={() => setTrophyError(true)}
+            />
+          )}
         </span>
       )}
 
