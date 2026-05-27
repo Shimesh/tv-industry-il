@@ -26,7 +26,6 @@ export async function GET() {
           value: { stringValue: 'approved' },
         },
       },
-      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
       limit: 30,
     });
 
