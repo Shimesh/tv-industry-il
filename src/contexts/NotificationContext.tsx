@@ -59,7 +59,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [realtimeFailed, setRealtimeFailed] = useState(false);
-  const browserNotifiedRef = useRef(new Set<string>());
+  const browserNotifiedRef = useRef<Set<string>>(loadNotifiedIds());
   const sentRemindersRef = useRef(new Set<string>());
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'default'>(() => (
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
@@ -91,9 +91,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (
       latestUnread &&
       browserPermission === 'granted' &&
-      !browserNotifiedRef.current.has(latestUnread.id)
+      !browserNotifiedRef.current.has(latestUnread.id) &&
+      document.visibilityState !== 'visible'
     ) {
       browserNotifiedRef.current.add(latestUnread.id);
+      persistNotifiedId(latestUnread.id);
       showBrowserNotification(latestUnread.title, latestUnread.message);
     }
   }, [user, browserPermission]);
@@ -397,6 +399,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       {children}
     </NotificationContext.Provider>
   );
+}
+
+const NOTIFIED_STORAGE_KEY = 'tv-browser-notified-ids';
+const NOTIFIED_MAX = 200;
+
+function loadNotifiedIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(NOTIFIED_STORAGE_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistNotifiedId(id: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = loadNotifiedIds();
+    existing.add(id);
+    const arr = Array.from(existing).slice(-NOTIFIED_MAX);
+    localStorage.setItem(NOTIFIED_STORAGE_KEY, JSON.stringify(arr));
+  } catch {}
 }
 
 function showBrowserNotification(title: string, body: string) {

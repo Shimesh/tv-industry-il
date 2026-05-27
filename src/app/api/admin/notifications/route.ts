@@ -5,6 +5,7 @@ import {
   createUserNotification,
   sendFcmPush,
   sendStandardWebPush,
+  removeFcmTokensFromUsers,
   uniqueWebPushSubscriptions,
   type StoredWebPushSubscription,
 } from '@/lib/server/notifications';
@@ -133,7 +134,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (sendPush && fcmTokens.length > 0) {
-      await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl, type: notificationType });
+      const { failedTokens } = await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl, type: notificationType });
+      if (failedTokens.length > 0) {
+        void removeFcmTokensFromUsers(failedTokens);
+      }
     }
     if (sendPush && webPushSubscriptions.length > 0) {
       await sendStandardWebPush({ subscriptions: webPushSubscriptions, title, body: message, linkUrl, type: notificationType });
