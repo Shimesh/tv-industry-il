@@ -323,7 +323,7 @@ function findMasterMatch(row: RatingRow, index: MasterIndexEntry[]): IndustryMas
   for (const candidate of index) {
     for (const rowKey of rowKeys) {
       for (const masterKey of candidate.keys) {
-        const contains = rowKey.length >= 4 && masterKey.length >= 4 && (rowKey.includes(masterKey) || masterKey.includes(rowKey));
+        const contains = rowKey.length >= 4 && masterKey.length >= 4 && rowKey.includes(masterKey);
         const score = contains ? 0.92 : stringSimilarity(rowKey, masterKey);
         if (score > (best?.score || 0)) best = { entry: candidate.entry, score };
       }
