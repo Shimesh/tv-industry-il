@@ -1490,6 +1490,76 @@ export default function AdminPage() {
             />
           </div>
 
+          {showManualPaste && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" dir="rtl" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
+              <h3 className="mb-1 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
+              <p className="mb-4 text-xs text-gray-400">
+                פתח את <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>,
+                סמן את שורות הטבלה (מ-1 עד 20/25), העתק והדבק כאן.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג יומי</label>
+                  <textarea
+                    value={manualDailyText}
+                    onChange={(e) => setManualDailyText(e.target.value)}
+                    placeholder={'1\tחדשות 12\tקשת 12\t19:50\t25/05/2026\t109\t10.1\t251\n2\tהבת\tקשת 12\t21:50\t25/05/2026\t58\t9.3\t231'}
+                    dir="ltr"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    rows={5}
+                  />
+                  {manualDailyText.trim() && (
+                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualDailyText).length} שורות זוהו</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג שבועי <span className="font-normal text-gray-500">(אופציונלי)</span></label>
+                  <textarea
+                    value={manualWeeklyText}
+                    onChange={(e) => setManualWeeklyText(e.target.value)}
+                    placeholder={'1\tחתונה ממבט ראשון עונה 8\tקשת 12\t\t\t75\t13.4\t334\n2\tחדשות שבת 12\tקשת 12\tש\t23/05/2026\t96\t11\t276'}
+                    dir="ltr"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    rows={5}
+                  />
+                  {manualWeeklyText.trim() && (
+                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualWeeklyText).length} שורות זוהו</p>
+                  )}
+                  {manualWeeklyText.trim() && (
+                    <input
+                      type="text"
+                      value={manualWeeklyRange}
+                      onChange={(e) => setManualWeeklyRange(e.target.value)}
+                      placeholder="מזהה שבוע — לדוגמה: 21/2026"
+                      dir="ltr"
+                      className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void submitManualText()}
+                  disabled={(!manualDailyText.trim() && !manualWeeklyText.trim()) || submittingManualText}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {submittingManualText ? 'שומר...' : 'שמור'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowManualPaste(false); setManualDailyText(''); setManualWeeklyText(''); setManualWeeklyRange(''); }}
+                  className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 rounded-2xl border border-gray-800 bg-gray-950/60 p-4">
             <div className="mb-4 flex flex-col gap-1">
               <h3 className="text-sm font-bold text-white">הגדרות Cron</h3>
@@ -1576,73 +1646,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {showManualPaste && (
-            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" dir="rtl">
-              <h3 className="mb-1 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
-              <p className="mb-4 text-xs text-gray-400">
-                פתח את <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>,
-                סמן את שורות הטבלה (מ-1 עד 20/25), העתק והדבק כאן.
-              </p>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג יומי</label>
-                  <textarea
-                    value={manualDailyText}
-                    onChange={(e) => setManualDailyText(e.target.value)}
-                    placeholder={'1\tחדשות 12\tקשת 12\t19:50\t25/05/2026\t109\t10.1\t251\n2\tהבת\tקשת 12\t21:50\t25/05/2026\t58\t9.3\t231'}
-                    dir="ltr"
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
-                    rows={5}
-                  />
-                  {manualDailyText.trim() && (
-                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualDailyText).length} שורות זוהו</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-300">רייטינג שבועי <span className="font-normal text-gray-500">(אופציונלי)</span></label>
-                  <textarea
-                    value={manualWeeklyText}
-                    onChange={(e) => setManualWeeklyText(e.target.value)}
-                    placeholder={'1\tחתונה ממבט ראשון עונה 8\tקשת 12\t\t\t75\t13.4\t334\n2\tחדשות שבת 12\tקשת 12\tש\t23/05/2026\t96\t11\t276'}
-                    dir="ltr"
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
-                    rows={5}
-                  />
-                  {manualWeeklyText.trim() && (
-                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualWeeklyText).length} שורות זוהו</p>
-                  )}
-                  {manualWeeklyText.trim() && (
-                    <input
-                      type="text"
-                      value={manualWeeklyRange}
-                      onChange={(e) => setManualWeeklyRange(e.target.value)}
-                      placeholder="מזהה שבוע — לדוגמה: 21/2026"
-                      dir="ltr"
-                      className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => void submitManualText()}
-                  disabled={(!manualDailyText.trim() && !manualWeeklyText.trim()) || submittingManualText}
-                  className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
-                >
-                  {submittingManualText ? 'שומר...' : 'שמור'}
-                </button>
-                <button
-                  onClick={() => { setShowManualPaste(false); setManualDailyText(''); setManualWeeklyText(''); setManualWeeklyRange(''); }}
-                  className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
-                >
-                  ביטול
-                </button>
-              </div>
-            </div>
-          )}
         </section>
 
         <section className="hidden rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
