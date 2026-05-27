@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { VersionAnnouncer } from '@/components/VersionAnnouncer';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WorldCupProvider } from '@/contexts/WorldCupContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -149,6 +150,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <NotificationProvider>
               <ToastProvider>
                 <ProductionRegistryProvider>
+                <VersionAnnouncer />
                 <FCMForegroundListener />
                 <PushBanner />
                 <CallProvider>

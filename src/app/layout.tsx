@@ -10,8 +10,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import ScrollToTop from '@/components/ScrollToTop';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
-import { checkAndAnnounceVersion } from '@/lib/server/announceVersion';
-
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
 const appDescription =
   'הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - שידור חי, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד';
@@ -50,12 +48,11 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  void checkAndAnnounceVersion();
   return (
     <html lang="he" dir="rtl">
       <head>
