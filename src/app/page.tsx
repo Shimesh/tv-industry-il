@@ -14,7 +14,7 @@ import HomeInfoWidget from '@/components/home/HomeInfoWidget';
 import PersonalProCardWidget from '@/components/home/PersonalProCardWidget';
 import RatingsWidget from '@/components/home/RatingsWidget';
 import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
-import LiveBroadcastPanel from '@/components/home/LiveBroadcastPanel';
+import HeroCinematicCollage from '@/components/home/HeroCinematicCollage';
 import CinematicProjectsSection from '@/components/home/CinematicProjectsSection';
 import ProfessionalsSection from '@/components/home/ProfessionalsSection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -259,9 +259,9 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* RIGHT side in LTR = LEFT in RTL → Live broadcast panel */}
-            <div className="flex-1 w-full order-1 lg:order-2 lg:max-w-[480px]">
-              <LiveBroadcastPanel channels={broadcastChannels} />
+            {/* RIGHT side in LTR = LEFT in RTL → Cinematic collage */}
+            <div className="flex-1 w-full order-1 lg:order-2 lg:max-w-[500px]">
+              <HeroCinematicCollage />
             </div>
           </div>
 
