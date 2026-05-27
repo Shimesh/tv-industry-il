@@ -1,4 +1,4 @@
-import { createDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
+import { createDocument, getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import { getFirebaseAdminMessaging } from '@/lib/server/firebaseAdmin';
 import { getPrimaryAdminUid } from '@/lib/server/primaryAdmin';
 import webPush from 'web-push';
@@ -97,19 +97,31 @@ export async function createUserNotification(params: CreateUserNotificationParam
   });
 }
 
-export async function sendFcmPush(params: SendFcmPushParams) {
+const STALE_FCM_ERRORS = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-argument',
+]);
+
+export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTokens: string[] }> {
   const tokens = uniqueStrings(params.tokens);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return { failedTokens: [] };
 
   const messaging = getFirebaseAdminMessaging();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
   const linkUrl = cleanInternalLink(params.linkUrl) || '/';
   const link = `${appUrl}${linkUrl}`;
+  const failedTokens: string[] = [];
 
   const chunkSize = 500;
   for (let i = 0; i < tokens.length; i += chunkSize) {
-    await messaging.sendEachForMulticast({
-      tokens: tokens.slice(i, i + chunkSize),
+    const chunk = tokens.slice(i, i + chunkSize);
+    const response = await messaging.sendEachForMulticast({
+      tokens: chunk,
+      notification: {
+        title: params.title,
+        body: params.body,
+      },
       data: {
         source: 'firebase',
         title: params.title,
@@ -121,8 +133,41 @@ export async function sendFcmPush(params: SendFcmPushParams) {
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
+        notification: {
+          title: params.title,
+          body: params.body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-72x72.png',
+          data: { link, linkUrl, type: params.type || 'general' },
+        },
       },
     });
+
+    response.responses.forEach((result, idx) => {
+      if (!result.success && result.error && STALE_FCM_ERRORS.has(result.error.code)) {
+        failedTokens.push(chunk[idx]);
+      }
+    });
+  }
+
+  return { failedTokens };
+}
+
+export async function removeFcmTokensFromUsers(staleTokens: string[]): Promise<void> {
+  if (staleTokens.length === 0) return;
+  const staleSet = new Set(staleTokens);
+  try {
+    const users = await listDocuments<{ id: string; fcmTokens?: unknown }>('users');
+    await Promise.all(
+      users
+        .filter((u) => Array.isArray(u.fcmTokens) && (u.fcmTokens as string[]).some((t) => staleSet.has(t)))
+        .map((u) => {
+          const cleaned = (u.fcmTokens as string[]).filter((t) => !staleSet.has(t));
+          return patchDocument(`users/${u.id}`, { fcmTokens: cleaned } as Parameters<typeof patchDocument>[1]);
+        }),
+    );
+  } catch (err) {
+    console.error('[notifications] failed to remove stale FCM tokens:', err);
   }
 }
 
@@ -214,12 +259,13 @@ export async function notifyAdminsOfPendingUser(params: {
     );
 
     if (fcmTokens.length > 0) {
-      await sendFcmPush({
+      const { failedTokens } = await sendFcmPush({
         tokens: fcmTokens,
         title: 'New User Waiting',
         body: `New User Waiting: ${params.displayLabel} is requesting access to TV Industry IL.`,
         linkUrl,
       });
+      if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
     }
 
     const subscriptions = uniqueWebPushSubscriptions(

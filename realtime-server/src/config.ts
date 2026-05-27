@@ -14,6 +14,8 @@ export const realtimeConfig = {
   storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
   persistenceMode: process.env.CHAT_V2_PERSISTENCE_MODE || 'firestore',
   allowAnonymousFallback: parseBoolean(process.env.CHAT_V2_ALLOW_ANON_FALLBACK, false),
+  notifyApiUrl: process.env.NOTIFY_API_URL || process.env.CORS_ORIGIN || 'http://localhost:3000',
+  notifyApiSecret: process.env.NOTIFY_API_SECRET || '',
 };
 
 export function getFirebaseServiceAccountJson(): Record<string, unknown> | null {

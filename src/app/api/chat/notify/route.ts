@@ -1,0 +1,114 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getDocument } from '@/lib/server/firestoreAdminRest';
+import {
+  sendFcmPush,
+  sendStandardWebPush,
+  createUserNotification,
+  removeFcmTokensFromUsers,
+  uniqueWebPushSubscriptions,
+} from '@/lib/server/notifications';
+
+type NotifyBody = {
+  chatId: string;
+  senderUid: string;
+  senderName: string;
+  messageText?: string;
+  isEncrypted?: boolean;
+  memberUids: string[];
+};
+
+type RawUserDoc = {
+  id: string;
+  fcmTokens?: unknown;
+  webPushSubscriptions?: unknown;
+};
+
+function uniqueStrings(values: unknown[]): string[] {
+  return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const secret = process.env.NOTIFY_API_SECRET?.trim();
+  if (secret) {
+    const provided = request.headers.get('x-notify-secret')?.trim();
+    if (provided !== secret) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+  }
+
+  let body: NotifyBody;
+  try {
+    body = (await request.json()) as NotifyBody;
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  const { chatId, senderUid, senderName, messageText, isEncrypted, memberUids } = body;
+  if (!chatId || !senderUid || !Array.isArray(memberUids) || memberUids.length === 0) {
+    return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+  }
+
+  const recipientUids = memberUids.filter((uid) => uid !== senderUid);
+  if (recipientUids.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  const title = senderName || 'הודעה חדשה';
+  const bodyText = isEncrypted
+    ? 'קיבלת הודעה מוצפנת חדשה'
+    : (messageText || 'קיבלת הודעה חדשה').slice(0, 120);
+  const linkUrl = '/chat';
+
+  try {
+    const userDocs = await Promise.allSettled(
+      recipientUids.map((uid) => getDocument<RawUserDoc>(`users/${uid}`)),
+    );
+
+    const allFcmTokens: string[] = [];
+    const allWebPushSubs: unknown[] = [];
+
+    const bellPromises: Promise<void>[] = [];
+
+    for (let i = 0; i < recipientUids.length; i++) {
+      const uid = recipientUids[i];
+      const result = userDocs[i];
+      const userData = result.status === 'fulfilled' ? result.value : null;
+
+      const fcmTokens = Array.isArray(userData?.fcmTokens) ? userData.fcmTokens as string[] : [];
+      const webPushSubs = Array.isArray(userData?.webPushSubscriptions) ? userData.webPushSubscriptions : [];
+
+      allFcmTokens.push(...fcmTokens);
+      allWebPushSubs.push(...webPushSubs);
+
+      bellPromises.push(
+        createUserNotification({
+          userId: uid,
+          title,
+          message: bodyText,
+          linkUrl,
+          type: 'new_message',
+          source: 'system',
+          createdBy: senderUid,
+        }),
+      );
+    }
+
+    await Promise.all(bellPromises);
+
+    const tokens = uniqueStrings(allFcmTokens);
+    if (tokens.length > 0) {
+      const { failedTokens } = await sendFcmPush({ tokens, title, body: bodyText, linkUrl, type: 'new_message' });
+      if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
+    }
+
+    const webPushSubscriptions = uniqueWebPushSubscriptions(allWebPushSubs);
+    if (webPushSubscriptions.length > 0) {
+      await sendStandardWebPush({ subscriptions: webPushSubscriptions, title, body: bodyText, linkUrl, type: 'new_message' });
+    }
+
+    return NextResponse.json({ ok: true, recipients: recipientUids.length });
+  } catch (err) {
+    console.error('[chat/notify] error:', err);
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+  }
+}
