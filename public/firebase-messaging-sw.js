@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v2.6.13';
+const CACHE_NAME = 'tv-industry-il-v2.6.14';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -65,6 +65,8 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+let firebaseInitialized = false;
+
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -75,7 +77,9 @@ self.addEventListener('push', (event) => {
     payload = { data: { title: 'TV Industry IL', body: event.data.text(), link: '/' } };
   }
 
-  if (payload?.data?.source === 'firebase') return;
+  // When Firebase SDK is active it handles FCM messages via onBackgroundMessage.
+  // Only skip if Firebase actually initialized — otherwise show it ourselves.
+  if (payload?.data?.source === 'firebase' && firebaseInitialized) return;
   event.waitUntil(showAppNotification(payload));
 });
 
@@ -152,6 +156,7 @@ if (
 
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
+  firebaseInitialized = true;
 
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Background message received:', payload);

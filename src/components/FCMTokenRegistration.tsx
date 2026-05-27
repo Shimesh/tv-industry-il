@@ -65,9 +65,13 @@ async function registerWebPushSubscription(
 ): Promise<PushRegistrationResult> {
   if (!('PushManager' in window)) return { ok: false, reason: 'no-push-manager' };
 
-  const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim();
+  // FCM VAPID key and Web Push VAPID key are the same key — accept either env var
+  const publicKey = (
+    process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY?.trim()
+  );
   if (!publicKey) {
-    console.log('[WebPush] NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY is not set.');
+    console.log('[WebPush] No VAPID public key configured.');
     return { ok: false, reason: 'no-web-push-vapid-key' };
   }
 
