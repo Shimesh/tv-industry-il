@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, RefreshCw, Trophy } from 'lucide-react';
-import ChannelLogo from '@/components/ChannelLogo';
 import RatingLogo from '@/components/ratings/RatingLogo';
 import { findChannelByName } from '@/data/channels';
 import type { RatingRow, RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
@@ -23,16 +22,13 @@ function formatDate(value: string | undefined): string {
   return new Date(parsed).toLocaleDateString('he-IL');
 }
 
-function ChannelNameWithLogo({ channelName }: { channelName?: string }) {
+function channelLabel(channelName?: string): string {
+  if (!channelName) return '';
   const channel = findChannelByName(channelName);
-  if (!channelName) return null;
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      {channel ? <ChannelLogo channel={channel} size={26} rounded={7} /> : null}
-      <span>{channelName}</span>
-    </span>
-  );
+  if (channel?.number) return `ערוץ ${channel.number}`;
+  const match = channelName.match(/\d+/);
+  if (match) return `ערוץ ${match[0]}`;
+  return channelName;
 }
 
 function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
@@ -81,8 +77,10 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-300">
-                  <ChannelNameWithLogo channelName={row.channel} />
-                  {unifiedRow.category ? <span className="mr-2 rounded-full bg-blue-400/10 px-2 py-0.5 text-xs text-blue-200">{unifiedRow.category}</span> : null}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm">{channelLabel(row.channel)}</span>
+                    {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-2 py-0.5 text-xs text-blue-200">{unifiedRow.category}</span> : null}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-slate-300" dir="ltr">{formatDate(row.date)}</td>
                 <td className="px-4 py-3 text-slate-300">

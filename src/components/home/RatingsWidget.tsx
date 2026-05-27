@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, BarChart3, RefreshCw } from 'lucide-react';
-import ChannelLogo from '@/components/ChannelLogo';
 import RatingLogo from '@/components/ratings/RatingLogo';
 import { findChannelByName } from '@/data/channels';
 import type { RatingsApiResponse, RatingsMode } from '@/lib/ratingsTypes';
@@ -14,16 +13,13 @@ const MODES: Array<{ key: RatingsMode; label: string }> = [
   { key: 'weekly', label: 'רייטינג שבועי' },
 ];
 
-function ChannelInline({ channelName }: { channelName?: string }) {
+function channelLabel(channelName?: string): string {
+  if (!channelName) return '';
   const channel = findChannelByName(channelName);
-  if (!channelName) return null;
-
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      {channel ? <ChannelLogo channel={channel} size={18} rounded={5} /> : null}
-      <span className="truncate">{channelName}</span>
-    </span>
-  );
+  if (channel?.number) return `ערוץ ${channel.number}`;
+  const match = channelName.match(/\d+/);
+  if (match) return `ערוץ ${match[0]}`;
+  return channelName;
 }
 
 export default function RatingsWidget() {
@@ -105,11 +101,11 @@ export default function RatingsWidget() {
                 <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={row.showName} channel={row.channel} compact />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-white">{row.showName}</p>
-                  <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-purple-100/60">
-                    <ChannelInline channelName={row.channel} />
-                    {isUnified && sourceSummary(unifiedRow) ? ` · ${sourceSummary(unifiedRow)}` : ''}
-                    {viewersK != null ? ' · ' : ''}
-                    {viewersK != null ? <span dir="ltr">{viewersK}K</span> : null}
+                  <p className="flex min-w-0 flex-wrap items-center gap-1 text-[11px] text-purple-100/60">
+                    <span>{channelLabel(row.channel)}</span>
+                    {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-300">{unifiedRow.category}</span> : null}
+                    {isUnified && sourceSummary(unifiedRow) ? <span>· {sourceSummary(unifiedRow)}</span> : null}
+                    {viewersK != null ? <span dir="ltr">· {viewersK}K</span> : null}
                   </p>
                 </div>
                 <div className="rounded-lg bg-fuchsia-400/15 px-2.5 py-1 text-sm font-black text-fuchsia-100" dir="ltr">
