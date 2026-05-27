@@ -444,7 +444,7 @@ export default function OnAirNowCarousel({
                 )}
 
                 <div className="absolute bottom-0 left-0 right-0 p-4 text-right">
-                  <div className="mb-1 flex flex-row-reverse items-center justify-end gap-1.5">
+                  <div className="mb-1 flex items-center justify-end gap-1.5">
                     <span className="text-[10px] text-white/70">
                       {program ? formatBroadcastTime(program.startAt) : ''}
                     </span>
