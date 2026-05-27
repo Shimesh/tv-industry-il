@@ -152,7 +152,7 @@ export async function removeFcmTokensFromUsers(staleTokens: string[]): Promise<v
         .filter((u) => Array.isArray(u.fcmTokens) && (u.fcmTokens as string[]).some((t) => staleSet.has(t)))
         .map((u) => {
           const cleaned = (u.fcmTokens as string[]).filter((t) => !staleSet.has(t));
-          return patchDocument(`users/${u.id}`, { fcmTokens: cleaned } as Record<string, unknown>);
+          return patchDocument(`users/${u.id}`, { fcmTokens: cleaned as unknown[] });
         }),
     );
   } catch (err) {
