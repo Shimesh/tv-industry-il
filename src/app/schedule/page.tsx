@@ -109,11 +109,7 @@ function SchedulePageInner() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
-      <div className="sticky z-30 border-b px-2 py-2 lg:hidden" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', top: 'var(--app-header-offset)' }}>
-        <ChannelSidebar selectedChannelId={selectedChannelId} onSelectChannel={selectChannel} isMobile byChannelId={byChannelId} loading={broadcastsLoading} />
-      </div>
-
-      <div className="flex" style={{ minHeight: 'calc(100dvh - var(--app-header-offset))' }}>
+      <div className="flex" style={{ height: 'calc(100dvh - var(--app-header-offset))' }}>
         <aside
           className={`hidden shrink-0 overflow-hidden border-l transition-all duration-300 lg:block ${sidebarCollapsed ? 'w-0 p-0' : 'w-64 p-3'}`}
           style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
@@ -143,8 +139,11 @@ function SchedulePageInner() {
         )}
 
         <main className="flex-1 overflow-y-auto">
+          <div className="sticky top-0 z-30 border-b px-2 py-2 lg:hidden" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+            <ChannelSidebar selectedChannelId={selectedChannelId} onSelectChannel={selectChannel} isMobile byChannelId={byChannelId} loading={broadcastsLoading} />
+          </div>
           <div className="mx-auto max-w-5xl space-y-5 px-3 py-4 sm:px-6 sm:py-6">
-            <section id="live" className="scroll-mt-[calc(var(--app-header-offset)+1rem)]">
+            <section id="live" className="scroll-mt-[5.5rem] lg:scroll-mt-4">
               <VideoPlayer channel={channel} stream={stream} onNext={goToNextChannel} onPrev={goToPrevChannel} currentProgram={currentProgram?.title} />
             </section>
 
