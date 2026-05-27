@@ -545,6 +545,7 @@ export default function AdminPage() {
   const [manualWeeklyText, setManualWeeklyText] = useState('');
   const [manualWeeklyRange, setManualWeeklyRange] = useState('');
   const [submittingManualText, setSubmittingManualText] = useState(false);
+  const [fixingWeekId, setFixingWeekId] = useState(false);
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
@@ -1001,6 +1002,22 @@ export default function AdminPage() {
         return { rank, showName, channel, date, duration, ratingPercent };
       })
       .filter(r => r.rank > 0 && r.showName && r.channel);
+  }
+
+  async function fixWeeklyDocId(oldWeekId: string, newWeekId: string, weekRange: string) {
+    setFixingWeekId(true);
+    try {
+      await fetchWithAuth('/api/admin/ratings-sync/manual', {
+        method: 'PATCH',
+        body: JSON.stringify({ oldWeekId, newWeekId, weekRange }),
+      });
+      showToast('ok', `שבוע תוקן: week-${oldWeekId} → week-${newWeekId}`);
+      await loadOverview(true);
+    } catch (error) {
+      showToast('err', error instanceof Error ? error.message : 'שגיאה בתיקון');
+    } finally {
+      setFixingWeekId(false);
+    }
   }
 
   async function submitManualText() {
@@ -1540,7 +1557,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => void submitManualText()}
@@ -1548,6 +1565,15 @@ export default function AdminPage() {
                   className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
                 >
                   {submittingManualText ? 'שומר...' : 'שמור'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void fixWeeklyDocId('manual', '21-2026', '17/05/2026 – 23/05/2026')}
+                  disabled={fixingWeekId}
+                  className="rounded-lg border border-amber-700 bg-amber-900/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-900/60 disabled:opacity-50"
+                  title="תקן את מסמך week-manual → week-21-2026"
+                >
+                  {fixingWeekId ? 'מתקן...' : 'תקן שבוע 21/2026'}
                 </button>
                 <button
                   type="button"

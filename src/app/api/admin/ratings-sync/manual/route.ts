@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
 import { enrichRows } from '@/lib/server/ratings';
-import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { deleteDocument, getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import type { RatingRow, RatingsDailyDocument, RatingsWeeklyDocument } from '@/lib/ratingsTypes';
 import type { IndustryMasterEntry } from '@/lib/proCardTypes';
 
@@ -93,4 +93,37 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+}
+
+// PATCH — rename a weekly document (fix bad weekId/weekRange)
+export async function PATCH(request: NextRequest) {
+  const authUser = await requireAdminRequest(request);
+  if (authUser instanceof NextResponse) return authUser;
+
+  const { oldWeekId, newWeekId, weekRange } = await request.json() as {
+    oldWeekId: string;
+    newWeekId: string;
+    weekRange: string;
+  };
+
+  if (!oldWeekId || !newWeekId || !weekRange) {
+    return NextResponse.json({ error: 'Missing oldWeekId / newWeekId / weekRange' }, { status: 400 });
+  }
+
+  const existing = await getDocument<RatingsWeeklyDocument>(`ratings_weekly/week-${oldWeekId}`);
+  if (!existing) {
+    return NextResponse.json({ error: `Document week-${oldWeekId} not found` }, { status: 404 });
+  }
+
+  const fixed: RatingsWeeklyDocument = {
+    ...existing,
+    weekId: newWeekId,
+    weekRange,
+    fetchedAt: new Date().toISOString(),
+  };
+
+  await patchDocument(`ratings_weekly/week-${newWeekId}`, fixed as unknown as Record<string, never>);
+  await deleteDocument(`ratings_weekly/week-${oldWeekId}`);
+
+  return NextResponse.json({ success: true, from: `week-${oldWeekId}`, to: `week-${newWeekId}`, weekRange, rows: existing.top25?.length ?? 0 });
 }
