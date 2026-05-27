@@ -322,7 +322,7 @@ export default function Navigation() {
                     name={effectiveProfile?.displayName || user?.displayName || user?.email || 'משתמש'}
                     photoURL={effectiveProfile?.photoURL || user?.photoURL || null}
                     size="sm"
-                    isOnline={effectiveProfile?.isOnline !== false}
+                    isOnline={Boolean(user)}
                   />
                   <span className="hidden max-w-[100px] truncate text-sm font-bold text-[var(--theme-text)] 2xl:block">
                     {effectiveProfile?.displayName || user?.displayName || 'משתמש'}
