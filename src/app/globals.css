@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
-/* Theme CSS Variables - Default (Cinematic Dark) */
+/* Theme CSS Variables - Default (DUSK theme) */
 :root {
-  --background: #0a0a0f;
-  --foreground: #ffffff;
+  --background: #0e0a1f;
+  --foreground: #f5ecdf;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
@@ -12,25 +12,25 @@
   --app-header-offset: calc(var(--app-header-height) + var(--safe-area-top));
 
   /* Theme System Variables */
-  --theme-bg: #0a0a0f;
-  --theme-bg-secondary: #0f0f1a;
-  --theme-bg-card: #13131f;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #a0aec0;
-  --theme-border: rgba(0, 240, 255, 0.10);
-  --theme-accent: #00f0ff;
-  --theme-accent-secondary: #9d4edd;
-  --theme-accent-glow: rgba(0, 240, 255, 0.18);
+  --theme-bg: #0e0a1f;
+  --theme-bg-secondary: #18122e;
+  --theme-bg-card: #211a3d;
+  --theme-text: #f5ecdf;
+  --theme-text-secondary: #b8a8c9;
+  --theme-border: rgba(245, 236, 223, 0.12);
+  --theme-accent: #e07a5f;
+  --theme-accent-secondary: #5fb0a8;
+  --theme-accent-glow: rgba(224, 122, 95, 0.20);
   --theme-success: #22c55e;
   --theme-warning: #f59e0b;
   --theme-danger: #ef4444;
   --theme-info: #38bdf8;
-  --theme-nav-bg: rgba(10, 10, 15, 0.95);
+  --theme-nav-bg: rgba(14, 10, 31, 0.94);
 
-  /* Brand gradient — neon purple → blue → cyan */
-  --brand-grad-start: #9d4edd;
-  --brand-grad-mid:   #5a9fff;
-  --brand-grad-end:   #00f0ff;
+  /* Brand gradient — sienna → coral → dusty teal */
+  --brand-grad-start: #c84e3e;
+  --brand-grad-mid:   #e8956b;
+  --brand-grad-end:   #5fb0a8;
 
   /* Channel hues — vivid broadcaster identities */
   --ch-kan11:    #1e6fd9;
@@ -76,9 +76,9 @@ body {
 .app-ambient {
   position: relative;
   background:
-    radial-gradient(circle at 8% 3%, color-mix(in srgb, var(--theme-accent-secondary) 10%, transparent), transparent 34rem),
-    radial-gradient(circle at 92% 6%, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 30rem),
-    var(--theme-bg);
+    radial-gradient(circle at 12% 2%, color-mix(in srgb, var(--theme-accent) 18%, transparent), transparent 28rem),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--theme-accent-secondary) 16%, transparent), transparent 26rem),
+    linear-gradient(180deg, var(--theme-bg) 0%, color-mix(in srgb, var(--theme-bg) 88%, #000 12%) 100%);
 }
 
 .app-panel {
@@ -120,9 +120,9 @@ body {
   max-width: 100vw;
   border-bottom: 1px solid var(--theme-border);
   background:
-    radial-gradient(ellipse at 78% 0%, color-mix(in srgb, var(--theme-accent-secondary) 16%, transparent), transparent 35rem),
-    radial-gradient(ellipse at 18% 0%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 30rem),
-    var(--theme-bg);
+    radial-gradient(circle at 18% 16%, color-mix(in srgb, var(--theme-accent) 26%, transparent), transparent 26rem),
+    radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--theme-accent-secondary) 22%, transparent), transparent 24rem),
+    linear-gradient(135deg, color-mix(in srgb, var(--theme-bg-card) 74%, transparent), transparent);
 }
 
 .app-hero::after {
@@ -130,12 +130,12 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.18;
+  opacity: 0.28;
   background-image:
     linear-gradient(var(--theme-border) 1px, transparent 1px),
     linear-gradient(90deg, var(--theme-border) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, black, transparent 65%);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
 }
 
 .app-section-kicker {
@@ -270,7 +270,7 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
 
 @supports (-webkit-touch-callout: none) {
   :root {
-    --theme-nav-bg: rgba(10, 10, 15, 0.98);
+    --theme-nav-bg: rgba(14, 10, 31, 0.98);
   }
 
   html,
