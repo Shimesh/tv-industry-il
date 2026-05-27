@@ -345,8 +345,9 @@ export default function WeeklyCalendarWidget() {
       key={production.id}
       className="rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
       style={{
-        background: mine ? 'color-mix(in srgb, var(--theme-warning) 22%, transparent)' : 'var(--theme-bg-secondary)',
+        background: mine ? 'color-mix(in srgb, var(--theme-warning) 26%, transparent)' : 'color-mix(in srgb, var(--theme-bg-secondary) 80%, transparent)',
         color: mine ? 'var(--theme-warning)' : 'var(--theme-text-secondary)',
+        border: mine ? '1px solid color-mix(in srgb, var(--theme-warning) 32%, transparent)' : '1px solid color-mix(in srgb, var(--theme-border) 60%, transparent)',
         opacity: isPast ? 0.65 : 1,
       }}
     >
@@ -357,11 +358,12 @@ export default function WeeklyCalendarWidget() {
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border shadow-[0_18px_48px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)] transition duration-200 hover:shadow-[0_24px_64px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.10)]" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+      <div className="overflow-hidden rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.25),0_8px_20px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.09)] transition duration-200 hover:shadow-[0_32px_80px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.13)]" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+        <div className="h-[3px] bg-gradient-to-l from-orange-500 via-amber-400 to-purple-500 opacity-90" />
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500">
-              <Clapperboard className="h-3.5 w-3.5 text-white" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 shadow-[0_0_14px_rgba(251,146,60,0.45)]">
+              <Clapperboard className="h-4 w-4 text-white" />
             </div>
             <div>
               <h2 className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>
@@ -420,8 +422,17 @@ export default function WeeklyCalendarWidget() {
                 onClick={() => dayProds.length > 0 && setPopupDate(dateStr)}
                 className="relative flex flex-col items-center gap-1.5 px-1 py-3 transition-all enabled:hover:-translate-y-0.5 enabled:hover:bg-[var(--theme-accent-glow)] enabled:hover:shadow-inner"
                 style={{
-                  background: isMyDay ? 'color-mix(in srgb, var(--theme-warning) 12%, transparent)' : isToday ? 'var(--theme-accent-glow)' : 'transparent',
+                  background: isMyDay
+                    ? 'linear-gradient(180deg, color-mix(in srgb, var(--theme-warning) 18%, transparent), color-mix(in srgb, var(--theme-warning) 7%, transparent))'
+                    : isToday
+                    ? 'linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 22%, transparent), color-mix(in srgb, var(--theme-accent) 8%, transparent))'
+                    : 'transparent',
                   borderLeft: index < 6 ? '1px solid var(--theme-border)' : undefined,
+                  boxShadow: isMyDay
+                    ? 'inset 0 0 0 1.5px color-mix(in srgb, var(--theme-warning) 30%, transparent)'
+                    : isToday
+                    ? 'inset 0 0 0 1.5px color-mix(in srgb, var(--theme-accent) 30%, transparent)'
+                    : undefined,
                   cursor: dayProds.length > 0 ? 'pointer' : 'default',
                 }}
               >
@@ -437,7 +448,7 @@ export default function WeeklyCalendarWidget() {
                   {DAY_NAMES[index]}
                 </span>
                 <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black transition-all ${isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-sm' : ''}`}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black transition-all ${isToday ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-[0_0_12px_rgba(147,51,234,0.65)] ring-2 ring-white/20' : ''}`}
                   style={!isToday ? {
                     color: isMyDay ? 'var(--theme-warning)' : isPast ? 'var(--theme-text-secondary)' : 'var(--theme-text)',
                     opacity: isPast && !isMyDay ? 0.4 : 1,

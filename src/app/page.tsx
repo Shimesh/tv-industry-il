@@ -96,23 +96,28 @@ export default function HomePage() {
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-8">
           <div className="grid grid-cols-1 gap-5">
             <div className="mx-auto max-w-4xl pt-1 text-center lg:pt-2">
-              <div className="app-section-kicker mb-4">
-                <Sparkles className="h-4 w-4 text-amber-400" />
-                מרכז העבודה של תעשיית הטלוויזיה
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                </span>
+                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                מרכז העבודה של תעשיית הטלוויזיה הישראלית
               </div>
               <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
                 <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
                 <span className="block">מה קורה היום בתעשייה?</span>
               </h1>
-              <p className="mx-auto mt-3 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
-                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי בממשק אחד מסודר, מהיר וויזואלי.
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+                שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
+                <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
               </p>
             </div>
 
             <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
-              <RatingsWidget />
-              <PersonalProCardWidget />
               <WorldCupCountdown />
+              <PersonalProCardWidget />
+              <RatingsWidget />
               <HomeInfoWidget />
             </aside>
           </div>
@@ -141,13 +146,18 @@ export default function HomePage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-            </span>
-            <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--theme-text-secondary)' }}>עכשיו בשידור</h2>
-            <Link href="/schedule" className="text-xs font-medium flex items-center gap-0.5 mr-auto opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 shadow-[0_0_14px_rgba(239,68,68,0.40)]">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-200 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+              </span>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>עכשיו בשידור</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>שידורים חיים ישירים</p>
+            </div>
+            <Link href="/schedule" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
               לוח מלא <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
@@ -155,12 +165,15 @@ export default function HomePage() {
         </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--theme-text-secondary)' }}>
-              <TrendingUp className="w-4 h-4 text-purple-400" />
-              חדשות אחרונות
-            </h2>
-            <Link href="/news" className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-[0_0_14px_rgba(168,85,247,0.40)]">
+              <TrendingUp className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>חדשות אחרונות</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>עדכוני תעשייה בזמן אמת</p>
+            </div>
+            <Link href="/news" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
               כל החדשות <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -175,12 +188,15 @@ export default function HomePage() {
         </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="pb-10">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2" style={{ color: 'var(--theme-text-secondary)' }}>
-              <Calendar className="w-4 h-4 text-blue-400" />
-              אירועים קרובים
-            </h2>
-            <Link href="/news" className="text-xs font-medium flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--theme-accent)' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_0_14px_rgba(59,130,246,0.40)]">
+              <Calendar className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>אירועים קרובים</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>כנסים, הקרנות ואירועי תעשייה</p>
+            </div>
+            <Link href="/news" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
               כל האירועים <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>

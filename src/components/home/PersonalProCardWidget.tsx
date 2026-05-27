@@ -156,7 +156,7 @@ export default function PersonalProCardWidget() {
           </div>
 
           <div className="relative shrink-0">
-            <div className="absolute -inset-1.5 rounded-full bg-gradient-to-br from-amber-300 to-sky-400 opacity-70 blur-md" />
+            <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-amber-300 via-sky-400 to-purple-500 opacity-85 blur-lg" />
             <div className={`relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${deptColors[primaryDepartment] || 'from-blue-500 to-cyan-500'} text-2xl font-black text-white`}>
               <img
                 src={avatarUrl}
@@ -234,10 +234,10 @@ export default function PersonalProCardWidget() {
               {primaryDepartment || 'פרופיל מקצועי'}
               {contact.city ? <span> · {contact.city}</span> : null}
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-100 transition-colors duration-200 group-hover:text-sky-50">
-              <BadgeCheck className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5 rounded-xl border border-sky-400/22 bg-sky-400/10 px-3 py-2 text-xs font-bold text-sky-100 transition-all duration-200 group-hover:border-sky-400/40 group-hover:bg-sky-400/18 group-hover:text-sky-50">
+              <BadgeCheck className="h-3.5 w-3.5 text-sky-300" />
               פתיחת הכרטיס המקצועי
-              <ChevronLeft className="h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
+              <ChevronLeft className="mr-auto h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
             </div>
           </div>
         </div>

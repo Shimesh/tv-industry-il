@@ -120,9 +120,10 @@ body {
   max-width: 100vw;
   border-bottom: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at 18% 16%, color-mix(in srgb, var(--theme-accent) 26%, transparent), transparent 26rem),
-    radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--theme-accent-secondary) 22%, transparent), transparent 24rem),
-    linear-gradient(135deg, color-mix(in srgb, var(--theme-bg-card) 74%, transparent), transparent);
+    radial-gradient(ellipse 70% 80% at 12% 20%, color-mix(in srgb, var(--theme-accent) 32%, transparent), transparent 55%),
+    radial-gradient(ellipse 60% 70% at 88% 5%, color-mix(in srgb, var(--theme-accent-secondary) 28%, transparent), transparent 50%),
+    radial-gradient(circle at 52% 60%, color-mix(in srgb, var(--theme-bg-card) 55%, transparent), transparent 60%),
+    linear-gradient(170deg, color-mix(in srgb, var(--theme-bg-card) 80%, transparent) 0%, transparent 60%);
 }
 
 .app-hero::after {
@@ -130,12 +131,12 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.28;
+  opacity: 0.22;
   background-image:
     linear-gradient(var(--theme-border) 1px, transparent 1px),
     linear-gradient(90deg, var(--theme-border) 1px, transparent 1px);
   background-size: 56px 56px;
-  mask-image: linear-gradient(to bottom, black, transparent 70%);
+  mask-image: linear-gradient(to bottom, black 10%, transparent 75%);
 }
 
 .app-section-kicker {
