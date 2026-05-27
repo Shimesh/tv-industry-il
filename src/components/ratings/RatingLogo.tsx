@@ -82,13 +82,6 @@ export default function RatingLogo({
 }) {
   const size = compact ? 'h-8 w-8' : 'h-12 w-12';
   const channelLogo = findChannelByName(channel);
-  if (src) {
-    return (
-      <div className={`${size} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/95 p-1.5`}>
-        <img src={src} alt={name} className="h-full w-full object-contain" loading="lazy" referrerPolicy="no-referrer" />
-      </div>
-    );
-  }
 
   if (channelLogo) {
     return (
@@ -110,6 +103,14 @@ export default function RatingLogo({
       >
         <span className={`${compact ? 'text-xs' : 'text-base'} font-black leading-none`} dir="ltr">{brand.label}</span>
         {!compact ? <span className="mt-0.5 max-w-full truncate px-1 text-[9px] font-bold leading-none opacity-85">{brand.name}</span> : null}
+      </div>
+    );
+  }
+
+  if (src) {
+    return (
+      <div className={`${size} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/95 p-1.5`}>
+        <img src={src} alt={name} className="h-full w-full object-contain" loading="lazy" referrerPolicy="no-referrer" />
       </div>
     );
   }
