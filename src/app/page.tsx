@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   BarChart3,
   Calendar,
+  Cloud,
   Sparkles,
   TrendingUp,
 } from 'lucide-react';
@@ -94,7 +95,29 @@ export default function HomePage() {
   return (
     <div className="min-h-screen overflow-x-hidden">
 
-      {/* 1 → RSS Ticker */}
+      {/* Greeting — above everything */}
+      <header className="app-hero">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10 text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+            </span>
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            מרכז העבודה של תעשיית הטלוויזיה הישראלית
+          </div>
+          <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
+            <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
+            <span className="block">מה קורה היום בתעשייה?</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+            שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
+            <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
+          </p>
+        </div>
+      </header>
+
+      {/* RSS Ticker */}
       <div className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
         <div className="mx-auto flex max-w-7xl items-center overflow-hidden rounded-none sm:mt-4 sm:rounded-2xl sm:border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-card)' }}>
           <div className="flex shrink-0 items-center gap-1.5 bg-gradient-to-l from-purple-600 via-fuchsia-600 to-blue-600 px-3 py-2">
@@ -118,24 +141,21 @@ export default function HomePage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
 
-        {/* 3 → Ratings + Weather */}
+        {/* 3 → Ratings */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-[0_0_14px_rgba(168,85,247,0.40)]">
               <BarChart3 className="w-4 h-4 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>רייטינג ומזג אוויר</h2>
-              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>דירוגי צפייה ותחזית ערים מרכזיות</p>
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>מדד הרייטינג</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>דירוגי צפייה עדכניים</p>
             </div>
             <Link href="/ratings" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
               לדוח המלא <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:items-stretch">
-            <RatingsWidget />
-            <HomeInfoWidget />
-          </div>
+          <RatingsWidget />
         </motion.section>
 
         {/* 4 → On Air Now */}
@@ -158,7 +178,21 @@ export default function HomePage() {
           <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
-        {/* 5 → Hero (WorldCup + ProCard + greeting) */}
+        {/* 5 → Weather */}
+        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 shadow-[0_0_14px_rgba(14,165,233,0.40)]">
+              <Cloud className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>מזג האוויר</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>תחזית ערים מרכזיות בזמן אמת</p>
+            </div>
+          </div>
+          <HomeInfoWidget />
+        </motion.section>
+
+        {/* 6 → WorldCup + ProCard widgets */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -166,31 +200,11 @@ export default function HomePage() {
           transition={{ duration: 0.4 }}
           className="app-hero overflow-hidden rounded-[1.5rem]"
         >
-          <div className="relative z-10 px-4 py-8 sm:px-6 lg:py-10">
-            <div className="grid grid-cols-1 gap-5">
-              <div className="mx-auto max-w-4xl text-center">
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                  </span>
-                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  מרכז העבודה של תעשיית הטלוויזיה הישראלית
-                </div>
-                <h2 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
-                  <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
-                  <span className="block">מה קורה היום בתעשייה?</span>
-                </h2>
-                <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
-                  שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
-                  <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
-                </p>
-              </div>
-              <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:items-stretch">
-                <WorldCupCountdown />
-                <PersonalProCardWidget />
-              </aside>
-            </div>
+          <div className="relative z-10 px-4 py-8 sm:px-6">
+            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:items-stretch">
+              <WorldCupCountdown />
+              <PersonalProCardWidget />
+            </aside>
           </div>
         </motion.section>
 
