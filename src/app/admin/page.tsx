@@ -543,9 +543,7 @@ export default function AdminPage() {
   const [manualHtml, setManualHtml] = useState('');
   const [manualDailyText, setManualDailyText] = useState('');
   const [manualWeeklyText, setManualWeeklyText] = useState('');
-  const [manualWeeklyRange, setManualWeeklyRange] = useState('');
   const [submittingManualText, setSubmittingManualText] = useState(false);
-  const [fixingWeekId, setFixingWeekId] = useState(false);
   const [fullSyncRunning, setFullSyncRunning] = useState(false);
   const [fullSyncStep, setFullSyncStep] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
@@ -1004,20 +1002,21 @@ export default function AdminPage() {
       .filter(r => r.rank > 0 && r.showName && r.channel);
   }
 
-  async function fixWeeklyDocId(oldWeekId: string, newWeekId: string, weekRange: string) {
-    setFixingWeekId(true);
-    try {
-      await fetchWithAuth('/api/admin/ratings-sync/manual', {
-        method: 'PATCH',
-        body: JSON.stringify({ oldWeekId, newWeekId, weekRange }),
-      });
-      showToast('ok', `שבוע תוקן: week-${oldWeekId} → week-${newWeekId}`);
-      await loadOverview(true);
-    } catch (error) {
-      showToast('err', error instanceof Error ? error.message : 'שגיאה בתיקון');
-    } finally {
-      setFixingWeekId(false);
-    }
+  function extractWeekInfo(rows: Array<{ date: string }>): { weekId: string; weekRange: string } {
+    const dates = rows.map(r => r.date).filter(Boolean).sort();
+    if (dates.length === 0) return { weekId: '', weekRange: '' };
+    const fmt = (iso: string) => { const [y, mo, d] = iso.split('-'); return `${d}/${mo}/${y}`; };
+    const d = new Date(dates[0] + 'T12:00:00Z');
+    const year = d.getUTCFullYear();
+    const dow = d.getUTCDay(); // 0=Sun
+    const weekStartMs = d.getTime() - dow * 86400000;
+    const weekEndMs = weekStartMs + 6 * 86400000;
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    const weekNum = Math.ceil(((weekStartMs - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+    const endDate = new Date(weekEndMs);
+    const endIso = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth()+1).padStart(2,'0')}-${String(endDate.getUTCDate()).padStart(2,'0')}`;
+    const startIso = new Date(weekStartMs).toISOString().slice(0,10);
+    return { weekId: `${weekNum}-${year}`, weekRange: `${fmt(startIso)} – ${fmt(endIso)}` };
   }
 
   async function submitManualText() {
@@ -1038,17 +1037,16 @@ export default function AdminPage() {
         showToast('ok', `יומי נשמר: ${res.rows} תוכניות, ${res.matched} הותאמו`);
       }
       if (weeklyRows.length > 0) {
-        const weekId = manualWeeklyRange.match(/(\d+)\/(\d{4})/)?.[0]?.replace('/', '-') || 'manual';
-        const res = await fetchWithAuth<{ rows?: number; matched?: number }>(
+        const { weekId, weekRange } = extractWeekInfo(weeklyRows);
+        const res = await fetchWithAuth<{ rows?: number; matched?: number; weekRange?: string }>(
           '/api/admin/ratings-sync/manual',
-          { method: 'POST', body: JSON.stringify({ type: 'weekly', weekId, weekRange: manualWeeklyRange || weekId, rows: weeklyRows }) },
+          { method: 'POST', body: JSON.stringify({ type: 'weekly', weekId, weekRange, rows: weeklyRows }) },
         );
-        showToast('ok', `שבועי נשמר: ${res.rows} תוכניות, ${res.matched} הותאמו`);
+        showToast('ok', `שבועי נשמר: ${res.rows} תוכניות (${res.weekRange || weekRange})`);
       }
       setShowManualPaste(false);
       setManualDailyText('');
       setManualWeeklyText('');
-      setManualWeeklyRange('');
       await loadOverview(true);
     } catch (error) {
       showToast('err', error instanceof Error ? error.message : 'שגיאה בשמירה');
@@ -1541,23 +1539,20 @@ export default function AdminPage() {
                     className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
                     rows={5}
                   />
-                  {manualWeeklyText.trim() && (
-                    <p className="mt-1 text-xs text-gray-500">{parseMidrugText(manualWeeklyText).length} שורות זוהו</p>
-                  )}
-                  {manualWeeklyText.trim() && (
-                    <input
-                      type="text"
-                      value={manualWeeklyRange}
-                      onChange={(e) => setManualWeeklyRange(e.target.value)}
-                      placeholder="מזהה שבוע — לדוגמה: 21/2026"
-                      dir="ltr"
-                      className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 placeholder:text-gray-600 focus:border-amber-500 focus:outline-none"
-                    />
-                  )}
+                  {manualWeeklyText.trim() && (() => {
+                    const rows = parseMidrugText(manualWeeklyText);
+                    const { weekId, weekRange } = extractWeekInfo(rows);
+                    return (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {rows.length} שורות זוהו
+                        {weekRange ? ` · שבוע ${weekId} (${weekRange})` : ''}
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => void submitManualText()}
@@ -1568,16 +1563,7 @@ export default function AdminPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void fixWeeklyDocId('manual', '21-2026', '17/05/2026 – 23/05/2026')}
-                  disabled={fixingWeekId}
-                  className="rounded-lg border border-amber-700 bg-amber-900/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-900/60 disabled:opacity-50"
-                  title="תקן את מסמך week-manual → week-21-2026"
-                >
-                  {fixingWeekId ? 'מתקן...' : 'תקן שבוע 21/2026'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowManualPaste(false); setManualDailyText(''); setManualWeeklyText(''); setManualWeeklyRange(''); }}
+                  onClick={() => { setShowManualPaste(false); setManualDailyText(''); setManualWeeklyText(''); }}
                   className="rounded-lg bg-gray-800 px-4 py-2 text-xs text-gray-300 hover:bg-gray-700"
                 >
                   ביטול

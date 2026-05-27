@@ -9,6 +9,27 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+function deriveWeekInfo(rows: Array<{ date?: string }>, providedId?: string, providedRange?: string): { weekId: string; weekRange: string } {
+  if (providedId && providedId !== 'manual' && providedRange) {
+    return { weekId: providedId.replace('/', '-'), weekRange: providedRange };
+  }
+  const dates = rows.map(r => r.date).filter((d): d is string => Boolean(d)).sort();
+  if (dates.length === 0) return { weekId: providedId?.replace('/', '-') || 'unknown', weekRange: providedRange || '' };
+
+  const fmt = (iso: string) => { const [y, mo, d] = iso.split('-'); return `${d}/${mo}/${y}`; };
+  const d = new Date(dates[0] + 'T12:00:00Z');
+  const year = d.getUTCFullYear();
+  const dow = d.getUTCDay();
+  const weekStartMs = d.getTime() - dow * 86400000;
+  const weekEndMs = weekStartMs + 6 * 86400000;
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const weekNum = Math.ceil(((weekStartMs - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+  const startIso = new Date(weekStartMs).toISOString().slice(0, 10);
+  const endDate = new Date(weekEndMs);
+  const endIso = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`;
+  return { weekId: `${weekNum}-${year}`, weekRange: `${fmt(startIso)} – ${fmt(endIso)}` };
+}
+
 type SimpleRow = {
   rank: number;
   showName: string;
@@ -68,9 +89,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (type === 'weekly') {
-    const rawId = body.weekId || 'manual';
-    const weekId = rawId.replace('/', '-');
-    const weekRange = body.weekRange || rawId;
+    const { weekId, weekRange } = deriveWeekInfo(rows as RatingRow[], body.weekId, body.weekRange);
 
     const weeklyDoc: RatingsWeeklyDocument = {
       weekId,
@@ -80,6 +99,11 @@ export async function POST(request: NextRequest) {
       fetchedAt,
     };
     await patchDocument(`ratings_weekly/week-${weekId}`, weeklyDoc as unknown as Record<string, never>);
+
+    // Cleanup any orphaned week-manual document
+    if (weekId !== 'manual') {
+      await deleteDocument('ratings_weekly/week-manual').catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,
