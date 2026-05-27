@@ -104,9 +104,9 @@ export default function RatingsWidget() {
                   <p className="min-w-0 truncate text-[11px] text-purple-100/60">
                     {[
                       channelLabel(row.channel),
+                      viewersK != null ? `${viewersK}K` : null,
                       unifiedRow.category ?? null,
                       isUnified && sourceSummary(unifiedRow) ? sourceSummary(unifiedRow) : null,
-                      viewersK != null ? `${viewersK}K` : null,
                     ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
