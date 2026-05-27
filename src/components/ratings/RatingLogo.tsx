@@ -49,6 +49,13 @@ function getChannelBrand(channel?: string): ChannelBrand | null {
       className: 'border-cyan-300/30 bg-gradient-to-br from-cyan-500/90 to-slate-950 text-white',
     };
   }
+  if (/ספורט.?5(?!\s*(GOLD|LIVE|\+|פלוס))|(?<!\d)55(?!\d)/.test(value)) {
+    return {
+      label: '55',
+      name: 'ספורט 5',
+      className: 'border-orange-300/30 bg-gradient-to-br from-orange-500/90 to-red-900 text-white',
+    };
+  }
 
   const numericLabel = value.match(/\d{1,3}/)?.[0];
   if (numericLabel) {
