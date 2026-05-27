@@ -101,11 +101,13 @@ export default function RatingsWidget() {
                 <RatingLogo src={(row as import('@/lib/ratingsTypes').RatingRow).logoUrl} name={row.showName} channel={row.channel} compact />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-white">{row.showName}</p>
-                  <p className="flex min-w-0 flex-wrap items-center gap-1 text-[11px] text-purple-100/60">
-                    <span>{channelLabel(row.channel)}</span>
-                    {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-300">{unifiedRow.category}</span> : null}
-                    {isUnified && sourceSummary(unifiedRow) ? <span>· {sourceSummary(unifiedRow)}</span> : null}
-                    {viewersK != null ? <span dir="ltr">· {viewersK}K</span> : null}
+                  <p className="min-w-0 truncate text-[11px] text-purple-100/60">
+                    {[
+                      channelLabel(row.channel),
+                      unifiedRow.category ?? null,
+                      isUnified && sourceSummary(unifiedRow) ? sourceSummary(unifiedRow) : null,
+                      viewersK != null ? `${viewersK}K` : null,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <div className="rounded-lg bg-fuchsia-400/15 px-2.5 py-1 text-sm font-black text-fuchsia-100" dir="ltr">
