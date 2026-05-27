@@ -638,3 +638,47 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
+
+/* ─── Animated nav buttons ───────────────────────────────────────────────── */
+.nav-btn {
+  background: color-mix(in srgb, var(--theme-bg-card) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-border) 80%, transparent);
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.18s ease,
+    box-shadow 0.2s ease,
+    color 0.15s ease;
+}
+.nav-btn:hover {
+  transform: translateY(-1.5px) scale(1.05);
+  background: var(--theme-accent-glow);
+  box-shadow:
+    0 4px 18px color-mix(in srgb, var(--theme-accent) 22%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 35%, transparent);
+  color: var(--theme-text);
+}
+.nav-btn:active {
+  transform: scale(0.95) !important;
+  transition: transform 0.08s ease !important;
+}
+.nav-btn.is-active {
+  background: linear-gradient(
+    135deg,
+    var(--theme-accent-glow),
+    color-mix(in srgb, var(--theme-bg-card) 65%, transparent)
+  );
+  box-shadow:
+    0 2px 14px color-mix(in srgb, var(--theme-accent) 26%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 42%, transparent);
+}
+.nav-btn.is-active:hover {
+  transform: translateY(-1.5px) scale(1.05);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent-glow) 220%, transparent),
+    color-mix(in srgb, var(--theme-bg-card) 55%, transparent)
+  );
+  box-shadow:
+    0 4px 22px color-mix(in srgb, var(--theme-accent) 38%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 58%, transparent);
+}

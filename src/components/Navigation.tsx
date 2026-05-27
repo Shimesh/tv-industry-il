@@ -152,6 +152,30 @@ export default function Navigation() {
     const isActive = pathname === link.href;
     const Icon = link.icon;
     const isChat = link.href === '/chat';
+
+    if (compact) {
+      return (
+        <Link
+          key={link.href}
+          href={link.href}
+          prefetch
+          onClick={(event) => {
+            event.preventDefault();
+            navigateFromNav(link.href);
+          }}
+          className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold leading-none transition-all ${
+            isActive
+              ? 'text-[var(--theme-accent)]'
+              : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
+          }`}
+          style={isActive ? { background: 'var(--theme-accent-glow)' } : undefined}
+        >
+          <Icon className="h-5 w-5" />
+          <span>{link.label}</span>
+        </Link>
+      );
+    }
+
     return (
       <Link
         key={link.href}
@@ -161,18 +185,12 @@ export default function Navigation() {
           event.preventDefault();
           navigateFromNav(link.href);
         }}
-        className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-[clamp(0.25rem,0.42vw,0.65rem)] text-[clamp(0.66rem,0.72vw,0.82rem)] 2xl:h-10'} items-center gap-1 rounded-xl font-bold leading-none transition-all ${
-          isActive
-            ? 'text-[var(--theme-accent)]'
-            : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
+        className={`nav-btn inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-[clamp(0.35rem,0.5vw,0.75rem)] text-[clamp(0.7rem,0.76vw,0.86rem)] font-bold leading-none 2xl:h-10 ${
+          isActive ? 'is-active text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
         }`}
-        style={isActive ? {
-          background: 'linear-gradient(135deg, var(--theme-accent-glow), color-mix(in srgb, var(--theme-bg-card) 72%, transparent))',
-          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 28%, transparent)',
-        } : undefined}
       >
         <span className="relative">
-          <Icon className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 xl:block'} />
+          <Icon className="hidden h-3.5 w-3.5 shrink-0 xl:block" />
           {isChat && totalUnread > 0 ? (
             <span className="absolute -right-1.5 -top-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-[3px] text-[9px] font-bold leading-none text-white">
               {totalUnread > 99 ? '99+' : totalUnread}
@@ -193,11 +211,21 @@ export default function Navigation() {
         event.preventDefault();
         navigateFromNav(adminNavLink.href);
       }}
-      className={`${compact ? 'flex px-4 py-3 text-sm' : 'inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-[clamp(0.25rem,0.42vw,0.65rem)] text-[clamp(0.66rem,0.72vw,0.82rem)] 2xl:h-10'} items-center gap-1 rounded-xl border font-bold leading-none transition-all ${
-        adminIsActive
-          ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
-          : 'border-yellow-400/20 text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'
+      className={`${
+        compact
+          ? `flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold leading-none transition-all ${adminIsActive ? 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300' : 'text-yellow-200/80 hover:bg-yellow-400/10 hover:text-yellow-100'}`
+          : `inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-[clamp(0.35rem,0.5vw,0.75rem)] text-[clamp(0.7rem,0.76vw,0.86rem)] font-bold leading-none transition-all duration-200 hover:scale-[1.05] active:scale-[0.95] 2xl:h-10 ${
+              adminIsActive
+                ? 'text-yellow-300'
+                : 'text-yellow-200/80 hover:text-yellow-100'
+            }`
       }`}
+      style={!compact ? {
+        background: adminIsActive ? 'rgba(234,179,8,0.12)' : 'color-mix(in srgb, rgba(234,179,8,0.08) 55%, transparent)',
+        boxShadow: adminIsActive
+          ? '0 2px 14px rgba(234,179,8,0.18), inset 0 0 0 1px rgba(234,179,8,0.35)'
+          : 'inset 0 0 0 1px rgba(234,179,8,0.22)',
+      } : undefined}
     >
       <Shield className={compact ? 'h-5 w-5' : 'hidden h-3.5 w-3.5 shrink-0 xl:block'} />
       <span className="whitespace-nowrap">{adminNavLink.label}</span>
@@ -237,7 +265,7 @@ export default function Navigation() {
             <span className="hidden whitespace-nowrap text-lg font-black leading-none gradient-text 2xl:block">TV Industry IL</span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-[clamp(0.1rem,0.22vw,0.35rem)] px-2 lg:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-[clamp(0.08rem,0.16vw,0.28rem)] px-2 lg:flex">
             {desktopLinks.map((link) => link.href === adminNavLink.href ? renderAdminLink() : renderNavLink(link))}
           </div>
 
