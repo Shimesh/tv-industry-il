@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
+  BarChart3,
   Calendar,
   Sparkles,
   TrendingUp,
@@ -114,11 +115,9 @@ export default function HomePage() {
               </p>
             </div>
 
-            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
+            <aside className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:items-stretch">
               <WorldCupCountdown />
               <PersonalProCardWidget />
-              <RatingsWidget />
-              <HomeInfoWidget />
             </aside>
           </div>
         </div>
@@ -145,6 +144,28 @@ export default function HomePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+
+        {/* Ratings + Weather */}
+        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-[0_0_14px_rgba(168,85,247,0.40)]">
+              <BarChart3 className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>רייטינג ומזג אוויר</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>דירוגי צפייה ותחזית ערים מרכזיות</p>
+            </div>
+            <Link href="/ratings" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
+              לדוח המלא <ArrowLeft className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:items-stretch">
+            <RatingsWidget />
+            <HomeInfoWidget />
+          </div>
+        </motion.section>
+
+        {/* On Air Now */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 shadow-[0_0_14px_rgba(239,68,68,0.40)]">
@@ -164,9 +185,10 @@ export default function HomePage() {
           <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
+        {/* Latest News */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-[0_0_14px_rgba(168,85,247,0.40)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-[0_0_14px_rgba(99,102,241,0.40)]">
               <TrendingUp className="w-4 h-4 text-white" />
             </div>
             <div className="min-w-0">
@@ -177,7 +199,6 @@ export default function HomePage() {
               כל החדשות <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
-
           {liveNews.length > 0 ? (
             <LatestNewsCarousel news={liveNews.slice(0, 10)} />
           ) : (
@@ -187,6 +208,7 @@ export default function HomePage() {
           )}
         </motion.section>
 
+        {/* Upcoming Events */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="pb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_0_14px_rgba(59,130,246,0.40)]">
