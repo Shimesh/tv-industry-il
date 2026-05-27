@@ -242,9 +242,7 @@ export default function Navigation() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <div className="hidden md:block">
-              {mounted && user ? <NotificationBell /> : null}
-            </div>
+            {mounted && user ? <NotificationBell /> : null}
 
             <div className="relative hidden md:block" ref={themeMenuRef}>
               <button
