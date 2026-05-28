@@ -1484,6 +1484,31 @@ function ProductionsContent() {
     };
   }, [user?.uid, currentDate, calendarView, loadProductionsForPeriod]);
 
+  // Fetch lastSyncAt once on mount so the timestamp strip always appears
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const today = new Date();
+    const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+    const weekStart = toLocalDate(sunday);
+    const satDate = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + 6);
+    const weekEnd = toLocalDate(satDate);
+
+    user.getIdToken().then(token => {
+      if (cancelled || !token) return;
+      return fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      }).then(r => r.ok ? r.json() as Promise<{ lastSyncAt?: number | null }> : null);
+    }).then(data => {
+      if (!cancelled && data && typeof data.lastSyncAt === 'number') {
+        setLastSyncAt(data.lastSyncAt);
+      }
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [user]);
+
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
