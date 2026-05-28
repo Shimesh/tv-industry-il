@@ -1097,21 +1097,12 @@ function ProductionsContent() {
 
       setWorkerName(extractedWorkerName);
 
-      // Save URL for hourly auto-sync (fire-and-forget)
+      // Save URL for hourly auto-sync and trigger immediate sync (fire-and-forget)
       user.getIdToken().then(idToken => {
-        const projectId = 'tv-industry-il';
-        const syncDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system/calendarSync`;
-        fetch(syncDocUrl, {
-          method: 'PATCH',
+        fetch('/api/calendar/save-sync-url', {
+          method: 'POST',
           headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              url: { stringValue: urlMatch[0] },
-              workerName: { stringValue: extractedWorkerName },
-              savedAt: { integerValue: String(Date.now()) },
-              savedByUid: { stringValue: user.uid },
-            },
-          }),
+          body: JSON.stringify({ url: urlMatch[0], workerName: extractedWorkerName }),
         }).catch(() => {});
       }).catch(() => {});
 
