@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
-import { runQuery } from '@/lib/server/firestoreAdminRest';
+import { runQuery, getDocument } from '@/lib/server/firestoreAdminRest';
+
+type CalendarSyncDoc = {
+  lastSyncAt?: number;
+  lastSyncStatus?: string;
+};
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -26,7 +31,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const docs = await runQuery<GlobalProductionDoc>({
+    const [docs, syncDoc] = await Promise.all([
+      runQuery<GlobalProductionDoc>({
       from: [{ collectionId: 'global_productions' }],
       where: {
         compositeFilter: {
@@ -49,8 +55,10 @@ export async function GET(request: NextRequest) {
           ],
         },
       },
-      limit: 500,
-    });
+        limit: 500,
+      }),
+      getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
+    ]);
 
     // Compatibility endpoint: read the canonical global calendar source.
     const byId = new Map<string, GlobalProductionDoc>();
@@ -66,7 +74,13 @@ export async function GET(request: NextRequest) {
 
     recordRouteMetric({ route: '/api/productions/week', ok: true, statusCode: 200 }).catch(() => {});
 
-    return NextResponse.json({ success: true, count: productions.length, productions });
+    return NextResponse.json({
+      success: true,
+      count: productions.length,
+      productions,
+      lastSyncAt: syncDoc?.lastSyncAt ?? null,
+      lastSyncStatus: syncDoc?.lastSyncStatus ?? null,
+    });
   } catch (error) {
     recordRouteMetric({ route: '/api/productions/week', ok: false, statusCode: 500, error }).catch(() => {});
     return NextResponse.json({ success: false, count: 0, productions: [] });
