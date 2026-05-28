@@ -118,6 +118,10 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
     const chunk = tokens.slice(i, i + chunkSize);
     const response = await messaging.sendEachForMulticast({
       tokens: chunk,
+      notification: {
+        title: params.title,
+        body: params.body,
+      },
       data: {
         source: 'firebase',
         title: params.title,
@@ -129,6 +133,13 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
+        notification: {
+          title: params.title,
+          body: params.body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-72x72.png',
+          data: { link, linkUrl, type: params.type || 'general' },
+        },
       },
     });
 

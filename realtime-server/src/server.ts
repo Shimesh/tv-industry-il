@@ -42,6 +42,39 @@ function createErrorPayload(code: ChatV2ErrorPayload['code'], message: string, d
   return { code, message, details };
 }
 
+interface ChatPushParams {
+  chatId: string;
+  senderUid: string;
+  senderName: string;
+  messageText?: string;
+  isEncrypted?: boolean;
+  memberUids: string[];
+}
+
+async function sendChatPushNotification(params: ChatPushParams): Promise<void> {
+  const { notifyApiUrl, notifyApiSecret } = realtimeConfig;
+  if (!notifyApiUrl) return;
+
+  try {
+    const url = `${notifyApiUrl.replace(/\/$/, '')}/api/chat/notify`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (notifyApiSecret) headers['x-notify-secret'] = notifyApiSecret;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      console.error(`[chat/notify] HTTP ${response.status} from ${url}`);
+    }
+  } catch (err) {
+    console.error('[chat/notify] push notification failed:', err);
+  }
+}
+
 function writeHealth(res: http.ServerResponse): void {
   res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
   res.end(
@@ -339,6 +372,18 @@ export function createRealtimeServer({ persistence }: RealtimeDependencies = { p
           serverSequence: accepted.serverSequence,
         } satisfies ChatV2MessageUpdatePayload);
         ack?.({ ok: true, message: accepted });
+
+        // Fire-and-forget push notification for offline recipients
+        if (persisted.memberUids.length > 1 && realtimeConfig.notifyApiUrl) {
+          void sendChatPushNotification({
+            chatId: payload.chatId,
+            senderUid: socket.data.uid,
+            senderName: socket.data.displayName || socket.data.uid,
+            messageText: payload.encrypted ? undefined : payload.text,
+            isEncrypted: Boolean(payload.encrypted),
+            memberUids: persisted.memberUids,
+          });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'message_send_failed';
         ack?.({ ok: false, error: message });

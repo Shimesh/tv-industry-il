@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Clock, MapPin, User, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
@@ -210,6 +210,7 @@ export default function WeeklyCalendarWidget() {
   const [myProductionDates, setMyProductionDates] = useState<Set<string> | null>(null);
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   // In-memory cache per session — mirrors the productions page's productionsByWeekRef pattern
   const sessionCache = useRef<Map<string, Production[]>>(new Map());
 
@@ -251,8 +252,8 @@ export default function WeeklyCalendarWidget() {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
-          .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
-          .catch(() => ({ productions: [] as Production[] })),
+          .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[]; lastSyncAt?: number | null }>) : { productions: [], lastSyncAt: null }))
+          .catch(() => ({ productions: [] as Production[], lastSyncAt: null })),
 
         fetch(`/api/productions/personal?weekId=${weekId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -291,6 +292,7 @@ export default function WeeklyCalendarWidget() {
       const merged = mergeProductions(afterPhone, myProfileProds, displayName, phone);
 
       setProductions(merged);
+      if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
       // Write to both caches so subsequent navigations are instant
       sessionCache.current.set(weekId, merged);
       saveToCache(weekId, merged);
@@ -404,6 +406,23 @@ export default function WeeklyCalendarWidget() {
             </Link>
           </div>
         </div>
+
+        {mounted && lastSyncAt && (
+          <div
+            className="flex items-center gap-1.5 border-b px-4 py-1.5"
+            style={{ borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-accent) 4%, transparent)' }}
+          >
+            <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-45" style={{ color: 'var(--theme-accent)' }} />
+            <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
+              עודכן לאחרונה:{' '}
+              <span className="font-semibold" dir="ltr">
+                {new Date(lastSyncAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                {' '}
+                {new Date(lastSyncAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-7">
           {days.map((dateStr, index) => {
