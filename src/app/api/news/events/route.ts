@@ -19,6 +19,7 @@ type EventItem = {
   sourceUrl: string;
   category: string;
   description: string;
+  imageUrl?: string | null;
   kind?: EventKind;
   importance?: number;
 };
@@ -175,10 +176,10 @@ const ARTICLE_ONLY_KEYWORDS = [
 
 const FALLBACK_EVENTS: EventItem[] = [
   {
-    id: 'docaviv-2026',
+    id: 'docaviv-2027',
     title: 'פסטיבל דוקאביב',
     description: 'פסטיבל דוקומנטרי מרכזי ליוצרים, מפיקים, עורכים וגופי שידור, כולל הקרנות, מפגשי תעשייה ואירועי תוכן.',
-    date: '2026-05-21T10:00:00+03:00',
+    date: '2027-05-20T10:00:00+03:00',
     time: '10:00',
     location: 'תל אביב',
     category: 'פסטיבל',
@@ -188,9 +189,22 @@ const FALLBACK_EVENTS: EventItem[] = [
     importance: 92,
   },
   {
+    id: 'israel-festival-2026',
+    title: 'פסטיבל ישראל',
+    description: 'אירוע תרבות גדול עם מופעים, מוזיקה, במה ותוכן אמנותי. אחד האירועים התרבותיים המרכזיים של ישראל.',
+    date: '2026-06-04T18:00:00+03:00',
+    time: '18:00',
+    location: 'ירושלים',
+    category: 'פסטיבל',
+    source: 'פסטיבל ישראל',
+    sourceUrl: 'https://www.israel-festival.org',
+    kind: 'culture',
+    importance: 82,
+  },
+  {
     id: 'jerusalem-film-festival-2026',
     title: 'פסטיבל הקולנוע ירושלים',
-    description: 'אחד מאירועי הקולנוע והתוכן המרכזיים בישראל, עם הקרנות, מפגשי יוצרים, תחרויות ואירועי תעשייה.',
+    description: 'אחד מאירועי הקולנוע והתוכן המרכזיים בישראל, עם הקרנות, מפגשי יוצרים, תחרויות ואירועי תעשייה בינלאומיים.',
     date: '2026-07-16T10:00:00+03:00',
     time: '10:00',
     location: 'ירושלים',
@@ -203,10 +217,10 @@ const FALLBACK_EVENTS: EventItem[] = [
   {
     id: 'israel-tv-academy-awards-2026',
     title: 'טקס פרסי האקדמיה לטלוויזיה',
-    description: 'טקס פרסים שנתי מרכזי לתעשיית הטלוויזיה בישראל, עם דגש על יוצרים, הפקות, סדרות וגופי שידור.',
+    description: 'טקס פרסים שנתי מרכזי לתעשיית הטלוויזיה בישראל — יוצרים, הפקות, סדרות וגופי שידור בערב גאלה.',
     date: '2026-09-10T20:00:00+03:00',
     time: '20:00',
-    location: 'ישראל',
+    location: 'תל אביב',
     category: 'פרסים',
     source: 'האקדמיה הישראלית לקולנוע וטלוויזיה',
     sourceUrl: 'https://www.israelfilmacademy.co.il',
@@ -225,19 +239,6 @@ const FALLBACK_EVENTS: EventItem[] = [
     sourceUrl: 'https://www.globes.co.il',
     kind: 'conference',
     importance: 78,
-  },
-  {
-    id: 'israel-festival-2026',
-    title: 'פסטיבל ישראל',
-    description: 'אירוע תרבות גדול עם מופעים, מוזיקה, במה ותוכן אמנותי, רלוונטי למעקב אחר אירועי תוכן מרכזיים.',
-    date: '2026-06-04T18:00:00+03:00',
-    time: '18:00',
-    location: 'ירושלים',
-    category: 'פסטיבל',
-    source: 'פסטיבל ישראל',
-    sourceUrl: 'https://www.israel-festival.org',
-    kind: 'culture',
-    importance: 72,
   },
 ];
 
@@ -260,6 +261,20 @@ function extractCdata(block: string, tag: string): string {
   if (cdata?.[1]) return cdata[1];
   const plain = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
   return plain?.[1] || '';
+}
+
+function extractImageUrl(block: string, baseUrl: string): string | null {
+  const enclosure = block.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image[^"']*["']/i)
+    ?? block.match(/<enclosure[^>]+type=["']image[^"']*["'][^>]*url=["']([^"']+)["']/i);
+  if (enclosure?.[1]) return normalizeUrl(enclosure[1], baseUrl);
+
+  const mediaThumb = block.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
+  if (mediaThumb?.[1]) return normalizeUrl(mediaThumb[1], baseUrl);
+
+  const mediaContent = block.match(/<media:content[^>]+url=["']([^"']+\.(?:jpe?g|png|webp))[^"']*["']/i);
+  if (mediaContent?.[1]) return normalizeUrl(mediaContent[1], baseUrl);
+
+  return null;
 }
 
 function normalizeUrl(url: string, baseUrl: string): string {
@@ -406,6 +421,7 @@ async function fetchFeedEvents(source: EventSource): Promise<EventItem[]> {
           category: getCategory(text, source),
           source: source.source,
           sourceUrl: link,
+          imageUrl: extractImageUrl(block, source.sourceUrl),
           kind: source.kind,
           importance: scoreEvent(text, source),
         };

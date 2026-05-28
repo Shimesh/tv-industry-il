@@ -43,6 +43,7 @@ interface UpcomingEventItem {
   sourceUrl: string;
   category: string;
   description: string;
+  imageUrl?: string | null;
 }
 
 const RATINGS_KEYWORDS = ['רייטינג', 'דירוג', 'צפייה', 'פופולריות', 'נתוני'];
@@ -116,6 +117,27 @@ const catColors: Record<string, string> = {
   'תרבות': 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20',
   'טלוויזיה': 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/20',
 };
+
+type EventCatMeta = { accent: string; dimBg: string; icon: string; gradient: string };
+const EVENT_CAT_META: Record<string, EventCatMeta> = {
+  'פסטיבל': { accent: '#F59E0B', dimBg: 'rgba(245,158,11,0.10)', icon: '🎬', gradient: 'from-amber-950/80 to-yellow-950/50' },
+  'פרסים':  { accent: '#F97316', dimBg: 'rgba(249,115,22,0.10)', icon: '🏆', gradient: 'from-orange-950/80 to-amber-950/50' },
+  'כנס':    { accent: '#3B82F6', dimBg: 'rgba(59,130,246,0.10)', icon: '🎤', gradient: 'from-blue-950/80 to-indigo-950/50' },
+  'הקרנה':  { accent: '#8B5CF6', dimBg: 'rgba(139,92,246,0.10)', icon: '🎭', gradient: 'from-purple-950/80 to-violet-950/50' },
+  'מוזיקה': { accent: '#EC4899', dimBg: 'rgba(236,72,153,0.10)', icon: '🎵', gradient: 'from-pink-950/80 to-rose-950/50' },
+  'סדנה':   { accent: '#14B8A6', dimBg: 'rgba(20,184,166,0.10)', icon: '📚', gradient: 'from-teal-950/80 to-cyan-950/50' },
+  'תרבות':  { accent: '#D946EF', dimBg: 'rgba(217,70,239,0.10)', icon: '🎨', gradient: 'from-fuchsia-950/80 to-purple-950/50' },
+};
+function getEventCatMeta(category: string): EventCatMeta {
+  return EVENT_CAT_META[category] ?? { accent: '#6366F1', dimBg: 'rgba(99,102,241,0.10)', icon: '📅', gradient: 'from-indigo-950/80 to-slate-950/50' };
+}
+function daysUntilEvent(dateStr: string): number | null {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+}
+const HEBREW_MONTHS_FULL = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 /* Source badge colors */
 function getSourceColor(source: string): string {
@@ -801,37 +823,107 @@ function NewsPageContent() {
             <div className="space-y-4">
               {filteredEvents.map(event => {
                 const eventDate = new Date(event.date);
+                const valid = !Number.isNaN(eventDate.getTime());
+                const dayNum = valid ? eventDate.getDate() : '--';
+                const monthName = valid ? HEBREW_MONTHS_FULL[eventDate.getMonth()] : '';
+                const yearNum = valid ? eventDate.getFullYear() : '';
+                const days = valid ? daysUntilEvent(event.date) : null;
+                const meta = getEventCatMeta(event.category);
+
                 return (
-                  <div key={event.id} className="rounded-xl border p-6 card-glow transition-colors" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
-                    <div className="flex items-start gap-5">
-                      <div className="bg-blue-500/10 rounded-xl p-4 text-center shrink-0 min-w-[80px]">
-                        <div className="text-3xl font-black text-blue-400">{eventDate.getDate()}</div>
-                        <div className="text-sm text-blue-300 font-medium">
-                          {eventDate.toLocaleDateString('he-IL', { month: 'short' })}
+                  <div
+                    key={event.id}
+                    className="group relative overflow-hidden rounded-2xl border transition-all duration-200 hover:shadow-xl"
+                    style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
+                  >
+                    {/* Image banner or gradient header */}
+                    <div className="relative h-32 overflow-hidden">
+                      {event.imageUrl ? (
+                        <>
+                          <img
+                            src={event.imageUrl}
+                            alt={event.title}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-black/70" />
+                        </>
+                      ) : (
+                        <div className={`h-full w-full bg-gradient-to-br ${meta.gradient}`}>
+                          <div className="flex h-full items-center justify-center text-5xl opacity-20">{meta.icon}</div>
                         </div>
-                        <div className="text-xs text-blue-400/50 mt-0.5">
-                          {eventDate.getFullYear()}
+                      )}
+
+                      {/* Top-right: days badge */}
+                      {days !== null && days >= 0 && (
+                        <div className="absolute right-3 top-3">
+                          <span
+                            className="rounded-full px-2.5 py-1 text-[11px] font-black"
+                            style={{ background: `${meta.accent}30`, color: meta.accent, border: `1px solid ${meta.accent}50`, backdropFilter: 'blur(4px)' }}
+                          >
+                            {days === 0 ? 'היום!' : days === 1 ? 'מחר' : `${days} ימים`}
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex-1">
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${catColors[event.category] || 'bg-gray-700/50 text-gray-300'}`}>
+                      )}
+
+                      {/* Bottom-left: category pill */}
+                      <div className="absolute bottom-3 right-3">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-sm"
+                          style={{ background: `${meta.accent}25`, color: meta.accent, border: `1px solid ${meta.accent}45` }}
+                        >
+                          <span>{meta.icon}</span>
                           {event.category}
                         </span>
-                        <h3 className="font-bold text-xl mb-2 transition-colors" style={{ color: 'var(--theme-text)' }}>{event.title}</h3>
-                        <p className="text-sm leading-relaxed mb-3 transition-colors" style={{ color: 'var(--theme-text-secondary)' }}>{event.description}</p>
-                        <div className="flex items-center gap-4 text-sm transition-colors" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
-                          {event.time && (
-                            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{event.time}</span>
-                          )}
-                          <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{event.location}</span>
+                      </div>
+
+                      {/* Date block overlay bottom-left */}
+                      <div className="absolute bottom-3 left-3">
+                        <div
+                          className="rounded-xl px-2.5 py-1.5 text-center"
+                          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.12)' }}
+                        >
+                          <div className="text-xl font-black leading-none text-white">{dayNum}</div>
+                          <div className="text-[9px] font-semibold uppercase tracking-wider text-white/70">{monthName}</div>
+                          <div className="text-[9px] text-white/40">{yearNum}</div>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Card body */}
+                    <div className="p-5 pt-4">
+                      <h3 className="mb-2 text-lg font-black leading-snug transition-colors" style={{ color: 'var(--theme-text)' }}>
+                        {event.title}
+                      </h3>
+                      <p className="mb-4 text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
+                        {event.description}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
+                        {event.time && (
+                          <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{event.time}</span>
+                        )}
+                        <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{event.location}</span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => addToCalendar(event)}
-                          className="mt-3 px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 text-sm font-medium hover:bg-blue-500/20 transition-colors"
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+                          style={{ background: `${meta.accent}15`, color: meta.accent }}
                         >
-                          <Calendar className="w-3.5 h-3.5 inline ml-1" />
+                          <Calendar className="w-3.5 h-3.5" />
                           הוסף ליומן
                         </button>
+                        {event.sourceUrl && (
+                          <a
+                            href={event.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:opacity-80"
+                            style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            {event.source}
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
