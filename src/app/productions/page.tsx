@@ -261,6 +261,7 @@ function ProductionsContent() {
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [navLoading, setNavLoading] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   // Infinite scroll state for list view
   const [listViewExtraWeeks, setListViewExtraWeeks] = useState(0);
   const [loadingMoreList, setLoadingMoreList] = useState(false);
@@ -484,9 +485,9 @@ function ProductionsContent() {
           ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
               headers: { Authorization: `Bearer ${token}` },
             })
-              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
-              .catch(() => ({ productions: [] as Production[] }))
-          : Promise.resolve({ productions: [] as Production[] }),
+              .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[]; lastSyncAt?: number | null }>) : { productions: [] as Production[], lastSyncAt: null }))
+              .catch(() => ({ productions: [] as Production[], lastSyncAt: null }))
+          : Promise.resolve({ productions: [] as Production[], lastSyncAt: null }),
         // Secondary source: global_productions queried by phone (server-side filtered)
         token && normalizedPhone
           ? fetch(`/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`, {
@@ -506,6 +507,8 @@ function ProductionsContent() {
       ]);
 
       console.warn('[loadExistingWeek] personal docs:', personalRes.productions?.length ?? 0, '/ global docs:', globalRes.productions?.length ?? 0, '/ phone-matched:', phoneRes.productions?.length ?? 0, '/ profile-matched:', profileRes.productions?.length ?? 0);
+
+      if (typeof globalRes.lastSyncAt === 'number') setLastSyncAt(globalRes.lastSyncAt);
 
       const userProds = personalRes.productions ?? [];
       const displayName = profile?.crewName || profile?.displayName || user.displayName || '';
@@ -2305,6 +2308,22 @@ function ProductionsContent() {
       {/* Calendar - always show once we have a valid range */}
       {renderedRange.start && renderedRange.end && (
         <>
+          {lastSyncAt && (
+            <div
+              className="mb-2 flex items-center gap-1.5 rounded-xl border px-3 py-1.5"
+              style={{ borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-accent) 4%, transparent)' }}
+            >
+              <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-45" style={{ color: 'var(--theme-accent)' }} />
+              <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
+                עודכן:{' '}
+                <span className="font-semibold" dir="ltr">
+                  {new Date(lastSyncAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                  {' '}
+                  {new Date(lastSyncAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </span>
+            </div>
+          )}
           <WeeklyCalendar
             productions={visibleProductions}
             weekStart={renderedRange.start}
