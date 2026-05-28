@@ -7,7 +7,7 @@ import { ChevronLeft } from 'lucide-react';
 import { fallbackMatches, WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 
-const TROPHY_IMG = '/trophy.svg';
+const TROPHY_IMG = '/wc2026-logo.png';
 
 function getDiff() {
   const diffMs = Math.max(0, Date.parse(WORLD_CUP_START_ISO) - Date.now());
@@ -124,11 +124,11 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       <span className="relative flex w-full items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2.5">
           {compact ? (
-            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/95 p-0.5 shadow-[0_0_12px_rgba(212,175,55,0.45)]">
               <img
                 src={TROPHY_IMG}
                 alt="גביע העולם"
-                className="h-full w-auto object-contain drop-shadow-[0_0_10px_rgba(212,175,55,0.65)]"
+                className="h-full w-full object-contain"
                 loading="eager"
               />
             </span>
@@ -158,12 +158,14 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
         >
           <span className="pointer-events-none absolute inset-x-8 inset-y-0 rounded-full bg-[#D4AF37] opacity-[0.08] blur-2xl" />
           <span className="pointer-events-none absolute bottom-0 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#D4AF37] opacity-20 blur-2xl" />
-          <img
-            src={TROPHY_IMG}
-            alt="גביע העולם FIFA"
-            className="relative z-10 h-full w-auto object-contain drop-shadow-[0_4px_30px_rgba(212,175,55,0.68)] transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_8px_44px_rgba(212,175,55,0.92)]"
-            loading="eager"
-          />
+          <span className="relative z-10 flex h-full items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-2 shadow-[0_4px_30px_rgba(212,175,55,0.35)] transition-all duration-500 group-hover:scale-105 group-hover:shadow-[0_8px_44px_rgba(212,175,55,0.55)]">
+            <img
+              src={TROPHY_IMG}
+              alt="גביע העולם FIFA"
+              className="h-full w-auto object-contain"
+              loading="eager"
+            />
+          </span>
         </span>
       )}
 
