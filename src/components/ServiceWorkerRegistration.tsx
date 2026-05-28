@@ -18,16 +18,29 @@ export function ServiceWorkerRegistration() {
     // Register the app's caching service worker (handles PWA offline & cache).
     // firebase-messaging-sw.js is registered separately by FCMTokenRegistration.
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
-        console.log('SW registered:', registration.scope);
-        void registration.update();
+        // Activate any already-waiting SW immediately
         if (registration.waiting) {
           registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
+
+        // When a new SW finishes installing, skip waiting and take control
+        registration.addEventListener('updatefound', () => {
+          const newSW = registration.installing;
+          if (!newSW) return;
+          newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+              newSW.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+
+        // Proactively check for a new SW version on every load
+        void registration.update();
       })
       .catch((error) => {
-        console.log('SW registration failed:', error);
+        console.warn('SW registration failed:', error);
       });
 
     return () => {
