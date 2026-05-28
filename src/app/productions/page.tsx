@@ -1097,6 +1097,24 @@ function ProductionsContent() {
 
       setWorkerName(extractedWorkerName);
 
+      // Save URL for hourly auto-sync (fire-and-forget)
+      user.getIdToken().then(idToken => {
+        const projectId = 'tv-industry-il';
+        const syncDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system/calendarSync`;
+        fetch(syncDocUrl, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              url: { stringValue: urlMatch[0] },
+              workerName: { stringValue: extractedWorkerName },
+              savedAt: { integerValue: String(Date.now()) },
+              savedByUid: { stringValue: user.uid },
+            },
+          }),
+        }).catch(() => {});
+      }).catch(() => {});
+
       // Trigger GitHub Action immediately via API route (reduces wait from 5min to ~30s)
       user.getIdToken().then(idToken => {
         fetch('/api/trigger-action', {

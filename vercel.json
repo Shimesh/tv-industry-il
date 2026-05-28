@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/scrape-ratings",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-calendar",
+      "schedule": "0 * * * *"
     }
   ]
 }
