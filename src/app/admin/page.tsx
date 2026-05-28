@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -781,7 +781,7 @@ export default function AdminPage() {
       .catch(() => undefined);
   }, [user, isAdmin]);
 
-  useEffect(() => {
+  const refreshDiscoveries = useCallback(() => {
     if (!user || profile?.siteRole !== 'admin') return;
     setDiscoveriesLoading(true);
     const today = new Date().toISOString().slice(0, 10);
@@ -797,6 +797,10 @@ export default function AdminPage() {
         .finally(() => setDiscoveriesLoading(false)),
     );
   }, [user, profile?.siteRole]);
+
+  useEffect(() => {
+    refreshDiscoveries();
+  }, [refreshDiscoveries]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -1772,6 +1776,14 @@ export default function AdminPage() {
                 {discoveries.length}
               </span>
             )}
+            <button
+              onClick={refreshDiscoveries}
+              disabled={discoveriesLoading}
+              className="mr-auto rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300 disabled:opacity-40"
+              title="רענן גילויים"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${discoveriesLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
           {discoveries.length === 0 && !discoveriesLoading && (
             <p className="text-sm text-gray-500">אין גילויים חדשים היום.</p>
