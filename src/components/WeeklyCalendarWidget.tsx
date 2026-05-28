@@ -414,7 +414,7 @@ export default function WeeklyCalendarWidget() {
           >
             <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-45" style={{ color: 'var(--theme-accent)' }} />
             <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
-              עודכן לאחרונה:{' '}
+              עודכן:{' '}
               <span className="font-semibold" dir="ltr">
                 {new Date(lastSyncAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                 {' '}
