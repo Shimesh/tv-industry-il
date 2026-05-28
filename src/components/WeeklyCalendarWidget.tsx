@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
+import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
@@ -384,20 +384,28 @@ export default function WeeklyCalendarWidget() {
           </div>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => setWeekOffset((offset) => offset - 1)} className="rounded-lg p-1 transition-colors hover:bg-[var(--theme-accent-glow)]" title="שבוע קודם">
-              <ChevronRight className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            <button
+              onClick={() => setWeekOffset((offset) => offset - 1)}
+              className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
+              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}
+            >
+              הקודם
             </button>
             {!isCurrentWeek && (
               <button
                 onClick={() => setWeekOffset(0)}
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors hover:opacity-80"
-                style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
+                className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
+                style={{ background: 'var(--theme-accent)', color: 'white', boxShadow: '0 0 10px color-mix(in srgb, var(--theme-accent) 40%, transparent)' }}
               >
                 היום
               </button>
             )}
-            <button onClick={() => setWeekOffset((offset) => offset + 1)} className="rounded-lg p-1 transition-colors hover:bg-[var(--theme-accent-glow)]" title="שבוע הבא">
-              <ChevronLeft className="h-4 w-4" style={{ color: 'var(--theme-text-secondary)' }} />
+            <button
+              onClick={() => setWeekOffset((offset) => offset + 1)}
+              className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
+              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}
+            >
+              הבא
             </button>
             <div className="mx-1 h-4 w-px opacity-20" style={{ background: 'var(--theme-border)' }} />
             <Link href="/productions" className="flex items-center gap-0.5 text-xs font-medium opacity-50 transition-opacity hover:opacity-100" style={{ color: 'var(--theme-accent)' }}>

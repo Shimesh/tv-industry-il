@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { ChevronRight, ChevronLeft, Search, X, Calendar, List, LayoutGrid, CalendarDays } from 'lucide-react';
+import { Search, X, CalendarDays } from 'lucide-react';
 
 export type CalendarView = 'week' | 'month' | 'list';
 
@@ -19,10 +19,10 @@ interface CalendarNavigationProps {
   loading?: boolean;
 }
 
-const viewOptions: { key: CalendarView; label: string; icon: typeof Calendar }[] = [
-  { key: 'week', label: 'שבוע', icon: Calendar },
-  { key: 'month', label: 'חודש', icon: LayoutGrid },
-  { key: 'list', label: 'רשימה', icon: List },
+const viewOptions: { key: CalendarView; label: string }[] = [
+  { key: 'week', label: 'שבוע' },
+  { key: 'month', label: 'חודש' },
+  { key: 'list', label: 'רשימה' },
 ];
 
 export default function CalendarNavigation({
@@ -44,23 +44,23 @@ export default function CalendarNavigation({
     <div className="flex flex-col gap-3 mb-4">
       {/* Top row: navigation + view switcher */}
       <div className="flex items-center justify-between gap-2">
+
         {/* Period navigation */}
-        <div className="flex items-center gap-1">
-          {/* Right arrow = previous in RTL */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onPrev}
-            className="p-1.5 sm:p-2 rounded-lg transition-all hover:scale-105 active:scale-95"
+            className="rounded-xl px-3 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
             style={{
               background: 'var(--theme-bg-secondary)',
               color: 'var(--theme-text-secondary)',
+              border: '1px solid var(--theme-border)',
             }}
-            aria-label="תקופה קודמת"
           >
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            הקודם
           </button>
 
           <h2
-            className="text-sm sm:text-lg font-bold min-w-[120px] sm:min-w-[180px] text-center select-none"
+            className="text-sm sm:text-base font-bold min-w-[110px] sm:min-w-[160px] text-center select-none"
             style={{ color: 'var(--theme-text)' }}
           >
             {loading ? (
@@ -73,17 +73,16 @@ export default function CalendarNavigation({
             )}
           </h2>
 
-          {/* Left arrow = next in RTL */}
           <button
             onClick={onNext}
-            className="p-1.5 sm:p-2 rounded-lg transition-all hover:scale-105 active:scale-95"
+            className="rounded-xl px-3 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
             style={{
               background: 'var(--theme-bg-secondary)',
               color: 'var(--theme-text-secondary)',
+              border: '1px solid var(--theme-border)',
             }}
-            aria-label="תקופה הבאה"
           >
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            הבא
           </button>
 
           {/* Date-jump: calendar icon opens native date picker */}
@@ -91,15 +90,16 @@ export default function CalendarNavigation({
             <div className="relative flex items-center">
               <button
                 onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
-                className="p-1.5 sm:p-2 rounded-lg transition-all hover:scale-105 active:scale-95"
+                className="p-1.5 rounded-xl transition-all hover:scale-105 active:scale-95"
                 style={{
                   background: 'var(--theme-bg-secondary)',
                   color: 'var(--theme-text-secondary)',
+                  border: '1px solid var(--theme-border)',
                 }}
                 title="קפוץ לתאריך"
                 aria-label="קפוץ לתאריך"
               >
-                <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5" />
+                <CalendarDays className="w-4 h-4" />
               </button>
               <input
                 ref={dateInputRef}
@@ -115,14 +115,14 @@ export default function CalendarNavigation({
             </div>
           )}
 
-          {/* Today button - only when not on current period */}
           {!isCurrentPeriod && (
             <button
               onClick={onToday}
-              className="mr-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs font-bold transition-all hover:scale-105 active:scale-95"
+              className="rounded-xl px-3 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
               style={{
                 background: 'var(--theme-accent)',
                 color: 'white',
+                boxShadow: '0 0 12px color-mix(in srgb, var(--theme-accent) 40%, transparent)',
               }}
             >
               היום
@@ -130,23 +130,27 @@ export default function CalendarNavigation({
           )}
         </div>
 
-        {/* View switcher */}
+        {/* View switcher — text only */}
         <div
           className="flex rounded-xl overflow-hidden border"
           style={{ borderColor: 'var(--theme-border)' }}
         >
-          {viewOptions.map(({ key, label, icon: Icon }) => (
+          {viewOptions.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => onViewChange(key)}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-bold transition-all"
+              className="px-3 py-1.5 text-xs font-bold transition-all"
               style={{
-                background: view === key ? 'var(--theme-accent)' : 'var(--theme-bg-secondary)',
+                background: view === key
+                  ? 'var(--theme-accent)'
+                  : 'var(--theme-bg-secondary)',
                 color: view === key ? 'white' : 'var(--theme-text-secondary)',
+                boxShadow: view === key
+                  ? 'inset 0 1px 0 rgba(255,255,255,0.15)'
+                  : undefined,
               }}
             >
-              <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span className="hidden sm:inline">{label}</span>
+              {label}
             </button>
           ))}
         </div>
@@ -163,7 +167,7 @@ export default function CalendarNavigation({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="חפש הפקה, סטודיו, צוות..."
-          className="w-full pr-9 pl-9 py-2 rounded-xl text-sm outline-none transition-all border focus:ring-2"
+          className="w-full pr-9 pl-9 py-2.5 rounded-xl text-sm outline-none transition-all border focus:ring-2"
           style={{
             background: 'var(--theme-bg-secondary)',
             color: 'var(--theme-text)',
