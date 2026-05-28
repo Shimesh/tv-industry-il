@@ -20,27 +20,38 @@ function getDiff() {
 }
 
 function Digit({ value, label, compact = false }: { value: number | null; label: string; compact?: boolean }) {
+  const isSeconds = label === 'שניות';
   return (
     <div
-      className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl border leading-none ${
-        compact ? 'px-1 py-1' : 'px-1 py-2'
+      className={`relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-xl leading-none ${
+        compact ? 'px-1 py-1.5' : 'px-1 py-3'
       }`}
       style={{
-        borderColor: 'color-mix(in srgb, var(--wc-gold, #D4AF37) 34%, transparent)',
-        background: 'color-mix(in srgb, var(--wc-deep-blue, #002046) 62%, transparent)',
+        background: 'linear-gradient(180deg, rgba(0,20,60,0.85) 0%, rgba(0,10,35,0.95) 100%)',
+        border: '1px solid rgba(212,175,55,0.22)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
       }}
     >
+      {/* Subtle inner glow on digit */}
+      <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(212,175,55,0.08),transparent_70%)]" />
       <motion.span
         key={value ?? label}
-        initial={{ scale: 0.92, opacity: 0.55 }}
-        animate={{ scale: label === 'שניות' ? [1, 1.09, 1] : 1, opacity: 1 }}
-        transition={{ duration: label === 'שניות' ? 0.45 : 0.22 }}
-        className={`${compact ? 'text-sm' : 'text-xl sm:text-2xl'} font-black leading-none tabular-nums text-[var(--wc-gold,#D4AF37)] drop-shadow-[0_0_12px_rgba(212,175,55,.32)]`}
+        initial={{ y: isSeconds ? -6 : 0, opacity: isSeconds ? 0.4 : 0.7, scale: 0.88 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        transition={{ duration: isSeconds ? 0.3 : 0.18, ease: 'easeOut' }}
+        className={`relative font-black tabular-nums text-[#D4AF37] ${
+          compact ? 'text-sm' : 'text-2xl sm:text-3xl'
+        }`}
+        style={{ textShadow: '0 0 18px rgba(212,175,55,0.55), 0 0 40px rgba(212,175,55,0.2)' }}
         dir="ltr"
       >
         {value === null ? '--' : String(value).padStart(2, '0')}
       </motion.span>
-      <span className={`${compact ? 'text-[8px]' : 'mt-1 text-[10px]'} font-black leading-none text-white/75`}>
+      <span
+        className={`relative font-bold uppercase tracking-wide text-white/50 ${
+          compact ? 'text-[7px] mt-0.5' : 'text-[9px] mt-1.5'
+        }`}
+      >
         {label}
       </span>
     </div>
@@ -57,7 +68,8 @@ function FlagBadge({ team, small = false }: { team: { id: string; nameHe: string
   const code = FLAG_IMAGE_CODES[team.id];
   return (
     <span
-      className={`flex ${small ? 'h-10 w-10' : 'h-14 w-14'} items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/95 shadow-md shadow-black/20`}
+      className={`flex ${small ? 'h-11 w-11' : 'h-14 w-14'} items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-black/30`}
+      style={{ border: '1.5px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.92)' }}
     >
       {code ? (
         <img
@@ -67,7 +79,7 @@ function FlagBadge({ team, small = false }: { team: { id: string; nameHe: string
           loading="lazy"
         />
       ) : (
-        <span className={`${small ? 'text-xl' : 'text-3xl'} leading-none`}>{team.flag}</span>
+        <span className={`${small ? 'text-2xl' : 'text-3xl'} leading-none`}>{team.flag}</span>
       )}
     </span>
   );
@@ -91,121 +103,177 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
     <motion.button
       type="button"
       onClick={() => router.push('/world-cup')}
-      whileHover={{ y: -3, scale: 1.015 }}
+      whileHover={{ y: -4, scale: 1.018 }}
       whileTap={{ scale: 0.97, y: 0 }}
-      className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden rounded-[1.5rem] border text-right backdrop-blur-2xl transition-all duration-200 hover:border-[#D4AF37]/60 ${
+      className={`group relative isolate flex shrink-0 cursor-pointer text-right ${
         compact
-          ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 px-2 py-2 sm:max-w-none'
-          : 'h-[360px] w-full max-w-full flex-col gap-2.5 p-4'
+          ? 'min-h-16 max-w-[min(56vw,190px)] items-center gap-2 overflow-hidden rounded-2xl px-2 py-2 sm:max-w-none'
+          : 'w-full max-w-full flex-col gap-3 overflow-hidden rounded-[1.75rem] p-4'
       }`}
       style={{
-        borderColor: activeMatch
-          ? 'color-mix(in srgb, var(--wc-gold, #D4AF37) 45%, transparent)'
-          : 'rgba(212,175,55,0.24)',
-        background:
-          'linear-gradient(170deg, rgba(0,18,52,0.94) 0%, rgba(2,6,23,0.97) 52%, rgba(0,10,32,0.99) 100%)',
+        background: 'linear-gradient(175deg, #001230 0%, #000c22 45%, #000818 100%)',
         boxShadow: activeMatch
-          ? '0 0 28px var(--wc-gold-glow, rgba(212,175,55,.34)), 0 24px 64px rgba(0,0,0,.25)'
-          : '0 16px 48px rgba(212,175,55,0.16), inset 0 1px 0 rgba(255,255,255,0.09)',
+          ? '0 0 0 1.5px rgba(212,175,55,0.6), 0 8px 32px rgba(212,175,55,0.25), 0 24px 64px rgba(0,0,0,0.5)'
+          : '0 0 0 1.5px rgba(212,175,55,0.18), 0 8px 32px rgba(0,0,0,0.4), 0 2px 0 rgba(255,255,255,0.04) inset',
       }}
       title="מרכז מונדיאל 2026"
     >
-      {/* Backgrounds */}
+      {/* ── Breathing border glow ── */}
+      <motion.span
+        className="pointer-events-none absolute inset-0 rounded-[inherit]"
+        animate={{
+          boxShadow: activeMatch
+            ? [
+                '0 0 0 1.5px rgba(212,175,55,0.5), 0 0 24px rgba(212,175,55,0.25)',
+                '0 0 0 2px rgba(212,175,55,0.9), 0 0 48px rgba(212,175,55,0.55)',
+                '0 0 0 1.5px rgba(212,175,55,0.5), 0 0 24px rgba(212,175,55,0.25)',
+              ]
+            : [
+                '0 0 0 1.5px rgba(212,175,55,0.15), 0 0 16px rgba(212,175,55,0.06)',
+                '0 0 0 1.5px rgba(212,175,55,0.45), 0 0 32px rgba(212,175,55,0.18)',
+                '0 0 0 1.5px rgba(212,175,55,0.15), 0 0 16px rgba(212,175,55,0.06)',
+              ],
+        }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* ── Breathing background layers ── */}
       <span className="pointer-events-none absolute inset-0">
-        <span className="absolute inset-0 bg-[radial-gradient(ellipse_100%_55%_at_50%_115%,rgba(0,80,20,0.28),transparent_60%)]" />
-        <span className="absolute inset-0 bg-[radial-gradient(circle_at_22%_22%,rgba(212,175,55,0.20),transparent_46%)]" />
-        <span className="absolute inset-0 bg-[radial-gradient(circle_at_80%_80%,rgba(0,32,80,0.35),transparent_40%)]" />
+        {/* Gold top-corner glow */}
+        <span className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(212,175,55,0.18),transparent_42%)]" />
+        {/* Green pitch glow at bottom — breathing */}
+        <motion.span
+          className="absolute bottom-0 left-0 right-0 h-2/5"
+          style={{
+            background: 'radial-gradient(ellipse_110%_80%_at_50%_110%, rgba(0,100,28,0.55), rgba(0,60,16,0.25) 55%, transparent 80%)',
+          }}
+          animate={{ opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        {/* Deep blue side accent */}
+        <span className="absolute inset-0 bg-[radial-gradient(circle_at_85%_75%,rgba(0,40,100,0.3),transparent_38%)]" />
       </span>
 
-      {/* Shimmer on hover */}
-      <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+      {/* ── Shimmer on hover ── */}
+      <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
 
-      {/* Header */}
-      <span className="relative flex w-full items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2.5">
-          {compact ? (
-            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/95 p-0.5 shadow-[0_0_12px_rgba(212,175,55,0.45)]">
-              <img
-                src={TROPHY_IMG}
-                alt="גביע העולם"
-                className="h-full w-full object-contain"
-                loading="eager"
-              />
-            </span>
-          ) : null}
-          <span className={compact ? 'min-w-0 text-right' : 'min-w-0 text-right'}>
-            <span className="block text-[10px] font-black uppercase tracking-widest text-white/40">
-              FIFA World Cup
-            </span>
-            <span className={`block font-black leading-tight text-white ${compact ? 'text-sm' : 'text-base'}`}>
-              {label}
-            </span>
-          </span>
-        </span>
-        {!compact && (
-          <span className="flex shrink-0 items-center gap-1 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37] transition-all duration-200 group-hover:border-[#D4AF37]/50 group-hover:bg-[#D4AF37]/20">
-            כניסה
-            <ChevronLeft className="h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
-          </span>
-        )}
-      </span>
-
-      {/* Trophy centerpiece (non-compact only) */}
-      {!compact && (
-        <span
-          className="relative flex min-h-0 flex-1 items-center justify-center"
-          style={{ maxHeight: '176px' }}
-        >
-          <span className="pointer-events-none absolute inset-x-8 inset-y-0 rounded-full bg-[#D4AF37] opacity-[0.08] blur-2xl" />
-          <span className="pointer-events-none absolute bottom-0 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#D4AF37] opacity-20 blur-2xl" />
-          <span className="relative z-10 flex h-full items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-2 shadow-[0_4px_30px_rgba(212,175,55,0.35)] transition-all duration-500 group-hover:scale-105 group-hover:shadow-[0_8px_44px_rgba(212,175,55,0.55)]">
+      {/* ══════════════ COMPACT LAYOUT ══════════════ */}
+      {compact && (
+        <>
+          {/* Logo — inverted so black bg disappears on dark card, gold stays gold */}
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
             <img
               src={TROPHY_IMG}
-              alt="גביע העולם FIFA"
-              className="h-full w-auto object-contain"
+              alt="FIFA World Cup 2026"
+              className="h-full w-full object-contain"
+              style={{ filter: 'invert(1) hue-rotate(180deg) brightness(1.1)' }}
               loading="eager"
             />
           </span>
-        </span>
+
+          <span className="min-w-0 flex-1 text-right">
+            <span className="block text-[9px] font-black uppercase tracking-widest text-white/35">
+              FIFA World Cup
+            </span>
+            <span className="block text-sm font-black leading-tight text-white">{label}</span>
+          </span>
+
+          <span className="relative flex shrink-0 gap-1" dir="ltr">
+            <Digit value={diff?.days ?? null} label="ימים" compact />
+            <Digit value={diff?.hours ?? null} label="שעות" compact />
+            <Digit value={diff?.minutes ?? null} label="דקות" compact />
+            <Digit value={diff?.seconds ?? null} label="שניות" compact />
+          </span>
+        </>
       )}
 
-      {/* Match preview */}
-      {!compact && previewMatch ? (
-        <span
-          className="relative flex w-full items-center justify-center gap-2 rounded-2xl border border-[#D4AF37]/18 bg-black/25 px-3 py-2 text-center"
-          dir="rtl"
-        >
-          <span className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <FlagBadge team={previewMatch.homeTeam} small />
-            <span className="max-w-full truncate text-[11px] font-black text-white/85">
-              {previewMatch.homeTeam.nameHe}
+      {/* ══════════════ FULL LAYOUT ══════════════ */}
+      {!compact && (
+        <>
+          {/* Header row */}
+          <span className="relative flex w-full items-start justify-between gap-3">
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
+                FIFA World Cup
+              </span>
+              <span className="mt-0.5 text-lg font-black leading-tight text-white">{label}</span>
             </span>
-          </span>
-          <span
-            className="rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-0.5 text-[11px] font-black text-[#D4AF37]"
-            dir="ltr"
-          >
-            VS
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <FlagBadge team={previewMatch.awayTeam} small />
-            <span className="max-w-full truncate text-[11px] font-black text-white/85">
-              {previewMatch.awayTeam.nameHe}
-            </span>
-          </span>
-        </span>
-      ) : null}
 
-      {/* Countdown */}
-      <span
-        className={`${compact ? 'relative flex flex-1 gap-1' : 'relative grid w-full grid-cols-4 gap-1.5'}`}
-        dir="ltr"
-      >
-        <Digit value={diff?.days ?? null} label="ימים" compact={compact} />
-        <Digit value={diff?.hours ?? null} label="שעות" compact={compact} />
-        <Digit value={diff?.minutes ?? null} label="דקות" compact={compact} />
-        <Digit value={diff?.seconds ?? null} label="שניות" compact={compact} />
-      </span>
+            {/* Official logo — inverted filter */}
+            <span className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+              <motion.span
+                className="pointer-events-none absolute inset-0 rounded-2xl"
+                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                style={{ boxShadow: '0 0 20px rgba(212,175,55,0.5)' }}
+              />
+              <img
+                src={TROPHY_IMG}
+                alt="גביע העולם FIFA 2026"
+                className="relative z-10 h-full w-full object-contain drop-shadow-[0_0_14px_rgba(212,175,55,0.6)] transition-transform duration-500 group-hover:scale-110"
+                style={{ filter: 'invert(1) hue-rotate(180deg) brightness(1.15)' }}
+                loading="eager"
+              />
+            </span>
+
+            <span className="flex shrink-0 items-center gap-1 self-start rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[11px] font-black text-[#D4AF37] transition-all duration-200 group-hover:border-[#D4AF37]/55 group-hover:bg-[#D4AF37]/20">
+              כניסה
+              <ChevronLeft className="h-3 w-3 transition-transform duration-200 group-hover:-translate-x-0.5" />
+            </span>
+          </span>
+
+          {/* Match preview */}
+          {previewMatch && (
+            <motion.span
+              className="relative flex w-full items-center justify-center gap-3 rounded-2xl px-4 py-3"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0,15,45,0.85) 0%, rgba(0,10,30,0.9) 100%)',
+                border: '1px solid rgba(212,175,55,0.15)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+              dir="rtl"
+            >
+              {/* Team home */}
+              <span className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                <FlagBadge team={previewMatch.homeTeam} small />
+                <span className="max-w-full truncate text-[11px] font-black text-white/80">
+                  {previewMatch.homeTeam.nameHe}
+                </span>
+              </span>
+
+              {/* VS badge */}
+              <span className="flex flex-col items-center gap-0.5">
+                <span
+                  className="rounded-full px-3 py-1 text-[12px] font-black text-[#D4AF37]"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))',
+                    border: '1px solid rgba(212,175,55,0.35)',
+                  }}
+                  dir="ltr"
+                >
+                  VS
+                </span>
+              </span>
+
+              {/* Team away */}
+              <span className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                <FlagBadge team={previewMatch.awayTeam} small />
+                <span className="max-w-full truncate text-[11px] font-black text-white/80">
+                  {previewMatch.awayTeam.nameHe}
+                </span>
+              </span>
+            </motion.span>
+          )}
+
+          {/* Countdown */}
+          <span className="relative grid w-full grid-cols-4 gap-2" dir="ltr">
+            <Digit value={diff?.days ?? null} label="ימים" />
+            <Digit value={diff?.hours ?? null} label="שעות" />
+            <Digit value={diff?.minutes ?? null} label="דקות" />
+            <Digit value={diff?.seconds ?? null} label="שניות" />
+          </span>
+        </>
+      )}
     </motion.button>
   );
 }
