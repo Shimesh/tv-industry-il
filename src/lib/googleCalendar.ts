@@ -34,9 +34,10 @@ function buildOAuthUrl(uid: string, returnPath: string, mode: 'popup' | 'redirec
   if (!clientId) throw new Error('NEXT_PUBLIC_GOOGLE_CLIENT_ID not configured');
 
   const redirectUri = `${window.location.origin}/api/google/callback`;
-  const state = Buffer.from(
-    JSON.stringify({ uid, returnPath, mode }),
-  ).toString('base64url');
+  const state = btoa(JSON.stringify({ uid, returnPath, mode }))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   return (
     'https://accounts.google.com/o/oauth2/v2/auth?' +
