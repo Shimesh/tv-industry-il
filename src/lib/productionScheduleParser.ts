@@ -49,40 +49,61 @@ export function isHerzliyaHTML(text: string): boolean {
 }
 
 /**
- * Extract the base URL of the Herzliya scheduling system from the HTML source.
- * Returns something like "http://hsil.acc.co.il:5443/magicscripts"
+ * Extract the base URL (mgrqispi.dll endpoint) of the Herzliya scheduling system.
+ * Returns something like "https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll"
  */
 export function extractHerzliyaBaseUrl(html: string): string {
-  // Look for the URL in <form action="...">, meta refresh, or known patterns
-  const formMatch = html.match(/action=["']([^"']*magicscripts[^"']*)["']/i);
-  if (formMatch) {
-    try {
-      const u = new URL(formMatch[1]);
-      return `${u.protocol}//${u.host}${u.pathname}`;
-    } catch { /* fall through */ }
+  // Look for mgrqispi.dll in form actions, hrefs, or src attributes
+  const patterns = [
+    /action=["'](https?:\/\/[^"']*mgrqispi\.dll[^"']*)["']/i,
+    /(?:href|src)=["'](https?:\/\/[^"']*mgrqispi\.dll[^"']*)["']/i,
+    /["'](https?:\/\/[^"']*magicscripts[^"']*mgrqispi\.dll[^"']*)["']/i,
+  ];
+  for (const pattern of patterns) {
+    const m = html.match(pattern);
+    if (m) {
+      try {
+        const u = new URL(m[1]);
+        return `${u.protocol}//${u.host}${u.pathname}`;
+      } catch { /* try next */ }
+    }
   }
-  // Look for href or src containing the base
-  const hrefMatch = html.match(/(?:href|src|action)=["'](https?:\/\/[^"']*?magicscripts)[^"']*["']/i);
-  if (hrefMatch) {
-    try {
-      const u = new URL(hrefMatch[1]);
-      return `${u.protocol}//${u.host}${u.pathname}`;
-    } catch { /* fall through */ }
-  }
+  // Fallback: look for just the host+port from any hsil/magicscripts URL
+  const hostMatch = html.match(/["'](https?:\/\/[^"'/]+\/magicscripts\/mgrqispi\.dll)/i);
+  if (hostMatch) return hostMatch[1];
   return '';
 }
 
 /**
- * Build the URL for the Herzliya popup (openmd2) that contains the full crew list.
- * Based on the Progress/OpenEdge WebSpeed URL pattern used by the Herzliya system.
+ * Build the URL for the Herzliya crew popup (ShowCrew endpoint).
+ * Confirmed URL pattern from DevTools:
+ * https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N{id}
  */
 export function buildHerzliyaPopupUrl(baseUrl: string, herzliyaId: number): string {
   if (!baseUrl || !herzliyaId) return '';
-  // Progress WebSpeed: ?HSELWEBprgname=openmd2&P1={id}
   const url = new URL(baseUrl);
-  url.searchParams.set('HSELWEBprgname', 'openmd2');
-  url.searchParams.set('P1', String(herzliyaId));
+  url.searchParams.set('appname', 'HsILWeb');
+  url.searchParams.set('prgname', 'ShowCrew');
+  url.searchParams.set('arguments', `-N${herzliyaId}`);
   return url.toString();
+}
+
+/**
+ * Extract herzliyaId → production name pairs from Herzliya calendar HTML using regex.
+ * Works server-side (no DOMParser needed).
+ */
+export function extractHerzliyaEventIds(html: string): Array<{ herzliyaId: number; name: string }> {
+  const results: Array<{ herzliyaId: number; name: string }> = [];
+  const chunks = html.split(/onclick=["']openmd2\(/);
+  for (let i = 1; i < chunks.length; i++) {
+    const idMatch = chunks[i].match(/^(\d+)\)/);
+    if (!idMatch) continue;
+    const herzliyaId = parseInt(idMatch[1]);
+    const nameMatch = chunks[i].match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
+    const name = nameMatch ? nameMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+    if (herzliyaId && name) results.push({ herzliyaId, name });
+  }
+  return results;
 }
 
 /**

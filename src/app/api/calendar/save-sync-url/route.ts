@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { patchDocument } from '@/lib/server/firestoreAdminRest';
-import { parseScheduleHTML } from '@/lib/productionScheduleParser';
+import {
+  parseScheduleHTML,
+  extractHerzliyaBaseUrl,
+  buildHerzliyaPopupUrl,
+  parseHerzliyaPopupHtml,
+  extractHerzliyaEventIds,
+} from '@/lib/productionScheduleParser';
 import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
@@ -64,6 +70,63 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const deptHtml = deptResult?.ok ? await deptResult.text() : '';
       const deptSameAsPersonal = deptHtml === personalHtml;
       const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
+
+      // Enrich crew via ShowCrew popup for each Herzliya event (server-side)
+      if (parsed.productions.length > 0 && personalHtml.includes('openmd2')) {
+        const baseUrl =
+          extractHerzliyaBaseUrl(personalHtml) ||
+          (() => {
+            try {
+              const u = new URL(url);
+              return `${u.protocol}//${u.host}${u.pathname}`;
+            } catch {
+              return '';
+            }
+          })();
+
+        if (baseUrl) {
+          const events = extractHerzliyaEventIds(personalHtml);
+          const nameToId: Record<string, number> = {};
+          for (const e of events) nameToId[e.name] = e.herzliyaId;
+
+          const uniqueIds = [...new Set(events.map(e => e.herzliyaId))];
+          const popupCache: Record<number, string> = {};
+
+          await Promise.allSettled(
+            uniqueIds.map(async (id) => {
+              const popupUrl = buildHerzliyaPopupUrl(baseUrl, id);
+              if (!popupUrl) return;
+              const res = await fetch(popupUrl, fetchOptions).catch(() => null);
+              if (res?.ok) popupCache[id] = await res.text();
+            }),
+          );
+
+          console.log('[save-sync-url] ShowCrew popups fetched:', Object.keys(popupCache).length, '/', uniqueIds.length);
+
+          for (const prod of parsed.productions) {
+            const herzliyaId = nameToId[prod.name];
+            if (!herzliyaId || !popupCache[herzliyaId]) continue;
+            const popupCrew = parseHerzliyaPopupHtml(popupCache[herzliyaId]);
+            for (const pc of popupCrew) {
+              const exists = prod.crew.find(c => c.name === pc.name);
+              if (!exists) {
+                prod.crew.push({
+                  name: pc.name,
+                  role: pc.role,
+                  roleDetail: '',
+                  phone: pc.phone,
+                  startTime: pc.startTime,
+                  endTime: pc.endTime,
+                  isCurrentUser: false,
+                });
+              } else if (!exists.phone && pc.phone) {
+                exists.phone = pc.phone;
+              }
+            }
+          }
+        }
+      }
+
       // Log crew counts per production for debugging
       if (parsed.productions.length > 0) {
         console.log('[save-sync-url] parsed', parsed.productions.length, 'productions, deptHtml:', deptHtml ? `${deptHtml.length} chars` : 'empty', deptSameAsPersonal ? '(same as personal)' : '');
