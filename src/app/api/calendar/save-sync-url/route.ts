@@ -62,7 +62,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (personalResponse.ok) {
       const personalHtml = await personalResponse.text();
       const deptHtml = deptResult?.ok ? await deptResult.text() : '';
-      const parsed = parseScheduleHTML(personalHtml, deptHtml);
+      const deptSameAsPersonal = deptHtml === personalHtml;
+      const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
+      // Log crew counts per production for debugging
+      if (parsed.productions.length > 0) {
+        console.log('[save-sync-url] parsed', parsed.productions.length, 'productions, deptHtml:', deptHtml ? `${deptHtml.length} chars` : 'empty', deptSameAsPersonal ? '(same as personal)' : '');
+        for (const p of parsed.productions) {
+          console.log(`  [crew] ${p.name} ${p.date}: ${p.crew.length} members`);
+        }
+      }
 
       if (parsed.productions.length > 0) {
         const productions = parsed.productions.map((prod) => ({
