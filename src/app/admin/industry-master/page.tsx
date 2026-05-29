@@ -71,6 +71,8 @@ export default function UnifiedIndustryMasterPage() {
   const [bulkWikiProgress, setBulkWikiProgress] = useState<{ processed: number; remaining: number } | null>(null);
   const [bulkTmdbRunning, setBulkTmdbRunning] = useState(false);
   const [bulkTmdbProgress, setBulkTmdbProgress] = useState<{ processed: number; remaining: number } | null>(null);
+  const [bulkCseRunning, setBulkCseRunning] = useState(false);
+  const [bulkCseProgress, setBulkCseProgress] = useState<{ processed: number; remaining: number } | null>(null);
   const [addModal, setAddModal] = useState<AddModalState>(EMPTY_ADD);
   const [editModal, setEditModal] = useState<EditModalState>(EMPTY_EDIT);
   const [reviewModal, setReviewModal] = useState<ReviewModalState>(EMPTY_REVIEW);
@@ -313,6 +315,33 @@ export default function UnifiedIndustryMasterPage() {
     }
   };
 
+  const handleBulkCse = async (force = false) => {
+    setBulkCseRunning(true);
+    setBulkCseProgress({ processed: 0, remaining: Infinity });
+    const since = new Date().toISOString();
+    let totalProcessed = 0;
+    try {
+      while (true) {
+        const res = await authFetch('/api/admin/industry-master/sync/cse', {
+          method: 'POST',
+          body: JSON.stringify({ force, ...(force ? { since } : {}) }),
+        });
+        const data = await res.json() as { error?: string; processed?: number; remaining?: number; enriched?: number };
+        if (!res.ok) throw new Error(data.error || 'שגיאה');
+        totalProcessed += data.processed ?? 0;
+        setBulkCseProgress({ processed: totalProcessed, remaining: data.remaining ?? 0 });
+        if ((data.remaining ?? 0) === 0 || (data.processed ?? 0) === 0) break;
+      }
+      showToast('ok', `Google תמונות הושלם: ${totalProcessed} רשומות עודכנו`);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה ב-Google CSE');
+    } finally {
+      setBulkCseRunning(false);
+      setBulkCseProgress(null);
+    }
+  };
+
   const handleCleanup = async () => {
     if (!confirm('למחוק את כל הרשומות הרועשות (שמות בודדים, ביטולים, סטטוסים)? פעולה זו בלתי הפיכה.')) return;
     setCleaningUp(true);
@@ -501,6 +530,26 @@ export default function UnifiedIndustryMasterPage() {
           </button>
 
           <button
+            onClick={bulkCseRunning ? undefined : () => handleBulkCse(false)}
+            disabled={bulkCseRunning}
+            title="מחפש תמונות דרך Google ב-Mako/כאן/רשת (דורש GOOGLE_CSE_KEY ו-GOOGLE_CSE_ID)"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border disabled:opacity-40"
+            style={bulkCseRunning
+              ? { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#f87171' }
+              : { background: 'rgba(59,130,246,0.12)', borderColor: 'rgba(59,130,246,0.3)', color: '#93c5fd' }
+            }
+          >
+            {bulkCseRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Google ({bulkCseProgress?.remaining === Infinity ? '...' : bulkCseProgress?.remaining} נותרו)
+              </>
+            ) : (
+              <><Globe className="w-4 h-4" />Google תמונות</>
+            )}
+          </button>
+
+          <button
             onClick={handleCleanup}
             disabled={cleaningUp || bulkWikiRunning}
             title="מוחק רשומות רועשות: שמות בודדים, ביטולים, סטטוסים"
@@ -522,6 +571,37 @@ export default function UnifiedIndustryMasterPage() {
         </div>
 
         {/* Bulk wiki progress bar */}
+        {bulkCseRunning && bulkCseProgress && (
+          <div
+            className="mb-4 rounded-lg px-4 py-3 border"
+            style={{ background: 'rgba(59,130,246,0.1)', borderColor: 'rgba(59,130,246,0.25)' }}
+          >
+            <div className="flex items-center justify-between text-sm mb-2" style={{ color: '#93c5fd' }}>
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Google תמונות: {bulkCseProgress.processed} הושלמו
+                {bulkCseProgress.remaining !== Infinity && `, ${bulkCseProgress.remaining} נותרו`}
+              </span>
+              <span>
+                {bulkCseProgress.remaining !== Infinity && bulkCseProgress.remaining + bulkCseProgress.processed > 0
+                  ? `${Math.round((bulkCseProgress.processed / (bulkCseProgress.processed + bulkCseProgress.remaining)) * 100)}%`
+                  : ''}
+              </span>
+            </div>
+            {bulkCseProgress.remaining !== Infinity && (
+              <div className="w-full rounded-full overflow-hidden" style={{ background: 'rgba(59,130,246,0.2)', height: 4 }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    background: '#60a5fa',
+                    width: `${Math.round((bulkCseProgress.processed / (bulkCseProgress.processed + bulkCseProgress.remaining)) * 100)}%`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {bulkTmdbRunning && bulkTmdbProgress && (
           <div
             className="mb-4 rounded-lg px-4 py-3 border"
