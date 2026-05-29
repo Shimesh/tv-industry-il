@@ -226,6 +226,7 @@ function ProductionsContent() {
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [gcalConnecting, setGcalConnecting] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const [gcalBulkProgress, setGcalBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -1781,18 +1782,44 @@ function ProductionsContent() {
     setStatusMessage('קובץ Outlook / ICS נוצר בהצלחה');
   }, [getUpcomingPersonalProductions]);
 
-  const syncUpcomingProductionsToGoogle = useCallback(async () => {
-    const upcomingProductions = getUpcomingPersonalProductions();
-    if (upcomingProductions.length === 0) {
-      setStatusMessage('אין הפקות עתידיות לסנכרון');
+  const syncUpcomingProductionsToGoogle = useCallback(async (range: 'week' | 'month' | 'quarter') => {
+    const today = new Date().toISOString().split('T')[0];
+    let untilDate: string;
+    if (range === 'week') {
+      const d = new Date(); d.setDate(d.getDate() + 7);
+      untilDate = d.toISOString().split('T')[0];
+    } else if (range === 'month') {
+      const d = new Date(); d.setMonth(d.getMonth() + 1);
+      untilDate = d.toISOString().split('T')[0];
+    } else {
+      const d = new Date(); d.setMonth(d.getMonth() + 3);
+      untilDate = d.toISOString().split('T')[0];
+    }
+
+    // Load productions in range (may need to fetch from server)
+    let rangeProds = productions.filter(p => p.date >= today && p.date <= untilDate);
+    if (rangeProds.length === 0) {
+      const loaded = await loadProductionsForPeriod(today, untilDate);
+      rangeProds = loaded.filter(p => p.date >= today && p.date <= untilDate);
+    }
+
+    if (rangeProds.length === 0) {
+      setStatusMessage('אין הפקות בטווח הנבחר');
       setShowCalendarMenu(false);
       return;
     }
-    for (const prod of upcomingProductions.slice(0, 20)) {
-      await syncToGoogleCalendar(prod);
-    }
+
     setShowCalendarMenu(false);
-  }, [getUpcomingPersonalProductions, syncToGoogleCalendar]);
+    setGcalBulkProgress({ done: 0, total: rangeProds.length });
+    let done = 0;
+    for (const prod of rangeProds) {
+      await syncToGoogleCalendar(prod);
+      done++;
+      setGcalBulkProgress({ done, total: rangeProds.length });
+    }
+    setGcalBulkProgress(null);
+    setStatusMessage(`סונכרנו ${done} הפקות ל-Google Calendar ✓`);
+  }, [productions, loadProductionsForPeriod, syncToGoogleCalendar]);
 
   const connectGoogleCalendar = useCallback(async () => {
     if (!user) return;
@@ -2033,14 +2060,30 @@ function ProductionsContent() {
 
                   <div className="space-y-2">
                     {profile?.googleCalendarConnected ? (
-                      <button
-                        onClick={() => void syncUpcomingProductionsToGoogle()}
-                        disabled={gcalSyncing !== null}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
-                      >
-                        {gcalSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
-                        סנכרון הפקות עתידיות
-                      </button>
+                      <>
+                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סנכרן הפקות עתידיות:</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(['week', 'month', 'quarter'] as const).map((range) => {
+                            const labels = { week: 'שבוע', month: 'חודש', quarter: '3 חודשים' };
+                            return (
+                              <button
+                                key={range}
+                                onClick={() => void syncUpcomingProductionsToGoogle(range)}
+                                disabled={gcalSyncing !== null || gcalBulkProgress !== null}
+                                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-xs font-bold text-white bg-gradient-to-b from-blue-500 to-sky-600 disabled:opacity-60"
+                              >
+                                {gcalBulkProgress !== null ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />}
+                                {labels[range]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {gcalBulkProgress && (
+                          <div className="text-center text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                            {gcalBulkProgress.done} / {gcalBulkProgress.total}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <button
                         onClick={() => void connectGoogleCalendar()}
