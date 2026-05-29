@@ -1,0 +1,36 @@
+name: Scrape Ratings (Puppeteer)
+
+on:
+  schedule:
+    - cron: '15 7 * * *'   # 07:15 UTC = 10:15 IST daily
+    - cron: '0 6 * * 0'    # 06:00 UTC = 09:00 IST Sunday (weekly ratings)
+  workflow_dispatch:
+    inputs:
+      force_weekly:
+        description: 'Force weekly scrape'
+        required: false
+        default: 'false'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-save puppeteer firebase-admin cheerio
+
+      - name: Scrape ratings via Puppeteer
+        env:
+          FIREBASE_PROJECT_ID:   ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FORCE_WEEKLY: ${{ github.event.inputs.force_weekly == 'true' && '1' || (github.event.schedule == '0 6 * * 0' && '1' || '0') }}
+        run: node scripts/scrape-ratings-puppeteer.mjs
