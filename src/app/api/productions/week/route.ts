@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
       },
         limit: 500,
       }),
-      getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
+      getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() =>
+        getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null)
+      ),
     ]);
 
     // Compatibility endpoint: read the canonical global calendar source.
