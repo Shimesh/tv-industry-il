@@ -48,9 +48,106 @@ export function isHerzliyaHTML(text: string): boolean {
   );
 }
 
-// ════════════════════════════════════════════
-// PRIMARY PARSER: DOMParser-based HTML parser
-// ════════════════════════════════════════════
+/**
+ * Extract the base URL of the Herzliya scheduling system from the HTML source.
+ * Returns something like "http://hsil.acc.co.il:5443/magicscripts"
+ */
+export function extractHerzliyaBaseUrl(html: string): string {
+  // Look for the URL in <form action="...">, meta refresh, or known patterns
+  const formMatch = html.match(/action=["']([^"']*magicscripts[^"']*)["']/i);
+  if (formMatch) {
+    try {
+      const u = new URL(formMatch[1]);
+      return `${u.protocol}//${u.host}${u.pathname}`;
+    } catch { /* fall through */ }
+  }
+  // Look for href or src containing the base
+  const hrefMatch = html.match(/(?:href|src|action)=["'](https?:\/\/[^"']*?magicscripts)[^"']*["']/i);
+  if (hrefMatch) {
+    try {
+      const u = new URL(hrefMatch[1]);
+      return `${u.protocol}//${u.host}${u.pathname}`;
+    } catch { /* fall through */ }
+  }
+  return '';
+}
+
+/**
+ * Build the URL for the Herzliya popup (openmd2) that contains the full crew list.
+ * Based on the Progress/OpenEdge WebSpeed URL pattern used by the Herzliya system.
+ */
+export function buildHerzliyaPopupUrl(baseUrl: string, herzliyaId: number): string {
+  if (!baseUrl || !herzliyaId) return '';
+  // Progress WebSpeed: ?HSELWEBprgname=openmd2&P1={id}
+  const url = new URL(baseUrl);
+  url.searchParams.set('HSELWEBprgname', 'openmd2');
+  url.searchParams.set('P1', String(herzliyaId));
+  return url.toString();
+}
+
+/**
+ * Parse the Herzliya popup HTML (openmd2 detail modal) to extract full crew list.
+ * The popup is a table with columns: phone, name, role, time.
+ */
+export function parseHerzliyaPopupHtml(html: string): Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> {
+  if (!html || typeof DOMParser === 'undefined') return parseHerzliyaPopupText(html);
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const rows = doc.querySelectorAll('tr');
+  const crew: Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> = [];
+
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 2) return;
+
+    // Try to identify columns by content pattern
+    const texts = Array.from(cells).map(c => c.textContent?.trim() || '');
+
+    // Heuristic: find the cell with a Hebrew name (2+ Hebrew chars)
+    const nameIdx = texts.findIndex(t => /[א-ת]{2,}/.test(t) && t.length >= 2);
+    if (nameIdx === -1) return;
+
+    const name = texts[nameIdx];
+    const role = texts[nameIdx + 1] || '';
+    const phone = texts.find(t => /^0\d{8,9}$/.test(t.replace(/[-\s]/g, ''))) || '';
+    const times = texts.flatMap(t => t.match(/\d{1,2}:\d{2}/g) || []);
+    const [startTime, endTime] = times.length >= 2 ? [times[0], times[1]] : [times[0] || '', ''];
+
+    if (name.length >= 2) {
+      crew.push({ name, role: role.replace(/\d{1,2}:\d{2}.*/g, '').trim(), phone: phone.replace(/[-\s]/g, ''), startTime, endTime });
+    }
+  });
+
+  return crew;
+}
+
+/** Fallback: parse popup text (server-side, no DOMParser) */
+function parseHerzliyaPopupText(html: string): Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> {
+  const crew: Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> = [];
+  const text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/td>/gi, '\t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+
+  for (const line of text.split('\n')) {
+    const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    const phoneIdx = parts.findIndex(p => /^0\d{8,9}$/.test(p.replace(/[-\s]/g, '')));
+    const nameIdx = parts.findIndex(p => /[א-ת]{2,}/.test(p));
+    if (nameIdx === -1) continue;
+    const name = parts[nameIdx];
+    const role = parts[nameIdx + 1] && !/\d{1,2}:\d{2}/.test(parts[nameIdx + 1]) ? parts[nameIdx + 1] : '';
+    const phone = phoneIdx !== -1 ? parts[phoneIdx].replace(/[-\s]/g, '') : '';
+    const times = parts.flatMap(p => p.match(/\d{1,2}:\d{2}/g) || []);
+    crew.push({ name, role, phone, startTime: times[0] || '', endTime: times[1] || '' });
+  }
+  return crew;
+}
+
 
 /** Parse Herzliya schedule HTML using browser DOMParser */
 export function parseHerzliyaHTML(html: string, currentUserName?: string): ParsedSchedule {
@@ -62,6 +159,13 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
   // Quick check: is this actually Herzliya HTML?
   if (!isHerzliyaHTML(html)) {
     return parseScheduleHTML(html, '');
+  }
+
+  // Extract injected popup crew data (if available from browserFetch enrichment)
+  let popupCrewData: Record<number, string> = {};
+  const popupMatch = html.match(/<!-- POPUP_CREW_DATA:([\s\S]+?) -->/);
+  if (popupMatch) {
+    try { popupCrewData = JSON.parse(popupMatch[1]); } catch { /* ignore */ }
   }
 
   const parser = new DOMParser();
@@ -204,6 +308,20 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
 
       // Determine isCurrentUserShift
       const isCurrentUserShift = isHighlightedShift || crew.some(c => c.isCurrentUser);
+
+      // Enrich crew from popup data (openmd2) if available — gives full list + phones
+      if (herzliyaId && popupCrewData[herzliyaId]) {
+        const popupCrew = parseHerzliyaPopupHtml(popupCrewData[herzliyaId]);
+        for (const pc of popupCrew) {
+          const exists = crew.find(c => c.name === pc.name);
+          if (!exists) {
+            crew.push({ ...pc, roleDetail: '', isCurrentUser: matchesUserName(pc.name, currentUserName) });
+          } else if (!exists.phone && pc.phone) {
+            // Enrich existing entry with phone number from popup
+            exists.phone = pc.phone;
+          }
+        }
+      }
 
       productions.push({
         id: generateProductionId(finalName, dayInfo.isoDate, studio),

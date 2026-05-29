@@ -1,11 +1,20 @@
 // Browser-side fetching for Herzliya schedule system
 // Uses CORS proxies since the server is only accessible from user's network
 
+import {
+  isHerzliyaHTML,
+  parseHerzliyaHTML,
+  parseHerzliyaPopupHtml,
+  extractHerzliyaBaseUrl,
+  buildHerzliyaPopupUrl,
+} from '@/lib/productionScheduleParser';
+
 export type FetchStep =
   | 'detecting'
   | 'connecting'
   | 'fetching_personal'
   | 'fetching_dept'
+  | 'fetching_crew'
   | 'parsing'
   | 'done'
   | 'error';
@@ -18,6 +27,7 @@ export interface FetchProgress {
 const STEP_MESSAGES: Record<FetchStep, string> = {
   detecting: '🔍 מזהה לינק...',
   connecting: '📡 מתחבר לשרת הרצליה...',
+  fetching_crew: '👥 מושך פרטי צוות מלאים...',
   fetching_personal: '📋 קורא לוח עבודה אישי...',
   fetching_dept: '👥 קורא נתוני מחלקה...',
   parsing: '⚙️ מעבד נתונים...',
@@ -148,11 +158,44 @@ export async function fetchScheduleFromBrowser(
     }
   }
 
-  // Step 4: Done fetching
+  // Step 4: Fetch full crew details from openmd2 popup for each event
+  // The calendar HTML only shows a preview of crew; the popup has the full list + phone numbers
+  let enrichedPersonalHtml = personalResult.html;
+  if (isHerzliyaHTML(personalResult.html)) {
+    const baseUrl = extractHerzliyaBaseUrl(personalResult.html) || url.replace(/\?.*$/, '');
+    const parsed = parseHerzliyaHTML(personalResult.html);
+    const eventIds = parsed.productions
+      .map(p => p.herzliyaId)
+      .filter((id): id is number => Boolean(id));
+
+    if (eventIds.length > 0 && baseUrl) {
+      onProgress({ step: 'fetching_crew', message: `${getStepMessage('fetching_crew')} (${eventIds.length} הפקות)` });
+
+      // Fetch popup for each event (up to 20 to avoid overwhelming the proxy)
+      const popupResults: Record<number, string> = {};
+      const idsToFetch = eventIds.slice(0, 20);
+      await Promise.allSettled(
+        idsToFetch.map(async (herzliyaId) => {
+          const popupUrl = buildHerzliyaPopupUrl(baseUrl, herzliyaId);
+          if (!popupUrl) return;
+          const result = await fetchViaProxy(popupUrl);
+          if (result.html) popupResults[herzliyaId] = result.html;
+        })
+      );
+
+      // Inject popup crew data as hidden data attributes in the HTML for the parser
+      if (Object.keys(popupResults).length > 0) {
+        const injected = JSON.stringify(popupResults);
+        enrichedPersonalHtml = personalResult.html + `\n<!-- POPUP_CREW_DATA:${injected} -->`;
+      }
+    }
+  }
+
+  // Step 5: Done fetching
   onProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
   return {
-    personalHtml: personalResult.html,
+    personalHtml: enrichedPersonalHtml,
     deptHtml,
   };
 }
