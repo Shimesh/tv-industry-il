@@ -12,6 +12,7 @@ import {
   Clock,
   Edit2,
   ExternalLink,
+  Film,
   Globe,
   Link2,
   Loader2,
@@ -68,6 +69,8 @@ export default function UnifiedIndustryMasterPage() {
   const [bulkWikiRunning, setBulkWikiRunning] = useState(false);
   const [bulkWikiForce, setBulkWikiForce] = useState(false);
   const [bulkWikiProgress, setBulkWikiProgress] = useState<{ processed: number; remaining: number } | null>(null);
+  const [bulkTmdbRunning, setBulkTmdbRunning] = useState(false);
+  const [bulkTmdbProgress, setBulkTmdbProgress] = useState<{ processed: number; remaining: number } | null>(null);
   const [addModal, setAddModal] = useState<AddModalState>(EMPTY_ADD);
   const [editModal, setEditModal] = useState<EditModalState>(EMPTY_EDIT);
   const [reviewModal, setReviewModal] = useState<ReviewModalState>(EMPTY_REVIEW);
@@ -283,6 +286,33 @@ export default function UnifiedIndustryMasterPage() {
     }
   };
 
+  const handleBulkTmdb = async (force = false) => {
+    setBulkTmdbRunning(true);
+    setBulkTmdbProgress({ processed: 0, remaining: Infinity });
+    const since = new Date().toISOString();
+    let totalProcessed = 0;
+    try {
+      while (true) {
+        const res = await authFetch('/api/admin/industry-master/sync/tmdb', {
+          method: 'POST',
+          body: JSON.stringify({ force, ...(force ? { since } : {}) }),
+        });
+        const data = await res.json() as { error?: string; processed?: number; remaining?: number; enriched?: number };
+        if (!res.ok) throw new Error(data.error || 'שגיאה');
+        totalProcessed += data.processed ?? 0;
+        setBulkTmdbProgress({ processed: totalProcessed, remaining: data.remaining ?? 0 });
+        if ((data.remaining ?? 0) === 0 || (data.processed ?? 0) === 0) break;
+      }
+      showToast('ok', `TMDB הושלם: ${totalProcessed} רשומות עודכנו`);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה ב-TMDB');
+    } finally {
+      setBulkTmdbRunning(false);
+      setBulkTmdbProgress(null);
+    }
+  };
+
   const handleCleanup = async () => {
     if (!confirm('למחוק את כל הרשומות הרועשות (שמות בודדים, ביטולים, סטטוסים)? פעולה זו בלתי הפיכה.')) return;
     setCleaningUp(true);
@@ -447,6 +477,26 @@ export default function UnifiedIndustryMasterPage() {
               </>
             ) : (
               <><RefreshCw className="w-4 h-4" />ויקי מחדש לכולם</>
+            )}
+          </button>
+
+          <button
+            onClick={bulkTmdbRunning ? undefined : () => handleBulkTmdb(false)}
+            disabled={bulkTmdbRunning}
+            title="מחפש פוסטרים ב-TMDB עבור הפקות ללא לוגו (דורש TMDB_API_KEY)"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border disabled:opacity-40"
+            style={bulkTmdbRunning
+              ? { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#f87171' }
+              : { background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.3)', color: '#6ee7b7' }
+            }
+          >
+            {bulkTmdbRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                TMDB ({bulkTmdbProgress?.remaining === Infinity ? '...' : bulkTmdbProgress?.remaining} נותרו)
+              </>
+            ) : (
+              <><Film className="w-4 h-4" />TMDB לכולם</>
             )}
           </button>
 
