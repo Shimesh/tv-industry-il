@@ -944,6 +944,7 @@ function ProductionsContent() {
         setShowSummary(true);
         await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
         setStatusMessage(`${diff.changes.length} שינויים עודכנו`);
+        void autoSyncAndNotify(diff, updated);
       } else {
         setStatusMessage('אין שינויים חדשים');
       }
@@ -956,10 +957,11 @@ function ProductionsContent() {
         if (diff.hasChanges) {
           const updated = applyDiff(existingProds, parsed.productions, diff, user?.uid || '', wName);
           setProductions(updated);
-        productionsByWeekRef.current.set(weekId, updated);
+          productionsByWeekRef.current.set(weekId, updated);
           setLastDiff(diff);
           setShowSummary(true);
           await saveToFirestore(weekId, updated, parsed.weekStart, parsed.weekEnd);
+          void autoSyncAndNotify(diff, updated);
         } else {
           setProductions(existingProds);
           productionsByWeekRef.current.set(weekId, existingProds);
@@ -990,6 +992,7 @@ function ProductionsContent() {
 
       setCurrentWeekId(weekId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, profile, currentWeekId, productions, loadExistingWeek, saveToFirestore]);
 
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
@@ -1957,7 +1960,84 @@ function ProductionsContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, profile, workerName, calendarEventMap, calendarMapLoaded, loadCalendarEventMap, saveCalendarEventMap, loadProductionsForPeriod]);
 
+  // Auto-sync changed productions to Google Calendar and send push notification.
+  // Called silently after processSchedule detects changes — no popup interaction.
+  const autoSyncAndNotify = useCallback(async (
+    diff: import('@/lib/productionDiff').ScheduleDiff,
+    updatedProds: Production[],
+  ) => {
+    if (!user) return;
+
+    // Send push notification (fire-and-forget — never blocks the UI)
+    user.getIdToken().then(token => {
+      fetch('/api/productions/notify-change', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes: diff.changes }),
+      }).catch(() => {});
+    }).catch(() => {});
+
+    // Skip calendar sync if not connected
+    if (!profile?.googleCalendarConnected) return;
+
+    const userNames = [profile?.crewName, profile?.displayName, user.displayName, workerName]
+      .filter(Boolean) as string[];
+
+    // Only sync productions that (a) belong to the user and (b) were actually changed
+    const changedIds = new Set(diff.changes.map(c => {
+      const match = updatedProds.find(p =>
+        p.name === c.productionName && p.date === c.productionDate
+      );
+      return match?.id;
+    }).filter(Boolean) as string[]);
+
+    const myChangedProds = updatedProds.filter(p =>
+      changedIds.has(p.id) &&
+      p.status !== 'cancelled' &&
+      (p.isCurrentUserShift || isProductionAssignedToUser(p, userNames))
+    );
+
+    if (myChangedProds.length === 0) return;
+
+    // Lazy-load event map
+    const existingMap = calendarMapLoaded ? calendarEventMap : await loadCalendarEventMap();
+    if (!calendarMapLoaded) {
+      setCalendarEventMap(existingMap);
+      setCalendarMapLoaded(true);
+    }
+    const newMap = { ...existingMap };
+
+    try {
+      const idToken = await user.getIdToken();
+      for (const prod of myChangedProds) {
+        const existingEventId = existingMap[prod.id];
+        const prodData = {
+          id: prod.id, name: prod.name, date: prod.date,
+          startTime: prod.startTime, endTime: prod.endTime, studio: prod.studio,
+          notes: null as string | null,
+          crew: (prod.crew ?? []).map(c => ({ name: c.name, role: c.role ?? c.roleDetail ?? '' })),
+        };
+
+        if (existingEventId) {
+          const r = await updateProductionInCalendar(idToken, existingEventId, prodData);
+          if (r.success) { newMap[prod.id] = r.eventId ?? existingEventId; continue; }
+          if (r.notConnected || r.tokenRevoked) break;
+        }
+        const r = await syncProductionToCalendar(idToken, prodData);
+        if (r.success && r.eventId) newMap[prod.id] = r.eventId;
+        else if (r.notConnected || r.tokenRevoked) break;
+      }
+      const hasChanges = Object.keys(newMap).some(k => newMap[k] !== existingMap[k]);
+      if (hasChanges) {
+        setCalendarEventMap(newMap);
+        await saveCalendarEventMap(newMap);
+      }
+    } catch { /* silent — auto-sync is best-effort */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, profile, workerName, calendarEventMap, calendarMapLoaded, loadCalendarEventMap, saveCalendarEventMap]);
+
   const connectGoogleCalendar = useCallback(async () => {
+    if (!user) return;
     if (!user) return;
     setGcalConnecting(true);
     setShowCalendarMenu(false);
