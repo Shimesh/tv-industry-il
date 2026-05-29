@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       if (since && e.lastUpdated && e.lastUpdated >= since) return false;
       return true;
     }
-    // Normal mode: only entries with no logo at all
+    // Normal mode: skip entries that already have a logo or were already searched (logoUrl='none')
     if (e.logoUrl && e.logoUrl !== '') return false;
     return true;
   });
@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
     if (result.logoUrl) {
       update.logoUrl = result.logoUrl;
       enriched++;
+    } else {
+      // Mark as searched-but-not-found so we don't retry endlessly
+      update.logoUrl = 'none';
     }
     await patchDocument(`industry_master/${entry.id}`, update);
   }
