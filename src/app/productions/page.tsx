@@ -31,7 +31,7 @@ import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/b
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { getGoogleAuthToken, createCalendarEvent } from '@/lib/googleCalendar';
+import { initiateGoogleCalendarConnect, syncProductionToCalendar } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
@@ -224,7 +224,7 @@ function ProductionsContent() {
   const [useAI, setUseAI] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
-  const [pendingGcalToken, setPendingGcalToken] = useState<string | null>(null);
+  const [gcalConnecting, setGcalConnecting] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
@@ -294,13 +294,21 @@ function ProductionsContent() {
     };
   }, []);
 
-  // Mobile OAuth redirect: pick up token stored by /api/google/callback
+  // Handle redirect back from Google OAuth on mobile
   useEffect(() => {
-    const token = sessionStorage.getItem('gcal_pending_token');
-    if (token) {
-      sessionStorage.removeItem('gcal_pending_token');
-      setPendingGcalToken(token);
-      setStatusMessage('מסנכרן עם Google Calendar...');
+    const params = new URLSearchParams(window.location.search);
+    const gcalStatus = params.get('gcal');
+    if (gcalStatus === 'connected') {
+      setStatusMessage('Google Calendar חובר בהצלחה!');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('gcal');
+      url.searchParams.delete('email');
+      window.history.replaceState({}, '', url.toString());
+    } else if (gcalStatus === 'error') {
+      setStatusMessage('שגיאה בחיבור ל-Google Calendar');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('gcal');
+      window.history.replaceState({}, '', url.toString());
     }
   }, []);
   useEffect(() => {
@@ -1677,33 +1685,23 @@ function ProductionsContent() {
   }, [addNotification]);
 
   // ===== Google Calendar Sync =====
-  const syncToGoogleCalendar = useCallback(async (prod: Production, existingToken?: string) => {
+  const syncToGoogleCalendar = useCallback(async (prod: Production) => {
+    if (!user) return;
     setGcalSyncing(prod.id);
     try {
-      const token = existingToken ?? await getGoogleAuthToken();
-      if (!token) {
-        setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
-        return;
-      }
-
-      const result = await createCalendarEvent(token, {
+      const idToken = await user.getIdToken();
+      const result = await syncProductionToCalendar(idToken, {
         id: prod.id,
         name: prod.name,
         date: prod.date,
         startTime: prod.startTime,
         endTime: prod.endTime,
-        location: prod.studio || '',
-        studio: prod.studio || '',
-        notes: '',
-        crew: (prod.crew || []).map(c => ({
-          name: c.name,
-          role: c.role || c.roleDetail || '',
-          department: '',
-        })),
+        studio: prod.studio,
+        crew: (prod.crew ?? []).map((c) => ({ name: c.name, role: c.role ?? c.roleDetail ?? '' })),
       });
 
       if (result.success) {
-        setStatusMessage(`"${prod.name}" סונכרנה ל-Google Calendar`);
+        setStatusMessage(`"${prod.name}" סונכרנה ל-Google Calendar ✓`);
         await addNotification({
           type: 'general',
           title: 'Google Calendar',
@@ -1711,38 +1709,22 @@ function ProductionsContent() {
           productionId: prod.id,
           productionName: prod.name,
         });
+      } else if (result.notConnected || result.tokenRevoked) {
+        setStatusMessage('Google Calendar לא מחובר — חבר מדף ההגדרות');
       } else {
-        setStatusMessage(result.error || 'שגיאה בסנכרון');
+        setStatusMessage(result.error ?? 'שגיאה בסנכרון');
       }
     } catch {
       setStatusMessage('שגיאה בסנכרון ל-Google Calendar');
     } finally {
       setGcalSyncing(null);
     }
-  }, [addNotification]);
+  }, [user, addNotification]);
 
   const getUpcomingPersonalProductions = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
     return productions.filter((prod) => prod.date >= today);
   }, [productions]);
-
-  // Auto-sync after mobile OAuth redirect (once productions are loaded)
-  useEffect(() => {
-    if (!pendingGcalToken || productions.length === 0) return;
-    const token = pendingGcalToken;
-    setPendingGcalToken(null);
-    const today = new Date().toISOString().split('T')[0];
-    const upcoming = productions.filter(p => p.date >= today).slice(0, 20);
-    if (upcoming.length === 0) {
-      setStatusMessage('אין הפקות עתידיות לסנכרון');
-      return;
-    }
-    void (async () => {
-      for (const prod of upcoming) {
-        await syncToGoogleCalendar(prod, token);
-      }
-    })();
-  }, [pendingGcalToken, productions, syncToGoogleCalendar]);
 
   const exportOutlookIcs = useCallback(() => {
     const upcomingProductions = getUpcomingPersonalProductions();
@@ -1803,21 +1785,30 @@ function ProductionsContent() {
     const upcomingProductions = getUpcomingPersonalProductions();
     if (upcomingProductions.length === 0) {
       setStatusMessage('אין הפקות עתידיות לסנכרון');
+      setShowCalendarMenu(false);
       return;
     }
-
-    const token = await getGoogleAuthToken();
-    if (!token) {
-      setStatusMessage('לא ניתן להתחבר ל-Google Calendar');
-      return;
-    }
-
     for (const prod of upcomingProductions.slice(0, 20)) {
-      await syncToGoogleCalendar(prod, token);
+      await syncToGoogleCalendar(prod);
     }
-
     setShowCalendarMenu(false);
   }, [getUpcomingPersonalProductions, syncToGoogleCalendar]);
+
+  const connectGoogleCalendar = useCallback(async () => {
+    if (!user) return;
+    setGcalConnecting(true);
+    setShowCalendarMenu(false);
+    try {
+      const result = await initiateGoogleCalendarConnect(user.uid, '/productions');
+      if (result.success) {
+        setStatusMessage(`Google Calendar חובר בהצלחה (${result.email ?? ''})`);
+      } else if (result.error !== 'popup_closed') {
+        setStatusMessage('שגיאה בחיבור ל-Google Calendar');
+      }
+    } finally {
+      setGcalConnecting(false);
+    }
+  }, [user]);
 
   // Main fetch handler - direct GitHub Action for URLs, browser parsing for pasted content
   const handleFetch = useCallback(async (url: string | null, manualText: string | null, rawHtml?: string | null) => {
@@ -2027,17 +2018,39 @@ function ProductionsContent() {
                   <div className="mb-2 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
                     סנכרון היומן האישי
                   </div>
-                  <p className="mb-3 text-xs leading-5" style={{ color: 'var(--theme-text-secondary)' }}>
-                    אפשר לסנכרן את כל ההפקות העתידיות שלך ישירות ל-Google Calendar או לייצא קובץ ICS ל-Outlook וליומנים נוספים.
-                  </p>
+
+                  {/* Google Calendar connection status */}
+                  {profile?.googleCalendarConnected ? (
+                    <div className="mb-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs" style={{ background: 'color-mix(in srgb, var(--theme-accent) 10%, transparent)', color: 'var(--theme-accent)' }}>
+                      <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{profile.googleCalendarEmail ?? 'מחובר'}</span>
+                    </div>
+                  ) : (
+                    <p className="mb-3 text-xs leading-5" style={{ color: 'var(--theme-text-secondary)' }}>
+                      חבר את Google Calendar כדי לסנכרן את ההפקות שלך. הסנכרון יישמר גם אחרי סגירת הדפדפן.
+                    </p>
+                  )}
+
                   <div className="space-y-2">
-                    <button
-                      onClick={() => void syncUpcomingProductionsToGoogle()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white"
-                    >
-                      <CalendarPlus className="h-3.5 w-3.5" />
-                      סנכרון ל-Google Calendar
-                    </button>
+                    {profile?.googleCalendarConnected ? (
+                      <button
+                        onClick={() => void syncUpcomingProductionsToGoogle()}
+                        disabled={gcalSyncing !== null}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                      >
+                        {gcalSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                        סנכרון הפקות עתידיות
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void connectGoogleCalendar()}
+                        disabled={gcalConnecting}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                      >
+                        {gcalConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                        חיבור Google Calendar
+                      </button>
+                    )}
                     <button
                       onClick={exportOutlookIcs}
                       className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold"

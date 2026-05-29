@@ -57,6 +57,8 @@ export interface UserProfile {
   encryptionPublicKey?: string;
   crewName?: string;
   lastSeen?: number | null;
+  googleCalendarConnected?: boolean;
+  googleCalendarEmail?: string | null;
 }
 
 type ProfileSource = 'server' | 'cache' | 'fallback';

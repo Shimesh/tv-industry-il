@@ -1,33 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
-  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera
+  ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera,
+  Calendar, Link2, Link2Off, Loader2
 } from 'lucide-react';
+import { initiateGoogleCalendarConnect, disconnectGoogleCalendar } from '@/lib/googleCalendar';
 
 export default function SettingsPage() {
   return (
     <AuthGuard>
-      <SettingsContent />
+      <Suspense fallback={null}>
+        <SettingsContent />
+      </Suspense>
     </AuthGuard>
   );
 }
 
 function SettingsContent() {
-  const { profile, logout, updateUserProfile, deleteDirectoryProfile } = useAuth();
+  const { profile, user, logout, updateUserProfile, deleteDirectoryProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
   const [soundEnabled, setSoundEnabled] = useState(profile?.soundEnabled !== false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteProfileConfirm, setShowDeleteProfileConfirm] = useState(false);
+  const [gcalConnecting, setGcalConnecting] = useState(false);
+  const [gcalDisconnecting, setGcalDisconnecting] = useState(false);
+
+  // Handle redirect back from Google OAuth (mobile flow)
+  useEffect(() => {
+    const gcalStatus = searchParams.get('gcal');
+    if (!gcalStatus) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('gcal');
+    url.searchParams.delete('email');
+    window.history.replaceState({}, '', url.toString());
+    if (gcalStatus === 'connected') {
+      setSettingsSuccess('Google Calendar חובר בהצלחה!');
+    } else if (gcalStatus === 'error') {
+      setSettingsError('שגיאה בחיבור ל-Google Calendar. נסה שוב.');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [deletingProfile, setDeletingProfile] = useState(false);
   const [statusSaved, setStatusSaved] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -110,6 +133,41 @@ function SettingsContent() {
       await updateUserProfile({ openToWork: !profile.openToWork });
     } catch {
       setSettingsError('לא הצלחנו לשמור את זמינות העבודה.');
+    }
+  };
+
+  const handleConnectGoogleCalendar = async () => {
+    if (!user) return;
+    setGcalConnecting(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    try {
+      const result = await initiateGoogleCalendarConnect(user.uid, '/settings');
+      if (result.success) {
+        setSettingsSuccess(`Google Calendar חובר בהצלחה (${result.email ?? ''})`);
+      } else if (result.error === 'popup_blocked') {
+        setSettingsError('חלון הקופץ נחסם — אפשר חלונות קופצים בדפדפן ונסה שוב.');
+      } else if (result.error && result.error !== 'popup_closed') {
+        setSettingsError('שגיאה בחיבור ל-Google Calendar. נסה שוב.');
+      }
+    } finally {
+      setGcalConnecting(false);
+    }
+  };
+
+  const handleDisconnectGoogleCalendar = async () => {
+    if (!user) return;
+    setGcalDisconnecting(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    try {
+      const idToken = await user.getIdToken();
+      await disconnectGoogleCalendar(idToken);
+      setSettingsSuccess('Google Calendar נותק בהצלחה.');
+    } catch {
+      setSettingsError('שגיאה בניתוק Google Calendar.');
+    } finally {
+      setGcalDisconnecting(false);
     }
   };
 
@@ -266,6 +324,59 @@ function SettingsContent() {
               enabled={soundEnabled}
               onToggle={handleToggleSound}
             />
+          </div>
+        </SettingsSection>
+
+        {/* Google Calendar */}
+        <SettingsSection icon={<Calendar className="w-4 h-4" />} title="Google Calendar">
+          <div className="space-y-3">
+            {profile.googleCalendarConnected ? (
+              <>
+                <div
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm"
+                  style={{ background: 'color-mix(in srgb, var(--theme-accent) 10%, transparent)', color: 'var(--theme-accent)' }}
+                >
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-semibold">מחובר</div>
+                    {profile.googleCalendarEmail && (
+                      <div className="text-xs opacity-70">{profile.googleCalendarEmail}</div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => void handleDisconnectGoogleCalendar()}
+                  disabled={gcalDisconnecting}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors hover:opacity-80 disabled:opacity-50"
+                  style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}
+                >
+                  {gcalDisconnecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2Off className="h-4 w-4" />
+                  )}
+                  ניתוק Google Calendar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
+                  חבר את Google Calendar כדי לסנכרן את ההפקות שלך ישירות ליומן. הטוקן נשמר בצורה מאובטחת ומתרענן אוטומטית.
+                </p>
+                <button
+                  onClick={() => void handleConnectGoogleCalendar()}
+                  disabled={gcalConnecting}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                >
+                  {gcalConnecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )}
+                  חיבור Google Calendar
+                </button>
+              </>
+            )}
           </div>
         </SettingsSection>
 
