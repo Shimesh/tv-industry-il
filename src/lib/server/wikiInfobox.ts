@@ -215,10 +215,6 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
 
   const wikitext = await fetchWikiText(page.title);
 
-<<<<<<< HEAD
-  const isTV = isTVShowArticle(wikitext);
-=======
->>>>>>> claude/quick-menu-button-icon-PJRpf
   const isPerson = isPersonArticle(wikitext);
 
   // Downgrade to needs_review if the article is clearly about a person, not a TV show —
@@ -229,17 +225,10 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
   if (wikiTitleMatch === 'ok') {
     // Try infobox logo/poster first (specific to the show)
     logoUrl = await fetchInfoboxImageUrl(wikitext);
-<<<<<<< HEAD
-    // Fall back to page's representative image.
-    // Safe here: wikiTitleMatch='ok' already filtered out person/couple articles via isPerson check,
-    // so pageimages can't return a cast photo from an unrelated show.
-    if (!logoUrl) {
-=======
     // pageimages fallback only for confirmed TV show articles — the field-based isTVShowArticle()
     // check prevents shows like "אינטימי" (whose Wikipedia article has no TV infobox fields)
     // from getting a wrong representative image (e.g. an unrelated personal photo).
     if (!logoUrl && isTVShowArticle(wikitext)) {
->>>>>>> claude/quick-menu-button-icon-PJRpf
       logoUrl = await fetchWikiPageImage(page.title);
     }
   }
