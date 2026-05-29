@@ -910,6 +910,12 @@ export default function UnifiedIndustryMasterPage() {
         </div>
       )}
 
+      {/* TMDB Attribution */}
+      <div className="mt-8 pb-4 text-center text-xs text-slate-500">
+        This product uses the TMDB API but is not endorsed or certified by TMDB.{' '}
+        <img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" className="inline h-3 ml-1 opacity-60" />
+      </div>
+
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium text-white"
