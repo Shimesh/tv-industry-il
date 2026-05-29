@@ -38,6 +38,8 @@ export type ProCardProductionCredit = {
   media: ProCardMedia;
   shiftCount: number;
   logoUrl?: string;
+  isVerified?: boolean;
+  wikiUrl?: string;
 };
 
 export type ProCardBoardActivity = {
