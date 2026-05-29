@@ -272,8 +272,9 @@ function applyRegistryOverrides(
     const reg = registry.get(key) ?? registry.get(rawKey);
     const mst = master.get(key) ?? master.get(rawKey) ?? findBestMasterMatch(credit.productionName, master);
     // industry_master takes priority over production-registry for logo and network
-    // Only use logo if it passed title verification (wikiTitleMatch !== 'needs_review')
-    const masterLogo = (mst?.logoUrl && mst.logoUrl !== 'none' && mst.wikiTitleMatch !== 'needs_review')
+    // TMDB posters (image.tmdb.org) are always trusted; wiki logos require verified title match
+    const isTmdbLogo = mst?.logoUrl?.startsWith('https://image.tmdb.org');
+    const masterLogo = (mst?.logoUrl && mst.logoUrl !== 'none' && (isTmdbLogo || mst.wikiTitleMatch !== 'needs_review'))
       ? mst.logoUrl
       : null;
     const logoUrl = masterLogo
