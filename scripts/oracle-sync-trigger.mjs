@@ -1,12 +1,13 @@
 /**
  * oracle-sync-trigger.mjs
  * Runs every 5 minutes via cron on Oracle VM.
- * Checks Firestore for a sync request written by the admin panel,
- * and if found, runs the full ratings scrape (daily + weekly).
  *
- * Cron setup (run once on Oracle VM):
- *   crontab -e
- *   Add: *\/5 * * * * cd ~/ratings-scraper && node oracle-sync-trigger.mjs >> ~/sync-trigger.log 2>&1
+ * Two triggers:
+ * 1. Manual — admin panel sets ratingsSyncRequested=true in Firestore
+ * 2. Automatic — Sunday 09:00–09:30 IST (weekly ratings published by Midrug)
+ *               + Daily 10:10–10:20 IST (daily ratings)
+ *
+ * Uses "lastAutoRunDate" in Firestore to avoid running more than once per day.
  */
 
 import { createRequire } from 'module';
@@ -30,54 +31,106 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
+function israelNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const get = t => parts.find(p => p.type === t)?.value || '';
+  const weekdays = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const hour = parseInt(get('hour'), 10);
+  const minute = parseInt(get('minute'), 10);
+  const totalMinutes = hour * 60 + minute;
+  return {
+    isoDate: `${get('year')}-${get('month')}-${get('day')}`,
+    weekday: weekdays[get('weekday')] ?? 0,
+    totalMinutes,
+  };
+}
+
+function runScraper(forceWeekly) {
+  const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), 'scrape-ratings-oracle.mjs');
+  execSync(`node ${scriptPath}`, {
+    stdio: 'inherit',
+    env: { ...process.env, FORCE_WEEKLY: forceWeekly ? '1' : '0' },
+  });
+}
+
 async function main() {
   const ref = db.doc('appConfig/global');
   const snap = await ref.get();
   const data = snap.data() || {};
 
-  if (!data.ratingsSyncRequested) {
+  const { isoDate, weekday, totalMinutes } = israelNow();
+
+  // ── 1. Manual trigger from admin panel ──
+  if (data.ratingsSyncRequested) {
+    console.log(`[${new Date().toISOString()}] Manual trigger — starting scrape (FORCE_WEEKLY=1)...`);
+    await ref.update({
+      ratingsSyncRequested: false,
+      ratingsSyncInProgress: true,
+      ratingsSyncStartedAt: new Date().toISOString(),
+    });
+    try {
+      runScraper(true);
+      await ref.update({
+        ratingsSyncInProgress: false,
+        ratingsSyncLastTriggeredAt: new Date().toISOString(),
+        ratingsSyncLastStatus: 'success',
+        lastAutoRunDate: isoDate,
+      });
+      console.log(`[${new Date().toISOString()}] Manual scrape done.`);
+    } catch (err) {
+      await ref.update({ ratingsSyncInProgress: false, ratingsSyncLastStatus: 'failure', ratingsSyncLastError: err.message }).catch(() => {});
+      console.error(`[${new Date().toISOString()}] Manual scrape failed:`, err.message);
+      process.exit(1);
+    }
     process.exit(0);
   }
 
-  const requestedAt = data.ratingsSyncRequestedAt || 'unknown';
-  console.log(`[${new Date().toISOString()}] Sync requested at ${requestedAt} — starting scrape...`);
+  // ── 2. Automatic daily window: 10:10–10:20 IST (daily ratings) ──
+  //       On Sunday: 09:00–09:30 IST (weekly ratings published earlier)
+  const isWeeklySunday = weekday === 0 && totalMinutes >= 540 && totalMinutes < 570; // 09:00–09:30
+  const isDailyWindow  = totalMinutes >= 610 && totalMinutes < 620;                  // 10:10–10:20
+  const shouldAutoRun  = isWeeklySunday || isDailyWindow;
 
-  // Mark as in-progress and clear the flag
+  if (!shouldAutoRun) {
+    process.exit(0);
+  }
+
+  // Avoid running more than once per day
+  if (data.lastAutoRunDate === isoDate) {
+    process.exit(0);
+  }
+
+  const forceWeekly = isWeeklySunday;
+  console.log(`[${new Date().toISOString()}] Auto run — weekday=${weekday}, window=${isWeeklySunday ? 'weekly-sunday' : 'daily'}, forceWeekly=${forceWeekly}`);
+
   await ref.update({
-    ratingsSyncRequested: false,
     ratingsSyncInProgress: true,
     ratingsSyncStartedAt: new Date().toISOString(),
+    lastAutoRunDate: isoDate,
   });
 
   try {
-    const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), 'scrape-ratings-oracle.mjs');
-    // Pass FORCE_WEEKLY=1 so the oracle script always scrapes weekly when manually triggered
-    execSync(`FORCE_WEEKLY=1 node ${scriptPath}`, {
-      stdio: 'inherit',
-      env: { ...process.env, FORCE_WEEKLY: '1' },
-    });
-
+    runScraper(forceWeekly);
     await ref.update({
       ratingsSyncInProgress: false,
       ratingsSyncLastTriggeredAt: new Date().toISOString(),
       ratingsSyncLastStatus: 'success',
     });
-
-    console.log(`[${new Date().toISOString()}] Triggered scrape completed successfully.`);
+    console.log(`[${new Date().toISOString()}] Auto scrape done.`);
   } catch (err) {
-    await ref.update({
-      ratingsSyncInProgress: false,
-      ratingsSyncLastStatus: 'failure',
-      ratingsSyncLastError: err.message,
-    }).catch(() => {});
-    console.error(`[${new Date().toISOString()}] Triggered scrape failed:`, err.message);
+    await ref.update({ ratingsSyncInProgress: false, ratingsSyncLastStatus: 'failure', ratingsSyncLastError: err.message }).catch(() => {});
+    console.error(`[${new Date().toISOString()}] Auto scrape failed:`, err.message);
     process.exit(1);
   }
 
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error('oracle-sync-trigger fatal:', err.message);
   process.exit(1);
 });
