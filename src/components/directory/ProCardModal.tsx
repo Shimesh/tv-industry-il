@@ -63,18 +63,16 @@ const overlayVariants = {
 };
 
 const modalVariants = {
-  hidden: { opacity: 0, scale: 0.88, y: 32 },
+  hidden: { opacity: 0, y: 28 },
   visible: {
     opacity: 1,
-    scale: 1,
     y: 0,
-    transition: { duration: 0.36, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
   },
   exit: {
     opacity: 0,
-    scale: 0.95,
-    y: 16,
-    transition: { duration: 0.16 },
+    y: 12,
+    transition: { duration: 0.14 },
   },
 };
 
@@ -430,7 +428,7 @@ export default function ProCardModal({
           animate="visible"
           exit="exit"
           className="relative flex max-h-[calc(100dvh-var(--app-header-offset)-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/15 bg-slate-950 shadow-2xl sm:max-h-[calc(100dvh-var(--app-header-offset)-2rem)]"
-          style={{ boxShadow: '0 30px 120px rgba(0,0,0,0.64), 0 0 70px rgba(59,130,246,0.16)' }}
+          style={{ boxShadow: '0 30px 120px rgba(0,0,0,0.64), 0 0 70px rgba(59,130,246,0.16)', backfaceVisibility: 'hidden', willChange: 'transform, opacity' }}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -648,49 +646,56 @@ export default function ProCardModal({
                       )}
                     </div>
 
-                    {/* Filter chips — show when there are 2+ years or 2+ known channels */}
+                    {/* Filter chips */}
                     {(allYears.length > 1 || allChannels.length > 1) && (
-                      <div className="mb-3 space-y-2">
+                      <div className="mb-3 space-y-1.5">
                         {allYears.length > 1 && (
-                          <div className="no-scrollbar flex flex-wrap gap-1.5" dir="ltr">
-                            <button
-                              type="button"
-                              onClick={() => setActiveYear('all')}
-                              className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeYear === 'all' ? 'bg-amber-300/22 text-amber-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
-                            >
-                              כל השנים
-                            </button>
-                            {allYears.map((yr) => (
-                              <button
-                                key={yr}
-                                type="button"
-                                onClick={() => { setActiveYear(yr); setActiveChannel('all'); }}
-                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeYear === yr ? 'bg-amber-300/22 text-amber-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
-                              >
-                                {yr}
-                              </button>
-                            ))}
+                          <div className="no-scrollbar overflow-x-auto">
+                            <div className="flex gap-1.5 pb-0.5" dir="ltr">
+                              {allYears.map((yr) => (
+                                <button
+                                  key={yr}
+                                  type="button"
+                                  onClick={() => setActiveYear(activeYear === yr ? 'all' : yr)}
+                                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                                    activeYear === yr
+                                      ? 'bg-amber-300/22 text-amber-100 ring-1 ring-amber-300/40'
+                                      : 'bg-white/8 text-white/55 hover:bg-white/14'
+                                  }`}
+                                >
+                                  {yr}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {allChannels.length > 1 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setActiveChannel('all')}
-                              className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeChannel === 'all' ? 'bg-sky-400/18 text-sky-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
-                            >
-                              כל הערוצים
-                            </button>
-                            {allChannels.map((ch) => (
-                              <button
-                                key={ch}
-                                type="button"
-                                onClick={() => setActiveChannel(ch)}
-                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${activeChannel === ch ? 'bg-sky-400/18 text-sky-100' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}
-                              >
-                                {ch}
-                              </button>
-                            ))}
+                          <div className="no-scrollbar overflow-x-auto">
+                            <div className="flex gap-1.5 pb-0.5">
+                              {allChannels.map((ch) => (
+                                <button
+                                  key={ch}
+                                  type="button"
+                                  onClick={() => setActiveChannel(activeChannel === ch ? 'all' : ch)}
+                                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                                    activeChannel === ch
+                                      ? 'bg-sky-400/18 text-sky-100 ring-1 ring-sky-400/35'
+                                      : 'bg-white/8 text-white/55 hover:bg-white/14'
+                                  }`}
+                                >
+                                  {ch}
+                                </button>
+                              ))}
+                              {(activeYear !== 'all' || activeChannel !== 'all') && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setActiveYear('all'); setActiveChannel('all'); }}
+                                  className="shrink-0 rounded-full bg-white/6 px-3 py-1.5 text-xs font-bold text-white/38 hover:bg-white/12 hover:text-white/65 transition"
+                                >
+                                  ✕ נקה
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>

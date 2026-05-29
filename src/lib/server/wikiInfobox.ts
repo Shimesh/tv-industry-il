@@ -97,6 +97,16 @@ async function fetchWikiText(pageTitle: string): Promise<string> {
   }
 }
 
+// Detects articles that have a TV-show infobox template (not a person/couple article)
+function isTVShowArticle(wikitext: string): boolean {
+  return /\{\{\s*(?:טלוויזיה|תוכנית טלוויזיה|סדרת טלוויזיה|תוכנית ריאליטי|ריאליטי|infobox television|infobox tv)/i.test(wikitext);
+}
+
+// Detects articles that are about a person or couple rather than a TV show
+function isPersonArticle(wikitext: string): boolean {
+  return /\{\{\s*(?:אישיות|ביוגרפיה|infobox person|infobox biography|infobox sportsperson)/i.test(wikitext);
+}
+
 function stripWikiMarkup(value: string): string {
   return value
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
@@ -116,8 +126,9 @@ function extractInfoboxField(wikitext: string, fieldName: string): string {
 // This is the show's actual logo/poster, more reliable than pageimages for TV articles.
 async function fetchInfoboxImageUrl(wikitext: string): Promise<string> {
   // Matches: | תמונה = Filename.jpg  /  | לוגו = [[File:Img.png]]  /  | image = Img.png
+  // Handles optional newline between = and the filename (common in Hebrew Wikipedia infoboxes)
   const match = wikitext.match(
-    /\|\s*(?:תמונה|לוגו|logo|image)\s*=\s*\[?\[?(?:קובץ:|File:)?([^\n|{}\]]+)/i,
+    /\|\s*(?:תמונה|לוגו|logo|image)\s*=\s*(?:\n\s*)?\[?\[?(?:קובץ:|File:)?([^\n|{}\]]+)/i,
   );
   const raw = match?.[1]?.trim();
   if (!raw) return '';
@@ -194,17 +205,25 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
   const canonicalName = stripProductionSuffixes(showName);
   const similarity = stringSimilarity(canonicalName, page.title);
   const titleMatches = similarity >= TITLE_MATCH_THRESHOLD;
-  const wikiTitleMatch: 'ok' | 'needs_review' = titleMatches ? 'ok' : 'needs_review';
 
   const wikitext = await fetchWikiText(page.title);
 
+  const isTV = isTVShowArticle(wikitext);
+  const isPerson = isPersonArticle(wikitext);
+
+  // Downgrade to needs_review if the article is clearly about a person, not a TV show —
+  // prevents couple articles (e.g. "חיים ומעיין") from inheriting an unrelated show logo.
+  const wikiTitleMatch: 'ok' | 'needs_review' = (titleMatches && !isPerson) ? 'ok' : 'needs_review';
+
   let logoUrl = '';
-  if (titleMatches) {
-    // Prefer the infobox | תמונה = image (the show's logo/poster).
-    // pageimages fallback is intentionally NOT used: for couple/person articles it returns
-    // a cast photo (e.g. an article about people who appeared on a show returns that show's
-    // photo as representative image, causing the wrong logo to be stored).
+  if (wikiTitleMatch === 'ok') {
+    // Prefer the specific infobox logo/poster field
     logoUrl = await fetchInfoboxImageUrl(wikitext);
+    // For confirmed TV show articles with no infobox image, fall back to the page's
+    // representative image — safe here because we've verified it's a TV show article.
+    if (!logoUrl && isTV) {
+      logoUrl = await fetchWikiPageImage(page.title);
+    }
   }
 
   const network = extractInfoboxField(wikitext, 'רשת שידור');
