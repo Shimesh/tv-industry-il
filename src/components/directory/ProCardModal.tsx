@@ -7,13 +7,13 @@ import {
   Briefcase,
   Camera,
   CheckCircle2,
-  Clapperboard,
   Copy,
   Clock,
   Download,
   FileText,
   Film,
   Image as ImageIcon,
+  Loader2,
   Mail,
   MapPin,
   MessageCircle,
@@ -125,38 +125,66 @@ function formatDate(date: string): string {
   return parsed.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// Deterministic gradient for productions without a logo or known channel
+const INITIALS_GRADIENTS = [
+  'linear-gradient(135deg,#4f46e5,#7c3aed)',
+  'linear-gradient(135deg,#0284c7,#0891b2)',
+  'linear-gradient(135deg,#059669,#0d9488)',
+  'linear-gradient(135deg,#b45309,#d97706)',
+  'linear-gradient(135deg,#dc2626,#db2777)',
+  'linear-gradient(135deg,#7c3aed,#2563eb)',
+  'linear-gradient(135deg,#0369a1,#6366f1)',
+  'linear-gradient(135deg,#047857,#0284c7)',
+];
+function nameGradient(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return INITIALS_GRADIENTS[Math.abs(h) % INITIALS_GRADIENTS.length];
+}
+function productionInitials(name: string): string {
+  const trimmed = name.trim();
+  // Take first chars of first two words, falling back to first 2 chars of the name
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] ?? '') + (words[1][0] ?? '');
+  return trimmed.slice(0, 2) || '?';
+}
+
 function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
+  // 1. Show Wikipedia-sourced show logo (most accurate)
   if (credit.logoUrl && credit.logoUrl !== 'none') {
     return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/8">
         <img src={credit.logoUrl} alt={credit.productionName} className="h-full w-full object-contain" referrerPolicy="no-referrer" />
       </div>
     );
   }
 
+  // 2. Channel logo — covers the common case when no show-specific logo exists
   const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
   if (channel) {
-    return <ChannelLogo channel={channel} size={40} rounded={12} />;
+    return <ChannelLogo channel={channel} size={44} rounded={12} />;
   }
 
-  if (credit.media.kind === 'fallback') {
+  // 3. Named production from registry (ארץ נהדרת, האח הגדול, etc.) — use brand gradient
+  if (credit.media.kind === 'production') {
     return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700/70 text-slate-200">
-        <Clapperboard className="h-5 w-5" />
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-black text-white"
+        style={{ background: credit.media.gradient }}
+        dir="ltr"
+      >
+        {credit.media.shortLabel}
       </div>
     );
   }
 
+  // 4. Fallback: colored initials derived from production name — far better than a generic icon
   return (
     <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black text-white shadow-lg"
-      style={{
-        background: credit.media.gradient,
-        boxShadow: `0 0 24px ${credit.media.color}55`,
-      }}
-      dir="ltr"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-black text-white"
+      style={{ background: nameGradient(credit.productionName) }}
     >
-      {credit.media.shortLabel}
+      {productionInitials(credit.productionName)}
     </div>
   );
 }
@@ -604,9 +632,9 @@ export default function ProCardModal({
                 </div>
 
                 {historyLoading ? (
-                  <div className="space-y-2">
-                    <div className="h-14 animate-pulse rounded-xl bg-white/10" />
-                    <div className="h-14 animate-pulse rounded-xl bg-white/8" />
+                  <div className="flex flex-col items-center gap-3 py-10">
+                    <Loader2 className="h-7 w-7 animate-spin text-sky-400/70" />
+                    <p className="text-xs text-white/40">טוען היסטוריית הפקות...</p>
                   </div>
                 ) : groupedCredits.length > 0 ? (
                   <>
@@ -633,12 +661,12 @@ export default function ProCardModal({
                       )}
                     </div>
 
-                    {/* Filter chips */}
+                    {/* Filter chips — scroll container must use w-max on inner row so chips don't clip */}
                     {(allYears.length > 1 || allChannels.length > 1) && (
                       <div className="mb-3 space-y-1.5">
                         {allYears.length > 1 && (
-                          <div className="no-scrollbar overflow-x-auto">
-                            <div className="flex gap-1.5 pb-0.5" dir="ltr">
+                          <div className="no-scrollbar overflow-x-auto" dir="ltr">
+                            <div className="flex w-max gap-1.5 pb-0.5">
                               {allYears.map((yr) => (
                                 <button
                                   key={yr}
@@ -657,8 +685,8 @@ export default function ProCardModal({
                           </div>
                         )}
                         {allChannels.length > 1 && (
-                          <div className="no-scrollbar overflow-x-auto">
-                            <div className="flex gap-1.5 pb-0.5">
+                          <div className="no-scrollbar overflow-x-auto" dir="rtl">
+                            <div className="flex w-max gap-1.5 pb-0.5">
                               {allChannels.map((ch) => (
                                 <button
                                   key={ch}
@@ -706,14 +734,15 @@ export default function ProCardModal({
                                 {flatCredits.map((credit) => (
                                   <div
                                     key={`${credit.id}-${credit.role}`}
-                                    className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2.5"
+                                    className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.04] p-3 transition hover:bg-white/[0.07]"
                                   >
                                     <ProductionMark credit={credit} />
                                     <div className="min-w-0 flex-1">
-                                      <div className="flex flex-wrap items-center gap-1.5 leading-snug">
-                                        <span className="text-sm font-bold text-white">{credit.productionName}</span>
+                                      {/* Production name + badges */}
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-[13px] font-bold leading-snug text-white">{credit.productionName}</span>
                                         {credit.isMajor && (
-                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-300/12 px-1.5 py-0.5 text-[10px] font-bold text-amber-100">
+                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
                                             <Trophy className="h-2.5 w-2.5" />
                                             מרכזית
                                           </span>
@@ -724,34 +753,35 @@ export default function ProCardModal({
                                               href={credit.wikiUrl}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="inline-flex items-center rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-300/80 hover:bg-sky-400/20 transition"
+                                              className="inline-flex items-center rounded-full bg-sky-400/12 px-1.5 py-0.5 text-[10px] text-sky-300/80 hover:bg-sky-400/22 transition"
                                               title="מאומת בוויקיפדיה"
                                               onClick={(e) => e.stopPropagation()}
                                             >
                                               <CheckCircle2 className="h-2.5 w-2.5" />
                                             </a>
                                           ) : (
-                                            <span className="inline-flex items-center rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-300/80">
+                                            <span className="inline-flex items-center rounded-full bg-sky-400/12 px-1.5 py-0.5 text-[10px] text-sky-300/80">
                                               <CheckCircle2 className="h-2.5 w-2.5" />
                                             </span>
                                           )
                                         )}
                                       </div>
-                                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-white/50">
-                                        <span className="font-medium text-sky-100/75">{credit.role}</span>
+                                      {/* Role + channel + date */}
+                                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-white/45">
+                                        <span className="font-semibold text-sky-200/70">{credit.role}</span>
                                         {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
                                           <span className="inline-flex items-center gap-1">
                                             {(() => {
-                                              const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
-                                              return channel ? <ChannelLogo channel={channel} size={14} rounded={3} /> : null;
+                                              const ch = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
+                                              return ch ? <ChannelLogo channel={ch} size={13} rounded={3} /> : <span className="h-1 w-1 rounded-full bg-white/25" />;
                                             })()}
                                             <span>{credit.channelName}</span>
                                           </span>
                                         )}
                                         {credit.shiftCount > 1 ? (
-                                          <span dir="ltr">{credit.shiftCount} משמרות</span>
+                                          <span dir="ltr" className="text-white/35">{credit.shiftCount} משמרות</span>
                                         ) : (
-                                          <span dir="ltr">{formatDate(credit.date)}</span>
+                                          <span dir="ltr" className="text-white/35">{formatDate(credit.date)}</span>
                                         )}
                                       </div>
                                     </div>
