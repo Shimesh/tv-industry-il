@@ -72,6 +72,7 @@ export default function UnifiedIndustryMasterPage() {
   const [editModal, setEditModal] = useState<EditModalState>(EMPTY_EDIT);
   const [reviewModal, setReviewModal] = useState<ReviewModalState>(EMPTY_REVIEW);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
   const bulkAbortRef = useRef(false);
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
@@ -282,6 +283,22 @@ export default function UnifiedIndustryMasterPage() {
     }
   };
 
+  const handleCleanup = async () => {
+    if (!confirm('למחוק את כל הרשומות הרועשות (שמות בודדים, ביטולים, סטטוסים)? פעולה זו בלתי הפיכה.')) return;
+    setCleaningUp(true);
+    try {
+      const res = await authFetch('/api/admin/industry-master/cleanup', { method: 'POST' });
+      const data = await res.json() as { error?: string; deleted?: number; names?: string[] };
+      if (!res.ok) throw new Error(data.error || 'שגיאה');
+      showToast('ok', `נמחקו ${data.deleted ?? 0} רשומות רועשות`);
+      await loadEntries();
+    } catch (e) {
+      showToast('err', e instanceof Error ? e.message : 'שגיאה');
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
   const handleDelete = async (entry: IndustryMasterEntry) => {
     if (!confirm(`למחוק את "${entry.masterName ?? entry.showName}"?`)) return;
     setDeletingId(entry.id);
@@ -431,6 +448,17 @@ export default function UnifiedIndustryMasterPage() {
             ) : (
               <><RefreshCw className="w-4 h-4" />ויקי מחדש לכולם</>
             )}
+          </button>
+
+          <button
+            onClick={handleCleanup}
+            disabled={cleaningUp || bulkWikiRunning}
+            title="מוחק רשומות רועשות: שמות בודדים, ביטולים, סטטוסים"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border disabled:opacity-40"
+            style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#f87171' }}
+          >
+            {cleaningUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            נקה רעשים
           </button>
 
           <button

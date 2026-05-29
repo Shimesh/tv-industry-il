@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 10;
 
 export async function POST(request: NextRequest) {
   const auth = await requirePrimaryAdminRequest(request);

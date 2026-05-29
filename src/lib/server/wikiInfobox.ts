@@ -3,7 +3,7 @@
 //   1. action=query&list=search  → fetch top-5 results for TWO queries, pick best title match
 //   2. action=parse&prop=wikitext → get raw infobox markup
 //   3. action=query&prop=imageinfo → resolve infobox | תמונה = filename → URL  (preferred)
-//   4. action=query&prop=pageimages → fallback if no infobox image field found
+//   4. action=query&prop=pageimages → fallback only for confirmed TV-show articles
 //
 // Why infobox image over pageimages:
 //   pageimages returns the article's representative image, which for person/couple articles
@@ -97,9 +97,16 @@ async function fetchWikiText(pageTitle: string): Promise<string> {
   }
 }
 
-// Detects articles that have a TV-show infobox template (not a person/couple article)
+// Detects articles that have a TV-show infobox template (not a person/couple article).
+// Also detects via field presence (| רשת שידור, | ז'אנר) since many Hebrew Wikipedia
+// TV articles use unlisted template names but still have these canonical fields.
 function isTVShowArticle(wikitext: string): boolean {
-  return /\{\{\s*(?:טלוויזיה|תוכנית טלוויזיה|סדרת טלוויזיה|תוכנית ריאליטי|ריאליטי|infobox television|infobox tv)/i.test(wikitext);
+  return (
+    /\{\{\s*(?:טלוויזיה|תוכנית טלוויזיה|סדרת טלוויזיה|תוכנית ריאליטי|ריאליטי|infobox television|infobox tv)/i.test(wikitext) ||
+    wikitext.includes('| רשת שידור') ||
+    wikitext.includes("| ז'אנר") ||
+    wikitext.includes('| ז׳אנר')
+  );
 }
 
 // Detects articles that are about a person or couple rather than a TV show
@@ -208,7 +215,10 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
 
   const wikitext = await fetchWikiText(page.title);
 
+<<<<<<< HEAD
   const isTV = isTVShowArticle(wikitext);
+=======
+>>>>>>> claude/quick-menu-button-icon-PJRpf
   const isPerson = isPersonArticle(wikitext);
 
   // Downgrade to needs_review if the article is clearly about a person, not a TV show —
@@ -219,10 +229,17 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
   if (wikiTitleMatch === 'ok') {
     // Try infobox logo/poster first (specific to the show)
     logoUrl = await fetchInfoboxImageUrl(wikitext);
+<<<<<<< HEAD
     // Fall back to page's representative image.
     // Safe here: wikiTitleMatch='ok' already filtered out person/couple articles via isPerson check,
     // so pageimages can't return a cast photo from an unrelated show.
     if (!logoUrl) {
+=======
+    // pageimages fallback only for confirmed TV show articles — the field-based isTVShowArticle()
+    // check prevents shows like "אינטימי" (whose Wikipedia article has no TV infobox fields)
+    // from getting a wrong representative image (e.g. an unrelated personal photo).
+    if (!logoUrl && isTVShowArticle(wikitext)) {
+>>>>>>> claude/quick-menu-button-icon-PJRpf
       logoUrl = await fetchWikiPageImage(page.title);
     }
   }

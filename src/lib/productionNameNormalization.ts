@@ -40,6 +40,10 @@ const SUFFIX_PATTERNS: RegExp[] = [
   // Same suffixes without leading space-dash (e.g. "האח הגדול פיילוט")
   / פיילוט$/i,
   / pilot$/i,
+  // Cancellation / status annotations after dash
+  / - בוטל.*$/i,
+  / - ביטול.*$/i,
+  / - נדחה.*$/i,
   // Audio/lighting check suffix, with or without space before dash
   / ?-+\s*בלאנס$/i,
   // Season / session / episode numbers — strip the number and everything after
