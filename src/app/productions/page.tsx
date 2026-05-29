@@ -230,6 +230,7 @@ function ProductionsContent() {
   const [gcalWeekSyncing, setGcalWeekSyncing] = useState<'prev' | 'current' | 'next' | null>(null);
   const [calendarEventMap, setCalendarEventMap] = useState<Record<string, string>>({});
   const [calendarMapLoaded, setCalendarMapLoaded] = useState(false);
+  const [calendarMenuMsg, setCalendarMenuMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -1820,7 +1821,7 @@ function ProductionsContent() {
 
     const weekKey = offset === -1 ? 'prev' : offset === 0 ? 'current' : 'next';
     setGcalWeekSyncing(weekKey as 'prev' | 'current' | 'next');
-    setShowCalendarMenu(false);
+    setCalendarMenuMsg(null);
 
     try {
       // Calculate Sunday–Saturday work week
@@ -1849,7 +1850,7 @@ function ProductionsContent() {
       );
 
       if (myProds.length === 0) {
-        setStatusMessage('לא נמצאו הפקות שלך בשבוע זה');
+        setCalendarMenuMsg({ text: 'לא נמצאו הפקות שלך בשבוע זה', ok: false });
         return;
       }
 
@@ -1941,14 +1942,14 @@ function ProductionsContent() {
       }
 
       if (stoppedDueToAuth) {
-        setStatusMessage('Google Calendar לא מחובר — חבר מחדש מדף ההגדרות');
+        setCalendarMenuMsg({ text: 'Google Calendar לא מחובר — חבר מחדש מדף ההגדרות', ok: false });
       } else if (errorCount === 0) {
-        setStatusMessage(`${successCount} הפקות סונכרנו ל-Google Calendar ✓`);
+        setCalendarMenuMsg({ text: `${successCount} הפקות סונכרנו ✓`, ok: true });
       } else {
-        setStatusMessage(`${successCount} הפקות סונכרנו, ${errorCount} נכשלו`);
+        setCalendarMenuMsg({ text: `${successCount} סונכרנו, ${errorCount} נכשלו`, ok: false });
       }
     } catch {
-      setStatusMessage('שגיאה בסנכרון ל-Google Calendar');
+      setCalendarMenuMsg({ text: 'שגיאה בסנכרון ל-Google Calendar', ok: false });
     } finally {
       setGcalWeekSyncing(null);
       setGcalBulkProgress(null);
@@ -2178,7 +2179,7 @@ function ProductionsContent() {
                   <div
                     className="fixed inset-0 z-40"
                     style={{ background: 'rgba(0,0,0,0.5)' }}
-                    onClick={() => setShowCalendarMenu(false)}
+                    onClick={() => { setShowCalendarMenu(false); setCalendarMenuMsg(null); }}
                   />
                   {/* Modal */}
                   <div
@@ -2191,7 +2192,7 @@ function ProductionsContent() {
                         סנכרון היומן האישי
                       </div>
                       <button
-                        onClick={() => setShowCalendarMenu(false)}
+                        onClick={() => { setShowCalendarMenu(false); setCalendarMenuMsg(null); }}
                         className="rounded-lg p-1 transition-colors hover:bg-black/10"
                         style={{ color: 'var(--theme-text-secondary)' }}
                       >
@@ -2237,8 +2238,23 @@ function ProductionsContent() {
                             })}
                           </div>
                           {gcalBulkProgress && (
-                            <div className="text-center text-xs py-1" style={{ color: 'var(--theme-text-secondary)' }}>
+                            <div className="flex items-center justify-center gap-2 rounded-xl py-2 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               מסנכרן {gcalBulkProgress.done} / {gcalBulkProgress.total}
+                            </div>
+                          )}
+                          {!gcalBulkProgress && calendarMenuMsg && (
+                            <div
+                              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
+                              style={{
+                                background: calendarMenuMsg.ok
+                                  ? 'color-mix(in srgb, #22c55e 15%, transparent)'
+                                  : 'color-mix(in srgb, #ef4444 15%, transparent)',
+                                color: calendarMenuMsg.ok ? '#4ade80' : '#f87171',
+                              }}
+                            >
+                              {calendarMenuMsg.ok ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangleIcon className="h-3.5 w-3.5 shrink-0" />}
+                              {calendarMenuMsg.text}
                             </div>
                           )}
                         </>
