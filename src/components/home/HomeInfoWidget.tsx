@@ -190,7 +190,7 @@ export default function HomeInfoWidget() {
   return (
     <div
       dir="rtl"
-      className={`relative isolate flex h-[360px] w-full max-w-full items-center overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
+      className={`relative isolate w-full max-w-full overflow-hidden rounded-[1.5rem] border p-4 shadow-2xl backdrop-blur-2xl transition ${
         heatwave
           ? 'border-orange-300/35 bg-orange-950/35 shadow-orange-500/20'
           : 'border-white/10 bg-slate-950/[0.42] shadow-black/25'
@@ -203,7 +203,7 @@ export default function HomeInfoWidget() {
             : 'bg-[radial-gradient(circle_at_18%_18%,rgba(56,189,248,0.18),transparent_42%)]'
         }`}
       />
-      <div className="relative flex h-full w-full flex-col justify-between gap-3">
+      <div className="relative flex flex-col gap-3">
         <div className="flex items-start justify-between gap-4">
           <div className="text-right">
             <p className="text-xs font-black uppercase tracking-wide text-white/45">Live Weather</p>
