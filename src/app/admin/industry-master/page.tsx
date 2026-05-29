@@ -522,6 +522,37 @@ export default function UnifiedIndustryMasterPage() {
         </div>
 
         {/* Bulk wiki progress bar */}
+        {bulkTmdbRunning && bulkTmdbProgress && (
+          <div
+            className="mb-4 rounded-lg px-4 py-3 border"
+            style={{ background: 'rgba(14,165,233,0.1)', borderColor: 'rgba(14,165,233,0.25)' }}
+          >
+            <div className="flex items-center justify-between text-sm mb-2" style={{ color: '#7dd3fc' }}>
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                TMDB: {bulkTmdbProgress.processed} הושלמו
+                {bulkTmdbProgress.remaining !== Infinity && `, ${bulkTmdbProgress.remaining} נותרו`}
+              </span>
+              <span>
+                {bulkTmdbProgress.remaining !== Infinity && bulkTmdbProgress.remaining + bulkTmdbProgress.processed > 0
+                  ? `${Math.round((bulkTmdbProgress.processed / (bulkTmdbProgress.processed + bulkTmdbProgress.remaining)) * 100)}%`
+                  : ''}
+              </span>
+            </div>
+            {bulkTmdbProgress.remaining !== Infinity && (
+              <div className="w-full rounded-full overflow-hidden" style={{ background: 'rgba(14,165,233,0.2)', height: 4 }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    background: '#38bdf8',
+                    width: `${Math.round((bulkTmdbProgress.processed / (bulkTmdbProgress.processed + bulkTmdbProgress.remaining)) * 100)}%`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {bulkWikiRunning && bulkWikiProgress && (
           <div
             className="mb-4 rounded-lg px-4 py-3 border"
