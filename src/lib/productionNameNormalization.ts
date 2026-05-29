@@ -114,10 +114,7 @@ export function isNoisyProductionTitle(name: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) return true;
 
-  // Rule 1: single word — very likely a first name or irrelevant entry
-  if (!/\s/.test(trimmed)) return true;
-
-  // Rule 2: contains noise keywords
+  // Contains noise keywords (status markers, cancellations, etc.)
   if (NOISE_KEYWORDS.some((kw) => trimmed.includes(kw))) return true;
 
   return false;
