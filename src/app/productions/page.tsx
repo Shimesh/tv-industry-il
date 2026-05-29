@@ -2160,9 +2160,9 @@ function ProductionsContent() {
 
         <div className="flex items-center gap-2">
           {productions.length > 0 && (
-            <div className="relative">
+            <>
               <button
-                onClick={() => setShowCalendarMenu((current) => !current)}
+                onClick={() => setShowCalendarMenu(true)}
                 disabled={gcalSyncing !== null}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
                 style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
@@ -2173,79 +2173,98 @@ function ProductionsContent() {
               </button>
 
               {showCalendarMenu && (
-                <div
-                  className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-2xl border p-3 shadow-2xl"
-                  style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
-                >
-                  <div className="mb-2 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-                    סנכרון היומן האישי
-                  </div>
-
-                  {/* Google Calendar connection status */}
-                  {profile?.googleCalendarConnected ? (
-                    <div className="mb-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs" style={{ background: 'color-mix(in srgb, var(--theme-accent) 10%, transparent)', color: 'var(--theme-accent)' }}>
-                      <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{profile.googleCalendarEmail ?? 'מחובר'}</span>
-                    </div>
-                  ) : (
-                    <p className="mb-3 text-xs leading-5" style={{ color: 'var(--theme-text-secondary)' }}>
-                      חבר את Google Calendar כדי לסנכרן את ההפקות שלך. הסנכרון יישמר גם אחרי סגירת הדפדפן.
-                    </p>
-                  )}
-
-                  <div className="space-y-2">
-                    {profile?.googleCalendarConnected ? (
-                      <>
-                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סנכרן את השבוע שלי:</div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {([
-                            { offset: -1 as const, label: 'שבוע קודם', key: 'prev' },
-                            { offset: 0 as const, label: 'שבוע נוכחי', key: 'current' },
-                            { offset: 1 as const, label: 'שבוע הבא', key: 'next' },
-                          ]).map(({ offset, label, key }) => {
-                            const isSyncing = gcalWeekSyncing === key;
-                            const isDisabled = gcalWeekSyncing !== null || gcalBulkProgress !== null;
-                            return (
-                              <button
-                                key={key}
-                                onClick={() => void syncWeekToGoogle(offset)}
-                                disabled={isDisabled}
-                                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-1 text-xs font-bold text-white bg-gradient-to-b from-blue-500 to-sky-600 disabled:opacity-60 text-center leading-tight"
-                              >
-                                {isSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />}
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {gcalBulkProgress && (
-                          <div className="text-center text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-                            מסנכרן {gcalBulkProgress.done} / {gcalBulkProgress.total}
-                          </div>
-                        )}
-                      </>
-                    ) : (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    style={{ background: 'rgba(0,0,0,0.5)' }}
+                    onClick={() => setShowCalendarMenu(false)}
+                  />
+                  {/* Modal */}
+                  <div
+                    className="fixed left-1/2 top-1/2 z-50 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-4 shadow-2xl"
+                    style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+                  >
+                    {/* Header */}
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
+                        סנכרון היומן האישי
+                      </div>
                       <button
-                        onClick={() => void connectGoogleCalendar()}
-                        disabled={gcalConnecting}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                        onClick={() => setShowCalendarMenu(false)}
+                        className="rounded-lg p-1 transition-colors hover:bg-black/10"
+                        style={{ color: 'var(--theme-text-secondary)' }}
                       >
-                        {gcalConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
-                        חיבור Google Calendar
+                        <X className="h-4 w-4" />
                       </button>
+                    </div>
+
+                    {/* Google Calendar connection status */}
+                    {profile?.googleCalendarConnected ? (
+                      <div className="mb-3 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs" style={{ background: 'color-mix(in srgb, var(--theme-accent) 10%, transparent)', color: 'var(--theme-accent)' }}>
+                        <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{profile.googleCalendarEmail ?? 'מחובר'}</span>
+                      </div>
+                    ) : (
+                      <p className="mb-3 text-xs leading-5" style={{ color: 'var(--theme-text-secondary)' }}>
+                        חבר את Google Calendar כדי לסנכרן את ההפקות שלך. הסנכרון יישמר גם אחרי סגירת הדפדפן.
+                      </p>
                     )}
-                    <button
-                      onClick={exportOutlookIcs}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold"
-                      style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)' }}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      ייצוא Outlook / ICS
-                    </button>
+
+                    <div className="space-y-2">
+                      {profile?.googleCalendarConnected ? (
+                        <>
+                          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סנכרן את השבוע שלי:</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {([
+                              { offset: -1 as const, label: 'שבוע קודם', key: 'prev' },
+                              { offset: 0 as const, label: 'שבוע נוכחי', key: 'current' },
+                              { offset: 1 as const, label: 'שבוע הבא', key: 'next' },
+                            ]).map(({ offset, label, key }) => {
+                              const isSyncing = gcalWeekSyncing === key;
+                              const isDisabled = gcalWeekSyncing !== null || gcalBulkProgress !== null;
+                              return (
+                                <button
+                                  key={key}
+                                  onClick={() => void syncWeekToGoogle(offset)}
+                                  disabled={isDisabled}
+                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-3 px-1 text-xs font-bold text-white bg-gradient-to-b from-blue-500 to-sky-600 disabled:opacity-60 text-center leading-tight"
+                                >
+                                  {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {gcalBulkProgress && (
+                            <div className="text-center text-xs py-1" style={{ color: 'var(--theme-text-secondary)' }}>
+                              מסנכרן {gcalBulkProgress.done} / {gcalBulkProgress.total}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => void connectGoogleCalendar()}
+                          disabled={gcalConnecting}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-sky-500 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-60"
+                        >
+                          {gcalConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                          חיבור Google Calendar
+                        </button>
+                      )}
+                      <button
+                        onClick={exportOutlookIcs}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold"
+                        style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)' }}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        ייצוא Outlook / ICS
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
-            </div>
+            </>
           )}
 
           {productions.length > 0 && (
