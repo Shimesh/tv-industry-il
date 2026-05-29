@@ -2240,22 +2240,9 @@ function ProductionsContent() {
         </div>
 
         <div className="flex items-center gap-2">
-          {productions.length > 0 && (
+          {showCalendarMenu && (
             <>
-              <button
-                onClick={() => setShowCalendarMenu(true)}
-                disabled={gcalSyncing !== null}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:shadow-md"
-                style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
-                title="סנכרון היומן האישי"
-              >
-                {gcalSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarPlus className="w-3.5 h-3.5" />}
-                סנכרון יומן
-              </button>
-
-              {showCalendarMenu && (
-                <>
-                  {/* Backdrop */}
+              {/* Backdrop */}
                   <div
                     className="fixed inset-0 z-40"
                     style={{ background: 'rgba(0,0,0,0.5)' }}
@@ -2358,8 +2345,6 @@ function ProductionsContent() {
                       </button>
                     </div>
                   </div>
-                </>
-              )}
             </>
           )}
 
@@ -2660,6 +2645,53 @@ function ProductionsContent() {
               </span>
             </div>
           )}
+
+          {/* Google Calendar sync banner */}
+          <button
+            onClick={() => setShowCalendarMenu(true)}
+            disabled={gcalSyncing !== null || gcalWeekSyncing !== null}
+            className="mb-3 w-full flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all hover:shadow-md active:scale-[0.99] text-right"
+            style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+          >
+            {/* Google Calendar icon */}
+            <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden" style={{ background: '#fff' }}>
+              <svg viewBox="0 0 48 48" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="40" height="40" rx="4" fill="#fff" />
+                <rect x="4" y="4" width="40" height="10" rx="4" fill="#1a73e8" />
+                <rect x="4" y="10" width="40" height="4" fill="#1a73e8" />
+                <text x="24" y="34" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#1a73e8" fontFamily="sans-serif">
+                  {new Date().getDate()}
+                </text>
+                <rect x="14" y="2" width="4" height="8" rx="2" fill="#1a73e8" />
+                <rect x="30" y="2" width="4" height="8" rx="2" fill="#1a73e8" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>Google Calendar</span>
+                {profile?.googleCalendarConnected ? (
+                  <span className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, #22c55e 15%, transparent)', color: '#4ade80' }}>
+                    <CheckCircle className="h-2.5 w-2.5" />
+                    מחובר
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)', color: 'var(--theme-accent)' }}>
+                    לא מחובר
+                  </span>
+                )}
+              </div>
+              <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--theme-text-secondary)' }}>
+                {profile?.googleCalendarConnected
+                  ? 'לחץ לסנכרן את הלוח שלך'
+                  : 'חבר ותסנכרן את ההפקות שלך אוטומטית'}
+              </p>
+            </div>
+            {(gcalWeekSyncing !== null || gcalBulkProgress !== null)
+              ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--theme-accent)' }} />
+              : <CalendarPlus className="h-4 w-4 shrink-0" style={{ color: 'var(--theme-text-secondary)' }} />
+            }
+          </button>
+
           <WeeklyCalendar
             productions={visibleProductions}
             weekStart={renderedRange.start}
