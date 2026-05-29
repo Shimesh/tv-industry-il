@@ -31,7 +31,7 @@ import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/b
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { initiateGoogleCalendarConnect, syncProductionToCalendar } from '@/lib/googleCalendar';
+import { initiateGoogleCalendarConnect, syncProductionToCalendar, updateProductionInCalendar } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
@@ -227,6 +227,9 @@ function ProductionsContent() {
   const [gcalConnecting, setGcalConnecting] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [gcalBulkProgress, setGcalBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [gcalWeekSyncing, setGcalWeekSyncing] = useState<'prev' | 'current' | 'next' | null>(null);
+  const [calendarEventMap, setCalendarEventMap] = useState<Record<string, string>>({});
+  const [calendarMapLoaded, setCalendarMapLoaded] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -1068,6 +1071,36 @@ function ProductionsContent() {
     return result;
   }, [user]);
 
+  // Load productionId→calendarEventId map from Firestore
+  const loadCalendarEventMap = useCallback(async (): Promise<Record<string, string>> => {
+    if (!user) return {};
+    const data = await firestoreRestRead(`users/${user.uid}/calendarSync/eventIds`);
+    if (!data) return {};
+    const map: Record<string, string> = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (typeof v === 'string') map[k] = v;
+    }
+    return map;
+  }, [user, firestoreRestRead]);
+
+  // Persist the full event map to Firestore (overwrite)
+  const saveCalendarEventMap = useCallback(async (map: Record<string, string>): Promise<void> => {
+    if (!user || Object.keys(map).length === 0) return;
+    try {
+      const token = await user.getIdToken();
+      const projectId = 'tv-industry-il';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${user.uid}/calendarSync/eventIds`;
+      const fields: Record<string, { stringValue: string }> = {};
+      for (const [k, v] of Object.entries(map)) fields[k] = { stringValue: v };
+      await fetch(url, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+    } catch { /* non-critical */ }
+  }, [user]);
+
+
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
   // Submit schedule request via REST API for GitHub Action
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
@@ -1782,44 +1815,146 @@ function ProductionsContent() {
     setStatusMessage('קובץ Outlook / ICS נוצר בהצלחה');
   }, [getUpcomingPersonalProductions]);
 
-  const syncUpcomingProductionsToGoogle = useCallback(async (range: 'week' | 'month' | 'quarter') => {
-    const today = new Date().toISOString().split('T')[0];
-    let untilDate: string;
-    if (range === 'week') {
-      const d = new Date(); d.setDate(d.getDate() + 7);
-      untilDate = d.toISOString().split('T')[0];
-    } else if (range === 'month') {
-      const d = new Date(); d.setMonth(d.getMonth() + 1);
-      untilDate = d.toISOString().split('T')[0];
-    } else {
-      const d = new Date(); d.setMonth(d.getMonth() + 3);
-      untilDate = d.toISOString().split('T')[0];
-    }
+  const syncWeekToGoogle = useCallback(async (offset: -1 | 0 | 1) => {
+    if (!user || !profile?.googleCalendarConnected) return;
 
-    // Load productions in range (may need to fetch from server)
-    let rangeProds = productions.filter(p => p.date >= today && p.date <= untilDate);
-    if (rangeProds.length === 0) {
-      const loaded = await loadProductionsForPeriod(today, untilDate);
-      rangeProds = loaded.filter(p => p.date >= today && p.date <= untilDate);
-    }
-
-    if (rangeProds.length === 0) {
-      setStatusMessage('אין הפקות בטווח הנבחר');
-      setShowCalendarMenu(false);
-      return;
-    }
-
+    const weekKey = offset === -1 ? 'prev' : offset === 0 ? 'current' : 'next';
+    setGcalWeekSyncing(weekKey as 'prev' | 'current' | 'next');
     setShowCalendarMenu(false);
-    setGcalBulkProgress({ done: 0, total: rangeProds.length });
-    let done = 0;
-    for (const prod of rangeProds) {
-      await syncToGoogleCalendar(prod);
-      done++;
-      setGcalBulkProgress({ done, total: rangeProds.length });
+
+    try {
+      // Calculate Sunday–Saturday work week
+      const today = new Date();
+      const sunday = new Date(today);
+      sunday.setDate(today.getDate() - today.getDay() + offset * 7);
+      sunday.setHours(0, 0, 0, 0);
+      const saturday = new Date(sunday);
+      saturday.setDate(sunday.getDate() + 6);
+      const weekStart = toLocalDate(sunday);
+      const weekEnd = toLocalDate(saturday);
+      const weekId = getWeekId(weekStart);
+
+      // Use cached week data or fetch from server
+      let weekProds = productionsByWeekRef.current.get(weekId) ?? [];
+      if (weekProds.length === 0) {
+        weekProds = await loadProductionsForPeriod(weekStart, weekEnd);
+      }
+
+      // Filter to only this user's productions
+      const userNames = [profile?.crewName, profile?.displayName, user.displayName, workerName]
+        .filter(Boolean) as string[];
+      const myProds = weekProds.filter(p =>
+        p.status !== 'cancelled' &&
+        (p.isCurrentUserShift || isProductionAssignedToUser(p, userNames))
+      );
+
+      if (myProds.length === 0) {
+        setStatusMessage('לא נמצאו הפקות שלך בשבוע זה');
+        return;
+      }
+
+      // Lazy-load the event ID map (avoids Firestore read on every page load)
+      const existingMap = calendarMapLoaded ? calendarEventMap : await loadCalendarEventMap();
+      if (!calendarMapLoaded) {
+        setCalendarEventMap(existingMap);
+        setCalendarMapLoaded(true);
+      }
+      const newMap = { ...existingMap };
+
+      const idToken = await user.getIdToken();
+      let successCount = 0;
+      let errorCount = 0;
+      let stoppedDueToAuth = false;
+
+      setGcalBulkProgress({ done: 0, total: myProds.length });
+
+      for (let i = 0; i < myProds.length; i++) {
+        const prod = myProds[i];
+        const existingEventId = existingMap[prod.id];
+
+        const prodData = {
+          id: prod.id,
+          name: prod.name,
+          date: prod.date,
+          startTime: prod.startTime,
+          endTime: prod.endTime,
+          studio: prod.studio,
+          notes: null as string | null,
+          crew: (prod.crew ?? []).map(c => ({ name: c.name, role: c.role ?? c.roleDetail ?? '' })),
+        };
+
+        let resultEventId: string | undefined;
+        let syncError: string | undefined;
+
+        if (existingEventId) {
+          // Try to update the existing Google Calendar event
+          const updateResult = await updateProductionInCalendar(idToken, existingEventId, prodData);
+          if (updateResult.success) {
+            resultEventId = updateResult.eventId ?? existingEventId;
+          } else if (updateResult.notConnected || updateResult.tokenRevoked) {
+            stoppedDueToAuth = true;
+            errorCount++;
+            break;
+          } else {
+            // Event may have been deleted from Google Calendar — recreate it
+            const createResult = await syncProductionToCalendar(idToken, prodData);
+            if (createResult.success) {
+              resultEventId = createResult.eventId;
+            } else if (createResult.notConnected || createResult.tokenRevoked) {
+              stoppedDueToAuth = true;
+              errorCount++;
+              break;
+            } else {
+              syncError = createResult.error;
+            }
+          }
+        } else {
+          // First sync for this production
+          const createResult = await syncProductionToCalendar(idToken, prodData);
+          if (createResult.success) {
+            resultEventId = createResult.eventId;
+          } else if (createResult.notConnected || createResult.tokenRevoked) {
+            stoppedDueToAuth = true;
+            errorCount++;
+            break;
+          } else {
+            syncError = createResult.error;
+          }
+        }
+
+        if (resultEventId) {
+          successCount++;
+          newMap[prod.id] = resultEventId;
+        } else {
+          errorCount++;
+          console.warn('[syncWeekToGoogle] failed for', prod.name, syncError);
+        }
+
+        setGcalBulkProgress({ done: i + 1, total: myProds.length });
+      }
+
+      // Persist updated event IDs if anything changed
+      const hasChanges = Object.keys(newMap).some(k => newMap[k] !== existingMap[k]);
+      if (hasChanges) {
+        setCalendarEventMap(newMap);
+        await saveCalendarEventMap(newMap);
+      }
+
+      if (stoppedDueToAuth) {
+        setStatusMessage('Google Calendar לא מחובר — חבר מחדש מדף ההגדרות');
+      } else if (errorCount === 0) {
+        setStatusMessage(`${successCount} הפקות סונכרנו ל-Google Calendar ✓`);
+      } else {
+        setStatusMessage(`${successCount} הפקות סונכרנו, ${errorCount} נכשלו`);
+      }
+    } catch {
+      setStatusMessage('שגיאה בסנכרון ל-Google Calendar');
+    } finally {
+      setGcalWeekSyncing(null);
+      setGcalBulkProgress(null);
     }
-    setGcalBulkProgress(null);
-    setStatusMessage(`סונכרנו ${done} הפקות ל-Google Calendar ✓`);
-  }, [productions, loadProductionsForPeriod, syncToGoogleCalendar]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, profile, workerName, calendarEventMap, calendarMapLoaded, loadCalendarEventMap, saveCalendarEventMap, loadProductionsForPeriod]);
 
   const connectGoogleCalendar = useCallback(async () => {
     if (!user) return;
@@ -2061,26 +2196,31 @@ function ProductionsContent() {
                   <div className="space-y-2">
                     {profile?.googleCalendarConnected ? (
                       <>
-                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סנכרן הפקות עתידיות:</div>
+                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סנכרן את השבוע שלי:</div>
                         <div className="grid grid-cols-3 gap-1.5">
-                          {(['week', 'month', 'quarter'] as const).map((range) => {
-                            const labels = { week: 'שבוע', month: 'חודש', quarter: '3 חודשים' };
+                          {([
+                            { offset: -1 as const, label: 'שבוע קודם', key: 'prev' },
+                            { offset: 0 as const, label: 'שבוע נוכחי', key: 'current' },
+                            { offset: 1 as const, label: 'שבוע הבא', key: 'next' },
+                          ]).map(({ offset, label, key }) => {
+                            const isSyncing = gcalWeekSyncing === key;
+                            const isDisabled = gcalWeekSyncing !== null || gcalBulkProgress !== null;
                             return (
                               <button
-                                key={range}
-                                onClick={() => void syncUpcomingProductionsToGoogle(range)}
-                                disabled={gcalSyncing !== null || gcalBulkProgress !== null}
-                                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-xs font-bold text-white bg-gradient-to-b from-blue-500 to-sky-600 disabled:opacity-60"
+                                key={key}
+                                onClick={() => void syncWeekToGoogle(offset)}
+                                disabled={isDisabled}
+                                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-1 text-xs font-bold text-white bg-gradient-to-b from-blue-500 to-sky-600 disabled:opacity-60 text-center leading-tight"
                               >
-                                {gcalBulkProgress !== null ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />}
-                                {labels[range]}
+                                {isSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />}
+                                {label}
                               </button>
                             );
                           })}
                         </div>
                         {gcalBulkProgress && (
                           <div className="text-center text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-                            {gcalBulkProgress.done} / {gcalBulkProgress.total}
+                            מסנכרן {gcalBulkProgress.done} / {gcalBulkProgress.total}
                           </div>
                         )}
                       </>
