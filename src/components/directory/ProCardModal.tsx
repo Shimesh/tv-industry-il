@@ -11,7 +11,6 @@ import {
   Copy,
   Clock,
   Download,
-  ExternalLink,
   FileText,
   Film,
   Image as ImageIcon,
@@ -55,12 +54,6 @@ type GroupedCredits = Array<{
     credits: ProCardProductionCredit[];
   }>;
 }>;
-
-const overlayVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.22 } },
-  exit: { opacity: 0, transition: { duration: 0.16 } },
-};
 
 const modalVariants = {
   hidden: { opacity: 0, y: 28 },
@@ -414,12 +407,15 @@ export default function ProCardModal({
 
   return (
     <AnimatePresence>
+      {/* Overlay: animate only background color — NOT opacity on the blur element.
+          Animating opacity on a backdrop-blur element causes GPU recomposition on every
+          frame (expensive on mobile → heavy flicker). By keeping backdrop-blur at full
+          opacity and animating only the background color, the blur is applied once. */}
       <motion.div
-        variants={overlayVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        className="fixed inset-0 z-[12000] flex items-start justify-center overflow-y-auto bg-slate-950/78 backdrop-blur-[18px] p-3 pt-[calc(var(--app-header-offset)+0.75rem)] sm:p-6 sm:pt-[calc(var(--app-header-offset)+1rem)]"
+        initial={{ backgroundColor: 'rgba(2,6,23,0)' }}
+        animate={{ backgroundColor: 'rgba(2,6,23,0.78)', transition: { duration: 0.2 } }}
+        exit={{ backgroundColor: 'rgba(2,6,23,0)', transition: { duration: 0.16 } }}
+        className="fixed inset-0 z-[12000] flex items-start justify-center overflow-y-auto backdrop-blur-[18px] p-3 pt-[calc(var(--app-header-offset)+0.75rem)] sm:p-6 sm:pt-[calc(var(--app-header-offset)+1rem)]"
         onClick={onClose}
       >
         <motion.div
@@ -434,16 +430,7 @@ export default function ProCardModal({
           aria-modal="true"
           dir="rtl"
         >
-          <div
-            className="absolute inset-0 opacity-60"
-            style={{
-              background:
-                'linear-gradient(120deg, rgba(250,204,21,0.16), rgba(37,99,235,0.22), rgba(14,165,233,0.14), rgba(250,204,21,0.12))',
-              backgroundSize: '300% 300%',
-              animation: 'proCardGradient 9s ease-in-out infinite',
-            }}
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(250,204,21,0.18),transparent_34%),radial-gradient(circle_at_90%_18%,rgba(56,189,248,0.22),transparent_38%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(250,204,21,0.15),transparent_38%),radial-gradient(circle_at_88%_15%,rgba(56,189,248,0.18),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(37,99,235,0.12),transparent_50%)]" />
 
           <button
             type="button"
@@ -703,95 +690,77 @@ export default function ProCardModal({
 
                     {filteredGroups.length > 0 ? (
                       <div className="space-y-4">
-                        {filteredGroups.map((yearGroup) => (
-                          <div key={yearGroup.year} className="rounded-2xl border border-white/10 bg-slate-950/42 p-3">
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <div className="rounded-full bg-amber-300/12 px-3 py-1 text-sm font-black text-amber-100" dir="ltr">
-                                {yearGroup.year}
+                        {filteredGroups.map((yearGroup) => {
+                          const flatCredits = yearGroup.channels.flatMap((cg) => cg.credits);
+                          return (
+                            <div key={yearGroup.year}>
+                              {/* Year header — slim divider, no heavy card wrapper */}
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="shrink-0 rounded-full bg-amber-300/12 px-2.5 py-0.5 text-xs font-black text-amber-100" dir="ltr">
+                                  {yearGroup.year}
+                                </span>
+                                <div className="h-px flex-1 bg-white/10" />
+                                <span className="shrink-0 text-[10px] text-white/35">{flatCredits.length}</span>
                               </div>
-                              <div className="text-xs font-bold text-white/45">
-                                {yearGroup.channels.reduce((sum, cg) => sum + cg.credits.length, 0)} קרדיטים
-                              </div>
-                            </div>
-                            <div className="space-y-3">
-                              {yearGroup.channels.map((channelGroup) => (
-                                <div key={channelGroup.channelName}>
-                                  {/* Channel sub-header — only when showing all channels and there are multiple */}
-                                  {activeChannel === 'all' && allChannels.length > 1 && channelGroup.channelName !== 'ללא ערוץ' && (
-                                    <div className="mb-1.5 flex items-center gap-2 pr-1">
-                                      {(() => {
-                                        const channel = getChannelById(channelGroup.channelId) || findChannelByName(channelGroup.channelName);
-                                        return channel ? <ChannelLogo channel={channel} size={22} rounded={6} /> : null;
-                                      })()}
-                                      <span className="text-[11px] font-bold text-sky-300/70">{channelGroup.channelName}</span>
-                                      <div className="h-px flex-1 bg-white/8" />
-                                    </div>
-                                  )}
-                                  <div className="grid gap-2">
-                                    {channelGroup.credits.map((credit) => (
-                                      <div
-                                        key={`${credit.id}-${credit.role}`}
-                                        className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.055] p-3"
-                                      >
-                                        <ProductionMark credit={credit} />
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <span className="truncate text-sm font-black text-white">{credit.productionName}</span>
-                                            {credit.isMajor && (
-                                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-bold text-amber-100">
-                                                <Trophy className="h-3 w-3" />
-                                                מרכזית
-                                              </span>
-                                            )}
-                                            {credit.isVerified && (
-                                              credit.wikiUrl ? (
-                                                <a
-                                                  href={credit.wikiUrl}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="inline-flex items-center gap-1 rounded-full bg-sky-400/10 px-2 py-0.5 text-[11px] font-bold text-sky-300/80 hover:bg-sky-400/20 transition"
-                                                  title="מאומת בוויקיפדיה"
-                                                  onClick={(e) => e.stopPropagation()}
-                                                >
-                                                  <CheckCircle2 className="h-3 w-3" />
-                                                  <ExternalLink className="h-2.5 w-2.5" />
-                                                </a>
-                                              ) : (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-400/10 px-2 py-0.5 text-[11px] font-bold text-sky-300/80" title="מאומת בוויקיפדיה">
-                                                  <CheckCircle2 className="h-3 w-3" />
-                                                </span>
-                                              )
-                                            )}
-                                          </div>
-                                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">
-                                            <span className="font-bold text-sky-100/85">{credit.role}</span>
-                                            {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
-                                              <span className="inline-flex items-center gap-1.5">
-                                                {(() => {
-                                                  const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
-                                                  return channel ? <ChannelLogo channel={channel} size={18} rounded={5} /> : null;
-                                                })()}
-                                                <span>{credit.channelName}</span>
-                                              </span>
-                                            )}
-                                            {credit.studio && <span>{credit.studio}</span>}
-                                            {credit.shiftCount > 1 ? (
-                                              <span dir="ltr" className="text-sky-300/80">
-                                                {credit.shiftCount} משמרות · {formatDate(credit.dateFrom)} - {formatDate(credit.dateTo)}
-                                              </span>
-                                            ) : (
-                                              <span dir="ltr">{formatDate(credit.date)}</span>
-                                            )}
-                                          </div>
-                                        </div>
+                              <div className="grid gap-1.5">
+                                {flatCredits.map((credit) => (
+                                  <div
+                                    key={`${credit.id}-${credit.role}`}
+                                    className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2.5"
+                                  >
+                                    <ProductionMark credit={credit} />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-1.5 leading-snug">
+                                        <span className="text-sm font-bold text-white">{credit.productionName}</span>
+                                        {credit.isMajor && (
+                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-300/12 px-1.5 py-0.5 text-[10px] font-bold text-amber-100">
+                                            <Trophy className="h-2.5 w-2.5" />
+                                            מרכזית
+                                          </span>
+                                        )}
+                                        {credit.isVerified && (
+                                          credit.wikiUrl ? (
+                                            <a
+                                              href={credit.wikiUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-300/80 hover:bg-sky-400/20 transition"
+                                              title="מאומת בוויקיפדיה"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <CheckCircle2 className="h-2.5 w-2.5" />
+                                            </a>
+                                          ) : (
+                                            <span className="inline-flex items-center rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-300/80">
+                                              <CheckCircle2 className="h-2.5 w-2.5" />
+                                            </span>
+                                          )
+                                        )}
                                       </div>
-                                    ))}
+                                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-white/50">
+                                        <span className="font-medium text-sky-100/75">{credit.role}</span>
+                                        {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
+                                          <span className="inline-flex items-center gap-1">
+                                            {(() => {
+                                              const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
+                                              return channel ? <ChannelLogo channel={channel} size={14} rounded={3} /> : null;
+                                            })()}
+                                            <span>{credit.channelName}</span>
+                                          </span>
+                                        )}
+                                        {credit.shiftCount > 1 ? (
+                                          <span dir="ltr">{credit.shiftCount} משמרות</span>
+                                        ) : (
+                                          <span dir="ltr">{formatDate(credit.date)}</span>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-white/14 p-5 text-center text-sm text-white/58">
