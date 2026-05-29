@@ -3,6 +3,11 @@
 // wikiUrl 'none' sentinel = tried Wikipedia, page not found → skip on re-runs.
 // Title Match Verification: sets wikiTitleMatch='needs_review' and withholds logo
 // when the Wikipedia page title is <70% similar to the show name.
+//
+// Force mode uses a `since` ISO timestamp sent by the client at the start of the run.
+// Entries updated at or after `since` were already processed in this run → skip them.
+// This prevents the infinite loop that would otherwise occur because force mode
+// has no other way to know which entries were already processed this session.
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
 import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
@@ -19,17 +24,26 @@ export async function POST(request: NextRequest) {
   const auth = await requirePrimaryAdminRequest(request);
   if (auth instanceof NextResponse) return auth;
 
-  const body = await request.json().catch(() => ({})) as { force?: boolean };
+  const body = await request.json().catch(() => ({})) as { force?: boolean; since?: string };
   const force = body.force === true;
+  // `since` is an ISO timestamp sent by the client when the force run began.
+  // Entries updated at or after this timestamp were already processed → skip.
+  const since = typeof body.since === 'string' && body.since ? body.since : null;
 
   const allEntries = await listDocuments<IndustryMasterEntry>('industry_master').catch(() => []);
-  // Normal mode: skip entries that are already verified AND have a logo AND have metadata.
-  // Force mode: reprocess ALL entries (used to correct wrong logos from old search algorithm).
+
   const needsWiki = allEntries.filter((e) => {
-    if (!force && e.wikiUrl === 'none') return false; // Already tried, page not found — skip in normal mode
-    if (!force && e.isVerified && e.logoUrl && e.logoUrl !== 'none' && e.network) return false; // Fully enriched
+    if (force) {
+      // In force mode, skip only entries already processed in this batch run
+      if (since && e.lastUpdated && e.lastUpdated >= since) return false;
+      return true;
+    }
+    // Normal mode: skip entries that are done or not found
+    if (e.wikiUrl === 'none') return false;
+    if (e.isVerified && e.logoUrl && e.logoUrl !== 'none' && e.network) return false;
     return true;
   });
+
   const pending = needsWiki.slice(0, BATCH_SIZE);
   const totalPending = needsWiki.length;
 
@@ -52,13 +66,10 @@ export async function POST(request: NextRequest) {
     if (info.network) update.network = info.network;
     if (info.genre) update.genre = info.genre;
     if (info.productionCompany) update.productionCompany = info.productionCompany;
-    // Update logo:
-    //   • Force mode OR verified match: always apply new logo (corrects previously wrong images)
-    //   • Not verified: clear existing logo to prevent wrong images from being displayed
     if (isVerified) {
-      update.logoUrl = info.logoUrl; // may be '' if no infobox image — that's correct
+      update.logoUrl = info.logoUrl;
     } else {
-      update.logoUrl = ''; // Title mismatch → wipe wrong logo
+      update.logoUrl = '';
     }
     await patchDocument(`industry_master/${entry.id}`, update);
     if (info.network || info.logoUrl) enriched++;

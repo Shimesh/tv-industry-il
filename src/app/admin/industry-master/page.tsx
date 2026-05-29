@@ -180,12 +180,15 @@ export default function UnifiedIndustryMasterPage() {
     setBulkWikiForce(force);
     bulkAbortRef.current = false;
     setBulkWikiProgress({ processed: 0, remaining: Infinity });
+    // Record run-start timestamp so the route can skip already-processed entries in force mode,
+    // preventing the infinite loop that occurs when force=true includes all entries every call.
+    const since = new Date().toISOString();
     let totalProcessed = 0;
     try {
       while (!bulkAbortRef.current) {
         const res = await authFetch('/api/admin/industry-master/sync/wiki', {
           method: 'POST',
-          body: JSON.stringify({ force }),
+          body: JSON.stringify({ force, ...(force ? { since } : {}) }),
         });
         const data = await res.json() as { error?: string; processed?: number; remaining?: number };
         if (!res.ok) throw new Error(data.error || 'שגיאה');
