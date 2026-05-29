@@ -11,6 +11,7 @@ import {
   Copy,
   Clock,
   Download,
+  ExternalLink,
   FileText,
   Film,
   Image as ImageIcon,
@@ -18,6 +19,7 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  Search,
   Share2,
   Sparkles,
   Star,
@@ -196,6 +198,7 @@ export default function ProCardModal({
   const groupedCredits = useMemo(() => groupCredits(history.productionCredits), [history.productionCredits]);
   const [activeYear, setActiveYear] = useState<string>('all');
   const [activeChannel, setActiveChannel] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const allYears = useMemo(() => groupedCredits.map((g) => g.year), [groupedCredits]);
 
@@ -210,14 +213,38 @@ export default function ProCardModal({
   }, [groupedCredits]);
 
   const filteredGroups = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return groupedCredits
       .filter((yg) => activeYear === 'all' || yg.year === activeYear)
       .map((yg) => ({
         ...yg,
-        channels: yg.channels.filter((cg) => activeChannel === 'all' || cg.channelName === activeChannel),
+        channels: yg.channels
+          .filter((cg) => activeChannel === 'all' || cg.channelName === activeChannel)
+          .map((cg) => ({
+            ...cg,
+            credits: query
+              ? cg.credits.filter(
+                  (c) =>
+                    c.productionName.toLowerCase().includes(query) ||
+                    c.role.toLowerCase().includes(query) ||
+                    c.channelName.toLowerCase().includes(query),
+                )
+              : cg.credits,
+          }))
+          .filter((cg) => cg.credits.length > 0),
       }))
       .filter((yg) => yg.channels.length > 0);
-  }, [groupedCredits, activeYear, activeChannel]);
+  }, [groupedCredits, activeYear, activeChannel, searchQuery]);
+
+  const stats = useMemo(() => {
+    const credits = history.productionCredits;
+    const totalShifts = credits.reduce((sum, c) => sum + c.shiftCount, 0);
+    const years = new Set(credits.map((c) => c.year).filter((y) => /^\d{4}$/.test(y)));
+    const allYearsArr = Array.from(years).map(Number);
+    const firstYear = allYearsArr.length ? Math.min(...allYearsArr) : 0;
+    const lastYear = allYearsArr.length ? Math.max(...allYearsArr) : 0;
+    return { totalShifts, firstYear, lastYear, hasYears: years.size > 0 };
+  }, [history.productionCredits]);
 
   const verified = isCurrentUser || contact.source === 'user-profile' || Boolean(contact.profileId);
 
@@ -232,6 +259,7 @@ export default function ProCardModal({
   useEffect(() => {
     setActiveYear('all');
     setActiveChannel('all');
+    setSearchQuery('');
   }, [contact.id]);
 
   useEffect(() => {
@@ -566,15 +594,27 @@ export default function ProCardModal({
               )}
 
               <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="flex items-center gap-2 text-base font-black text-white">
                     <Film className="h-4 w-4 text-sky-200" />
                     היסטוריית הפקות
                   </h3>
-                  {history.productionCredits.length > 0 && (
-                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/70">
-                      {history.productionCredits.length} קרדיטים
-                    </span>
+                  {!historyLoading && history.productionCredits.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-sky-400/14 px-2.5 py-1 text-xs font-bold text-sky-100">
+                        {history.productionCredits.length} הפקות
+                      </span>
+                      {stats.totalShifts > history.productionCredits.length && (
+                        <span className="rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/60">
+                          {stats.totalShifts} משמרות
+                        </span>
+                      )}
+                      {stats.hasYears && (
+                        <span className="rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/60" dir="ltr">
+                          {stats.firstYear === stats.lastYear ? stats.firstYear : `${stats.firstYear}–${stats.lastYear}`}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -585,6 +625,29 @@ export default function ProCardModal({
                   </div>
                 ) : groupedCredits.length > 0 ? (
                   <>
+                    {/* Search input */}
+                    <div className="relative mb-3">
+                      <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="חיפוש לפי הפקה, תפקיד, ערוץ..."
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.07] py-2 pr-9 pl-8 text-sm text-white placeholder-white/35 outline-none focus:border-sky-400/40 focus:bg-white/10 transition"
+                        dir="rtl"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition"
+                          aria-label="נקה חיפוש"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
                     {/* Filter chips — show when there are 2+ years or 2+ known channels */}
                     {(allYears.length > 1 || allChannels.length > 1) && (
                       <div className="mb-3 space-y-2">
@@ -674,6 +737,25 @@ export default function ProCardModal({
                                                 <Trophy className="h-3 w-3" />
                                                 מרכזית
                                               </span>
+                                            )}
+                                            {credit.isVerified && (
+                                              credit.wikiUrl ? (
+                                                <a
+                                                  href={credit.wikiUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center gap-1 rounded-full bg-sky-400/10 px-2 py-0.5 text-[11px] font-bold text-sky-300/80 hover:bg-sky-400/20 transition"
+                                                  title="מאומת בוויקיפדיה"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <CheckCircle2 className="h-3 w-3" />
+                                                  <ExternalLink className="h-2.5 w-2.5" />
+                                                </a>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-400/10 px-2 py-0.5 text-[11px] font-bold text-sky-300/80" title="מאומת בוויקיפדיה">
+                                                  <CheckCircle2 className="h-3 w-3" />
+                                                </span>
+                                              )
                                             )}
                                           </div>
                                           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/62">

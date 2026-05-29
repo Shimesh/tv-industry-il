@@ -282,7 +282,9 @@ function applyRegistryOverrides(
     const channelName = mst?.network || reg?.channel || credit.channelName;
     const isMajor = credit.isMajor || Boolean(reg?.isMajor);
     const productionName = (mst?.masterName || mst?.showName || reg?.name || collapseProductionName(credit.productionName)).trim();
-    return { ...credit, productionName, logoUrl, channelName, isMajor };
+    const isVerified = mst?.isVerified === true;
+    const wikiUrl = mst?.wikiUrl && mst.wikiUrl !== 'none' ? mst.wikiUrl : undefined;
+    return { ...credit, productionName, logoUrl, channelName, isMajor, isVerified, wikiUrl };
   });
 }
 

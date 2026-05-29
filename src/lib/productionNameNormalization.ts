@@ -12,6 +12,8 @@
 const SUFFIX_PATTERNS: RegExp[] = [
   // Operational suffixes with dash separator
   / - טסטים$/i,
+  / - טסט$/i,
+  / - בדיקה$/i,
   / - הקמה$/i,
   / - חזרות$/i,
   / - יום צילום$/i,
@@ -19,6 +21,8 @@ const SUFFIX_PATTERNS: RegExp[] = [
   / - מוקלט$/i,
   / - בשידור חי$/i,
   / - שידור חי$/i,
+  / - שידור ישיר$/i,
+  / - שידור מיוחד$/i,
   / - פיילוט$/i,
   / - אולפן$/i,
   / - לייב$/i,
@@ -28,6 +32,11 @@ const SUFFIX_PATTERNS: RegExp[] = [
   / - גאלה$/i,
   / - בכורה$/i,
   / - סיום$/i,
+  / - הסיום$/i,
+  / - כתבות$/i,
+  / - ריאיונות$/i,
+  / - אורחים$/i,
+  / - חלק [א-ת]'?$/i,
   // Same suffixes without leading space-dash (e.g. "האח הגדול פיילוט")
   / פיילוט$/i,
   / pilot$/i,
@@ -37,6 +46,9 @@ const SUFFIX_PATTERNS: RegExp[] = [
   / עונה\s+\d+.*/i,
   / סשן\s+\d+.*/i,
   /\s+s\d+\b.*/i,
+  // Episode/program number at end
+  / תוכנית\s+\d+$/i,
+  / פרק\s+\d+$/i,
 ];
 
 /** Strip known operational suffixes from a production title (multi-pass until stable). */
@@ -88,7 +100,11 @@ export function collapseProductionName(name: string): string {
  *  1. Single Hebrew/Latin word (no spaces) — likely a person's first name or single noun
  *  2. Contains known status-noise keywords
  */
-const NOISE_KEYWORDS = ['בוטל', 'שימו לב', 'עקב'];
+const NOISE_KEYWORDS = [
+  'בוטל', 'שימו לב', 'עקב',
+  'ביטול', 'נדחה', 'אין שידור', 'לא מועבר', 'off air', 'off-air',
+  'בוטל בגלל', 'עקב שביתה', 'עקב אבל',
+];
 
 export function isNoisyProductionTitle(name: string): boolean {
   const trimmed = name.trim();
