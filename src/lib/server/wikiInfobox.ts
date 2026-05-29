@@ -217,11 +217,12 @@ export async function fetchWikiInfobox(showName: string): Promise<WikiInfoboxRes
 
   let logoUrl = '';
   if (wikiTitleMatch === 'ok') {
-    // Prefer the specific infobox logo/poster field
+    // Try infobox logo/poster first (specific to the show)
     logoUrl = await fetchInfoboxImageUrl(wikitext);
-    // For confirmed TV show articles with no infobox image, fall back to the page's
-    // representative image — safe here because we've verified it's a TV show article.
-    if (!logoUrl && isTV) {
+    // Fall back to page's representative image.
+    // Safe here: wikiTitleMatch='ok' already filtered out person/couple articles via isPerson check,
+    // so pageimages can't return a cast photo from an unrelated show.
+    if (!logoUrl) {
       logoUrl = await fetchWikiPageImage(page.title);
     }
   }
