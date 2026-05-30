@@ -44,9 +44,9 @@ export default function ListingCard({ listing, onClose }: Props) {
     setContactRevealed(true);
   };
 
-  const handleClose = () => {
-    if (!onClose) return;
-    const token = localStorage.getItem('authToken') ?? '';
+  const handleClose = async () => {
+    if (!onClose || !user) return;
+    const token = await user.getIdToken().catch(() => '');
     fetch(`/api/board/listings/${listing.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
