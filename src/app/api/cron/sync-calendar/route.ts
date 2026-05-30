@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
-import { syncHerzliyaUrl, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
+import { syncHerzliyaUrl, getCurrentWeekStartIsrael, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
 import { recordJobMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
@@ -13,12 +13,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const currentWeekStart = getCurrentWeekStartIsrael();
   const allUsers = await listDocuments<UserCalendarSyncDoc>('user_calendar_sync').catch(() => []);
-  const activeUsers = allUsers.filter(u => u.url?.trim());
+
+  // Only sync users whose saved URL belongs to the current week
+  const activeUsers = allUsers.filter(u => u.url?.trim() && u.weekStart === currentWeekStart);
+  const skippedUsers = allUsers.filter(u => u.url?.trim() && u.weekStart !== currentWeekStart);
+
+  if (skippedUsers.length > 0) {
+    console.log(`[sync-calendar] skipping ${skippedUsers.length} users with stale weekStart (not ${currentWeekStart})`);
+  }
 
   if (activeUsers.length === 0) {
-    await recordJobMetric({ job: 'cron-sync-calendar', ok: false, message: 'אין משתמשים עם לינק יומן שמור' });
-    return NextResponse.json({ ok: false, reason: 'no_users' });
+    await recordJobMetric({ job: 'cron-sync-calendar', ok: false, message: `אין משתמשים לסינכרון השבוע (${currentWeekStart})` });
+    return NextResponse.json({ ok: false, reason: 'no_active_users_this_week', currentWeekStart, skipped: skippedUsers.length });
   }
 
   const startedAt = Date.now();

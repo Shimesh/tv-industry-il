@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { patchDocument } from '@/lib/server/firestoreAdminRest';
-import { syncHerzliyaUrl, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
+import { syncHerzliyaUrl, getCurrentWeekStartIsrael, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -30,12 +30,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const userSyncPath = `user_calendar_sync/${authUser.uid}`;
 
-  // Save per-user URL
+  // Save per-user URL with current week context
   await patchDocument(userSyncPath, {
     uid: authUser.uid,
     url,
     workerName,
     savedAt: Date.now(),
+    weekStart: getCurrentWeekStartIsrael(),
   } as unknown as Record<string, string>);
 
   // Run sync immediately

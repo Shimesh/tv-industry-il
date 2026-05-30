@@ -20,11 +20,23 @@ export type UserCalendarSyncDoc = {
   url: string;
   workerName: string;
   savedAt: number;
+  weekStart: string; // ISO date of Sunday that starts the week this URL was saved for
   lastSyncAt?: number;
   lastSyncStatus?: 'success' | 'error' | 'empty';
   lastSyncCount?: number;
   lastSyncError?: string | null;
 };
+
+/** Returns the ISO date (YYYY-MM-DD) of the Sunday starting the current Israeli week */
+export function getCurrentWeekStartIsrael(): string {
+  const israelDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const d = new Date(israelDate);
+  d.setDate(d.getDate() - d.getDay()); // back to Sunday
+  return d.toISOString().split('T')[0];
+}
 
 const FETCH_OPTIONS: RequestInit = {
   headers: {
