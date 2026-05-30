@@ -386,15 +386,15 @@ export default function WeeklyCalendarWidget() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setWeekOffset((offset) => offset - 1)}
-              className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
-              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}
+              className="rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all hover:brightness-110 active:scale-95"
+              style={{ background: '#16a34a', color: 'white' }}
             >
               הקודם
             </button>
             {!isCurrentWeek && (
               <button
                 onClick={() => setWeekOffset(0)}
-                className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
+                className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
                 style={{ background: 'var(--theme-accent)', color: 'white', boxShadow: '0 0 10px color-mix(in srgb, var(--theme-accent) 40%, transparent)' }}
               >
                 היום
@@ -402,8 +402,8 @@ export default function WeeklyCalendarWidget() {
             )}
             <button
               onClick={() => setWeekOffset((offset) => offset + 1)}
-              className="rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all hover:opacity-80 active:scale-95"
-              style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}
+              className="rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all hover:brightness-110 active:scale-95"
+              style={{ background: '#16a34a', color: 'white' }}
             >
               הבא
             </button>
