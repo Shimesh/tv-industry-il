@@ -19,6 +19,7 @@ import OnAirNowCarousel from '@/components/home/OnAirNowCarousel';
 import UpcomingEventsCarousel, { type UpcomingEventItem } from '@/components/home/UpcomingEventsCarousel';
 import HomeInfoWidget from '@/components/home/HomeInfoWidget';
 import PersonalProCardWidget from '@/components/home/PersonalProCardWidget';
+import HotListingsWidget from '@/components/board/HotListingsWidget';
 import RatingsWidget from '@/components/home/RatingsWidget';
 import WorldCupCountdown from '@/components/world-cup/WorldCupCountdown';
 import { useAuth } from '@/contexts/AuthContext';
@@ -178,7 +179,12 @@ export default function HomePage() {
           <OnAirNowCarousel channels={broadcastChannels} loading={broadcastsLoading} />
         </motion.section>
 
-        {/* 5 → Weather */}
+        {/* 5 → Hot Listings */}
+        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+          <HotListingsWidget />
+        </motion.section>
+
+        {/* 6 → Weather */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 shadow-[0_0_14px_rgba(14,165,233,0.40)]">
@@ -192,7 +198,7 @@ export default function HomePage() {
           <HomeInfoWidget />
         </motion.section>
 
-        {/* 6 → WorldCup + ProCard widgets */}
+        {/* 7 → WorldCup + ProCard widgets */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -208,7 +214,7 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* 6 → Latest News */}
+        {/* 8 → Latest News */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-[0_0_14px_rgba(99,102,241,0.40)]">
