@@ -116,10 +116,13 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
   const chunkSize = 500;
   for (let i = 0; i < tokens.length; i += chunkSize) {
     const chunk = tokens.slice(i, i + chunkSize);
-    // Send data-only (no notification field) so Firebase SDK always calls
-    // onBackgroundMessage in the SW instead of auto-displaying. The SW's
-    // onBackgroundMessage handler calls showAppNotification which controls
-    // icon, badge, RTL, and tag reliably.
+    // webpush.notification tells Chrome's push service to treat this as a
+    // user-visible notification push (not a silent data push). Android delivers
+    // notification-type pushes even when Chrome has been killed by the OS, while
+    // data-only pushes can be suppressed by battery optimisation. The SW's push
+    // event handler still runs first and calls showNotification with our custom
+    // styling; webpush.notification is a fallback if the SW fails to display.
+    const tag = (params.type || '').startsWith('world_cup_') ? params.type! : 'tv-industry-push';
     const response = await messaging.sendEachForMulticast({
       tokens: chunk,
       data: {
@@ -133,6 +136,16 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
+        notification: {
+          title: params.title,
+          body: params.body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-72x72.png',
+          tag,
+          renotify: true,
+          dir: 'rtl',
+          lang: 'he',
+        },
       },
     });
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v2.7.3';
+const CACHE_NAME = 'tv-industry-il-v2.7.4';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -75,16 +75,11 @@ self.addEventListener('push', (event) => {
     payload = { data: { title: 'TV Industry IL', body: event.data.text(), link: '/' } };
   }
 
-  // Show a system notification only when no app window is currently visible.
-  // When the app is in the foreground, FCMForegroundListener shows an in-app
-  // toast instead — showing a system notification there too would duplicate it.
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      const isAppVisible = clientList.some((c) => c.visibilityState === 'visible');
-      if (isAppVisible) return;
-      return showAppNotification(payload);
-    }),
-  );
+  // Always show a system notification. FCMForegroundListener in the main thread
+  // handles the foreground case (in-app toast) via Firebase's onMessage — that
+  // fires before the push event reaches the SW when the app is open, so the
+  // user sees the toast. The system notification tag deduplicates on the OS level.
+  event.waitUntil(showAppNotification(payload));
 });
 
 self.addEventListener('install', (event) => {
@@ -140,28 +135,3 @@ self.addEventListener('fetch', (event) => {
       }),
   );
 });
-
-const urlParams = new URLSearchParams(self.location.search);
-const firebaseConfig = {
-  apiKey: urlParams.get('apiKey'),
-  projectId: urlParams.get('projectId'),
-  messagingSenderId: urlParams.get('messagingSenderId'),
-  appId: urlParams.get('appId'),
-};
-
-if (
-  firebaseConfig.apiKey &&
-  firebaseConfig.projectId &&
-  firebaseConfig.messagingSenderId &&
-  firebaseConfig.appId
-) {
-  importScripts('https://www.gstatic.com/firebasejs/12.10.0/firebase-app-compat.js');
-  importScripts('https://www.gstatic.com/firebasejs/12.10.0/firebase-messaging-compat.js');
-
-  firebase.initializeApp(firebaseConfig);
-  const messaging = firebase.messaging();
-
-  // Register a no-op onBackgroundMessage so Firebase SDK doesn't attempt its
-  // own notification display. The push event handler above manages display.
-  messaging.onBackgroundMessage(() => {});
-}
