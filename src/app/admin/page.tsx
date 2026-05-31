@@ -1909,11 +1909,11 @@ export default function AdminPage() {
               <thead className="sticky top-0 z-10 bg-gray-900">
                 <tr className="border-b border-gray-800 text-[11px] text-gray-500">
                   <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
-                  <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden lg:table-cell" />
-                  <th className="hidden px-3 py-2 text-right font-medium xl:table-cell">כניסה</th>
-                  <SortHeader label="תפקיד" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden xl:table-cell" />
+                  <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
+                  <th className="px-3 py-2 text-right font-medium">כניסה</th>
+                  <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
                   <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                  <SortHeader label="נראה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
+                  <SortHeader label="נראה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
                   <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
                 </tr>
               </thead>
@@ -1936,7 +1936,7 @@ export default function AdminPage() {
                           ) : null}
                         </div>
                         <div className="min-w-0">
-                          {/* שורה 1: שם + אייקונים */}
+                          {/* שם + אייקונים */}
                           <div className="flex items-center gap-1">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
                             {entry.hasPush ? (
@@ -1948,7 +1948,7 @@ export default function AdminPage() {
                               <span title="ביצע סיור"><Sparkles className="h-2.5 w-2.5 text-violet-400 flex-shrink-0" /></span>
                             ) : null}
                           </div>
-                          {/* שורה 2: סטטוס פרופיל + פעולות קצרות */}
+                          {/* סטטוס פרופיל + פעולות */}
                           <div className="mt-0.5 flex flex-wrap items-center gap-1">
                             {isFullProfile(entry) ? (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-green-900/40 px-1 py-0.5 text-[9px] text-green-400">
@@ -2005,24 +2005,23 @@ export default function AdminPage() {
                               הסכמה: {new Date(entry.termsAcceptedAt).toLocaleDateString('he-IL')}
                             </div>
                           ) : null}
-                          <p className="truncate text-[10px] text-gray-500 lg:hidden">{entry.email || '—'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="hidden max-w-[160px] px-3 py-2 text-gray-400 lg:table-cell">
-                      <span className="block truncate">{entry.email || '—'}</span>
+                    <td className="max-w-[140px] px-3 py-2 text-gray-400">
+                      <span className="block truncate" title={entry.email || ''}>{entry.email || '—'}</span>
                     </td>
-                    <td className="hidden px-3 py-2 xl:table-cell">
+                    <td className="px-3 py-2">
                       <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
                     </td>
-                    <td className="hidden px-3 py-2 xl:table-cell">
-                      <p className="text-white">{safeProfileRoles(entry).join(', ') || '—'}</p>
-                      <p className="text-[10px] text-gray-500">{safeProfileDepartments(entry).join(', ') || '—'}</p>
+                    <td className="max-w-[120px] px-3 py-2">
+                      <p className="truncate text-white" title={safeProfileRoles(entry).join(', ') || '—'}>{safeProfileRoles(entry).join(', ') || '—'}</p>
+                      <p className="truncate text-[10px] text-gray-500" title={safeProfileDepartments(entry).join(', ') || ''}>{safeProfileDepartments(entry).join(', ') || '—'}</p>
                     </td>
                     <td className="px-3 py-2">
                       <PresenceBadge user={entry} />
                     </td>
-                    <td className="hidden px-3 py-2 text-[10px] text-gray-400 md:table-cell whitespace-nowrap">
+                    <td className="px-3 py-2 text-[10px] text-gray-400 whitespace-nowrap">
                       {formatRelativeTime(entry.lastSeen)}
                     </td>
                     <td className="px-3 py-2">

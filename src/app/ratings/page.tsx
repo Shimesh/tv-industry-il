@@ -35,15 +35,15 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
       <div className="overflow-x-auto">
-        <table className="w-full text-right text-sm">
-          <thead className="bg-white/[0.06] text-xs text-purple-100/70">
+        <table className="w-full text-right text-xs">
+          <thead className="bg-white/[0.06] text-[11px] text-purple-100/70">
             <tr>
-              <th className="px-2 py-2.5 font-bold w-10">#</th>
-              <th className="px-3 py-2.5 font-bold">תוכנית</th>
-              <th className="hidden px-3 py-2.5 font-bold sm:table-cell">ערוץ</th>
-              <th className="hidden px-3 py-2.5 font-bold md:table-cell">תאריך</th>
-              <th className="hidden px-3 py-2.5 font-bold lg:table-cell">מקור</th>
-              <th className="px-3 py-2.5 font-bold text-left">צפייה</th>
+              <th className="px-2 py-2 font-bold w-9">#</th>
+              <th className="px-2 py-2 font-bold">תוכנית</th>
+              <th className="px-2 py-2 font-bold">ערוץ / קטגוריה</th>
+              <th className="px-2 py-2 font-bold whitespace-nowrap">תאריך</th>
+              <th className="px-2 py-2 font-bold">מקור</th>
+              <th className="px-2 py-2 font-bold text-left whitespace-nowrap">שיעור צפייה</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
@@ -54,22 +54,18 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
 
               return (
               <tr key={`${row.rank}-${row.showName}-${row.date}`} className="align-middle text-slate-100">
-                <td className="px-2 py-2.5 text-center">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/15 text-xs font-black text-purple-100" dir="ltr">
+                <td className="px-2 py-2 text-center">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/15 text-[11px] font-black text-purple-100" dir="ltr">
                     {unifiedRow.displayRank || row.rank}
                   </span>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-2 py-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <RatingLogo src={row.logoUrl} name={row.showName} channel={row.channel} compact />
                     <div className="min-w-0">
                       <div className="truncate font-bold text-white leading-tight">{row.showName}</div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 sm:hidden">
-                        <span className="text-[11px] text-slate-400">{channelLabel(row.channel)}</span>
-                        {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-200">{unifiedRow.category}</span> : null}
-                      </div>
                       {hasDifferentValues ? (
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-blue-200/80">
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] font-bold text-blue-200/80">
                           {sources.map((source) => (
                             <span key={`${source.name}-${source.category || 'all'}-${source.ratingPercent}`} dir="ltr">
                               {source.name}{source.category ? ` ${source.category}` : ''} {source.ratingPercent}%
@@ -80,21 +76,21 @@ function RatingsTable({ rows }: { rows: Array<RatingRow | UnifiedRatingRow> }) {
                     </div>
                   </div>
                 </td>
-                <td className="hidden px-3 py-2.5 text-slate-300 sm:table-cell">
+                <td className="px-2 py-2 text-slate-300">
                   <div className="flex flex-wrap items-center gap-1">
-                    <span className="text-sm">{channelLabel(row.channel)}</span>
-                    {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-1.5 py-0.5 text-[11px] text-blue-200">{unifiedRow.category}</span> : null}
+                    <span>{channelLabel(row.channel)}</span>
+                    {unifiedRow.category ? <span className="rounded-full bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-200">{unifiedRow.category}</span> : null}
                   </div>
                 </td>
-                <td className="hidden px-3 py-2.5 text-slate-300 md:table-cell whitespace-nowrap" dir="ltr">{formatDate(row.date)}</td>
-                <td className="hidden px-3 py-2.5 text-slate-300 lg:table-cell">
+                <td className="px-2 py-2 text-slate-300 whitespace-nowrap" dir="ltr">{formatDate(row.date)}</td>
+                <td className="px-2 py-2 text-slate-300">
                   <div className="flex flex-wrap gap-1">
-                    <span className="text-xs">{sourceSummary(unifiedRow) || 'מדרוג'}</span>
-                    {unifiedRow.viewers ? <span className="text-xs" dir="ltr">{unifiedRow.viewers}K</span> : null}
+                    <span>{sourceSummary(unifiedRow) || 'מדרוג'}</span>
+                    {unifiedRow.viewers ? <span dir="ltr">{unifiedRow.viewers}K</span> : null}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-left">
-                  <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-2.5 py-1 text-sm font-black text-fuchsia-100" dir="ltr">
+                <td className="px-2 py-2 text-left">
+                  <span className="inline-flex rounded-lg bg-fuchsia-400/15 px-2.5 py-1 font-black text-fuchsia-100 text-sm" dir="ltr">
                     {row.ratingPercent}%
                   </span>
                 </td>
