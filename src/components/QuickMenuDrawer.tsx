@@ -16,6 +16,7 @@ import {
   Trophy,
   UserRound,
   UserRoundCog,
+  UsersRound,
   Wrench,
   X,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ const mainLinks = [
   { href: '/studios', label: 'אולפנים', icon: Building2, accent: '#f97316' },
   { href: '/board', label: 'לוח מודעות', icon: Megaphone, accent: '#38bdf8' },
   { href: '/chat', label: "צ'אט", icon: MessageCircle, accent: '#ec4899', auth: true },
+  { href: '/teams', label: 'צוותים', icon: UsersRound, accent: '#34d399', auth: true },
   { href: '/ratings', label: 'רייטינג', icon: BarChart3, accent: '#c084fc' },
   { href: '/toolbox', label: 'כלים', icon: Wrench, accent: '#14b8a6' },
   { href: '/world-cup', label: 'מונדיאל', icon: Trophy, accent: '#D4AF37' },
