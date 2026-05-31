@@ -14,6 +14,7 @@ function OnboardingInner({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const { user, profile, loading, profileReady, updateUserProfile } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [tourDismissed, setTourDismissed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -41,6 +42,7 @@ function OnboardingInner({ children }: { children: ReactNode }) {
 
   const shouldShowTour = Boolean(
     !shouldShowProfileLinker &&
+      !tourDismissed &&
       mounted &&
       user &&
       !loading &&
@@ -53,6 +55,7 @@ function OnboardingInner({ children }: { children: ReactNode }) {
   );
 
   const handleTourComplete = async () => {
+    setTourDismissed(true);
     try {
       await updateUserProfile({ appTourSeen: true });
     } catch {
