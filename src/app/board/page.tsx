@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -69,6 +69,8 @@ function BoardPageContent() {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
   const [showNewModal, setShowNewModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [fabBottom, setFabBottom] = useState(24);
+  const fabRef = useRef<HTMLButtonElement>(null);
 
   const loadListings = useCallback(() => {
     setLoading(true);
@@ -89,6 +91,25 @@ function BoardPageContent() {
     const t = setInterval(loadListings, 90000);
     return () => clearInterval(t);
   }, [loadListings]);
+
+  // Keep FAB above footer
+  useEffect(() => {
+    const footer = document.querySelector('footer');
+    if (!footer) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          const footerVisible = entry.intersectionRect.height;
+          setFabBottom(footerVisible + 16);
+        } else {
+          setFabBottom(24);
+        }
+      },
+      { threshold: Array.from({ length: 101 }, (_, i) => i / 100) },
+    );
+    obs.observe(footer);
+    return () => obs.disconnect();
+  }, []);
 
   const filtered = allListings
     .filter(l => {
@@ -325,9 +346,14 @@ function BoardPageContent() {
       {/* FAB for mobile */}
       {user && !showNewModal && (
         <button
+          ref={fabRef}
           onClick={() => setShowNewModal(true)}
-          className="fixed bottom-6 left-6 z-40 sm:hidden w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 active:scale-95"
-          style={{ background: 'linear-gradient(135deg, var(--theme-accent), #7c3aed)' }}
+          className="fixed left-6 z-40 sm:hidden w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, var(--theme-accent), #7c3aed)',
+            bottom: fabBottom,
+            transition: 'bottom 0.2s ease, transform 0.1s ease',
+          }}
         >
           <Plus className="w-6 h-6" />
         </button>
