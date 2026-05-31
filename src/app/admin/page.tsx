@@ -1940,12 +1940,12 @@ export default function AdminPage() {
                           <div className="flex items-center gap-1">
                             <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
                             {entry.hasPush ? (
-                              <Smartphone className="h-2.5 w-2.5 text-blue-400 flex-shrink-0" title="push" />
+                              <span title="push למובייל"><Smartphone className="h-2.5 w-2.5 text-blue-400 flex-shrink-0" /></span>
                             ) : (
-                              <BellOff className="h-2.5 w-2.5 text-gray-600 flex-shrink-0" title="אין push" />
+                              <span title="אין push למובייל"><BellOff className="h-2.5 w-2.5 text-gray-600 flex-shrink-0" /></span>
                             )}
                             {entry.appTourSeen ? (
-                              <Sparkles className="h-2.5 w-2.5 text-violet-400 flex-shrink-0" title="ביצע סיור" />
+                              <span title="ביצע סיור"><Sparkles className="h-2.5 w-2.5 text-violet-400 flex-shrink-0" /></span>
                             ) : null}
                           </div>
                           {/* שורה 2: סטטוס פרופיל + פעולות קצרות */}
