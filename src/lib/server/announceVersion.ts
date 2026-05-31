@@ -61,10 +61,6 @@ export async function checkAndAnnounceVersion(): Promise<void> {
         return Array.isArray(v) ? v : [];
       }),
     );
-    if (fcmTokens.length > 0) {
-      const { failedTokens } = await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl });
-      if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
-    }
 
     const webPushSubs: StoredWebPushSubscription[] = uniqueWebPushSubscriptions(
       adminUids
@@ -77,8 +73,22 @@ export async function checkAndAnnounceVersion(): Promise<void> {
           return Array.isArray(v) ? v : [];
         }),
     );
+
+    console.log(`[version] ${APP_VERSION} → admins: ${adminUids.length}, fcm tokens: ${fcmTokens.length}, web push subs: ${webPushSubs.length}`);
+
+    if (fcmTokens.length > 0) {
+      const { failedTokens } = await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl });
+      console.log(`[version] FCM sent to ${fcmTokens.length} tokens, ${failedTokens.length} failed`);
+      if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
+    } else {
+      console.warn('[version] No FCM tokens found for admins — mobile push skipped');
+    }
+
     if (webPushSubs.length > 0) {
       await sendStandardWebPush({ subscriptions: webPushSubs, title, body: message, linkUrl });
+      console.log(`[version] Web push sent to ${webPushSubs.length} subscriptions`);
+    } else if (fcmTokens.length === 0) {
+      console.warn('[version] No push tokens or web push subscriptions found — push not sent');
     }
   } catch (err) {
     console.error('[version] announce failed:', err);

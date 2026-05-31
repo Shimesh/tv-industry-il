@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v2.6.19';
+const CACHE_NAME = 'tv-industry-il-v2.7.0';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -28,6 +28,57 @@ function shouldHandleRequest(request) {
 function shouldCacheResponse(response) {
   return response && response.ok && response.status === 200 && response.type === 'basic';
 }
+
+// Push notification handler — fires when this SW is the active one at scope '/'.
+// firebase-messaging-sw.js also has a push handler; whichever SW is active handles it.
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { data: { title: 'TV Industry IL', body: event.data.text() } };
+  }
+
+  const data = payload?.data || {};
+  const notification = payload?.notification || {};
+  const title = notification.title || data.title || 'TV Industry IL';
+  const body = notification.body || data.body || '';
+  const link = payload?.fcmOptions?.link || data.link || data.linkUrl || '/';
+  const tag = data.type && data.type.startsWith('world_cup_') ? data.type : 'tv-industry-push';
+
+  if (!title && !body) return;
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-72x72.png',
+      tag,
+      renotify: true,
+      dir: 'rtl',
+      lang: 'he',
+      data: { link },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = event.notification.data?.link || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(link);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(link);
+    })
+  );
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
