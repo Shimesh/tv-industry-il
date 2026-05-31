@@ -1,0 +1,22 @@
+name: Post-deploy version announcement
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Vercel deployment to complete
+        run: sleep 300
+
+      - name: Trigger version announcement push
+        run: |
+          curl -f --max-time 30 \
+            https://tv-industry-il.vercel.app/api/system/version-check \
+            && echo "Version announcement triggered" \
+            || echo "Version check call failed (non-fatal)"
