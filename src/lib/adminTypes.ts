@@ -17,12 +17,14 @@ export type AdminUserSummary = {
   onlineNow: boolean;
   stalePresence: boolean;
   onboardingComplete: boolean;
+  appTourSeen?: boolean;
   photoURL: string | null;
   city: string | null;
   lastSeen: string | null;
   crewName: string | null;
   is_consented: boolean;
   termsAccepted: boolean;
+  termsAcceptedAt?: string | null;
   linkedContactId: number | string | null;
   phone: string | null;
   loginMethods: AdminLoginMethod[];

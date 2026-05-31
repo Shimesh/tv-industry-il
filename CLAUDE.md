@@ -40,6 +40,14 @@ Israeli TV industry platform built with Next.js 16 (App Router), React 19, TypeS
 - `.nvmrc` sets Node 20 for Vercel (LTS)
 - `vercel.json` sets `regions: ["fra1"]` (Frankfurt) — functions closer to Israel
 
+## Version Bump Workflow
+When the user asks to "עדכן גירסה" (update version), always do ALL of the following:
+1. Bump version number in: `package.json`, `src/lib/clientErrorLogging.ts`, `src/components/Footer.tsx`, `public/sw.js` (CACHE_NAME), `public/firebase-messaging-sw.js` (CACHE_NAME)
+2. Commit and push to the current feature branch
+3. Merge the feature branch into `master` (fast-forward or merge commit)
+4. Push `master` to origin
+5. Deploy to Vercel production: `npx vercel --prod --yes`
+
 ## User
 - Hebrew-speaking user (all UI is in Hebrew, RTL)
 - Prefers direct action over long explanations
