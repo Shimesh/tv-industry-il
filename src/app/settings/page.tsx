@@ -313,7 +313,7 @@ function SettingsContent() {
         {/* Tour */}
         <SettingsSection icon={<Sparkles className="w-4 h-4" />} title="הדרכה">
           <p className="text-sm mb-3" style={{ color: 'var(--theme-text-secondary)' }}>
-            הצג מחדש את טיור ההיכרות עם האפליקציה.
+            הצג מחדש את סיור ההיכרות עם האפליקציה.
           </p>
           <button
             onClick={() => void handleResetTour()}
@@ -321,7 +321,7 @@ function SettingsContent() {
             style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
           >
             <Sparkles className="w-4 h-4" />
-            הצג טיור מחדש
+            הצג סיור מחדש
           </button>
         </SettingsSection>
 
