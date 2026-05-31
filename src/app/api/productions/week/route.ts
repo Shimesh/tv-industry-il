@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [docs, syncDoc] = await Promise.all([
+    const [docs, userSyncDoc, systemSyncDoc] = await Promise.all([
       runQuery<GlobalProductionDoc>({
       from: [{ collectionId: 'global_productions' }],
       where: {
@@ -57,9 +57,8 @@ export async function GET(request: NextRequest) {
       },
         limit: 500,
       }),
-      getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() =>
-        getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null)
-      ),
+      getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() => null),
+      getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
     ]);
 
     // Compatibility endpoint: read the canonical global calendar source.
@@ -74,14 +73,18 @@ export async function GET(request: NextRequest) {
 
     const productions = Array.from(byId.values()).map(fromGlobalProduction);
 
+    // Prefer the user's own last sync time; fall back to the global system sync timestamp
+    const lastSyncAt = userSyncDoc?.lastSyncAt ?? systemSyncDoc?.lastSyncAt ?? null;
+    const lastSyncStatus = userSyncDoc?.lastSyncStatus ?? systemSyncDoc?.lastSyncStatus ?? null;
+
     recordRouteMetric({ route: '/api/productions/week', ok: true, statusCode: 200 }).catch(() => {});
 
     return NextResponse.json({
       success: true,
       count: productions.length,
       productions,
-      lastSyncAt: syncDoc?.lastSyncAt ?? null,
-      lastSyncStatus: syncDoc?.lastSyncStatus ?? null,
+      lastSyncAt,
+      lastSyncStatus,
     });
   } catch (error) {
     recordRouteMetric({ route: '/api/productions/week', ok: false, statusCode: 500, error }).catch(() => {});

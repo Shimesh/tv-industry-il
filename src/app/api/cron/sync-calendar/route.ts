@@ -142,6 +142,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let globalMigration: { written: number; unique: number; errors: number } | null = null;
   try {
     globalMigration = await migrateGlobalProductions();
+    // Write system-wide last-sync timestamp so all users see an up-to-date "עודכן" in the widget
+    await patchDocument('system/calendarSync', {
+      lastSyncAt: Date.now(),
+      lastSyncStatus: globalMigration.errors === 0 ? 'success' : 'partial',
+    } as unknown as Record<string, string>).catch(() => {});
     await recordJobMetric({
       job: 'cron-sync-global-productions',
       ok: globalMigration.errors === 0,
