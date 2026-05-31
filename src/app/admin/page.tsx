@@ -36,6 +36,7 @@ import {
   Wifi,
   WifiOff,
   Wrench,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, JobStatusMetric, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
@@ -73,7 +74,7 @@ const NOTIFICATION_LINK_OPTIONS = [
   { label: 'ללא קישור', value: '' },
 ];
 
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.8.0';
 const RATINGS_MIDRUG_JOB = 'ratings-midrug-scrape';
 const RATINGS_TELEGRAM_JOB = 'ratings-telegram-scopt';
 
@@ -518,6 +519,83 @@ function RatingsJobCard({
   );
 }
 
+function DonutChart({ value, total, color, size = 56 }: { value: number; total: number; color: string; size?: number }) {
+  const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+  const sw = 7;
+  const r = (size - sw) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  const cx = size / 2;
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={sw} />
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke={color} strokeWidth={sw}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[11px] font-bold leading-none" style={{ color }}>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+function InsightCard({ title, value, total, colorHex, icon: Icon }: {
+  title: string; value: number; total: number; colorHex: string; icon: typeof Users;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-800/80 bg-gray-900 p-4 transition-colors hover:border-gray-700">
+      <DonutChart value={value} total={total} color={colorHex} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1">
+          <p className="text-xl font-bold tabular-nums text-white">{value}</p>
+          <p className="text-xs text-gray-500">/ {total}</p>
+        </div>
+        <p className="mt-0.5 truncate text-[11px] leading-tight text-gray-400">{title}</p>
+      </div>
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/5" style={{ color: colorHex }}>
+        <Icon className="h-4 w-4" />
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleSection({
+  title, icon, badge, actions, children, collapsed, onToggle, accentColor = 'text-purple-400', className = '',
+}: {
+  title: string;
+  icon: ReactNode;
+  badge?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  accentColor?: string;
+  className?: string;
+}) {
+  return (
+    <section className={`overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 ${className}`}>
+      <div
+        className="flex cursor-pointer select-none items-center justify-between px-5 py-4 transition-colors hover:bg-white/[0.025]"
+        onClick={onToggle}
+        role="button"
+        aria-expanded={!collapsed}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className={accentColor}>{icon}</span>
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          {badge}
+        </div>
+        <div className="flex items-center gap-2">
+          <div onClick={(e) => e.stopPropagation()}>{actions}</div>
+          <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
+        </div>
+      </div>
+      {!collapsed && <div className="border-t border-gray-800/60">{children}</div>}
+    </section>
+  );
+}
+
 export default function AdminPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const [overview, setOverview] = useState<AdminOverview>(EMPTY_OVERVIEW);
@@ -587,9 +665,21 @@ export default function AdminPage() {
   });
   const [discoveries, setDiscoveries] = useState<ContactDiscovery[]>([]);
   const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    users: false,
+    discoveries: false,
+    ratings: false,
+    systemControl: false,
+    health: false,
+    analytics: false,
+  });
   const draftDirtyRef = useRef(false);
 
   const isAdmin = profile?.siteRole === 'admin';
+
+  function toggleSection(key: string) {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   function handleUserSort(key: UserSortKey) {
     setUserSort((current) => ({
@@ -1254,6 +1344,11 @@ export default function AdminPage() {
     });
   }, [overview.users, search, userSort]);
 
+  const tourCompletedCount = overview.users.filter((u) => u.appTourSeen).length;
+  const fullProfileCount = overview.users.filter((u) => isFullProfile(u)).length;
+  const consentedCount = overview.users.filter((u) => u.is_consented || u.termsAccepted).length;
+  const pushCount = overview.users.filter((u) => u.hasPush).length;
+
   const midrugRatingsJob = ratingsJobsLive[RATINGS_MIDRUG_JOB]
     ?? overview.usage.jobs.find((job) => job.key === RATINGS_MIDRUG_JOB)
     ?? overview.usage.jobs.find((job) => job.key === 'ratings-scrape')
@@ -1354,7 +1449,7 @@ export default function AdminPage() {
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4 sm:p-6">
+        <div className="rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900/70 p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-1.5 flex items-center gap-2.5">
@@ -1437,12 +1532,38 @@ export default function AdminPage() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-gray-800 bg-gray-900/80 p-4 shadow-lg">
+        {/* === STATS GRID === */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+          <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
+          <StatCard icon={Wifi} label="מחוברים עכשיו" value={overview.stats.onlineNow} color="bg-green-500/20 text-green-400" live />
+          <StatCard icon={Activity} label="פעילים ב־24 שעות" value={overview.stats.active24h} color="bg-teal-500/20 text-teal-400" />
+          <StatCard icon={Contact2} label="אנשי קשר" value={overview.stats.totalContacts} color="bg-purple-500/20 text-purple-400" live />
+          <StatCard icon={FileText} label="פוסטים בלוח" value={overview.stats.totalPosts} color="bg-pink-500/20 text-pink-400" />
+          <StatCard icon={MessageCircle} label="שיחות צ׳אט" value={overview.stats.totalChats} color="bg-indigo-500/20 text-indigo-400" />
+          <StatCard icon={Crown} label="מנהלים" value={overview.stats.admins} color="bg-yellow-500/20 text-yellow-400" />
+          <StatCard icon={AlertTriangle} label="נוכחות מיושנת" value={overview.stats.stalePresence} color="bg-orange-500/20 text-orange-400" />
+        </div>
+
+        {/* === INSIGHTS ROW === */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          <InsightCard title="סיור הושלם" value={tourCompletedCount} total={overview.stats.totalUsers} colorHex="#a78bfa" icon={Sparkles} />
+          <InsightCard title="פרופיל מלא" value={fullProfileCount} total={overview.stats.totalUsers} colorHex="#34d399" icon={CheckCircle} />
+          <InsightCard title="הסכמה לתנאים" value={consentedCount} total={overview.stats.totalUsers} colorHex="#60a5fa" icon={ShieldCheck} />
+          <InsightCard title="Push מופעל" value={pushCount} total={overview.stats.totalUsers} colorHex="#fb923c" icon={Smartphone} />
+        </div>
+
+        <CollapsibleSection
+          title="Ratings Automation"
+          icon={<BarChart3 className="h-5 w-5" />}
+          collapsed={collapsedSections.ratings}
+          onToggle={() => toggleSection('ratings')}
+          accentColor="text-purple-300"
+        >
+        <div className="p-4 sm:p-5">
           <div className="mb-4 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-purple-300" />
-              <h2 className="text-lg font-bold text-white">Ratings Automation</h2>
-            </div>
+            <p className="text-sm leading-relaxed text-gray-400">
+              משיכת הנתונים מחולקת לשני מקורות עצמאיים: מדרוג הרשמי וערוץ Scopt בטלגרם. כל כפתור מפעיל רק את הטריגר שלו ומציג חיווי מפורט.
+            </p>
             <p className="text-sm leading-relaxed text-gray-400">
               משיכת הנתונים מחולקת לשני מקורות עצמאיים: מדרוג הרשמי וערוץ Scopt בטלגרם. כל כפתור מפעיל רק את הטריגר שלו ומציג חיווי מפורט.
             </p>
@@ -1661,8 +1782,8 @@ export default function AdminPage() {
               <span className="rounded-lg bg-white/5 px-3 py-2">חלון חם: 09:00-09:20</span>
             </div>
           </div>
-
-        </section>
+        </div>
+        </CollapsibleSection>
 
         <section className="hidden rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1753,302 +1874,323 @@ export default function AdminPage() {
         </section>
 
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-          <StatCard icon={Users} label="משתמשים רשומים" value={overview.stats.totalUsers} color="bg-blue-500/20 text-blue-400" />
-          <StatCard icon={Wifi} label="מחוברים עכשיו" value={overview.stats.onlineNow} color="bg-green-500/20 text-green-400" live />
-          <StatCard icon={Activity} label="פעילים ב־24 שעות" value={overview.stats.active24h} color="bg-teal-500/20 text-teal-400" />
-          <StatCard icon={Contact2} label="אנשי קשר" value={overview.stats.totalContacts} color="bg-purple-500/20 text-purple-400" live />
-          <StatCard icon={FileText} label="פוסטים בלוח" value={overview.stats.totalPosts} color="bg-pink-500/20 text-pink-400" />
-          <StatCard icon={MessageCircle} label="שיחות צ׳אט" value={overview.stats.totalChats} color="bg-indigo-500/20 text-indigo-400" />
-          <StatCard icon={Crown} label="מנהלים" value={overview.stats.admins} color="bg-yellow-500/20 text-yellow-400" />
-          <StatCard icon={AlertTriangle} label="נוכחות מיושנת" value={overview.stats.stalePresence} color="bg-orange-500/20 text-orange-400" />
-        </div>
+        {/* === USER MANAGEMENT (TOP) === */}
+        <CollapsibleSection
+          title="ניהול משתמשים"
+          icon={<Users className="h-5 w-5" />}
+          badge={
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
+              <span className="flex items-center gap-1 rounded-full bg-blue-900/40 px-2 py-0.5 text-xs text-blue-300" title="משתמשים עם Push למובייל">
+                <Smartphone className="h-3 w-3" />
+                {overview.users.filter(u => u.hasPush).length}/{overview.users.length} push
+              </span>
+            </div>
+          }
+          collapsed={collapsedSections.users}
+          onToggle={() => toggleSection('users')}
+          accentColor="text-purple-400"
+          actions={
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="חיפוש..."
+                className="w-40 rounded-xl border border-gray-700 bg-gray-800 py-1.5 pl-4 pr-9 text-xs text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none sm:w-52"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          }
+        >
+          <div className="max-h-[600px] overflow-x-auto overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-gray-900">
+                <tr className="border-b border-gray-800 text-xs text-gray-500">
+                  <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-5" />
+                  <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
+                  <th className="hidden px-4 py-3 text-right font-medium md:table-cell">שיטות כניסה</th>
+                  <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden lg:table-cell" />
+                  <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                  <SortHeader label="נראה לאחרונה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden sm:table-cell" />
+                  <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((entry) => (
+                  <tr key={entry.uid} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-shrink-0">
+                          {entry.photoURL ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={entry.photoURL} alt="" className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-600 text-sm font-bold">
+                              {entry.displayName?.charAt(0) || '?'}
+                            </div>
+                          )}
+                          {entry.onlineNow ? (
+                            <span className="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full border-2 border-gray-900 bg-green-400" />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
+                            {entry.hasPush ? (
+                              <span title="קיבל push למובייל"><Smartphone className="h-3 w-3 text-blue-400 flex-shrink-0" /></span>
+                            ) : (
+                              <span title="פעמון בלבד – אין push למובייל"><BellOff className="h-3 w-3 text-gray-500 flex-shrink-0" /></span>
+                            )}
+                          </div>
+                          {entry.uidCount > 1 ? (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-300">
+                              {entry.uidCount} כניסות מאוחדות
+                            </span>
+                          ) : null}
+                          {isFullProfile(entry) ? (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                              פרופיל מלא
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
+                                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                {!entry.linkedContactId ? 'לא מקושר' : 'לא הסכים'}
+                              </span>
+                              <div className="mt-0.5 text-[9px] text-orange-300/60 leading-tight">
+                                {getMissingItems(entry).join(' · ')}
+                              </div>
+                              {reminderSent[entry.uid] ? (
+                                <span className="mt-0.5 text-[9px] text-green-400">נשלח ✓</span>
+                              ) : (
+                                <button
+                                  onClick={() => void sendReminder(entry.uid)}
+                                  className="mt-0.5 text-[9px] text-purple-400 hover:text-purple-300 underline underline-offset-2"
+                                >
+                                  שלח תזכורת
+                                </button>
+                              )}
+                              <button
+                                  onClick={() => void handleAutoLink(entry.uid)}
+                                  disabled={autoLinkPending[entry.uid]}
+                                  className="mt-1 text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
+                                  title="חפש וקשר אוטומטית לאיש קשר"
+                                >
+                                  {autoLinkPending[entry.uid] ? '...' : '🔗 קשר אוטומטית'}
+                                </button>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => {
+                              const fields = safeProfileFields(entry);
+                              setContactSearchTerm('');
+                              setShowContactSearch(false);
+                              setEditModal({
+                                uid: entry.uid,
+                                displayName: entry.displayName ?? '',
+                                phone: entry.phone ?? '',
+                                department: fields.department,
+                                departments: fields.departments,
+                                role: fields.role,
+                                roles: fields.roles,
+                                customRole: '',
+                                forceContactId: '',
+                                linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
+                              });
+                            }}
+                            className="mt-0.5 text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
+                          >
+                            ✏️ ערוך
+                          </button>
+                          {/* Tour & consent */}
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {entry.appTourSeen ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-900/40 px-1.5 py-0.5 text-[9px] text-violet-300">
+                                <Sparkles className="h-2.5 w-2.5" />
+                                סיור ✓
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-gray-800 px-1.5 py-0.5 text-[9px] text-gray-500">
+                                סיור —
+                              </span>
+                            )}
+                            {entry.termsAcceptedAt ? (
+                              <span className="inline-flex items-center rounded-full bg-gray-800/60 px-1.5 py-0.5 text-[9px] text-gray-500">
+                                הסכמה: {new Date(entry.termsAcceptedAt).toLocaleDateString('he-IL')}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="hidden max-w-[180px] px-4 py-3 text-gray-400 md:table-cell">
+                      <span className="block truncate">{entry.email || '—'}</span>
+                    </td>
+                    <td className="hidden px-4 py-3 md:table-cell">
+                      <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
+                    </td>
+                    <td className="hidden px-4 py-3 lg:table-cell">
+                      <p className="text-white">{safeProfileRoles(entry).join(', ') || '—'}</p>
+                      <p className="text-xs text-gray-500">{safeProfileDepartments(entry).join(', ') || '—'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <PresenceBadge user={entry} />
+                    </td>
+                    <td className="hidden px-4 py-3 text-xs text-gray-400 sm:table-cell">
+                      {formatRelativeTime(entry.lastSeen)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {entry.linkedUids.includes(user.uid) ? (
+                        <RoleBadge role={entry.siteRole} />
+                      ) : (
+                        <>
+                          <div className="relative inline-flex min-w-[110px]">
+                            <select
+                              value={entry.siteRole}
+                              onChange={(event) => void updateUserRole(entry.uid, event.target.value as AdminRole)}
+                              disabled={updatingRole === entry.uid}
+                              className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-xs text-gray-100 outline-none transition-colors hover:bg-gray-700 focus:border-purple-500 disabled:opacity-60"
+                              aria-label={`עדכון הרשאה עבור ${entry.displayName || entry.email}`}
+                            >
+                              {ROLE_OPTIONS.map((option) => (
+                                <option key={`${entry.uid}-${option.value}`} value={option.value}>
+                                  {roleLabel(option.value)}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                          </div>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
+                      לא נמצאו משתמשים
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
 
         {/* גילויים חדשים */}
-        <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5" dir="rtl">
-          <div className="mb-3 flex items-center gap-2">
-            <Contact2 className="h-5 w-5 text-emerald-400" />
-            <h2 className="font-bold text-white">גילויים חדשים היום</h2>
-            {discoveriesLoading ? (
+        <CollapsibleSection
+          title="גילויים חדשים היום"
+          icon={<Contact2 className="h-5 w-5" />}
+          badge={
+            discoveriesLoading ? (
               <span className="text-xs text-gray-500">טוען...</span>
             ) : (
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                {discoveries.length}
-              </span>
-            )}
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">{discoveries.length}</span>
+            )
+          }
+          collapsed={collapsedSections.discoveries}
+          onToggle={() => toggleSection('discoveries')}
+          accentColor="text-emerald-400"
+          actions={
             <button
               onClick={refreshDiscoveries}
               disabled={discoveriesLoading}
-              className="mr-auto rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300 disabled:opacity-40"
+              className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300 disabled:opacity-40"
               title="רענן גילויים"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${discoveriesLoading ? 'animate-spin' : ''}`} />
             </button>
-          </div>
-          {discoveries.length === 0 && !discoveriesLoading && (
-            <p className="text-sm text-gray-500">אין גילויים חדשים היום.</p>
-          )}
-          {discoveries.length > 0 && (
-            <div className="max-h-52 space-y-1 overflow-y-auto">
-              {discoveries.map((d) => (
-                <div key={d.id} className="flex items-center justify-between rounded-xl border border-transparent px-3 py-2 text-sm hover:border-gray-800 hover:bg-gray-800/50">
-                  <div className="min-w-0">
-                    <span className="font-medium text-white">{d.name}</span>
-                    <span className="mr-2 text-gray-400">— {d.role || 'ללא תפקיד'}</span>
+          }
+        >
+          <div className="p-4 sm:p-5" dir="rtl">
+            {discoveries.length === 0 && !discoveriesLoading && (
+              <p className="text-sm text-gray-500">אין גילויים חדשים היום.</p>
+            )}
+            {discoveries.length > 0 && (
+              <div className="max-h-52 space-y-1 overflow-y-auto">
+                {discoveries.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between rounded-xl border border-transparent px-3 py-2 text-sm hover:border-gray-800 hover:bg-gray-800/50">
+                    <div className="min-w-0">
+                      <span className="font-medium text-white">{d.name}</span>
+                      <span className="mr-2 text-gray-400">— {d.role || 'ללא תפקיד'}</span>
+                    </div>
+                    <span className="mr-3 shrink-0 text-xs text-emerald-400">{d.sourceBoardName ?? d.sourceBoard}</span>
                   </div>
-                  <span className="mr-3 shrink-0 text-xs text-emerald-400">{d.sourceBoardName ?? d.sourceBoard}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleSection>
+
+        {/* === CONTACTS & PRESENCE ROW === */}
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-purple-400" />
+              <h3 className="font-bold">אנשי קשר לפי מקצוע</h3>
+            </div>
+            <div className="space-y-3">
+              {overview.contactsByDepartment.map((entry) => (
+                <div key={entry.key}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-gray-300">{entry.label}</span>
+                    <span className="text-gray-500">{entry.count}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
+                    <div
+                      className="h-full rounded-full bg-purple-500"
+                      style={{ width: `${Math.max(6, Math.round((entry.count / Math.max(overview.stats.totalContacts, 1)) * 100))}%` }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-4">
-          <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 xl:col-span-3">
-            <div className="flex flex-col gap-3 border-b border-gray-800 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users className="h-5 w-5 text-purple-400" />
-                <h2 className="text-lg font-bold">ניהול משתמשים</h2>
-                <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
-                <span className="flex items-center gap-1 rounded-full bg-blue-900/40 px-2 py-0.5 text-xs text-blue-300" title="משתמשים עם התראות push למובייל">
-                  <Smartphone className="h-3 w-3" />
-                  {overview.users.filter(u => u.hasPush).length}/{overview.users.length} push
-                </span>
-              </div>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="חיפוש משתמש, תפקיד או עיר..."
-                  className="w-64 rounded-xl border border-gray-700 bg-gray-800 py-2 pl-4 pr-9 text-sm text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
-                />
-              </div>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Contact2 className="h-5 w-5 text-blue-400" />
+              <h3 className="font-bold">פילוח אולפן / קונטרול</h3>
             </div>
-            <div className="max-h-[560px] overflow-x-auto overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-gray-900">
-                  <tr className="border-b border-gray-800 text-xs text-gray-500">
-                    <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-5" />
-                    <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden md:table-cell" />
-                    <th className="hidden px-4 py-3 text-right font-medium md:table-cell">שיטות כניסה</th>
-                    <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden lg:table-cell" />
-                    <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                    <SortHeader label="נראה לאחרונה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="hidden sm:table-cell" />
-                    <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((entry) => (
-                    <tr key={entry.uid} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="relative flex-shrink-0">
-                            {entry.photoURL ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={entry.photoURL} alt="" className="h-9 w-9 rounded-full object-cover" />
-                            ) : (
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-600 text-sm font-bold">
-                                {entry.displayName?.charAt(0) || '?'}
-                              </div>
-                            )}
-                            {entry.onlineNow ? (
-                              <span className="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full border-2 border-gray-900 bg-green-400" />
-                            ) : null}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
-                              {entry.hasPush ? (
-                                <span title="קיבל push למובייל"><Smartphone className="h-3 w-3 text-blue-400 flex-shrink-0" /></span>
-                              ) : (
-                                <span title="פעמון בלבד – אין push למובייל"><BellOff className="h-3 w-3 text-gray-500 flex-shrink-0" /></span>
-                              )}
-                            </div>
-                            {entry.uidCount > 1 ? (
-                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-300">
-                                {entry.uidCount} כניסות מאוחדות
-                              </span>
-                            ) : null}
-                            {isFullProfile(entry) ? (
-                              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-900/40 px-1.5 py-0.5 text-[10px] text-green-400">
-                                <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                                פרופיל מלא
-                              </span>
-                            ) : (
-                              <div>
-                                <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                                  {!entry.linkedContactId ? 'לא מקושר' : 'לא הסכים'}
-                                </span>
-                                <div className="mt-0.5 text-[9px] text-orange-300/60 leading-tight">
-                                  {getMissingItems(entry).join(' · ')}
-                                </div>
-                                {reminderSent[entry.uid] ? (
-                                  <span className="mt-0.5 text-[9px] text-green-400">נשלח ✓</span>
-                                ) : (
-                                  <button
-                                    onClick={() => void sendReminder(entry.uid)}
-                                    className="mt-0.5 text-[9px] text-purple-400 hover:text-purple-300 underline underline-offset-2"
-                                  >
-                                    שלח תזכורת
-                                  </button>
-                                )}
-                                <button
-                                    onClick={() => void handleAutoLink(entry.uid)}
-                                    disabled={autoLinkPending[entry.uid]}
-                                    className="mt-1 text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
-                                    title="חפש וקשר אוטומטית לאיש קשר"
-                                  >
-                                    {autoLinkPending[entry.uid] ? '...' : '🔗 קשר אוטומטית'}
-                                  </button>
-                              </div>
-                            )}
-                            <button
-                              onClick={() => {
-                                const fields = safeProfileFields(entry);
-                                setContactSearchTerm('');
-                                setShowContactSearch(false);
-                                setEditModal({
-                                  uid: entry.uid,
-                                  displayName: entry.displayName ?? '',
-                                  phone: entry.phone ?? '',
-                                  department: fields.department,
-                                  departments: fields.departments,
-                                  role: fields.role,
-                                  roles: fields.roles,
-                                  customRole: '',
-                                  forceContactId: '',
-                                  linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
-                                });
-                              }}
-                              className="mt-0.5 text-[9px] text-gray-400 hover:text-gray-200 underline underline-offset-2"
-                            >
-                              ✏️ ערוך
-                            </button>
-                            <p className="truncate text-xs text-gray-500 md:hidden">{entry.email || '—'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="hidden max-w-[180px] px-4 py-3 text-gray-400 md:table-cell">
-                        <span className="block truncate">{entry.email || '—'}</span>
-                      </td>
-                      <td className="hidden px-4 py-3 md:table-cell">
-                        <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
-                      </td>
-                      <td className="hidden px-4 py-3 lg:table-cell">
-                        <p className="text-white">{safeProfileRoles(entry).join(', ') || '—'}</p>
-                        <p className="text-xs text-gray-500">{safeProfileDepartments(entry).join(', ') || '—'}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <PresenceBadge user={entry} />
-                      </td>
-                      <td className="hidden px-4 py-3 text-xs text-gray-400 sm:table-cell">
-                        {formatRelativeTime(entry.lastSeen)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {entry.linkedUids.includes(user.uid) ? (
-                          <RoleBadge role={entry.siteRole} />
-                        ) : (
-                          <>
-                            <div className="relative inline-flex min-w-[110px]">
-                              <select
-                                value={entry.siteRole}
-                                onChange={(event) => void updateUserRole(entry.uid, event.target.value as AdminRole)}
-                                disabled={updatingRole === entry.uid}
-                                className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-xs text-gray-100 outline-none transition-colors hover:bg-gray-700 focus:border-purple-500 disabled:opacity-60"
-                                aria-label={`עדכון הרשאה עבור ${entry.displayName || entry.email}`}
-                              >
-                                {ROLE_OPTIONS.map((option) => (
-                                  <option key={`${entry.uid}-${option.value}`} value={option.value}>
-                                    {roleLabel(option.value)}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                            </div>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
-                        לא נמצאו משתמשים
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {overview.contactsByWorkArea.map((entry) => (
+                <div key={entry.key} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2 text-sm">
+                  <span className="text-gray-200">{entry.label}</span>
+                  <span className="font-semibold text-white">{entry.count}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-purple-400" />
-                <h3 className="font-bold">אנשי קשר לפי מקצוע</h3>
-              </div>
-              <div className="space-y-3">
-                {overview.contactsByDepartment.map((entry) => (
-                  <div key={entry.key}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-gray-300">{entry.label}</span>
-                      <span className="text-gray-500">{entry.count}</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
-                      <div
-                        className="h-full rounded-full bg-purple-500"
-                        style={{ width: `${Math.max(6, Math.round((entry.count / Math.max(overview.stats.totalContacts, 1)) * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <Contact2 className="h-5 w-5 text-blue-400" />
-                <h3 className="font-bold">פילוח אולפן / קונטרול</h3>
-              </div>
-              <div className="space-y-2">
-                {overview.contactsByWorkArea.map((entry) => (
-                  <div key={entry.key} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2 text-sm">
-                    <span className="text-gray-200">{entry.label}</span>
-                    <span className="font-semibold text-white">{entry.count}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Wifi className="h-5 w-5 text-green-400" />
+              <h3 className="font-bold">נוכחות בזמן אמת</h3>
             </div>
-
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <Wifi className="h-5 w-5 text-green-400" />
-                <h3 className="font-bold">נוכחות בזמן אמת</h3>
-              </div>
-              <div className="space-y-3">
-                {overview.onlineUsers.slice(0, 6).map((entry) => (
-                  <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
-                    <div>
-                      <p className="text-sm text-white">{entry.displayName || entry.email}</p>
-                      <p className="text-xs text-gray-500">{safeProfileRoles(entry).join(', ') || safeProfileDepartments(entry).join(', ') || 'ללא תפקיד'}</p>
-                    </div>
-                    <span className="text-xs text-green-300">פעיל</span>
+            <div className="space-y-3">
+              {overview.onlineUsers.slice(0, 6).map((entry) => (
+                <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
+                  <div>
+                    <p className="text-sm text-white">{entry.displayName || entry.email}</p>
+                    <p className="text-xs text-gray-500">{safeProfileRoles(entry).join(', ') || safeProfileDepartments(entry).join(', ') || 'ללא תפקיד'}</p>
                   </div>
-                ))}
-                {overview.onlineUsers.length === 0 ? (
-                  <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>
-                ) : null}
-                {overview.staleUsers.length > 0 ? (
-                  <div className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    {overview.staleUsers.length} משתמשים עם נוכחות מיושנת
-                  </div>
-                ) : null}
-              </div>
+                  <span className="text-xs text-green-300">פעיל</span>
+                </div>
+              ))}
+              {overview.onlineUsers.length === 0 ? (
+                <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>
+              ) : null}
+              {overview.staleUsers.length > 0 ? (
+                <div className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {overview.staleUsers.length} משתמשים עם נוכחות מיושנת
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
