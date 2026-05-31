@@ -180,6 +180,7 @@ export async function PATCH(request: NextRequest) {
       'customPhotoURL',
       'linkedContactId',
       'onboardingComplete',
+      'appTourSeen',
       'crewName',
     ] as const;
 

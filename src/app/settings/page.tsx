@@ -10,7 +10,7 @@ import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import {
   Settings, Palette, Bell, Shield, LogOut, CheckCircle,
   ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera,
-  Calendar, Link2, Link2Off, Loader2
+  Calendar, Link2, Link2Off, Loader2, Sparkles
 } from 'lucide-react';
 import { initiateGoogleCalendarConnect, disconnectGoogleCalendar } from '@/lib/googleCalendar';
 
@@ -171,6 +171,11 @@ function SettingsContent() {
     }
   };
 
+  const handleResetTour = async () => {
+    await updateUserProfile({ appTourSeen: false });
+    router.push('/?tour=1');
+  };
+
   if (!profile) return null;
 
   return (
@@ -303,6 +308,21 @@ function SettingsContent() {
               </button>
             ))}
           </div>
+        </SettingsSection>
+
+        {/* Tour */}
+        <SettingsSection icon={<Sparkles className="w-4 h-4" />} title="הדרכה">
+          <p className="text-sm mb-3" style={{ color: 'var(--theme-text-secondary)' }}>
+            הצג מחדש את טיור ההיכרות עם האפליקציה.
+          </p>
+          <button
+            onClick={() => void handleResetTour()}
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors"
+            style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
+          >
+            <Sparkles className="w-4 h-4" />
+            הצג טיור מחדש
+          </button>
         </SettingsSection>
 
         {/* Notifications */}

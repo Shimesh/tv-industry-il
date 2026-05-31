@@ -42,6 +42,7 @@ export interface UserProfile {
   approvalStatus?: UserApprovalStatus;
   isOnline: boolean;
   onboardingComplete: boolean;
+  appTourSeen?: boolean;
   theme: string;
   siteRole?: UserRole;
   openToWork?: boolean;
@@ -206,6 +207,7 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     approvalStatus: normalizeApprovalStatus(raw.approvalStatus, 'active'),
     isOnline: raw.isOnline === true,
     onboardingComplete: raw.onboardingComplete === true,
+    appTourSeen: raw.appTourSeen === true,
     theme: typeof raw.theme === 'string' && raw.theme.trim() ? raw.theme : 'dark',
     siteRole:
       raw.siteRole === 'admin' || raw.siteRole === 'moderator' || raw.siteRole === 'editor' || raw.siteRole === 'viewer'
