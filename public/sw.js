@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v2.7.2';
+const CACHE_NAME = 'tv-industry-il-v2.7.3';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -29,8 +29,6 @@ function shouldCacheResponse(response) {
   return response && response.ok && response.status === 200 && response.type === 'basic';
 }
 
-// Push notification handler — fires when this SW is the active one at scope '/'.
-// firebase-messaging-sw.js also has a push handler; whichever SW is active handles it.
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -50,17 +48,22 @@ self.addEventListener('push', (event) => {
 
   if (!title && !body) return;
 
+  // Show system notification only when no app window is visible.
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png',
-      tag,
-      renotify: true,
-      dir: 'rtl',
-      lang: 'he',
-      data: { link },
-    })
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const isAppVisible = clientList.some((c) => c.visibilityState === 'visible');
+      if (isAppVisible) return;
+      return self.registration.showNotification(title, {
+        body,
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-72x72.png',
+        tag,
+        renotify: true,
+        dir: 'rtl',
+        lang: 'he',
+        data: { link },
+      });
+    }),
   );
 });
 

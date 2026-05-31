@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-industry-il-v2.7.2';
+const CACHE_NAME = 'tv-industry-il-v2.7.3';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -65,8 +65,6 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-let firebaseInitialized = false;
-
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -77,10 +75,16 @@ self.addEventListener('push', (event) => {
     payload = { data: { title: 'TV Industry IL', body: event.data.text(), link: '/' } };
   }
 
-  // When Firebase SDK is active it handles FCM messages via onBackgroundMessage.
-  // Only skip if Firebase actually initialized — otherwise show it ourselves.
-  if (payload?.data?.source === 'firebase' && firebaseInitialized) return;
-  event.waitUntil(showAppNotification(payload));
+  // Show a system notification only when no app window is currently visible.
+  // When the app is in the foreground, FCMForegroundListener shows an in-app
+  // toast instead — showing a system notification there too would duplicate it.
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const isAppVisible = clientList.some((c) => c.visibilityState === 'visible');
+      if (isAppVisible) return;
+      return showAppNotification(payload);
+    }),
+  );
 });
 
 self.addEventListener('install', (event) => {
@@ -156,10 +160,8 @@ if (
 
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
-  firebaseInitialized = true;
 
-  messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Background message received:', payload);
-    return showAppNotification(payload);
-  });
+  // Register a no-op onBackgroundMessage so Firebase SDK doesn't attempt its
+  // own notification display. The push event handler above manages display.
+  messaging.onBackgroundMessage(() => {});
 }
