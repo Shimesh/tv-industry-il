@@ -500,7 +500,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4" dir="rtl">
+      <div className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4" dir="rtl">
         <motion.div
           className="absolute inset-0 bg-black/70 backdrop-blur-md"
           variants={overlayVariants}

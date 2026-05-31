@@ -1,7 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
 import { syncHerzliyaUrl, getCurrentWeekStartIsrael, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
 import { recordJobMetric } from '@/lib/server/adminTelemetry';
+import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
+import type { Production } from '@/lib/productionDiff';
+
+type RawProductionDoc = Record<string, unknown> & {
+  id?: string;
+  date?: string;
+  name?: string;
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
+  _path?: string;
+  crew?: unknown[];
+};
+
+async function migrateGlobalProductions(): Promise<{ written: number; unique: number; errors: number }> {
+  const allDocs = await runQuery<RawProductionDoc>({
+    from: [{ collectionId: 'productions', allDescendants: true }],
+    limit: 5000,
+  });
+
+  const filtered = allDocs.filter((doc) => {
+    const path = String(doc._path || '');
+    return path.includes('/weeks/') && !!doc.name && !!doc.date && Array.isArray(doc.crew);
+  });
+
+  const byId = new Map<string, RawProductionDoc>();
+  for (const doc of filtered) {
+    const id = doc.id as string | undefined;
+    if (!id) continue;
+    const existing = byId.get(id);
+    if (!existing || String(doc.lastUpdatedAt ?? '') > String(existing.lastUpdatedAt ?? '')) {
+      byId.set(id, doc);
+    }
+  }
+
+  const unique = Array.from(byId.values());
+  let written = 0;
+  let errors = 0;
+  const BATCH = 50;
+
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (raw) => {
+        const prod = raw as unknown as Production;
+        if (!prod.id || !prod.date || !prod.name) return;
+        const parts = String(raw._path || '').split('/');
+        const weeksIdx = parts.indexOf('weeks');
+        const sourcePath = weeksIdx >= 0 ? parts.slice(0, weeksIdx + 2).join('/') : String(raw._path || '');
+        const uploaderUid = (raw.lastUpdatedBy as string) || 'migration';
+        const doc: GlobalProductionDoc = toGlobalProduction(prod, uploaderUid, sourcePath);
+        await patchDocument(
+          `global_productions/${doc.id}`,
+          doc as unknown as Record<string, string>,
+        );
+        written++;
+      }),
+    );
+    errors += results.filter((r) => r.status === 'rejected').length;
+  }
+
+  return { written, unique: unique.length, errors };
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -76,5 +138,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     detail: { results, elapsed },
   });
 
-  return NextResponse.json({ ok: true, users: activeUsers.length, success: successCount, productions: totalProductions, elapsed, results });
+  // Migrate to global_productions immediately after individual syncs
+  let globalMigration: { written: number; unique: number; errors: number } | null = null;
+  try {
+    globalMigration = await migrateGlobalProductions();
+    await recordJobMetric({
+      job: 'cron-sync-global-productions',
+      ok: globalMigration.errors === 0,
+      message: `סנכרון הפקות גלובאלי: ${globalMigration.written}/${globalMigration.unique} נכתבו`,
+      detail: globalMigration,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[sync-calendar] global migration failed:', msg);
+    await recordJobMetric({
+      job: 'cron-sync-global-productions',
+      ok: false,
+      message: `שגיאה בסנכרון גלובאלי: ${msg.slice(0, 200)}`,
+    });
+  }
+
+  return NextResponse.json({ ok: true, users: activeUsers.length, success: successCount, productions: totalProductions, elapsed, results, globalMigration });
 }
