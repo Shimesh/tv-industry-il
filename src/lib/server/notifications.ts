@@ -116,12 +116,12 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
   const chunkSize = 500;
   for (let i = 0; i < tokens.length; i += chunkSize) {
     const chunk = tokens.slice(i, i + chunkSize);
+    // Send data-only (no notification field) so Firebase SDK always calls
+    // onBackgroundMessage in the SW instead of auto-displaying. The SW's
+    // onBackgroundMessage handler calls showAppNotification which controls
+    // icon, badge, RTL, and tag reliably.
     const response = await messaging.sendEachForMulticast({
       tokens: chunk,
-      notification: {
-        title: params.title,
-        body: params.body,
-      },
       data: {
         source: 'firebase',
         title: params.title,
@@ -133,13 +133,6 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
-        notification: {
-          title: params.title,
-          body: params.body,
-          icon: '/icons/icon-192x192.png',
-          badge: '/icons/icon-72x72.png',
-          data: { link, linkUrl, type: params.type || 'general' },
-        },
       },
     });
 
