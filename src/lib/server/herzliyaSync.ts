@@ -11,6 +11,7 @@ import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProduc
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
 import { patchDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
+import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
   | { status: 'success'; count: number }
@@ -64,11 +65,13 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
   const personalHtml = await personalResponse.text();
   const deptHtml = deptResult?.ok ? await deptResult.text() : '';
   const deptSameAsPersonal = deptHtml === personalHtml;
+
+  // Try structural HTML parse first
   const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
 
-  if (parsed.productions.length === 0) return { status: 'empty' };
-
-  // Enrich crew via ShowCrew popup (server-side)
+  // Always fetch popups when openmd2 events exist — they are the authoritative source
+  // for date, studio, and crew. If HTML parsing returned 0 productions, popups are used
+  // to build productions from scratch.
   if (personalHtml.includes('openmd2')) {
     const baseUrl =
       extractHerzliyaBaseUrl(personalHtml) ||
@@ -83,9 +86,8 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     if (baseUrl) {
       const events = extractHerzliyaEventIds(personalHtml);
-      // Build mapping from production name → herzliyaId.
-      // Index both the raw name AND the cleaned name (studio suffix stripped),
-      // because the server-side text parser removes "אולפן N" from prod.name.
+
+      // name → herzliyaId (raw name and studio-stripped name)
       const nameToId: Record<string, number> = {};
       for (const e of events) {
         nameToId[e.name] = e.herzliyaId;
@@ -93,9 +95,9 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         if (cleaned && cleaned !== e.name) nameToId[cleaned] = e.herzliyaId;
       }
 
+      // Fetch all popup HTMLs in parallel
       const uniqueIds = [...new Set(events.map(e => e.herzliyaId))];
       const popupCache: Record<number, string> = {};
-
       await Promise.allSettled(
         uniqueIds.map(async (id) => {
           const popupUrl = buildHerzliyaPopupUrl(baseUrl, id);
@@ -105,17 +107,49 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         }),
       );
 
+      // If HTML parsing returned 0 productions, build them from popup data
+      if (parsed.productions.length === 0) {
+        const seenIds = new Set<number>();
+        for (const event of events) {
+          if (seenIds.has(event.herzliyaId)) continue;
+          seenIds.add(event.herzliyaId);
+          const popupHtml = popupCache[event.herzliyaId];
+          if (!popupHtml) continue;
+          const popupDate = extractDateFromPopup(popupHtml);
+          if (!popupDate) continue;
+          const popupStudio = extractStudioFromPopup(popupHtml);
+          const studioM = event.name.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+          const studio = popupStudio || (studioM ? studioM[0].trim() : '');
+          const name = studioM ? event.name.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : event.name;
+          const popupCrew = parseHerzliyaPopupHtml(popupHtml);
+          const crew: CrewMember[] = popupCrew.map(pc => ({
+            name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
+            startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
+          }));
+          parsed.productions.push({
+            id: generateProductionId(name, popupDate, studio),
+            name,
+            studio,
+            date: popupDate,
+            day: getHebrewDay(popupDate),
+            startTime: '',
+            endTime: '',
+            status: 'scheduled',
+            crew,
+            herzliyaId: event.herzliyaId,
+          } as Production);
+        }
+      }
+
+      // Enrich parsed productions: studio, date correction, additional crew
       for (const prod of parsed.productions) {
-        // Use herzliyaId already parsed from the event's onclick attribute.
-        // nameToId[prod.name] would fail when the name was cleaned of studio suffix.
         const herzliyaId = prod.herzliyaId || nameToId[prod.name];
         if (!herzliyaId || !popupCache[herzliyaId]) continue;
         const popupHtml = popupCache[herzliyaId];
 
-        // Extract studio/location and date from popup header (authoritative source)
         const popupStudio = extractStudioFromPopup(popupHtml);
         if (popupStudio) prod.studio = popupStudio;
-        // Correct the date from the popup in case the HTML-body parser assigned the wrong day
+
         const popupDate = extractDateFromPopup(popupHtml);
         if (popupDate && popupDate !== prod.date) {
           prod.date = popupDate;
@@ -135,6 +169,8 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
       }
     }
   }
+
+  if (parsed.productions.length === 0) return { status: 'empty' };
 
   const productions = parsed.productions.map(prod => ({
     ...prod,
