@@ -628,6 +628,110 @@ export function parseManualText(text: string): ParsedSchedule {
   return { workerName, weekStart, weekEnd, productions };
 }
 
+/**
+ * Parse Herzliya schedule HTML using regex — no DOMParser needed (server-side safe).
+ * Parses .calendar-header dates and .day-cell/.sat-cell events via string splitting.
+ */
+function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
+  const headerStart = html.indexOf('calendar-header');
+  const bodyStart = html.indexOf('calendar-body');
+  if (headerStart === -1 || bodyStart === -1) {
+    return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
+  }
+
+  // Collect weekday dates from the header section
+  const headerHtml = html.slice(headerStart, bodyStart);
+  const weekDays: Array<{ isoDate: string }> = [];
+  for (const m of headerHtml.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)) {
+    weekDays.push({
+      isoDate: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`,
+    });
+  }
+  if (weekDays.length === 0) return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
+
+  // Worker name
+  let workerName = '';
+  const nameM = html.match(/שלום\s+([^<\n,]+)/) || html.match(/עובד[:\s]+([^<\n]+)/);
+  if (nameM) workerName = nameM[1].trim();
+
+  // Body section
+  const bodyHtml = html.slice(bodyStart);
+
+  // Find all day/sat cell opening tags and their positions
+  const cellTagRe = /<div[^>]+class=["'][^"']*(?:day-cell|sat-cell)[^"']*["'][^>]*>/gi;
+  const cellMatches = [...bodyHtml.matchAll(cellTagRe)];
+
+  const productions: Production[] = [];
+
+  cellMatches.forEach((match, dayIdx) => {
+    if (dayIdx >= weekDays.length) return;
+    const { isoDate } = weekDays[dayIdx];
+
+    const cellStart = match.index! + match[0].length;
+    const cellEnd = dayIdx + 1 < cellMatches.length ? cellMatches[dayIdx + 1].index! : bodyHtml.length;
+    const cellHtml = bodyHtml.slice(cellStart, cellEnd);
+
+    // Each event is delimited by its onclick attribute
+    const eventChunks = cellHtml.split(/onclick=["']openmd2\(/);
+
+    for (let i = 1; i < eventChunks.length; i++) {
+      const chunk = eventChunks[i];
+      const idM = chunk.match(/^(\d+)\)/);
+      if (!idM) continue;
+      const herzliyaId = parseInt(idM[1]);
+
+      // Production name from <font color="red">
+      const nameM2 = chunk.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
+      const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
+      if (!rawName) continue;
+
+      // Studio from name
+      const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+      const studio = studioM ? studioM[0].trim() : '';
+      const name = studio ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+
+      // Crew from <br>-separated content after </font>
+      const afterFont = chunk.slice(chunk.search(/<\/font>/i) + 7);
+      const crew: CrewMember[] = [];
+      let startTime = '';
+      let endTime = '';
+
+      for (const part of afterFont.split(/<br\s*\/?>/i)) {
+        const text = part.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+        if (!text || text.length < 2) continue;
+
+        const m1 = text.match(/^(.+?)\s*[-–]\s*(.+?)\s+(\d{1,2}:\d{2})\s*[-–]?\s*(\d{1,2}:\d{2})/);
+        if (m1) {
+          if (!startTime) { startTime = m1[3]; endTime = m1[4]; }
+          crew.push({ name: m1[1].trim(), role: m1[2].trim(), roleDetail: '', phone: '', startTime: m1[3], endTime: m1[4], isCurrentUser: false });
+          continue;
+        }
+        const m2 = text.match(/^(.+?)\s*[-–]\s*(.+)$/);
+        if (m2 && /[א-ת]/.test(m2[1])) {
+          crew.push({ name: m2[1].trim(), role: m2[2].replace(/\d{1,2}:\d{2}.*/g, '').trim(), roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: false });
+        }
+      }
+
+      productions.push({
+        id: generateProductionId(name, isoDate, studio),
+        name,
+        studio,
+        date: isoDate,
+        day: getHebrewDay(isoDate),
+        startTime,
+        endTime,
+        status: 'scheduled',
+        crew,
+        herzliyaId,
+      });
+    }
+  });
+
+  const weekStart = weekDays[0]?.isoDate || '';
+  const weekEnd = weekDays[weekDays.length - 1]?.isoDate || '';
+  return { workerName, weekStart, weekEnd, productions };
+}
+
 /** Parse HTML by stripping tags → text parser (server-side compatible) */
 export function parseScheduleHTML(personalHtml: string, deptHtml: string): ParsedSchedule {
   if (!personalHtml.includes('<') || !personalHtml.includes('>')) {
@@ -637,6 +741,12 @@ export function parseScheduleHTML(personalHtml: string, deptHtml: string): Parse
   // Try DOMParser first (browser only)
   if (typeof DOMParser !== 'undefined' && isHerzliyaHTML(personalHtml)) {
     const result = parseHerzliyaHTML(personalHtml);
+    if (result.productions.length > 0) return result;
+  }
+
+  // Server-side: regex-based Herzliya parser (works without DOMParser)
+  if (isHerzliyaHTML(personalHtml)) {
+    const result = parseHerzliyaHTMLServer(personalHtml);
     if (result.productions.length > 0) return result;
   }
 
