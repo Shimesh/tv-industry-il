@@ -1,24 +1,56 @@
 import type { WorldCupMatch, WorldCupPlayerStat, WorldCupStanding, WorldCupTeam, WorldCupTeamDetail, WorldCupVenue } from './types';
 
-export const WORLD_CUP_START_ISO = '2026-06-11T22:00:00.000Z';
+export const WORLD_CUP_START_ISO = '2026-06-11T19:00:00.000Z';
 
 export const teams: Record<string, WorldCupTeam> = {
   mex: { id: 'mex', nameHe: 'מקסיקו', nameEn: 'Mexico', flag: '🇲🇽' },
   rsa: { id: 'rsa', nameHe: 'דרום אפריקה', nameEn: 'South Africa', flag: '🇿🇦' },
+  kor: { id: 'kor', nameHe: 'קוריאה הדרומית', nameEn: 'South Korea', flag: '🇰🇷' },
+  cze: { id: 'cze', nameHe: "צ'כיה", nameEn: 'Czechia', flag: '🇨🇿' },
   can: { id: 'can', nameHe: 'קנדה', nameEn: 'Canada', flag: '🇨🇦' },
+  bih: { id: 'bih', nameHe: 'בוסניה-הרצגובינה', nameEn: 'Bosnia and Herzegovina', flag: '🇧🇦' },
   qat: { id: 'qat', nameHe: 'קטאר', nameEn: 'Qatar', flag: '🇶🇦' },
-  usa: { id: 'usa', nameHe: 'ארצות הברית', nameEn: 'United States', flag: '🇺🇸' },
-  par: { id: 'par', nameHe: 'פרגוואי', nameEn: 'Paraguay', flag: '🇵🇾' },
+  swi: { id: 'swi', nameHe: "שווייץ", nameEn: 'Switzerland', flag: '🇨🇭' },
   bra: { id: 'bra', nameHe: 'ברזיל', nameEn: 'Brazil', flag: '🇧🇷' },
   mar: { id: 'mar', nameHe: 'מרוקו', nameEn: 'Morocco', flag: '🇲🇦' },
-  arg: { id: 'arg', nameHe: 'ארגנטינה', nameEn: 'Argentina', flag: '🇦🇷' },
-  alg: { id: 'alg', nameHe: 'אלג׳יריה', nameEn: 'Algeria', flag: '🇩🇿' },
+  hai: { id: 'hai', nameHe: 'האיטי', nameEn: 'Haiti', flag: '🇭🇹' },
+  sco: { id: 'sco', nameHe: 'סקוטלנד', nameEn: 'Scotland', flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  usa: { id: 'usa', nameHe: 'ארצות הברית', nameEn: 'United States', flag: '🇺🇸' },
+  par: { id: 'par', nameHe: 'פרגואי', nameEn: 'Paraguay', flag: '🇵🇾' },
+  aus: { id: 'aus', nameHe: 'אוסטרליה', nameEn: 'Australia', flag: '🇦🇺' },
+  tur: { id: 'tur', nameHe: 'טורקיה', nameEn: 'Türkiye', flag: '🇹🇷' },
   ger: { id: 'ger', nameHe: 'גרמניה', nameEn: 'Germany', flag: '🇩🇪' },
+  cur: { id: 'cur', nameHe: 'קוראסאו', nameEn: 'Curaçao', flag: '🇨🇼' },
+  civ: { id: 'civ', nameHe: 'חוף השנהב', nameEn: "Côte d'Ivoire", flag: '🇨🇮' },
+  ecu: { id: 'ecu', nameHe: 'אקוודור', nameEn: 'Ecuador', flag: '🇪🇨' },
+  ned: { id: 'ned', nameHe: 'הולנד', nameEn: 'Netherlands', flag: '🇳🇱' },
+  jpn: { id: 'jpn', nameHe: 'יפן', nameEn: 'Japan', flag: '🇯🇵' },
+  swe: { id: 'swe', nameHe: 'שוודיה', nameEn: 'Sweden', flag: '🇸🇪' },
+  tun: { id: 'tun', nameHe: 'תוניסיה', nameEn: 'Tunisia', flag: '🇹🇳' },
+  bel: { id: 'bel', nameHe: 'בלגיה', nameEn: 'Belgium', flag: '🇧🇪' },
+  egy: { id: 'egy', nameHe: 'מצרים', nameEn: 'Egypt', flag: '🇪🇬' },
+  irn: { id: 'irn', nameHe: 'איראן', nameEn: 'Iran', flag: '🇮🇷' },
   nzl: { id: 'nzl', nameHe: 'ניו זילנד', nameEn: 'New Zealand', flag: '🇳🇿' },
+  esp: { id: 'esp', nameHe: 'ספרד', nameEn: 'Spain', flag: '🇪🇸' },
+  cpv: { id: 'cpv', nameHe: 'קייפ ורדה', nameEn: 'Cape Verde', flag: '🇨🇻' },
+  ksa: { id: 'ksa', nameHe: 'ערב הסעודית', nameEn: 'Saudi Arabia', flag: '🇸🇦' },
+  uru: { id: 'uru', nameHe: 'אורוגואי', nameEn: 'Uruguay', flag: '🇺🇾' },
+  fra: { id: 'fra', nameHe: 'צרפת', nameEn: 'France', flag: '🇫🇷' },
+  sen: { id: 'sen', nameHe: 'סנגל', nameEn: 'Senegal', flag: '🇸🇳' },
+  irq: { id: 'irq', nameHe: 'עיראק', nameEn: 'Iraq', flag: '🇮🇶' },
+  nor: { id: 'nor', nameHe: 'נורווגיה', nameEn: 'Norway', flag: '🇳🇴' },
+  arg: { id: 'arg', nameHe: 'ארגנטינה', nameEn: 'Argentina', flag: '🇦🇷' },
+  alg: { id: 'alg', nameHe: "אלג'יריה", nameEn: 'Algeria', flag: '🇩🇿' },
+  aut: { id: 'aut', nameHe: 'אוסטריה', nameEn: 'Austria', flag: '🇦🇹' },
+  jor: { id: 'jor', nameHe: 'ירדן', nameEn: 'Jordan', flag: '🇯🇴' },
+  por: { id: 'por', nameHe: 'פורטוגל', nameEn: 'Portugal', flag: '🇵🇹' },
+  cod: { id: 'cod', nameHe: 'ד.ר. קונגו', nameEn: 'DR Congo', flag: '🇨🇩' },
+  uzb: { id: 'uzb', nameHe: 'אוזבקיסטן', nameEn: 'Uzbekistan', flag: '🇺🇿' },
+  col: { id: 'col', nameHe: 'קולומביה', nameEn: 'Colombia', flag: '🇨🇴' },
   eng: { id: 'eng', nameHe: 'אנגליה', nameEn: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
   cro: { id: 'cro', nameHe: 'קרואטיה', nameEn: 'Croatia', flag: '🇭🇷' },
-  esp: { id: 'esp', nameHe: 'ספרד', nameEn: 'Spain', flag: '🇪🇸' },
-  jpn: { id: 'jpn', nameHe: 'יפן', nameEn: 'Japan', flag: '🇯🇵' },
+  gha: { id: 'gha', nameHe: 'גאנה', nameEn: 'Ghana', flag: '🇬🇭' },
+  pan: { id: 'pan', nameHe: 'פנמה', nameEn: 'Panama', flag: '🇵🇦' },
   tbd: { id: 'tbd', nameHe: 'ייקבע בהמשך', nameEn: 'TBD', flag: '🏳️' },
 };
 
@@ -42,14 +74,30 @@ export const venues: WorldCupVenue[] = [
 ];
 
 export const fallbackMatches: WorldCupMatch[] = [
-  { id: 'm1', matchNumber: 1, stage: 'group', group: 'A', homeTeam: teams.mex, awayTeam: teams.rsa, homeScore: null, awayScore: null, status: 'scheduled', kickoff: WORLD_CUP_START_ISO, venueId: 'mexico-city', broadcaster: 'kan11' },
-  { id: 'm2', matchNumber: 2, stage: 'group', group: 'B', homeTeam: teams.can, awayTeam: teams.qat, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T00:00:00.000Z', venueId: 'toronto', broadcaster: 'kan11' },
-  { id: 'm3', matchNumber: 3, stage: 'group', group: 'D', homeTeam: teams.usa, awayTeam: teams.par, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T02:00:00.000Z', venueId: 'los-angeles', broadcaster: 'kan11' },
-  { id: 'm4', matchNumber: 4, stage: 'group', group: 'C', homeTeam: teams.bra, awayTeam: teams.mar, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T19:00:00.000Z', venueId: 'miami', broadcaster: 'kan11' },
-  { id: 'm5', matchNumber: 5, stage: 'group', group: 'E', homeTeam: teams.arg, awayTeam: teams.alg, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-14T00:00:00.000Z', venueId: 'new-york-new-jersey', broadcaster: 'kan11' },
-  { id: 'm6', matchNumber: 6, stage: 'group', group: 'F', homeTeam: teams.ger, awayTeam: teams.nzl, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-14T22:00:00.000Z', venueId: 'dallas', broadcaster: 'kan11' },
-  { id: 'm7', matchNumber: 7, stage: 'group', group: 'G', homeTeam: teams.eng, awayTeam: teams.cro, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T19:00:00.000Z', venueId: 'seattle', broadcaster: 'kan11' },
-  { id: 'm8', matchNumber: 8, stage: 'group', group: 'H', homeTeam: teams.esp, awayTeam: teams.jpn, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T22:00:00.000Z', venueId: 'vancouver', broadcaster: 'kan11' },
+  { id: 'm1',  matchNumber: 1,  stage: 'group', group: 'A', homeTeam: teams.mex, awayTeam: teams.rsa, homeScore: null, awayScore: null, status: 'scheduled', kickoff: WORLD_CUP_START_ISO,           venueId: 'mexico-city',            broadcaster: 'kan11' },
+  { id: 'm2',  matchNumber: 2,  stage: 'group', group: 'A', homeTeam: teams.kor, awayTeam: teams.cze, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-11T22:00:00.000Z',   venueId: 'guadalajara',            broadcaster: 'kan11' },
+  { id: 'm3',  matchNumber: 3,  stage: 'group', group: 'B', homeTeam: teams.can, awayTeam: teams.bih, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T19:00:00.000Z',   venueId: 'toronto',                broadcaster: 'kan11' },
+  { id: 'm4',  matchNumber: 4,  stage: 'group', group: 'B', homeTeam: teams.qat, awayTeam: teams.swi, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T22:00:00.000Z',   venueId: 'los-angeles',            broadcaster: 'kan11' },
+  { id: 'm5',  matchNumber: 5,  stage: 'group', group: 'C', homeTeam: teams.bra, awayTeam: teams.mar, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T22:00:00.000Z',   venueId: 'new-york-new-jersey',    broadcaster: 'kan11' },
+  { id: 'm6',  matchNumber: 6,  stage: 'group', group: 'C', homeTeam: teams.hai, awayTeam: teams.sco, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T19:00:00.000Z',   venueId: 'houston',                broadcaster: 'kan11' },
+  { id: 'm7',  matchNumber: 7,  stage: 'group', group: 'D', homeTeam: teams.usa, awayTeam: teams.par, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T23:00:00.000Z',   venueId: 'los-angeles',            broadcaster: 'kan11' },
+  { id: 'm8',  matchNumber: 8,  stage: 'group', group: 'D', homeTeam: teams.aus, awayTeam: teams.tur, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T16:00:00.000Z',   venueId: 'kansas-city',            broadcaster: 'kan11' },
+  { id: 'm9',  matchNumber: 9,  stage: 'group', group: 'E', homeTeam: teams.ger, awayTeam: teams.cur, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-14T22:00:00.000Z',   venueId: 'dallas',                 broadcaster: 'kan11' },
+  { id: 'm10', matchNumber: 10, stage: 'group', group: 'E', homeTeam: teams.civ, awayTeam: teams.ecu, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-14T19:00:00.000Z',   venueId: 'seattle',                broadcaster: 'kan11' },
+  { id: 'm11', matchNumber: 11, stage: 'group', group: 'F', homeTeam: teams.ned, awayTeam: teams.jpn, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T00:00:00.000Z',   venueId: 'san-francisco-bay-area', broadcaster: 'kan11' },
+  { id: 'm12', matchNumber: 12, stage: 'group', group: 'F', homeTeam: teams.swe, awayTeam: teams.tun, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T02:00:00.000Z',   venueId: 'boston',                 broadcaster: 'kan11' },
+  { id: 'm13', matchNumber: 13, stage: 'group', group: 'G', homeTeam: teams.bel, awayTeam: teams.egy, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T19:00:00.000Z',   venueId: 'atlanta',                broadcaster: 'kan11' },
+  { id: 'm14', matchNumber: 14, stage: 'group', group: 'G', homeTeam: teams.irn, awayTeam: teams.nzl, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T22:00:00.000Z',   venueId: 'seattle',                broadcaster: 'kan11' },
+  { id: 'm15', matchNumber: 15, stage: 'group', group: 'H', homeTeam: teams.esp, awayTeam: teams.cpv, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-15T16:00:00.000Z',   venueId: 'houston',                broadcaster: 'kan11' },
+  { id: 'm16', matchNumber: 16, stage: 'group', group: 'H', homeTeam: teams.ksa, awayTeam: teams.uru, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-16T02:00:00.000Z',   venueId: 'miami',                  broadcaster: 'kan11' },
+  { id: 'm17', matchNumber: 17, stage: 'group', group: 'I', homeTeam: teams.fra, awayTeam: teams.sen, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-16T22:00:00.000Z',   venueId: 'philadelphia',           broadcaster: 'kan11' },
+  { id: 'm18', matchNumber: 18, stage: 'group', group: 'I', homeTeam: teams.irq, awayTeam: teams.nor, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-16T19:00:00.000Z',   venueId: 'dallas',                 broadcaster: 'kan11' },
+  { id: 'm19', matchNumber: 19, stage: 'group', group: 'J', homeTeam: teams.arg, awayTeam: teams.alg, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-17T19:00:00.000Z',   venueId: 'new-york-new-jersey',    broadcaster: 'kan11' },
+  { id: 'm20', matchNumber: 20, stage: 'group', group: 'J', homeTeam: teams.aut, awayTeam: teams.jor, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-17T22:00:00.000Z',   venueId: 'miami',                  broadcaster: 'kan11' },
+  { id: 'm21', matchNumber: 21, stage: 'group', group: 'K', homeTeam: teams.por, awayTeam: teams.cod, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-18T22:00:00.000Z',   venueId: 'kansas-city',            broadcaster: 'kan11' },
+  { id: 'm22', matchNumber: 22, stage: 'group', group: 'K', homeTeam: teams.uzb, awayTeam: teams.col, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-18T19:00:00.000Z',   venueId: 'boston',                 broadcaster: 'kan11' },
+  { id: 'm23', matchNumber: 23, stage: 'group', group: 'L', homeTeam: teams.eng, awayTeam: teams.cro, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-18T19:00:00.000Z',   venueId: 'philadelphia',           broadcaster: 'kan11' },
+  { id: 'm24', matchNumber: 24, stage: 'group', group: 'L', homeTeam: teams.gha, awayTeam: teams.pan, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-18T22:00:00.000Z',   venueId: 'vancouver',              broadcaster: 'kan11' },
   { id: 'm104', matchNumber: 104, stage: 'final', homeTeam: teams.tbd, awayTeam: teams.tbd, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-07-19T19:00:00.000Z', venueId: 'new-york-new-jersey', broadcaster: 'kan11' },
 ];
 
@@ -77,7 +125,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'arg', nameHe: 'ארגנטינה', nameEn: 'Argentina', flag: '🇦🇷',
     confederation: 'CONMEBOL', coachHe: 'ליאונל סקלוני', coachEn: 'Lionel Scaloni',
     fifaRanking: 1, worldCupTitles: 3, bestResult: 'אלוף (1978, 1986, 2022)',
-    group: 'E',
+    group: 'J',
     squad: [
       { name: 'אמיליאנו מרטינס', number: 23, position: 'GK', club: 'אסטון וילה' },
       { name: 'ניקולאס אוטמנדי', number: 19, position: 'DEF', club: 'בנפיקה' },
@@ -129,7 +177,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'fra', nameHe: 'צרפת', nameEn: 'France', flag: '🇫🇷',
     confederation: 'UEFA', coachHe: 'דידייה דשאן', coachEn: 'Didier Deschamps',
     fifaRanking: 2, worldCupTitles: 2, bestResult: 'אלוף (1998, 2018)',
-    group: 'D',
+    group: 'I',
     squad: [
       { name: 'מייק מניאן', number: 1, position: 'GK', club: 'ריאל מדריד' },
       { name: 'תיאו הרנאנדס', number: 22, position: 'DEF', club: 'AC מילאן' },
@@ -152,7 +200,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'eng', nameHe: 'אנגליה', nameEn: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
     confederation: 'UEFA', coachHe: 'לי קארסלי', coachEn: 'Lee Carsley',
     fifaRanking: 4, worldCupTitles: 1, bestResult: 'אלוף (1966)',
-    group: 'G',
+    group: 'L',
     squad: [
       { name: 'ג׳ורדן פיקפורד', number: 1, position: 'GK', club: 'אברטון' },
       { name: 'קייל ווקר', number: 2, position: 'DEF', club: 'מנצ׳סטר סיטי' },
@@ -199,7 +247,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'ger', nameHe: 'גרמניה', nameEn: 'Germany', flag: '🇩🇪',
     confederation: 'UEFA', coachHe: 'יוליאן נגלסמן', coachEn: 'Julian Nagelsmann',
     fifaRanking: 13, worldCupTitles: 4, bestResult: 'אלוף (1954, 1974, 1990, 2014)',
-    group: 'F',
+    group: 'E',
     squad: [
       { name: 'מנואל נויאר', number: 1, position: 'GK', club: 'באיירן מינכן' },
       { name: 'יושוע קימיך', number: 6, position: 'DEF', club: 'באיירן מינכן' },
@@ -222,7 +270,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'por', nameHe: 'פורטוגל', nameEn: 'Portugal', flag: '🇵🇹',
     confederation: 'UEFA', coachHe: 'רוברטו מרטינז', coachEn: 'Roberto Martínez',
     fifaRanking: 6, worldCupTitles: 0, bestResult: 'מקום שלישי (1966)',
-    group: 'A',
+    group: 'K',
     squad: [
       { name: 'דיוגו קוסטה', number: 1, position: 'GK', club: 'פורטו' },
       { name: 'ז׳ואאו קנסלו', number: 20, position: 'DEF', club: 'ברצלונה' },
@@ -245,7 +293,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'ned', nameHe: 'הולנד', nameEn: 'Netherlands', flag: '🇳🇱',
     confederation: 'UEFA', coachHe: 'רונלד קואמן', coachEn: 'Ronald Koeman',
     fifaRanking: 7, worldCupTitles: 0, bestResult: 'גמר (1974, 1978, 2010)',
-    group: 'B',
+    group: 'F',
     squad: [
       { name: 'ברט פרברוגן', number: 1, position: 'GK', club: 'מנצ׳סטר סיטי' },
       { name: 'דנצל דומפריס', number: 22, position: 'DEF', club: 'אינטר מילאן' },
@@ -267,7 +315,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'bel', nameHe: 'בלגיה', nameEn: 'Belgium', flag: '🇧🇪',
     confederation: 'UEFA', coachHe: 'דומניקו טדסקו', coachEn: 'Domenico Tedesco',
     fifaRanking: 3, worldCupTitles: 0, bestResult: 'מקום שלישי (2018)',
-    group: 'C',
+    group: 'G',
     squad: [
       { name: 'קובה קולר', number: 1, position: 'GK', club: 'גנט' },
       { name: 'תיאו הרמנס', number: 2, position: 'DEF', club: 'ליל' },
@@ -370,7 +418,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'jpn', nameHe: 'יפן', nameEn: 'Japan', flag: '🇯🇵',
     confederation: 'AFC', coachHe: 'האג׳ימה מוריאסו', coachEn: 'Hajime Moriyasu',
     fifaRanking: 17, worldCupTitles: 0, bestResult: 'רבע גמר (2022)',
-    group: 'H',
+    group: 'F',
     squad: [
       { name: 'שוג׳י אוסוקו', number: 1, position: 'GK', club: 'ספורטינג ליסבון' },
       { name: 'ריוי יאמאנה', number: 2, position: 'DEF', club: 'ספורטינג' },
@@ -391,7 +439,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'sen', nameHe: 'סנגל', nameEn: 'Senegal', flag: '🇸🇳',
     confederation: 'CAF', coachHe: 'אליו סיסה', coachEn: 'Aliou Cissé',
     fifaRanking: 18, worldCupTitles: 0, bestResult: 'חצי גמר (2002)',
-    group: 'B',
+    group: 'I',
     squad: [
       { name: 'אדוארד מנדי', number: 1, position: 'GK', club: 'אל אהלי' },
       { name: 'כאלידו קוליבאלי', number: 3, position: 'DEF', club: 'אל הילאל' },
@@ -411,7 +459,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'aus', nameHe: 'אוסטרליה', nameEn: 'Australia', flag: '🇦🇺',
     confederation: 'AFC', coachHe: 'טוני פופוביץ׳', coachEn: 'Tony Popovic',
     fifaRanking: 23, worldCupTitles: 0, bestResult: 'חצי גמר (2006)',
-    group: 'G',
+    group: 'D',
     squad: [
       { name: 'מאת׳יו ריאן', number: 1, position: 'GK', club: 'FC קופנהגן' },
       { name: 'ניי טיילס', number: 2, position: 'DEF', club: 'בייקנהאם' },
@@ -432,7 +480,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'cro', nameHe: 'קרואטיה', nameEn: 'Croatia', flag: '🇭🇷',
     confederation: 'UEFA', coachHe: 'זלטקו דאליץ׳', coachEn: 'Zlatko Dalić',
     fifaRanking: 10, worldCupTitles: 0, bestResult: 'גמר (2018)',
-    group: 'G',
+    group: 'L',
     squad: [
       { name: 'דומיניק ליוואקוביץ׳', number: 1, position: 'GK', club: 'פנרבחה' },
       { name: 'יוסיפ יוראנוביץ׳', number: 2, position: 'DEF', club: 'Celtic' },
@@ -475,7 +523,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'col', nameHe: 'קולומביה', nameEn: 'Colombia', flag: '🇨🇴',
     confederation: 'CONMEBOL', coachHe: 'נסטור לורנצו', coachEn: 'Néstor Lorenzo',
     fifaRanking: 8, worldCupTitles: 0, bestResult: 'רבע גמר (2014)',
-    group: 'F',
+    group: 'K',
     squad: [
       { name: 'קמילו ורגארה', number: 1, position: 'GK', club: 'ניוואל אולד בויז' },
       { name: 'דניאל מונוס', number: 2, position: 'DEF', club: 'ואלנסיה' },
@@ -495,7 +543,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'swi', nameHe: 'שווייץ', nameEn: 'Switzerland', flag: '🇨🇭',
     confederation: 'UEFA', coachHe: 'מוראט יאקין', coachEn: 'Murat Yakin',
     fifaRanking: 21, worldCupTitles: 0, bestResult: 'רבע גמר (1934, 1938, 1954)',
-    group: 'A',
+    group: 'B',
     squad: [
       { name: 'יאן זומר', number: 1, position: 'GK', club: 'אינטר מילאן' },
       { name: 'מנואל אקנג׳י', number: 5, position: 'DEF', club: 'מנצ׳סטר סיטי' },
@@ -515,7 +563,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'ecu', nameHe: 'אקוודור', nameEn: 'Ecuador', flag: '🇪🇨',
     confederation: 'CONMEBOL', coachHe: 'סבסטיאן בקה', coachEn: 'Sebastián Beccacece',
     fifaRanking: 42, worldCupTitles: 0, bestResult: '16 האחרונות (2006)',
-    group: 'D',
+    group: 'E',
     squad: [
       { name: 'הרנן גאלינדז', number: 1, position: 'GK', club: 'גרמינאל' },
       { name: 'אנגל מנה', number: 3, position: 'DEF', club: 'בנפיקה' },
@@ -574,7 +622,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'alg', nameHe: 'אלג׳יריה', nameEn: 'Algeria', flag: '🇩🇿',
     confederation: 'CAF', coachHe: 'ולד ריד', coachEn: 'Walid Regragui',
     fifaRanking: 50, worldCupTitles: 0, bestResult: '16 האחרונות (2014)',
-    group: 'E',
+    group: 'J',
     squad: [
       { name: 'ראיס עמיגש', number: 1, position: 'GK', club: 'לאנס' },
       { name: 'ראמי בנסבאיני', number: 3, position: 'DEF', club: 'פלאמינגהם' },
@@ -628,7 +676,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'nzl', nameHe: 'ניו זילנד', nameEn: 'New Zealand', flag: '🇳🇿',
     confederation: 'OFC', coachHe: 'דסיפ ריסבאי', coachEn: 'Darren Bazeley',
     fifaRanking: 95, worldCupTitles: 0, bestResult: 'שלב הבתים',
-    group: 'F',
+    group: 'G',
     squad: [
       { name: 'מייקל בקנהאם', number: 1, position: 'GK', club: 'הוורד' },
       { name: 'לוגאן ג׳פרי', number: 2, position: 'DEF', club: 'ג׳ורנאל' },
@@ -647,6 +695,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'nor', nameHe: 'נורווגיה', nameEn: 'Norway', flag: '🇳🇴',
     confederation: 'UEFA', coachHe: 'ষ্টוֹলֵה סולבאקן', coachEn: 'Ståle Solbakken',
     fifaRanking: 14, worldCupTitles: 0, bestResult: 'שלב הבתים (1994, 1998)',
+    group: 'I',
     squad: [
       { name: 'ארלינג הולאנד', number: 9, position: 'FWD', club: 'מנצ׳סטר סיטי', caps: 40, goals: 33 },
       { name: 'מרטין אודגור', number: 10, position: 'MID', club: 'ארסנל', caps: 75, goals: 24 },
@@ -667,6 +716,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'aut', nameHe: 'אוסטריה', nameEn: 'Austria', flag: '🇦🇹',
     confederation: 'UEFA', coachHe: 'ראלף רנגניק', coachEn: 'Ralf Rangnick',
     fifaRanking: 25, worldCupTitles: 0, bestResult: 'מקום שלישי (1954)',
+    group: 'J',
     squad: [
       { name: 'פטריק פנץ', number: 1, position: 'GK', club: 'ריאל סוסיאדד' },
       { name: 'מארסל זאביצר', number: 11, position: 'MID', club: 'מנצ׳סטר יונייטד', caps: 75, goals: 19 },
@@ -687,6 +737,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'sco', nameHe: 'סקוטלנד', nameEn: 'Scotland', flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
     confederation: 'UEFA', coachHe: 'סטיב קלארק', coachEn: 'Steve Clarke',
     fifaRanking: 32, worldCupTitles: 0, bestResult: 'שלב הבתים',
+    group: 'C',
     squad: [
       { name: 'אנגוס גן', number: 1, position: 'GK', club: 'ניוקאסל' },
       { name: 'אנדרו רוברטסון', number: 3, position: 'DEF', club: 'ליברפול', caps: 80, goals: 3 },
@@ -707,6 +758,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'swe', nameHe: 'שוודיה', nameEn: 'Sweden', flag: '🇸🇪',
     confederation: 'UEFA', coachHe: 'יון דל טומסון', coachEn: 'Jon Dahl Tomasson',
     fifaRanking: 26, worldCupTitles: 0, bestResult: 'גמר (1958)',
+    group: 'F',
     squad: [
       { name: 'רובין אולסן', number: 1, position: 'GK', club: 'AS רומא' },
       { name: 'ויקטור לינדלוף', number: 5, position: 'DEF', club: 'מנצ׳סטר יונייטד' },
@@ -728,6 +780,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'tur', nameHe: 'טורקיה', nameEn: 'Türkiye', flag: '🇹🇷',
     confederation: 'UEFA', coachHe: 'וינצ׳נצו מונטלה', coachEn: 'Vincenzo Montella',
     fifaRanking: 40, worldCupTitles: 0, bestResult: 'מקום שלישי (2002)',
+    group: 'D',
     squad: [
       { name: 'מרט גונוק', number: 1, position: 'GK', club: 'בשיקטש' },
       { name: 'האקאן צ׳לחאנוגלו', number: 10, position: 'MID', club: 'אינטר מילאן', caps: 90, goals: 22 },
@@ -747,6 +800,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'bih', nameHe: 'בוסניה-הרצגובינה', nameEn: 'Bosnia and Herzegovina', flag: '🇧🇦',
     confederation: 'UEFA', coachHe: 'סרגיי ברברז', coachEn: 'Sergej Barbarez',
     fifaRanking: 55, worldCupTitles: 0, bestResult: 'שלב הבתים (2014)',
+    group: 'B',
     squad: [
       { name: 'ניקולה ווקאליץ׳', number: 1, position: 'GK', club: 'FK Sarajevo' },
       { name: 'אדין ג׳קו', number: 9, position: 'FWD', club: 'פנרבחה', caps: 115, goals: 64 },
@@ -764,6 +818,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'cze', nameHe: 'צ׳כיה', nameEn: 'Czechia', flag: '🇨🇿',
     confederation: 'UEFA', coachHe: 'איבן האשק', coachEn: 'Ivan Hašek',
     fifaRanking: 35, worldCupTitles: 0, bestResult: 'גמר (1962, כצ׳כוסלובקיה)',
+    group: 'A',
     squad: [
       { name: 'ג׳ירי סטאנק', number: 1, position: 'GK', club: 'ברייטון' },
       { name: 'פאטריק שיק', number: 9, position: 'FWD', club: 'Bayer Leverkusen', caps: 55, goals: 28 },
@@ -785,6 +840,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'pan', nameHe: 'פנמה', nameEn: 'Panama', flag: '🇵🇦',
     confederation: 'CONCACAF', coachHe: 'תומאס כריסטיאנסן', coachEn: 'Thomas Christiansen',
     fifaRanking: 75, worldCupTitles: 0, bestResult: 'שלב הבתים (2018)',
+    group: 'L',
     squad: [
       { name: 'לואיס מניאה', number: 1, position: 'GK', club: 'CD Árabe Unido' },
       { name: 'עדלברטו קראסקיה', number: 5, position: 'MID', club: 'הוסטון דיינמו', caps: 65, goals: 8 },
@@ -802,6 +858,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'cur', nameHe: 'קוראסאו', nameEn: 'Curaçao', flag: '🇨🇼',
     confederation: 'CONCACAF', coachHe: 'רמקו ביקנטיני', coachEn: 'Remko Bicentini',
     fifaRanking: 85, worldCupTitles: 0, bestResult: 'הופעת בכורה (2026)',
+    group: 'E',
     squad: [
       { name: 'לינו הולדר', number: 1, position: 'GK', club: 'Scheveningen' },
       { name: 'לנדרו בקונה', number: 5, position: 'DEF', club: 'מידלסבורו', caps: 45, goals: 4 },
@@ -818,6 +875,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'hai', nameHe: 'האיטי', nameEn: 'Haiti', flag: '🇭🇹',
     confederation: 'CONCACAF', coachHe: 'הנרי פנלוס', coachEn: 'Henry Fenelus',
     fifaRanking: 96, worldCupTitles: 0, bestResult: 'שלב הבתים (1974)',
+    group: 'C',
     squad: [
       { name: 'ג׳יימס לין', number: 1, position: 'GK', club: 'Violette AC' },
       { name: 'דקנס נאזון', number: 9, position: 'FWD', club: 'FK Čukarički' },
@@ -836,6 +894,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'tun', nameHe: 'תוניסיה', nameEn: 'Tunisia', flag: '🇹🇳',
     confederation: 'CAF', coachHe: 'ז׳לל קאדרי', coachEn: 'Jalel Kadri',
     fifaRanking: 34, worldCupTitles: 0, bestResult: 'שלב הבתים',
+    group: 'F',
     squad: [
       { name: 'איאס חמי', number: 1, position: 'GK', club: 'ריאל בטיס' },
       { name: 'ואהבי ח׳אזרי', number: 10, position: 'FWD', club: 'Montpellier', caps: 90, goals: 25 },
@@ -856,6 +915,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'egy', nameHe: 'מצרים', nameEn: 'Egypt', flag: '🇪🇬',
     confederation: 'CAF', coachHe: 'חוסאם חסן', coachEn: 'Hossam Hassan',
     fifaRanking: 32, worldCupTitles: 0, bestResult: 'שלב הבתים',
+    group: 'G',
     squad: [
       { name: 'מוחמד אבו גבל', number: 1, position: 'GK', club: 'גירונה' },
       { name: 'מוחמד סלאח', number: 10, position: 'FWD', club: 'ליברפול', caps: 100, goals: 58 },
@@ -876,6 +936,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'gha', nameHe: 'גאנה', nameEn: 'Ghana', flag: '🇬🇭',
     confederation: 'CAF', coachHe: 'אוטו אדו', coachEn: 'Otto Addo',
     fifaRanking: 61, worldCupTitles: 0, bestResult: 'רבע גמר (2010)',
+    group: 'L',
     squad: [
       { name: 'לורנס אטי-זיגי', number: 1, position: 'GK', club: 'Mainz 05' },
       { name: 'תומאס פרטי', number: 6, position: 'MID', club: 'ארסנל', caps: 50, goals: 8 },
@@ -896,6 +957,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'cod', nameHe: 'ד.ר. קונגו', nameEn: 'DR Congo', flag: '🇨🇩',
     confederation: 'CAF', coachHe: 'סבסטיאן דסאבר', coachEn: 'Sébastien Desabre',
     fifaRanking: 62, worldCupTitles: 0, bestResult: 'שלב הבתים (1974 כזאיר)',
+    group: 'K',
     squad: [
       { name: 'ז׳ואאו מלוומבה', number: 1, position: 'GK', club: 'AS Vita Club' },
       { name: 'שנסל מבמבה', number: 5, position: 'DEF', club: 'Marseille', caps: 55, goals: 3 },
@@ -913,6 +975,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'civ', nameHe: 'חוף השנהב', nameEn: "Côte d'Ivoire", flag: '🇨🇮',
     confederation: 'CAF', coachHe: 'אמרס פה', coachEn: 'Emerse Faé',
     fifaRanking: 47, worldCupTitles: 0, bestResult: 'שלב הבתים',
+    group: 'E',
     squad: [
       { name: 'ייאן קנן', number: 1, position: 'GK', club: 'AC מילאן' },
       { name: 'פרנק קסיה', number: 6, position: 'MID', club: 'אל קאדסיה', caps: 80, goals: 12 },
@@ -932,6 +995,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'cpv', nameHe: 'קייפ ורדה', nameEn: 'Cape Verde', flag: '🇨🇻',
     confederation: 'CAF', coachHe: 'פדרו ליטאו', coachEn: 'Pedro Leitão',
     fifaRanking: 56, worldCupTitles: 0, bestResult: 'הופעת בכורה (2026)',
+    group: 'H',
     squad: [
       { name: 'ווסטר מרטינס', number: 1, position: 'GK', club: 'FC Arouca' },
       { name: 'ריאן מנדס', number: 11, position: 'FWD', club: 'PAOK', caps: 60, goals: 15 },
@@ -950,6 +1014,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'irn', nameHe: 'איראן', nameEn: 'Iran', flag: '🇮🇷',
     confederation: 'AFC', coachHe: 'עמיר גלנואי', coachEn: 'Amir Ghalenoei',
     fifaRanking: 21, worldCupTitles: 0, bestResult: 'שלב הבתים',
+    group: 'G',
     squad: [
       { name: 'עלירזה ביראנוונד', number: 1, position: 'GK', club: 'Tractor' },
       { name: 'מהדי טארמי', number: 9, position: 'FWD', club: 'אינטר מילאן', caps: 75, goals: 43 },
@@ -971,6 +1036,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'ksa', nameHe: 'ערב הסעודית', nameEn: 'Saudi Arabia', flag: '🇸🇦',
     confederation: 'AFC', coachHe: 'הרנאן קרספו', coachEn: 'Hernán Crespo',
     fifaRanking: 56, worldCupTitles: 0, bestResult: 'רבע גמר (1994)',
+    group: 'H',
     squad: [
       { name: 'מוחמד אל-עואיס', number: 1, position: 'GK', club: 'Al Hilal' },
       { name: 'סאלח אל-שהרי', number: 9, position: 'FWD', club: 'Al Ittihad', caps: 55, goals: 24 },
@@ -991,6 +1057,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'irq', nameHe: 'עיראק', nameEn: 'Iraq', flag: '🇮🇶',
     confederation: 'AFC', coachHe: 'חסוס קאסס', coachEn: 'Jesús Casas',
     fifaRanking: 62, worldCupTitles: 0, bestResult: 'שלב הבתים (1986)',
+    group: 'I',
     squad: [
       { name: 'בשאר רשן', number: 1, position: 'GK', club: 'Zamalek' },
       { name: 'מוחנד עלי', number: 10, position: 'FWD', club: 'Al Zawraa', caps: 38, goals: 16 },
@@ -1007,6 +1074,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'jor', nameHe: 'ירדן', nameEn: 'Jordan', flag: '🇯🇴',
     confederation: 'AFC', coachHe: 'ח׳אשם אל-שבול', coachEn: 'Hashem Al-Shboul',
     fifaRanking: 71, worldCupTitles: 0, bestResult: 'הופעת בכורה (2026)',
+    group: 'J',
     squad: [
       { name: 'יאזן ניימאט', number: 1, position: 'GK', club: 'Al Wehdat' },
       { name: 'אחמד הייאל', number: 9, position: 'FWD', club: 'Al Faisaly', caps: 35, goals: 13 },
@@ -1023,6 +1091,7 @@ export const teamDetails: WorldCupTeamDetail[] = [
     id: 'uzb', nameHe: 'אוזבקיסטן', nameEn: 'Uzbekistan', flag: '🇺🇿',
     confederation: 'AFC', coachHe: 'ספצ׳קו קטאנץ', coachEn: 'Srecko Katanec',
     fifaRanking: 70, worldCupTitles: 0, bestResult: 'הופעת בכורה (2026)',
+    group: 'K',
     squad: [
       { name: 'אוטבק יוסופוב', number: 1, position: 'GK', club: 'Pakhtakor' },
       { name: 'אלדור שומורודוב', number: 9, position: 'FWD', club: 'AS רומא', caps: 55, goals: 25 },
