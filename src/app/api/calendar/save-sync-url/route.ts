@@ -52,9 +52,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await patchDocument(userSyncPath, statusPatch as unknown as Record<string, string>);
 
     if (result.status === 'success') {
-      return NextResponse.json({ ok: true, synced: true, count: result.count, studios: result.studios });
+      return NextResponse.json({ ok: true, synced: true, count: result.count, studios: result.studios, debug: result.debug });
     }
-    return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error' });
+    return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error', debug: (result as { debug?: string }).debug });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     await patchDocument(userSyncPath, {
