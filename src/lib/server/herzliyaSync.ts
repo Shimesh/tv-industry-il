@@ -5,6 +5,7 @@ import {
   parseHerzliyaPopupHtml,
   extractHerzliyaEventIds,
   extractStudioFromPopup,
+  extractDateFromPopup,
 } from '@/lib/productionScheduleParser';
 import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
@@ -111,10 +112,16 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         if (!herzliyaId || !popupCache[herzliyaId]) continue;
         const popupHtml = popupCache[herzliyaId];
 
-        // Extract studio/location from popup header (more reliable than parsing from name)
+        // Extract studio/location and date from popup header (authoritative source)
         const popupStudio = extractStudioFromPopup(popupHtml);
-        console.log(`[herzliyaSync] prod="${prod.name}" herzliyaId=${herzliyaId} popupStudio="${popupStudio}" prevStudio="${prod.studio}"`);
         if (popupStudio) prod.studio = popupStudio;
+        // Correct the date from the popup in case the HTML-body parser assigned the wrong day
+        const popupDate = extractDateFromPopup(popupHtml);
+        if (popupDate && popupDate !== prod.date) {
+          prod.date = popupDate;
+          prod.day = getHebrewDay(popupDate);
+          prod.id = generateProductionId(prod.name, popupDate, prod.studio);
+        }
 
         const popupCrew = parseHerzliyaPopupHtml(popupHtml);
         for (const pc of popupCrew) {

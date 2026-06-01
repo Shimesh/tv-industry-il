@@ -106,16 +106,9 @@ export function extractHerzliyaEventIds(html: string): Array<{ herzliyaId: numbe
   return results;
 }
 
-/**
- * Extract studio/location from the Herzliya popup header row.
- * The popup header format is: [Production Name] | [Studio/Location] | [Date dd/mm/yyyy] | [Time]
- * Uses the same HTML-stripping strategy as parseHerzliyaPopupText (handles nested tables).
- */
-export function extractStudioFromPopup(html: string): string {
-  if (!html) return '';
-
-  // Strip HTML the same way parseHerzliyaPopupText does — this handles nested tables reliably
-  const text = html
+/** Shared HTML stripper for popup header parsing */
+function stripPopupHtml(html: string): string {
+  return html
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, '\t')
@@ -123,6 +116,53 @@ export function extractStudioFromPopup(html: string): string {
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .trim();
+}
+
+/** Parse popup header line into [name, studio, isoDate] — returns null if not found */
+function parsePopupHeader(html: string): { studio: string; isoDate: string } | null {
+  const text = stripPopupHtml(html);
+  for (const line of text.split('\n')) {
+    const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const dateIdx = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
+    if (dateIdx >= 2) {
+      const dm = parts[dateIdx].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (dm) return {
+        studio: parts[dateIdx - 1],
+        isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
+      };
+    }
+    if (parts.length === 1 && parts[0].includes('|')) {
+      const segs = parts[0].split('|').map(s => s.trim()).filter(Boolean);
+      const di = segs.findIndex(s => /\d{1,2}\/\d{1,2}\/\d{4}/.test(s));
+      if (di >= 2) {
+        const dm = segs[di].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (dm) return {
+          studio: segs[di - 1],
+          isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/** Extract the ISO date (YYYY-MM-DD) from a Herzliya ShowCrew popup header */
+export function extractDateFromPopup(html: string): string {
+  return parsePopupHeader(html)?.isoDate || '';
+}
+
+/**
+ * Extract studio/location from the Herzliya popup header row.
+ * The popup header format is: [Production Name] | [Studio/Location] | [Date dd/mm/yyyy] | [Time]
+ * Uses the same HTML-stripping strategy as parseHerzliyaPopupText (handles nested tables).
+ */
+export function extractStudioFromPopup(html: string): string {
+  if (!html) return '';
+  const header = parsePopupHeader(html);
+  if (header) return header.studio;
+
+  // Legacy fallback (kept for safety)
+  const text = stripPopupHtml(html);
 
   for (const line of text.split('\n')) {
     const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -628,104 +668,113 @@ export function parseManualText(text: string): ParsedSchedule {
   return { workerName, weekStart, weekEnd, productions };
 }
 
+/** Extract crew and times from the HTML content after the production name font tag */
+function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime: string; endTime: string } {
+  const crew: CrewMember[] = [];
+  let startTime = '';
+  let endTime = '';
+  const afterFontIdx = chunk.search(/<\/font>/i);
+  const afterFont = afterFontIdx !== -1 ? chunk.slice(afterFontIdx + 7) : chunk;
+
+  for (const part of afterFont.split(/<br\s*\/?>/i)) {
+    const text = part.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (!text || text.length < 2) continue;
+    const m1 = text.match(/^(.+?)\s*[-–]\s*(.+?)\s+(\d{1,2}:\d{2})\s*[-–]?\s*(\d{1,2}:\d{2})/);
+    if (m1) {
+      if (!startTime) { startTime = m1[3]; endTime = m1[4]; }
+      crew.push({ name: m1[1].trim(), role: m1[2].trim(), roleDetail: '', phone: '', startTime: m1[3], endTime: m1[4], isCurrentUser: false });
+      continue;
+    }
+    const m2 = text.match(/^(.+?)\s*[-–]\s*(.+)$/);
+    if (m2 && /[א-ת]/.test(m2[1])) {
+      crew.push({ name: m2[1].trim(), role: m2[2].replace(/\d{1,2}:\d{2}.*/g, '').trim(), roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: false });
+    }
+  }
+  return { crew, startTime, endTime };
+}
+
 /**
  * Parse Herzliya schedule HTML using regex — no DOMParser needed (server-side safe).
- * Parses .calendar-header dates and .day-cell/.sat-cell events via string splitting.
+ * Strategy 1: split by .day-cell/.sat-cell boundaries, assign calendar-header dates by index.
+ * Strategy 2 fallback: extract all openmd2 events in order and assign dates by position.
  */
 function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
   const headerStart = html.indexOf('calendar-header');
   const bodyStart = html.indexOf('calendar-body');
-  if (headerStart === -1 || bodyStart === -1) {
+  if (headerStart === -1 || bodyStart === -1 || headerStart > bodyStart) {
     return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
   }
-
-  // Collect weekday dates from the header section
-  const headerHtml = html.slice(headerStart, bodyStart);
-  const weekDays: Array<{ isoDate: string }> = [];
-  for (const m of headerHtml.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)) {
-    weekDays.push({
-      isoDate: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`,
-    });
-  }
-  if (weekDays.length === 0) return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
 
   // Worker name
   let workerName = '';
   const nameM = html.match(/שלום\s+([^<\n,]+)/) || html.match(/עובד[:\s]+([^<\n]+)/);
   if (nameM) workerName = nameM[1].trim();
 
-  // Body section
+  // Weekday dates from the header section (Sun … Sat in order)
+  const headerHtml = html.slice(headerStart, bodyStart);
+  const weekDays: Array<{ isoDate: string }> = [];
+  for (const m of headerHtml.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)) {
+    weekDays.push({ isoDate: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` });
+  }
+  if (weekDays.length === 0) return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
+
   const bodyHtml = html.slice(bodyStart);
-
-  // Find all day/sat cell opening tags and their positions
-  const cellTagRe = /<div[^>]+class=["'][^"']*(?:day-cell|sat-cell)[^"']*["'][^>]*>/gi;
-  const cellMatches = [...bodyHtml.matchAll(cellTagRe)];
-
   const productions: Production[] = [];
 
-  cellMatches.forEach((match, dayIdx) => {
-    if (dayIdx >= weekDays.length) return;
-    const { isoDate } = weekDays[dayIdx];
+  // ── Strategy 1: split by day/sat cell tags (handles any element type) ──
+  // Matches any opening tag with class containing day-cell or sat-cell
+  const cellTagRe = /<[^/!>][^>]*class=["'][^"']*(?:day-cell|sat-cell)[^"']*["'][^>]*>/gi;
+  const cellMatches = [...bodyHtml.matchAll(cellTagRe)];
 
-    const cellStart = match.index! + match[0].length;
-    const cellEnd = dayIdx + 1 < cellMatches.length ? cellMatches[dayIdx + 1].index! : bodyHtml.length;
-    const cellHtml = bodyHtml.slice(cellStart, cellEnd);
+  if (cellMatches.length > 0) {
+    cellMatches.forEach((match, dayIdx) => {
+      if (dayIdx >= weekDays.length) return;
+      const { isoDate } = weekDays[dayIdx];
+      const cellStart = match.index! + match[0].length;
+      const cellEnd = dayIdx + 1 < cellMatches.length ? cellMatches[dayIdx + 1].index! : bodyHtml.length;
+      const cellHtml = bodyHtml.slice(cellStart, cellEnd);
 
-    // Each event is delimited by its onclick attribute
-    const eventChunks = cellHtml.split(/onclick=["']openmd2\(/);
+      for (const chunk of cellHtml.split(/onclick=["']openmd2\(/)) {
+        if (chunk === cellHtml) continue; // first segment (before first onclick)
+        const idM = chunk.match(/^(\d+)\)/);
+        if (!idM) continue;
+        const herzliyaId = parseInt(idM[1]);
+        const nameM2 = chunk.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
+        const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
+        if (!rawName) continue;
+        const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+        const studio = studioM ? studioM[0].trim() : '';
+        const name = studio ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+        const { crew, startTime, endTime } = parseEventCrewFromHtml(chunk);
+        productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
+      }
+    });
+  }
 
-    for (let i = 1; i < eventChunks.length; i++) {
-      const chunk = eventChunks[i];
+  // ── Strategy 2 fallback: if no cells matched, assign events to days by round-robin ──
+  // This handles cases where day-cell divs have unusual attributes or tag types.
+  if (productions.length === 0) {
+    const allEventChunks = bodyHtml.split(/onclick=["']openmd2\(/);
+    const eventsPerDay = Math.ceil((allEventChunks.length - 1) / weekDays.length) || 1;
+    let dayIdx = 0;
+    for (let i = 1; i < allEventChunks.length; i++) {
+      // Advance day when we estimate we've consumed that day's events
+      if (i > 1 && (i - 1) % eventsPerDay === 0 && dayIdx + 1 < weekDays.length) dayIdx++;
+      const chunk = allEventChunks[i];
       const idM = chunk.match(/^(\d+)\)/);
       if (!idM) continue;
       const herzliyaId = parseInt(idM[1]);
-
-      // Production name from <font color="red">
       const nameM2 = chunk.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
       const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
       if (!rawName) continue;
-
-      // Studio from name
+      const isoDate = weekDays[dayIdx]?.isoDate || weekDays[0].isoDate;
       const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
       const studio = studioM ? studioM[0].trim() : '';
       const name = studio ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
-
-      // Crew from <br>-separated content after </font>
-      const afterFont = chunk.slice(chunk.search(/<\/font>/i) + 7);
-      const crew: CrewMember[] = [];
-      let startTime = '';
-      let endTime = '';
-
-      for (const part of afterFont.split(/<br\s*\/?>/i)) {
-        const text = part.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
-        if (!text || text.length < 2) continue;
-
-        const m1 = text.match(/^(.+?)\s*[-–]\s*(.+?)\s+(\d{1,2}:\d{2})\s*[-–]?\s*(\d{1,2}:\d{2})/);
-        if (m1) {
-          if (!startTime) { startTime = m1[3]; endTime = m1[4]; }
-          crew.push({ name: m1[1].trim(), role: m1[2].trim(), roleDetail: '', phone: '', startTime: m1[3], endTime: m1[4], isCurrentUser: false });
-          continue;
-        }
-        const m2 = text.match(/^(.+?)\s*[-–]\s*(.+)$/);
-        if (m2 && /[א-ת]/.test(m2[1])) {
-          crew.push({ name: m2[1].trim(), role: m2[2].replace(/\d{1,2}:\d{2}.*/g, '').trim(), roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: false });
-        }
-      }
-
-      productions.push({
-        id: generateProductionId(name, isoDate, studio),
-        name,
-        studio,
-        date: isoDate,
-        day: getHebrewDay(isoDate),
-        startTime,
-        endTime,
-        status: 'scheduled',
-        crew,
-        herzliyaId,
-      });
+      const { crew, startTime, endTime } = parseEventCrewFromHtml(chunk);
+      productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
     }
-  });
+  }
 
   const weekStart = weekDays[0]?.isoDate || '';
   const weekEnd = weekDays[weekDays.length - 1]?.isoDate || '';
