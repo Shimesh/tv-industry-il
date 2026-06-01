@@ -1195,9 +1195,12 @@ function ProductionsContent() {
             setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 8000);
           } else {
-            const reasonHe = syncData.reason === 'empty_schedule' ? 'לא נמצאו הפקות בלוח' : 'שגיאת סנכרון';
-            const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 150)}` : '';
-            setStatusMessage(`${reasonHe}${debugStr}`);
+            if (syncData.reason !== 'empty_schedule') {
+              // Only show error message for unexpected failures — empty_schedule is normal for
+              // Herzliya URLs since the server can't authenticate; GitHub Action handles it.
+              const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 150)}` : '';
+              setStatusMessage(`שגיאת סנכרון${debugStr}`);
+            }
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
         }
