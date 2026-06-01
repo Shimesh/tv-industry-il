@@ -991,29 +991,31 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-white/72 sm:text-base">לוח משחקים, כאן 11, חדשות, טבלאות, אצטדיונים, מזג אוויר וצ׳אט משחקים חי.</p>
 
             {nextCountdown && (
-              <div className="mt-4 flex max-w-full flex-wrap items-center gap-3 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-2.5 backdrop-blur-sm">
-                <Timer className="h-5 w-5 shrink-0 text-[#D4AF37]" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold text-white/55">המשחק הבא</div>
-                  <div className="truncate text-sm font-black text-white">{nextCountdown.match.homeTeam.flag} {nextCountdown.match.homeTeam.nameHe} vs {nextCountdown.match.awayTeam.nameHe} {nextCountdown.match.awayTeam.flag}</div>
+              <div className="mt-4 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-3 backdrop-blur-sm">
+                <div className="mb-2 flex items-center gap-2">
+                  <Timer className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+                  <span className="text-xs font-bold text-white/55">המשחק הבא</span>
                 </div>
-                <div className="flex shrink-0 gap-1.5 text-center sm:gap-2" dir="ltr">
+                <div className="mb-3 text-sm font-black text-white">
+                  {nextCountdown.match.homeTeam.flag} {nextCountdown.match.homeTeam.nameHe} <span className="text-white/40">vs</span> {nextCountdown.match.awayTeam.nameHe} {nextCountdown.match.awayTeam.flag}
+                </div>
+                <div className="flex gap-1.5 text-center" dir="ltr">
                   {nextCountdown.days > 0 && (
-                    <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                      <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.days).padStart(2, '0')}</div>
+                    <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+                      <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.days).padStart(2, '0')}</div>
                       <div className="text-[9px] font-bold text-white/55">ימים</div>
                     </div>
                   )}
-                  <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.hours).padStart(2, '0')}</div>
+                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.hours).padStart(2, '0')}</div>
                     <div className="text-[9px] font-bold text-white/55">שעות</div>
                   </div>
-                  <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.minutes).padStart(2, '0')}</div>
+                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.minutes).padStart(2, '0')}</div>
                     <div className="text-[9px] font-bold text-white/55">דקות</div>
                   </div>
-                  <div className="rounded-lg bg-[#D4AF37]/15 px-2 py-1">
-                    <div className="text-lg font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.seconds).padStart(2, '0')}</div>
+                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.seconds).padStart(2, '0')}</div>
                     <div className="text-[9px] font-bold text-white/55">שניות</div>
                   </div>
                 </div>
