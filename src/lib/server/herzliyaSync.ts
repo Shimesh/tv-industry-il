@@ -127,7 +127,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
             startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
           }));
           parsed.productions.push({
-            id: generateProductionId(name, popupDate, studio),
+            id: String(event.herzliyaId),
             name,
             studio,
             date: popupDate,
@@ -154,8 +154,9 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         if (popupDate && popupDate !== prod.date) {
           prod.date = popupDate;
           prod.day = getHebrewDay(popupDate);
-          prod.id = generateProductionId(prod.name, popupDate, prod.studio);
         }
+        // Use herzliyaId as the stable document ID so it matches personal productions path
+        if (herzliyaId) prod.id = String(herzliyaId);
 
         const popupCrew = parseHerzliyaPopupHtml(popupHtml);
         for (const pc of popupCrew) {
@@ -174,7 +175,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   const productions = parsed.productions.map(prod => ({
     ...prod,
-    id: prod.id || generateProductionId(prod.name, prod.date, prod.studio),
+    id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio)),
     day: prod.day || getHebrewDay(prod.date),
   }));
 
