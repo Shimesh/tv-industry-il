@@ -1185,7 +1185,8 @@ function ProductionsContent() {
           body: JSON.stringify({ url: urlMatch[0], workerName: extractedWorkerName }),
         });
         if (syncResp.ok) {
-          const syncData = await syncResp.json() as { ok: boolean; synced?: boolean; count?: number; reason?: string };
+          const syncData = await syncResp.json() as { ok: boolean; synced?: boolean; count?: number; reason?: string; studios?: Array<{ name: string; studio: string }> };
+          console.log('[save-sync-url] response:', JSON.stringify(syncData));
           if (syncData.ok && syncData.synced) {
             syncedViaApi = true;
             await applyLoadedProductions();

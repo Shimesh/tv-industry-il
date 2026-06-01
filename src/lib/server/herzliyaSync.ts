@@ -14,7 +14,7 @@ import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
-  | { status: 'success'; count: number }
+  | { status: 'success'; count: number; studios?: Array<{ name: string; studio: string }> }
   | { status: 'empty' }
   | { status: 'error'; error: string };
 
@@ -187,5 +187,6 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   void syncContactsFromSavedProductions(true).catch(() => {});
 
-  return { status: 'success', count: productions.length };
+  console.log('[herzliyaSync] saved', productions.length, 'productions. Studios:', productions.map(p => `${p.name}→"${p.studio}"`).join(', '));
+  return { status: 'success', count: productions.length, studios: productions.map(p => ({ name: p.name, studio: p.studio })) };
 }

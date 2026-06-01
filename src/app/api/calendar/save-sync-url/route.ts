@@ -52,7 +52,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await patchDocument(userSyncPath, statusPatch as unknown as Record<string, string>);
 
     if (result.status === 'success') {
-      return NextResponse.json({ ok: true, synced: true, count: result.count });
+      return NextResponse.json({ ok: true, synced: true, count: result.count, studios: result.studios });
     }
     return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error' });
   } catch (err) {
