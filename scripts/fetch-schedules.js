@@ -657,9 +657,9 @@ async function fetchSchedule(browser, url) {
         //   - collectedSnapshots only has high-scoring crew tables (score>=6, rows>=3)
         //   - The ShowCrew header table has 1 row [name, studio, date, time] \u2192 score<6 \u2192 filtered out
         //   - activeModalRoot may be null when popup has no .modal-title/font[color="red"]
-        // So we scan document-level rows and look for a standalone "\u05d0\u05d5\u05dc\u05e4\u05df N" cell.
-        // Calendar event names embed studio inside a longer name (e.g. "\u05d0\u05e1\u05ea\u05d8\u05d9\u05e7\u05d4 360 \u05d0\u05d5\u05dc\u05e4\u05df 4"),
-        // while the popup header has studio as a standalone cell \u2192 use ^ anchor to distinguish.
+        // So we scan document-level rows and look for a standalone location cell.
+        // Popup header format: [production name, location/studio, date, time]
+        // Calendar event names embed location inside a longer name \u2192 dateIdx < 2 there.
         if (!studio) {
           const allPageRows = Array.from(document.querySelectorAll('table tr'));
           for (const row of allPageRows) {
@@ -669,12 +669,14 @@ async function fetchSchedule(browser, url) {
             // Prefer exact standalone "\u05d0\u05d5\u05dc\u05e4\u05df N" / "\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5 N" cell
             const exactStudio = cells.find((c) => /^(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?$/i.test(c));
             if (exactStudio) { studio = exactStudio; break; }
-            // Fallback: cell before a date (DD/MM/YYYY) in rows with enough context
+            // Fallback: cell before date (DD/MM/YYYY) when row has [name, location, date, ...]
+            // dateIdx>=2 ensures there are 2+ cells before the date (name + location).
+            // Skip short Hebrew label words (e.g. "\u05e9\u05dd", "\u05ea\u05d0\u05e8\u05d9\u05da") but accept named locations.
             const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
             if (dateIdx >= 2 && cells[dateIdx - 1]) {
               const candidate = cells[dateIdx - 1];
-              if (/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i.test(candidate)) {
-                studio = candidate.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i)[0];
+              if (!/^[\u05d0-\u05ea]{2,5}$/.test(candidate)) {
+                studio = candidate;
                 break;
               }
             }
