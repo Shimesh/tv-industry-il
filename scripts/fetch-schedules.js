@@ -649,8 +649,30 @@ async function fetchSchedule(browser, url) {
           .map(({ combined, ...snapshot }) => snapshot);
 
         const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
-        const studioMatch = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
-        const studio = studioMatch ? studioMatch[0] : '';
+        const studioMatchTitle = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
+        let studio = studioMatchTitle ? studioMatchTitle[0] : '';
+
+        // If title doesn't have studio, check the popup table header row.
+        // The ShowCrew popup first row typically has: [production name, studio, date, time]
+        if (!studio && collectedSnapshots.length > 0) {
+          const headerRows = (collectedSnapshots[0].rows || []).slice(0, 3);
+          for (const row of headerRows) {
+            const cells = row.filter((c) => c && c.trim());
+            // First: look for explicit "\u05d0\u05d5\u05dc\u05e4\u05df N" anywhere in the row
+            const studioCell = cells.find((c) => /(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i.test(c));
+            if (studioCell) {
+              studio = studioCell.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i)[0];
+              break;
+            }
+            // Second: take cell immediately before the date cell (dateIdx >= 2 = has production name before it)
+            const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
+            if (dateIdx >= 2 && cells[dateIdx - 1]) {
+              studio = cells[dateIdx - 1];
+              break;
+            }
+          }
+        }
+
         closePopup();
 
         return {
@@ -1103,10 +1125,29 @@ function parsePopupSnapshot(production, snapshot) {
     accepted: false,
   };
 
+  // Fallback: extract studio from table header rows when snapshot.studio is empty
+  let resolvedStudio = cleanSnapshotText(snapshot?.studio || '');
+  if (!resolvedStudio) {
+    const allRows = tables.flatMap((t) => (t.rows || []).slice(0, 3));
+    for (const row of allRows) {
+      const cells = row.filter((c) => c && c.trim());
+      const studioCell = cells.find((c) => /(?:אולפן|סטודיו|studio)\s*\d+\w?/i.test(c));
+      if (studioCell) {
+        resolvedStudio = studioCell.match(/(?:אולפן|סטודיו|studio)\s*\d+\w?/i)[0];
+        break;
+      }
+      const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
+      if (dateIdx >= 2 && cells[dateIdx - 1]) {
+        resolvedStudio = cells[dateIdx - 1];
+        break;
+      }
+    }
+  }
+
   return {
     crew: best.crew,
     title: titleText,
-    studio: cleanSnapshotText(snapshot?.studio || ''),
+    studio: resolvedStudio,
     rejected: !best.accepted,
     overlapCount: best.overlapCount,
     rawCrewCount: best.crew.length,
