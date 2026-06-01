@@ -153,29 +153,39 @@ export function extractDateFromPopup(html: string): string {
 
 /**
  * Extract studio/location from the Herzliya popup header row.
- * The popup header format is: [Production Name] | [Studio/Location] | [Date dd/mm/yyyy] | [Time]
- * Uses the same HTML-stripping strategy as parseHerzliyaPopupText (handles nested tables).
+ * Tries multiple strategies to handle different Magic XPA form layouts.
  */
 export function extractStudioFromPopup(html: string): string {
   if (!html) return '';
-  const header = parsePopupHeader(html);
-  if (header) return header.studio;
 
-  // Legacy fallback (kept for safety)
+  // Strategy 1: structured header (tab-separated or pipe-separated cells)
+  const header = parsePopupHeader(html);
+  if (header?.studio) return header.studio;
+
   const text = stripPopupHtml(html);
 
+  // Strategy 2: look for "אולפן N" (numbered studio) anywhere in the popup
+  const numberedStudio = text.match(/(?:אולפן|סטודיו|studio)\s*\d+\w?/i);
+  if (numberedStudio) return numberedStudio[0].trim();
+
+  // Strategy 3: label-value pairs — find "אולפן" / "מיקום" label then take the next non-empty value
   for (const line of text.split('\n')) {
     const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
-
-    // Find a cell that contains a date in dd/mm/yyyy format
-    const dateIdx = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
-
-    if (dateIdx >= 2) {
-      // The cell just before the date is the studio/location
-      return parts[dateIdx - 1];
+    const labelIdx = parts.findIndex(p => /^(?:אולפן|סטודיו|מיקום|location|studio)$/i.test(p));
+    if (labelIdx !== -1 && parts[labelIdx + 1]) {
+      return parts[labelIdx + 1];
     }
+  }
 
-    // Handle case where all 4 values are in a single cell separated by " | "
+  // Strategy 4: original fallback — cell directly before the date cell
+  for (const line of text.split('\n')) {
+    const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const dateIdx = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
+    if (dateIdx >= 2) {
+      const candidate = parts[dateIdx - 1];
+      // Skip if candidate is a short Hebrew label word like "תאריך", "שם", "שעות"
+      if (!/^[א-ת]{2,5}$/.test(candidate)) return candidate;
+    }
     if (parts.length === 1 && parts[0].includes('|')) {
       const segs = parts[0].split('|').map(s => s.trim()).filter(Boolean);
       const di = segs.findIndex(s => /\d{1,2}\/\d{1,2}\/\d{4}/.test(s));
