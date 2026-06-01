@@ -1109,32 +1109,51 @@ function ProductionsContent() {
   // Submit schedule request via REST API for GitHub Action
   // ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
   const submitScheduleRequest = useCallback(async (messageText: string) => {
+    if (!user) return;
 
-    if (!user) {
-      return;
-    }
-
-    // Extract URL from WhatsApp message
     const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
     if (!urlMatch) {
       setStatusMessage('לא מצאתי לינק בהודעה');
       return;
     }
 
-    // Extract worker name
     const nameMatch = messageText.match(/שלום\s+([^\n,]+)/);
     const extractedWorkerName = nameMatch?.[1]?.trim() || profile?.displayName || '';
-
-    // Extract dates
-    const dateMatch = messageText.match(/(\d{2}\/\d{2}\/\d{4})\s*[-ג€“]\s*(\d{2}\/\d{2}\/\d{4})/);
+    const dateMatch = messageText.match(/(\d{2}\/\d{2}\/\d{4})\s*[-\u2013]\s*(\d{2}\/\d{2}\/\d{4})/);
 
     setRequestStatus('pending');
     setRequestError(null);
     setStatusMessage(null);
+    setWorkerName(extractedWorkerName);
+
+    const applyLoadedProductions = async () => {
+      if (dateMatch) {
+        const [d, m, y] = dateMatch[1].split('/').map(Number);
+        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const weekId = getWeekId(isoDate);
+        try {
+          const prods = await loadExistingWeek(weekId);
+          if (prods.length > 0) {
+            setProductions(prods);
+            setWeekStart(isoDate);
+            setCurrentDate(new Date(isoDate));
+            const sat = new Date(y, m - 1, d + 6);
+            setWeekEnd(toLocalDate(sat));
+            setCurrentWeekId(weekId);
+            setStatusMessage(`נטענו ${prods.length} הפקות`);
+            return;
+          }
+        } catch { /* fall through */ }
+      }
+      void handleReloadLatest();
+    };
 
     try {
-      // Write via REST API (bypasses broken SDK)
-      const docId = await firestoreRestWrite('scheduleRequests', {
+      const idToken = await user.getIdToken();
+
+      // Write scheduleRequests doc + trigger GitHub Action in background (legacy fallback path)
+      let docId = '';
+      firestoreRestWrite('scheduleRequests', {
         userId: user.uid,
         workerName: extractedWorkerName,
         url: urlMatch[0],
@@ -1142,74 +1161,59 @@ function ProductionsContent() {
         weekEnd: dateMatch?.[2] || '',
         status: 'pending',
         createdAt: 'SERVER_TIMESTAMP',
-      });
+      }).then(id => { docId = id; }).catch(() => {});
 
-      setWorkerName(extractedWorkerName);
+      fetch('/api/trigger-action', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${idToken}` },
+      }).catch(() => {});
 
-      // Save URL for hourly auto-sync and trigger immediate sync (fire-and-forget)
-      user.getIdToken().then(idToken => {
-        fetch('/api/calendar/save-sync-url', {
+      // Primary sync: await save-sync-url (server-side HTTP fetch, no Puppeteer needed)
+      let syncedViaApi = false;
+      try {
+        const syncResp = await fetch('/api/calendar/save-sync-url', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urlMatch[0], workerName: extractedWorkerName }),
-        }).catch(() => {});
-      }).catch(() => {});
-
-      // Trigger GitHub Action immediately via API route (reduces wait from 5min to ~30s)
-      user.getIdToken().then(idToken => {
-        fetch('/api/trigger-action', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${idToken}` },
-        }).catch(() => {});
-      }).catch(() => {});
-
-      // Poll for status updates (REST-based, since SDK onSnapshot is broken)
-      const pollInterval = setInterval(async () => {
-        try {
-          const data = await firestoreRestRead(`scheduleRequests/${docId}`);
-          if (!data) return;
-
-          const status = data.status as RequestStatus;
-          setRequestStatus(status);
-
-          if (status === 'done') {
-            clearInterval(pollInterval);
-
-            // Load the week that was just fetched
-            if (dateMatch) {
-              const [d, m, y] = dateMatch[1].split('/').map(Number);
-              const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-              const weekId = getWeekId(isoDate);
-              try {
-                const prods = await loadExistingWeek(weekId);
-                if (prods.length > 0) {
-                  setProductions(prods);
-                  setWeekStart(isoDate);
-                  setCurrentDate(new Date(isoDate));
-                  const sat = new Date(y, m - 1, d + 6);
-                  setWeekEnd(toLocalDate(sat));
-                  setCurrentWeekId(weekId);
-                  setStatusMessage(`נטענו ${prods.length} הפקות`);
-                }
-              } catch {
-                handleReloadLatest();
-              }
-            } else {
-              setStatusMessage('הלוח עודכן - רענן את הדף');
-            }
-
+        });
+        if (syncResp.ok) {
+          const syncData = await syncResp.json() as { ok: boolean; synced?: boolean; count?: number; reason?: string };
+          if (syncData.ok && syncData.synced) {
+            syncedViaApi = true;
+            await applyLoadedProductions();
+            setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 5000);
-          } else if (status === 'error') {
-            clearInterval(pollInterval);
-            setRequestError((data.error as string) || 'שגיאה בטעינת הלוח');
+          } else if (syncData.ok && syncData.reason === 'empty_schedule') {
+            syncedViaApi = true;
+            setRequestError('הלוח ריק — לא נמצאו הפקות לשבוע זה');
+            setRequestStatus('error');
             setTimeout(() => setRequestStatus('idle'), 8000);
           }
-        } catch (pollErr) {
         }
-      }, 10000); // Poll every 10 seconds
+      } catch { /* network error — fall through to GitHub Action polling */ }
 
-      // Stop polling after 5 minutes max
-      setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+      // Fallback: poll scheduleRequests for GitHub Action result
+      if (!syncedViaApi) {
+        const pollInterval = setInterval(async () => {
+          if (!docId) return;
+          try {
+            const data = await firestoreRestRead(`scheduleRequests/${docId}`);
+            if (!data) return;
+            const status = data.status as RequestStatus;
+            setRequestStatus(status);
+            if (status === 'done') {
+              clearInterval(pollInterval);
+              await applyLoadedProductions();
+              setTimeout(() => setRequestStatus('idle'), 5000);
+            } else if (status === 'error') {
+              clearInterval(pollInterval);
+              setRequestError((data.error as string) || 'שגיאה בטעינת הלוח');
+              setTimeout(() => setRequestStatus('idle'), 8000);
+            }
+          } catch { /* ignore poll errors */ }
+        }, 10000);
+        setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+      }
     } catch (error: unknown) {
       setRequestStatus('error');
       setRequestError(error instanceof Error ? error.message : 'שגיאה בשליחת הבקשה');
