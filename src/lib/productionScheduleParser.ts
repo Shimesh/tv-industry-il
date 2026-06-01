@@ -353,11 +353,18 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
       const crew: CrewMember[] = [];
       let productionStartTime = '';
       let productionEndTime = '';
+      let studioFromParts = '';
 
       // Skip first part (production name in <font> tag)
       for (let i = 1; i < parts.length; i++) {
         const text = parts[i].replace(/<[^>]+>/g, '').trim();
         if (!text) continue;
+
+        // Capture standalone studio line (e.g. "אולפן 4" or "נווה אילן") before crew lines
+        if (!studioFromParts && /^(?:אולפן|סטודיו|studio)\s*\d+\w?$/i.test(text)) {
+          studioFromParts = text;
+          continue;
+        }
 
         // Try full crew format: "name - role time1 time2"
         // or "name - role time1 -time2"
@@ -413,9 +420,10 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
         }
       }
 
-      // Extract studio from name
-      const { studio, remaining: cleanName } = extractStudioFromName(rawProductionName);
-      const finalName = cleanName || rawProductionName;
+      // Extract studio: prefer standalone line from event div, fallback to production name
+      const { studio: studioFromName, remaining: cleanName } = extractStudioFromName(rawProductionName);
+      const studio = studioFromParts || studioFromName;
+      const finalName = (studioFromName ? cleanName : rawProductionName) || rawProductionName;
 
       // Determine isCurrentUserShift
       const isCurrentUserShift = isHighlightedShift || crew.some(c => c.isCurrentUser);
@@ -679,16 +687,22 @@ export function parseManualText(text: string): ParsedSchedule {
 }
 
 /** Extract crew and times from the HTML content after the production name font tag */
-function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime: string; endTime: string } {
+function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime: string; endTime: string; studio: string } {
   const crew: CrewMember[] = [];
   let startTime = '';
   let endTime = '';
+  let studio = '';
   const afterFontIdx = chunk.search(/<\/font>/i);
   const afterFont = afterFontIdx !== -1 ? chunk.slice(afterFontIdx + 7) : chunk;
 
   for (const part of afterFont.split(/<br\s*\/?>/i)) {
     const text = part.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
     if (!text || text.length < 2) continue;
+    // Capture standalone studio line before crew lines
+    if (!studio && /^(?:אולפן|סטודיו|studio)\s*\d+\w?$/i.test(text)) {
+      studio = text;
+      continue;
+    }
     const m1 = text.match(/^(.+?)\s*[-–]\s*(.+?)\s+(\d{1,2}:\d{2})\s*[-–]?\s*(\d{1,2}:\d{2})/);
     if (m1) {
       if (!startTime) { startTime = m1[3]; endTime = m1[4]; }
@@ -700,7 +714,7 @@ function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime:
       crew.push({ name: m2[1].trim(), role: m2[2].replace(/\d{1,2}:\d{2}.*/g, '').trim(), roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: false });
     }
   }
-  return { crew, startTime, endTime };
+  return { crew, startTime, endTime, studio };
 }
 
 /**
@@ -753,9 +767,10 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
         if (!rawName) continue;
         const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
-        const studio = studioM ? studioM[0].trim() : '';
-        const name = studio ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
-        const { crew, startTime, endTime } = parseEventCrewFromHtml(chunk);
+        const studioFromName = studioM ? studioM[0].trim() : '';
+        const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+        const { crew, startTime, endTime, studio: studioFromParts } = parseEventCrewFromHtml(chunk);
+        const studio = studioFromParts || studioFromName;
         productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
       }
     });
@@ -779,9 +794,10 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
       if (!rawName) continue;
       const isoDate = weekDays[dayIdx]?.isoDate || weekDays[0].isoDate;
       const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
-      const studio = studioM ? studioM[0].trim() : '';
-      const name = studio ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
-      const { crew, startTime, endTime } = parseEventCrewFromHtml(chunk);
+      const studioFromName = studioM ? studioM[0].trim() : '';
+      const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+      const { crew, startTime, endTime, studio: studioFromParts } = parseEventCrewFromHtml(chunk);
+      const studio = studioFromParts || studioFromName;
       productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
     }
   }
