@@ -101,12 +101,23 @@ export const fallbackMatches: WorldCupMatch[] = [
   { id: 'm104', matchNumber: 104, stage: 'final', homeTeam: teams.tbd, awayTeam: teams.tbd, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-07-19T19:00:00.000Z', venueId: 'new-york-new-jersey', broadcaster: 'kan11' },
 ];
 
-export const fallbackStandings: WorldCupStanding[] = ['A', 'B', 'C', 'D'].flatMap((group) => {
-  const groupTeams = group === 'A' ? [teams.mex, teams.rsa, teams.tbd, teams.tbd]
-    : group === 'B' ? [teams.can, teams.qat, teams.tbd, teams.tbd]
-      : group === 'C' ? [teams.bra, teams.mar, teams.tbd, teams.tbd]
-        : [teams.usa, teams.par, teams.tbd, teams.tbd];
-  return groupTeams.map((team) => ({
+const standingsGroupMap: Record<string, WorldCupTeam[]> = {
+  A: [teams.mex, teams.rsa, teams.kor, teams.cze],
+  B: [teams.can, teams.bih, teams.qat, teams.swi],
+  C: [teams.bra, teams.mar, teams.hai, teams.sco],
+  D: [teams.usa, teams.par, teams.aus, teams.tur],
+  E: [teams.ger, teams.cur, teams.civ, teams.ecu],
+  F: [teams.ned, teams.jpn, teams.swe, teams.tun],
+  G: [teams.bel, teams.egy, teams.irn, teams.nzl],
+  H: [teams.esp, teams.cpv, teams.ksa, teams.uru],
+  I: [teams.fra, teams.sen, teams.irq, teams.nor],
+  J: [teams.arg, teams.alg, teams.aut, teams.jor],
+  K: [teams.por, teams.cod, teams.uzb, teams.col],
+  L: [teams.eng, teams.cro, teams.gha, teams.pan],
+};
+
+export const fallbackStandings: WorldCupStanding[] = Object.entries(standingsGroupMap).flatMap(([group, groupTeams]) =>
+  groupTeams.map((team) => ({
     group,
     team,
     played: 0,
@@ -116,8 +127,8 @@ export const fallbackStandings: WorldCupStanding[] = ['A', 'B', 'C', 'D'].flatMa
     goalsFor: 0,
     goalsAgainst: 0,
     points: 0,
-  }));
-});
+  })),
+);
 
 export const teamDetails: WorldCupTeamDetail[] = [
   /* ─── CONMEBOL (6) ─── */

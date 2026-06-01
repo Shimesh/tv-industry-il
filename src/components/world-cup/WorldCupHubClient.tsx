@@ -798,11 +798,33 @@ function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (
   );
 }
 
-export default function WorldCupHubClient({ matches, standings, playerStats, venues, source, updatedAt }: HubProps) {
-  const [selectedMatch, setSelectedMatch] = useState(() => matches.find((match) => match.status === 'live') ?? matches[0]);
+export default function WorldCupHubClient({ matches: initialMatches, standings: initialStandings, playerStats, venues, source: initialSource, updatedAt: initialUpdatedAt }: HubProps) {
+  const [matches, setMatches] = useState(initialMatches);
+  const [standings, setStandings] = useState(initialStandings);
+  const [source, setSource] = useState(initialSource);
+  const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
+  const [selectedMatch, setSelectedMatch] = useState(() => initialMatches.find((match) => match.status === 'live') ?? initialMatches[0]);
   const [matchDetail, setMatchDetail] = useState<WorldCupMatch | null>(null);
   const [news, setNews] = useState<WorldCupNewsItem[]>([]);
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
+
+  useEffect(() => {
+    const hasLive = () => matches.some((m) => m.status === 'live');
+    const interval = hasLive() ? 30_000 : 60_000;
+    const id = window.setInterval(() => {
+      fetch('/api/world-cup/matches')
+        .then((res) => res.ok ? res.json() : null)
+        .then((payload) => {
+          if (!payload) return;
+          if (Array.isArray(payload.matches) && payload.matches.length > 0) setMatches(payload.matches);
+          if (Array.isArray(payload.standings) && payload.standings.length > 0) setStandings(payload.standings);
+          if (payload.source) setSource(payload.source);
+          if (payload.updatedAt) setUpdatedAt(payload.updatedAt);
+        })
+        .catch(() => {});
+    }, interval);
+    return () => window.clearInterval(id);
+  }, [matches]);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
   const selectedVenue = venues.find((venue) => venue.id === selectedMatch.venueId);
   const [now, setNow] = useState(Date.now());

@@ -87,7 +87,7 @@ async function fetchFootballData<T>(path: string): Promise<T | null> {
 }
 
 export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; source: 'football-data' | 'fallback'; updatedAt: string }> {
-  const payload = await fetchFootballData<{ matches?: FootballDataMatch[] }>('/competitions/WC/matches');
+  const payload = await fetchFootballData<{ matches?: FootballDataMatch[] }>('/competitions/WC/matches?season=2026');
   const fdMatches = payload?.matches;
 
   if (!fdMatches?.length) {
@@ -116,7 +116,7 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
 }
 
 export async function getWorldCupStandings(): Promise<{ standings: WorldCupStanding[]; source: 'football-data' | 'fallback' }> {
-  const payload = await fetchFootballData<FootballDataStandings>('/competitions/WC/standings');
+  const payload = await fetchFootballData<FootballDataStandings>('/competitions/WC/standings?season=2026');
   const standings = payload?.standings?.flatMap((group) =>
     (group.table ?? []).map((row) => ({
       group: group.group?.replace(/^GROUP_/, '') || 'A',

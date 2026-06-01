@@ -7,7 +7,7 @@ export const revalidate = 300;
 const RSS_SOURCES = [
   { name: 'Sport5', url: 'https://www.sport5.co.il/rss.aspx?FolderID=64', sourceUrl: 'https://www.sport5.co.il' },
   { name: 'ONE', url: 'https://www.one.co.il/cat/coop/xml/rss/newsfeed.aspx?id=1', sourceUrl: 'https://www.one.co.il' },
-  { name: 'BBC Sport', url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', sourceUrl: 'https://www.bbc.com/sport/football' },
+  { name: 'מכבי ספורט', url: 'https://www.mako.co.il/rss/31750e52b3b2c110', sourceUrl: 'https://www.mako.co.il/sport' },
 ];
 
 function decodeHtml(text: string): string {
