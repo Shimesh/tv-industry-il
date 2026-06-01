@@ -107,6 +107,52 @@ export function extractHerzliyaEventIds(html: string): Array<{ herzliyaId: numbe
 }
 
 /**
+ * Extract studio/location from the Herzliya popup header row.
+ * The popup header format is: [Production Name] | [Studio/Location] | [Date dd/mm/yyyy] | [Time]
+ * Works server-side (regex only, no DOMParser).
+ */
+export function extractStudioFromPopup(html: string): string {
+  if (!html) return '';
+
+  // Get the first <tr> (the header row with production info)
+  const firstRowMatch = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/i);
+  if (!firstRowMatch) return '';
+
+  // Extract each <td> cell's text content
+  const cellTexts: string[] = [];
+  const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+  let cellMatch: RegExpExecArray | null;
+  while ((cellMatch = cellRe.exec(firstRowMatch[1])) !== null) {
+    const text = cellMatch[1]
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) cellTexts.push(text);
+  }
+
+  // Header is: [Production Name, Studio/Location, Date (dd/mm/yyyy), Time Range]
+  // Find the date cell to anchor the position
+  const dateIdx = cellTexts.findIndex(c => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
+  if (dateIdx >= 2) {
+    return cellTexts[dateIdx - 1];
+  }
+
+  // Fallback: tab-separated approach
+  const tabText = firstRowMatch[1]
+    .replace(/<\/td>/gi, '\t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const parts = tabText.split('\t').map(p => p.trim()).filter(Boolean);
+  const dateIdx2 = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
+  if (dateIdx2 >= 2) return parts[dateIdx2 - 1];
+
+  return '';
+}
+
+/**
  * Parse the Herzliya popup HTML (openmd2 detail modal) to extract full crew list.
  * The popup is a table with columns: phone, name, role, time.
  */
