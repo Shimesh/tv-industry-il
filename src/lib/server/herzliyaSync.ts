@@ -113,11 +113,23 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     debugLines.push(`events:${events.length}`);
 
     const nameToId: Record<string, number> = {};
+    const idToEventName: Record<number, string> = {};
     for (const e of events) {
       nameToId[e.name] = e.herzliyaId;
+      idToEventName[e.herzliyaId] = e.name;
       const cleaned = e.name.replace(/\s*(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?\s*/gi, '').trim();
       if (cleaned && cleaned !== e.name) nameToId[cleaned] = e.herzliyaId;
     }
+
+    // Extract calendar dates from header section (before first event call)
+    const calendarDates: string[] = [];
+    const firstEventPos = personalHtml.indexOf('openmd2');
+    const headerSection = firstEventPos > 0 ? personalHtml.slice(0, firstEventPos) : personalHtml.slice(0, 3000);
+    for (const m of headerSection.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)) {
+      const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      if (!calendarDates.includes(iso)) calendarDates.push(iso);
+    }
+    debugLines.push(`calDates:${calendarDates.length}`);
 
     // Fetch all popups: try session-aware URL first, fall back to clean ShowCrew URL
     const uniqueIds = [...new Set(events.map(e => e.herzliyaId))];
@@ -153,21 +165,26 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     debugLines.push(`popupOk:${popupOk} popupFail:${popupFail}`);
 
-    // Build productions from popup data when HTML parse returned nothing
+    // Build productions from popup data when HTML parse returned nothing.
+    // Falls back to event name + calendar date when popup HTTP fails.
     if (parsed.productions.length === 0) {
       const seenIds = new Set<number>();
+      let builtIdx = 0;
       for (const event of events) {
         if (seenIds.has(event.herzliyaId)) continue;
         seenIds.add(event.herzliyaId);
         const popupHtml = popupCache[event.herzliyaId];
-        if (!popupHtml) continue;
-        const popupDate = extractDateFromPopup(popupHtml);
-        if (!popupDate) continue;
-        const popupStudio = extractStudioFromPopup(popupHtml);
+        const popupDate = popupHtml ? extractDateFromPopup(popupHtml) : '';
+        // Fallback date: assign calendar dates by position, or use first available date
+        const fallbackDate = calendarDates[builtIdx] || calendarDates[0] || '';
+        builtIdx++;
+        const date = popupDate || fallbackDate;
+        if (!date) continue;
+        const popupStudio = popupHtml ? extractStudioFromPopup(popupHtml) : '';
         const studioM = event.name.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studio = popupStudio || (studioM ? studioM[0].trim() : '');
         const name = studioM ? event.name.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : event.name;
-        const popupCrew = parseHerzliyaPopupHtml(popupHtml);
+        const popupCrew = popupHtml ? parseHerzliyaPopupHtml(popupHtml) : [];
         const crew: CrewMember[] = popupCrew.map(pc => ({
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
           startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
@@ -176,8 +193,8 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
           id: String(event.herzliyaId),
           name,
           studio,
-          date: popupDate,
-          day: getHebrewDay(popupDate),
+          date,
+          day: getHebrewDay(date),
           startTime: '',
           endTime: '',
           status: 'scheduled',
@@ -185,11 +202,19 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
           herzliyaId: event.herzliyaId,
         } as Production);
       }
+      debugLines.push(`builtFromEvents:${parsed.productions.length}`);
     }
 
     // Enrich parsed productions with popup data (studio, date, crew)
     for (const prod of parsed.productions) {
       const herzliyaId = prod.herzliyaId || nameToId[prod.name];
+
+      // Extract studio from event name as fallback even when popup is unavailable
+      if (!prod.studio && herzliyaId && idToEventName[herzliyaId]) {
+        const studioM = idToEventName[herzliyaId].match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+        if (studioM) prod.studio = studioM[0].trim();
+      }
+
       if (!herzliyaId || !popupCache[herzliyaId]) continue;
       const popupHtml = popupCache[herzliyaId];
 

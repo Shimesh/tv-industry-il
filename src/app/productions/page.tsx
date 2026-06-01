@@ -1190,10 +1190,16 @@ function ProductionsContent() {
           if (syncData.ok && syncData.synced) {
             syncedViaApi = true;
             await applyLoadedProductions();
+            const studioInfo = syncData.studios?.map(s => s.studio).filter(Boolean).join(', ');
+            setStatusMessage(studioInfo ? `נטענו ${syncData.count} הפקות | אולפן: ${studioInfo}` : `נטענו ${syncData.count} הפקות (אין מידע על אולפן)`);
             setRequestStatus('done');
-            setTimeout(() => setRequestStatus('idle'), 5000);
+            setTimeout(() => setRequestStatus('idle'), 8000);
+          } else {
+            const reasonHe = syncData.reason === 'empty_schedule' ? 'לא נמצאו הפקות בלוח' : 'שגיאת סנכרון';
+            const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 150)}` : '';
+            setStatusMessage(`${reasonHe}${debugStr}`);
+            console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
-          // empty_schedule / sync_error → fall through to GitHub Action polling silently
         }
       } catch { /* network error — fall through to GitHub Action polling */ }
 
