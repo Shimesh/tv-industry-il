@@ -104,6 +104,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
         // Extract studio/location from popup header (more reliable than parsing from name)
         const popupStudio = extractStudioFromPopup(popupHtml);
+        console.log(`[herzliyaSync] prod="${prod.name}" herzliyaId=${herzliyaId} popupStudio="${popupStudio}" prevStudio="${prod.studio}"`);
         if (popupStudio) prod.studio = popupStudio;
 
         const popupCrew = parseHerzliyaPopupHtml(popupHtml);

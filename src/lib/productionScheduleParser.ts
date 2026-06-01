@@ -109,45 +109,39 @@ export function extractHerzliyaEventIds(html: string): Array<{ herzliyaId: numbe
 /**
  * Extract studio/location from the Herzliya popup header row.
  * The popup header format is: [Production Name] | [Studio/Location] | [Date dd/mm/yyyy] | [Time]
- * Works server-side (regex only, no DOMParser).
+ * Uses the same HTML-stripping strategy as parseHerzliyaPopupText (handles nested tables).
  */
 export function extractStudioFromPopup(html: string): string {
   if (!html) return '';
 
-  // Get the first <tr> (the header row with production info)
-  const firstRowMatch = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/i);
-  if (!firstRowMatch) return '';
-
-  // Extract each <td> cell's text content
-  const cellTexts: string[] = [];
-  const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-  let cellMatch: RegExpExecArray | null;
-  while ((cellMatch = cellRe.exec(firstRowMatch[1])) !== null) {
-    const text = cellMatch[1]
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (text) cellTexts.push(text);
-  }
-
-  // Header is: [Production Name, Studio/Location, Date (dd/mm/yyyy), Time Range]
-  // Find the date cell to anchor the position
-  const dateIdx = cellTexts.findIndex(c => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
-  if (dateIdx >= 2) {
-    return cellTexts[dateIdx - 1];
-  }
-
-  // Fallback: tab-separated approach
-  const tabText = firstRowMatch[1]
+  // Strip HTML the same way parseHerzliyaPopupText does — this handles nested tables reliably
+  const text = html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, '\t')
+    .replace(/<\/th>/gi, '\t')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
     .trim();
-  const parts = tabText.split('\t').map(p => p.trim()).filter(Boolean);
-  const dateIdx2 = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
-  if (dateIdx2 >= 2) return parts[dateIdx2 - 1];
+
+  for (const line of text.split('\n')) {
+    const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+
+    // Find a cell that contains a date in dd/mm/yyyy format
+    const dateIdx = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
+
+    if (dateIdx >= 2) {
+      // The cell just before the date is the studio/location
+      return parts[dateIdx - 1];
+    }
+
+    // Handle case where all 4 values are in a single cell separated by " | "
+    if (parts.length === 1 && parts[0].includes('|')) {
+      const segs = parts[0].split('|').map(s => s.trim()).filter(Boolean);
+      const di = segs.findIndex(s => /\d{1,2}\/\d{1,2}\/\d{4}/.test(s));
+      if (di >= 2) return segs[di - 1];
+    }
+  }
 
   return '';
 }
