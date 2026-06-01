@@ -1,4 +1,4 @@
-import { fallbackMatches, fallbackPlayerStats, fallbackStandings, teams, venues } from './static-data';
+import { fallbackMatches, fallbackPlayerStats, fallbackStandings, teamDetails, teams, venues } from './static-data';
 import type { WorldCupMatch, WorldCupPlayerStat, WorldCupStanding, WorldCupTeam, WorldCupVenue, WorldCupWeather } from './types';
 
 const FOOTBALL_DATA_BASE = 'https://api.football-data.org/v4';
@@ -117,21 +117,34 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
 
 export async function getWorldCupStandings(): Promise<{ standings: WorldCupStanding[]; source: 'football-data' | 'fallback' }> {
   const payload = await fetchFootballData<FootballDataStandings>('/competitions/WC/standings?season=2026');
-  const standings = payload?.standings?.flatMap((group) =>
-    (group.table ?? []).map((row) => ({
-      group: group.group?.replace(/^GROUP_/, '') || 'A',
-      team: normalizeTeam(row.team),
-      played: row.playedGames ?? 0,
-      won: row.won ?? 0,
-      drawn: row.draw ?? 0,
-      lost: row.lost ?? 0,
-      goalsFor: row.goalsFor ?? 0,
-      goalsAgainst: row.goalsAgainst ?? 0,
-      points: row.points ?? 0,
-    })),
+  const raw = payload?.standings?.flatMap((group) =>
+    (group.table ?? []).map((row) => {
+      const teamObj = normalizeTeam(row.team);
+      const staticGroup = teamDetails.find((t) => t.id === teamObj.id)?.group;
+      return {
+        group: group.group?.replace(/^GROUP_/, '') || staticGroup || 'A',
+        team: teamObj,
+        played: row.playedGames ?? 0,
+        won: row.won ?? 0,
+        drawn: row.draw ?? 0,
+        lost: row.lost ?? 0,
+        goalsFor: row.goalsFor ?? 0,
+        goalsAgainst: row.goalsAgainst ?? 0,
+        points: row.points ?? 0,
+      };
+    }),
   ) ?? [];
 
-  return standings.length ? { standings, source: 'football-data' } : { standings: fallbackStandings, source: 'fallback' };
+  if (!raw.length) return { standings: fallbackStandings, source: 'fallback' };
+
+  // Merge live scores from API into fallback group structure so groups are always correct
+  const liveMap = new Map(raw.map((s) => [s.team.id, s]));
+  const merged = fallbackStandings.map((row) => {
+    const live = liveMap.get(row.team.id);
+    return live ? { ...row, played: live.played, won: live.won, drawn: live.drawn, lost: live.lost, goalsFor: live.goalsFor, goalsAgainst: live.goalsAgainst, points: live.points } : row;
+  });
+
+  return { standings: merged, source: 'football-data' };
 }
 
 export function getWorldCupVenues(): WorldCupVenue[] {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { CalendarDays, ChevronRight, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Users, X, Zap } from 'lucide-react';
 import { channels } from '@/data/channels';
@@ -113,22 +113,39 @@ function SectionHeader({ icon: Icon, title, badge }: { icon: typeof Trophy; titl
 function MatchScore({ match, compact = false }: { match: WorldCupMatch; compact?: boolean }) {
   const isLive = match.status === 'live';
   return (
-    <div
-      className={`flex items-center justify-between gap-2 rounded-2xl border p-3 transition-all ${isLive ? 'border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,.15)]' : ''}`}
+    <motion.div
+      layout
+      className={`flex items-center justify-between gap-2 rounded-2xl border p-3 transition-all ${isLive ? 'border-red-500/40 shadow-[0_0_24px_rgba(239,68,68,.18)]' : ''}`}
       style={{ borderColor: isLive ? undefined : 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className={compact ? 'text-xl' : 'text-2xl'}>{match.homeTeam.flag}</span>
+        <motion.span
+          key={match.homeTeam.id}
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={compact ? 'text-xl' : 'text-2xl'}
+        >{match.homeTeam.flag}</motion.span>
         <span className={`min-w-0 truncate font-black text-[var(--theme-text)] ${compact ? 'text-xs' : 'text-sm'}`}>{match.homeTeam.nameHe}</span>
       </div>
       <div className={`shrink-0 rounded-xl bg-[#002046] text-center font-black tabular-nums text-[#D4AF37] ${compact ? 'px-2 py-1.5 text-sm' : 'px-3 py-2 text-lg'}`} dir="ltr">
-        {match.homeScore ?? '-'} : {match.awayScore ?? '-'}
+        {isLive ? (
+          <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
+            {match.homeScore ?? '0'} : {match.awayScore ?? '0'}
+          </motion.span>
+        ) : (
+          <>{match.homeScore ?? '-'} : {match.awayScore ?? '-'}</>
+        )}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         <span className={`min-w-0 truncate font-black text-[var(--theme-text)] ${compact ? 'text-xs' : 'text-sm'}`}>{match.awayTeam.nameHe}</span>
-        <span className={compact ? 'text-xl' : 'text-2xl'}>{match.awayTeam.flag}</span>
+        <motion.span
+          key={match.awayTeam.id}
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={compact ? 'text-xl' : 'text-2xl'}
+        >{match.awayTeam.flag}</motion.span>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -181,26 +198,41 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
     <Card className="overflow-hidden">
       <SectionHeader icon={CalendarDays} title="לוח משחקים" badge={`${matches.length} משחקים`} />
       <StageFilterTabs value={stageFilter} onChange={setStageFilter} />
-      <div className="max-h-[600px] overflow-y-auto">
+      <div className="max-h-[640px] overflow-y-auto">
         <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
-          {Object.entries(byDay).map(([day, dayMatches]) => (
-            <div key={day} className="rounded-xl border p-3" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
+          {Object.entries(byDay).map(([day, dayMatches], di) => (
+            <motion.div
+              key={day}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: di * 0.05 }}
+              className="rounded-xl border p-3"
+              style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
+            >
+              <div className="mb-2.5 flex items-center gap-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
                 <CalendarDays className="h-3 w-3 text-[#D4AF37]" />
                 {new Date(`${day}T12:00:00`).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                <span className="mr-auto rounded-full bg-white/8 px-1.5 py-0.5 text-[9px]">{dayMatches.length}</span>
               </div>
               <div className="space-y-2">
-                {dayMatches.map((match) => {
+                {dayMatches.map((match, mi) => {
                   const isLive = match.status === 'live';
                   const isFinished = match.status === 'finished';
+                  const isActive = match.id === activeId;
                   return (
-                    <button
+                    <motion.button
                       key={match.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: di * 0.05 + mi * 0.04 }}
+                      whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => { onSelect(match); onDetail(match); }}
-                      className={`w-full rounded-lg border px-3 py-2 text-right transition-all hover:-translate-y-0.5 ${isLive ? 'animate-pulse border-red-500/40' : ''}`}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-right transition-colors ${isLive ? 'border-red-500/40' : ''}`}
                       style={{
-                        borderColor: match.id === activeId ? '#D4AF37' : isLive ? undefined : 'var(--theme-border)',
-                        background: match.id === activeId ? 'rgba(212,175,55,.10)' : isLive ? 'rgba(239,68,68,.06)' : 'var(--theme-bg-card)',
+                        borderColor: isActive ? '#D4AF37' : isLive ? undefined : 'var(--theme-border)',
+                        background: isActive ? 'rgba(212,175,55,.12)' : isLive ? 'rgba(239,68,68,.07)' : 'var(--theme-bg-card)',
+                        boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,.3)' : undefined,
                       }}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -210,27 +242,39 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
                               <Clock className="h-3 w-3" />
                               {formatIsraelTimeShort(match.kickoff)}
                             </span>
-                          ) : statusLabel(match)}
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              {isLive && <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />}
+                              {statusLabel(match)}
+                            </span>
+                          )}
                         </span>
-                        <span className="text-[10px] text-[var(--theme-text-secondary)]">{stageLabel(match.stage)}{match.group ? ` · ${match.group}` : ''}</span>
+                        <span className="rounded-full bg-white/6 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">
+                          {stageLabel(match.stage)}{match.group ? ` · ${match.group}` : ''}
+                        </span>
                       </div>
-                      <div className="mt-1 flex items-center justify-between gap-2 text-sm font-black text-[var(--theme-text)]">
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-sm font-black text-[var(--theme-text)]">
                         <span className="min-w-0 truncate">{match.homeTeam.flag} {match.homeTeam.nameHe}</span>
-                        <span className="shrink-0 text-xs text-[var(--theme-text-secondary)]">
-                          {match.homeScore != null ? `${match.homeScore} - ${match.awayScore}` : 'vs'}
+                        <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs tabular-nums ${isFinished ? 'bg-white/10 text-[var(--theme-text)]' : 'text-[var(--theme-text-secondary)]'}`} dir="ltr">
+                          {match.homeScore != null ? `${match.homeScore} – ${match.awayScore}` : 'vs'}
                         </span>
                         <span className="min-w-0 truncate text-left">{match.awayTeam.nameHe} {match.awayTeam.flag}</span>
                       </div>
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
-            </div>
+            </motion.div>
           ))}
           {Object.keys(byDay).length === 0 && (
-            <div className="col-span-full rounded-xl border p-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="col-span-full rounded-xl border p-8 text-center text-sm text-[var(--theme-text-secondary)]"
+              style={{ borderColor: 'var(--theme-border)' }}
+            >
               אין משחקים בשלב זה
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
@@ -246,40 +290,100 @@ function StandingsTables({ standings }: { standings: WorldCupStanding[] }) {
     }, {});
   }, [standings]);
 
+  const groupKeys = useMemo(() => Object.keys(groups).sort(), [groups]);
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const displayed = useMemo(() => activeGroup ? { [activeGroup]: groups[activeGroup] } : groups, [activeGroup, groups]);
+
   return (
     <Card className="overflow-hidden">
-      <SectionHeader icon={ShieldCheck} title="טבלאות בתים" badge={`${Object.keys(groups).length} בתים`} />
+      <SectionHeader icon={ShieldCheck} title="טבלאות בתים" badge={`${groupKeys.length} בתים`} />
+
+      {groupKeys.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto px-4 py-2" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setActiveGroup(null)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${!activeGroup ? 'bg-[#D4AF37] text-[#002046] shadow-md' : 'bg-white/10 text-[var(--theme-text-secondary)] hover:bg-white/15'}`}
+          >
+            הכל
+          </button>
+          {groupKeys.map((g) => (
+            <button
+              key={g}
+              onClick={() => setActiveGroup(g === activeGroup ? null : g)}
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black transition-all ${activeGroup === g ? 'bg-[#D4AF37] text-[#002046] shadow-md' : 'bg-white/10 text-[var(--theme-text-secondary)] hover:bg-white/15'}`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-4 p-3 sm:grid-cols-2">
-        {Object.entries(groups).map(([group, rows]) => (
-          <div key={group} className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
-            <div className="bg-[#002046] px-3 py-2 text-sm font-black text-[#D4AF37]">בית {group}</div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[340px] text-right text-xs">
-                <thead style={{ color: 'var(--theme-text-secondary)' }}>
-                  <tr>
-                    <th className="px-3 py-2">נבחרת</th><th className="w-8">מש׳</th><th className="w-8">נצ׳</th><th className="w-8">ת׳</th><th className="w-8">הפ׳</th><th className="w-10">יחס</th><th className="w-8 px-3">נק׳</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: 'var(--theme-border)' }}>
-                  {rows.map((row, index) => (
-                    <tr
-                      key={`${group}-${row.team.id}-${index}`}
-                      className="text-[var(--theme-text)]"
-                      style={index < 2 ? { background: 'rgba(34,197,94,.06)' } : undefined}
-                    >
-                      <td className="px-3 py-2 font-bold">
-                        <span className="ml-1.5">{row.team.flag}</span>
-                        {row.team.nameHe}
-                        {index < 2 && <span className="mr-1.5 text-[9px] text-emerald-400">▲</span>}
-                      </td>
-                      <td>{row.played}</td><td>{row.won}</td><td>{row.drawn}</td><td>{row.lost}</td><td dir="ltr">{row.goalsFor}:{row.goalsAgainst}</td><td className="px-3 font-black text-[#D4AF37]">{row.points}</td>
+        <AnimatePresence mode="popLayout">
+          {Object.entries(displayed).map(([group, rows], gi) => (
+            <motion.div
+              key={group}
+              layout
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.25, delay: gi * 0.04 }}
+              className="overflow-hidden rounded-xl border"
+              style={{ borderColor: 'var(--theme-border)' }}
+            >
+              <div className="flex items-center gap-2 bg-gradient-to-l from-[#002046] to-[#063a1a] px-3 py-2">
+                <span className="text-sm font-black text-[#D4AF37]">בית {group}</span>
+                <span className="mr-auto text-[10px] text-white/40">{rows.length} נבחרות</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[320px] text-right text-xs">
+                  <thead>
+                    <tr style={{ color: 'var(--theme-text-secondary)', background: 'var(--theme-bg-secondary)' }}>
+                      <th className="px-3 py-2 font-bold">נבחרת</th>
+                      <th className="w-8 text-center">מש׳</th>
+                      <th className="w-8 text-center">נצ׳</th>
+                      <th className="w-8 text-center">ת׳</th>
+                      <th className="w-8 text-center">הפ׳</th>
+                      <th className="w-12 text-center">יחס</th>
+                      <th className="w-10 px-3 text-center">נק׳</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <motion.tr
+                        key={`${group}-${row.team.id}`}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: gi * 0.04 + index * 0.03 }}
+                        className="border-t text-[var(--theme-text)] transition-colors hover:bg-white/3"
+                        style={{
+                          borderColor: 'var(--theme-border)',
+                          background: index < 2 ? 'rgba(34,197,94,.05)' : undefined,
+                        }}
+                      >
+                        <td className="px-3 py-2.5 font-bold">
+                          <div className="flex items-center gap-1.5">
+                            {index < 2 && (
+                              <span className="h-4 w-1 shrink-0 rounded-full bg-emerald-400" />
+                            )}
+                            <span>{row.team.flag}</span>
+                            <span className="truncate">{row.team.nameHe}</span>
+                          </div>
+                        </td>
+                        <td className="text-center">{row.played}</td>
+                        <td className="text-center font-bold text-emerald-400">{row.won}</td>
+                        <td className="text-center">{row.drawn}</td>
+                        <td className="text-center text-red-400/70">{row.lost}</td>
+                        <td className="text-center tabular-nums" dir="ltr">{row.goalsFor}:{row.goalsAgainst}</td>
+                        <td className="px-3 text-center font-black text-[#D4AF37]">{row.points}</td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </Card>
   );
@@ -636,42 +740,57 @@ function TeamsTab() {
         ))}
       </div>
       <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
-        {filtered.map(team => (
-          <button
-            key={team.id}
-            onClick={() => setSelectedTeam(team)}
-            className="flex items-center gap-3 rounded-xl border px-4 py-3 text-right transition-all hover:-translate-y-0.5 hover:border-[#D4AF37]/50"
-            style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
-          >
-            <span className="text-3xl shrink-0">{team.flag}</span>
-            <div className="min-w-0 flex-1">
-              <div className="font-black text-sm text-[var(--theme-text)]">{team.nameHe}</div>
-              <div className="text-[10px] text-[var(--theme-text-secondary)]">{confederationLabel[team.confederation]}{team.group ? ` · בית ${team.group}` : ''}</div>
-              <div className="mt-1 flex items-center gap-1.5">
-                {team.worldCupTitles > 0 && (
-                  <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/15 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
-                    <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
-                  </span>
-                )}
-                {team.fifaRanking && (
-                  <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">#{team.fifaRanking}</span>
-                )}
+        <AnimatePresence mode="popLayout">
+          {filtered.map((team, i) => (
+            <motion.button
+              key={team.id}
+              layout
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.18, delay: i * 0.02 }}
+              whileHover={{ y: -3, transition: { duration: 0.15 } }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setSelectedTeam(team)}
+              className="flex items-center gap-3 rounded-xl border px-4 py-3 text-right"
+              style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
+            >
+              <span className="shrink-0 text-3xl">{team.flag}</span>
+              <div className="min-w-0 flex-1">
+                <div className="font-black text-sm text-[var(--theme-text)]">{team.nameHe}</div>
+                <div className="text-[10px] text-[var(--theme-text-secondary)]">{confederationLabel[team.confederation]}{team.group ? ` · בית ${team.group}` : ''}</div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  {team.worldCupTitles > 0 && (
+                    <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/15 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                      <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
+                    </span>
+                  )}
+                  {team.fifaRanking && (
+                    <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">#{team.fifaRanking}</span>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="shrink-0 text-[var(--theme-text-secondary)]">
-              <ChevronRight className="h-4 w-4" />
-            </div>
-          </button>
-        ))}
-        {filtered.length === 0 && (
-          <div className="col-span-full rounded-xl border p-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
-            אין נבחרות בקונפדרציה זו
-          </div>
-        )}
+              <ChevronRight className="h-4 w-4 shrink-0 text-[var(--theme-text-secondary)]" />
+            </motion.button>
+          ))}
+          {filtered.length === 0 && (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="col-span-full rounded-xl border p-6 text-center text-sm text-[var(--theme-text-secondary)]"
+              style={{ borderColor: 'var(--theme-border)' }}
+            >
+              אין נבחרות בקונפדרציה זו
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      {selectedTeam && (
-        <TeamDetailPanel team={selectedTeam} onClose={() => setSelectedTeam(null)} />
-      )}
+      <AnimatePresence>
+        {selectedTeam && (
+          <TeamDetailPanel team={selectedTeam} onClose={() => setSelectedTeam(null)} />
+        )}
+      </AnimatePresence>
     </Card>
   );
 }
@@ -783,13 +902,15 @@ function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (
             <button
               key={tab.key}
               onClick={() => onChange(tab.key)}
-              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-bold transition-colors ${
+              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-bold transition-colors ${
                 value === tab.key ? 'text-[#D4AF37]' : 'text-[var(--theme-text-secondary)]'
               }`}
             >
               <Icon className="h-4 w-4" />
               {tab.label}
-              {value === tab.key && <div className="h-0.5 w-6 rounded-full bg-[#D4AF37]" />}
+              {value === tab.key && (
+                <motion.div layoutId="tab-indicator" className="absolute bottom-0 h-0.5 w-8 rounded-full bg-[#D4AF37]" />
+              )}
             </button>
           );
         })}
@@ -899,10 +1020,12 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
               </div>
             )}
 
-            <div className="mt-3 flex max-w-full flex-wrap gap-2 text-[11px] text-white/55">
-              <span className="rounded-full bg-white/8 px-2.5 py-1">📡 {source === 'football-data' ? 'Football-Data.org' : 'Fallback מקומי'}</span>
-              <span className="rounded-full bg-white/8 px-2.5 py-1">🕐 עודכן {new Date(updatedAt).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem' })}</span>
-              <span className="rounded-full bg-white/8 px-2.5 py-1">🇮🇱 כל השעות בשעון ישראל</span>
+            <div className="mt-3 flex max-w-full gap-2 overflow-x-auto text-[11px] text-white/55" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 rounded-full px-2.5 py-1" style={{ background: source === 'football-data' ? 'rgba(212,175,55,.18)' : 'rgba(255,255,255,.08)', color: source === 'football-data' ? '#D4AF37' : undefined }}>
+                📡 {source === 'football-data' ? 'Football-Data.org' : 'Fallback מקומי'}
+              </span>
+              <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1">🕐 {new Date(updatedAt).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem' })}</span>
+              <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1">🇮🇱 שעון ישראל</span>
             </div>
           </motion.div>
 
@@ -972,9 +1095,11 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
         </div>
       </main>
 
-      {matchDetail && (
-        <MatchDetailModal match={matchDetail} venues={venues} onClose={() => setMatchDetail(null)} />
-      )}
+      <AnimatePresence>
+        {matchDetail && (
+          <MatchDetailModal match={matchDetail} venues={venues} onClose={() => setMatchDetail(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
