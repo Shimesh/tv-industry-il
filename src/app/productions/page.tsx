@@ -161,6 +161,13 @@ function mergeGlobalProductions(
   globalProds: Production[],
   currentUserDisplayName: string,
 ): Production[] {
+  const globalById = new Map(globalProds.map((p) => [p.id, p]));
+  // Enrich existing personal productions with fields missing from the GitHub Action path (e.g. studio)
+  const enriched = userProds.map((p) => {
+    const g = p.id ? globalById.get(p.id) : undefined;
+    if (!g) return p;
+    return { ...p, studio: p.studio || g.studio || '' };
+  });
   const userIds = new Set(userProds.map((p) => p.id));
   const extras = globalProds
     .filter((p) => p.id && !userIds.has(p.id))
@@ -168,7 +175,7 @@ function mergeGlobalProductions(
       ...p,
       isCurrentUserShift: isCrewMatch(p.crew ?? [], currentUserDisplayName),
     }));
-  return [...userProds, ...extras];
+  return [...enriched, ...extras];
 }
 
 function ProductionsContent() {
