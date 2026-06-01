@@ -1552,6 +1552,193 @@ export default function AdminPage() {
           <InsightCard title="Push מופעל" value={pushCount} total={overview.stats.totalUsers} colorHex="#fb923c" icon={Smartphone} />
         </div>
 
+        {/* === USER MANAGEMENT (TOP) === */}
+        <CollapsibleSection
+          title="ניהול משתמשים"
+          icon={<Users className="h-5 w-5" />}
+          badge={
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
+              <span className="flex items-center gap-1 rounded-full bg-blue-900/40 px-2 py-0.5 text-xs text-blue-300" title="משתמשים עם Push למובייל">
+                <Smartphone className="h-3 w-3" />
+                {overview.users.filter(u => u.hasPush).length}/{overview.users.length} push
+              </span>
+            </div>
+          }
+          collapsed={collapsedSections.users}
+          onToggle={() => toggleSection('users')}
+          accentColor="text-purple-400"
+          actions={
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="חיפוש..."
+                className="w-40 rounded-xl border border-gray-700 bg-gray-800 py-1.5 pl-4 pr-9 text-xs text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none sm:w-52"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          }
+        >
+          <div className="max-h-[700px] overflow-x-auto overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-gray-900">
+                <tr className="border-b border-gray-800 text-[11px] text-gray-500">
+                  <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
+                  <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
+                  <th className="px-3 py-2 text-right font-medium">כניסה</th>
+                  <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
+                  <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                  <SortHeader label="נראה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
+                  <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((entry) => (
+                  <tr key={entry.uid} className="border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors">
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-shrink-0">
+                          {entry.photoURL ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={entry.photoURL} alt="" className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-600 text-sm font-bold">
+                              {entry.displayName?.charAt(0) || '?'}
+                            </div>
+                          )}
+                          {entry.onlineNow ? (
+                            <span className="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full border-2 border-gray-900 bg-green-400" />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0">
+                          {/* שם + אייקונים */}
+                          <div className="flex items-center gap-1">
+                            <p className="truncate font-semibold text-white">{entry.displayName || 'ללא שם'}</p>
+                            {entry.hasPush ? (
+                              <span title="push למובייל"><Smartphone className="h-3 w-3 text-blue-400 flex-shrink-0" /></span>
+                            ) : (
+                              <span title="אין push למובייל"><BellOff className="h-3 w-3 text-gray-600 flex-shrink-0" /></span>
+                            )}
+                            {entry.appTourSeen ? (
+                              <span title="ביצע סיור"><Sparkles className="h-3 w-3 text-violet-400 flex-shrink-0" /></span>
+                            ) : null}
+                          </div>
+                          {/* סטטוס פרופיל + פעולות */}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                            {isFullProfile(entry) ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-green-900/40 px-1 py-0.5 text-xs text-green-400">
+                                <span className="h-1 w-1 rounded-full bg-green-400" />מלא
+                              </span>
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-xs text-orange-400">
+                                  {!entry.linkedContactId ? 'לא מקושר' : 'חסר'}
+                                </span>
+                                {reminderSent[entry.uid] ? (
+                                  <span className="text-xs text-green-400">✓</span>
+                                ) : (
+                                  <button onClick={() => void sendReminder(entry.uid)} className="text-xs text-purple-400 hover:text-purple-300 underline underline-offset-1">תזכורת</button>
+                                )}
+                                <button
+                                  onClick={() => void handleAutoLink(entry.uid)}
+                                  disabled={autoLinkPending[entry.uid]}
+                                  className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-1 disabled:opacity-50"
+                                  title="קשר אוטומטית"
+                                >
+                                  {autoLinkPending[entry.uid] ? '...' : '🔗'}
+                                </button>
+                              </>
+                            )}
+                            {entry.uidCount > 1 ? (
+                              <span className="rounded-full bg-blue-900/30 px-1 py-0.5 text-xs text-blue-300">{entry.uidCount}×</span>
+                            ) : null}
+                            <button
+                              onClick={() => {
+                                const fields = safeProfileFields(entry);
+                                setContactSearchTerm('');
+                                setShowContactSearch(false);
+                                setEditModal({
+                                  uid: entry.uid,
+                                  displayName: entry.displayName ?? '',
+                                  phone: entry.phone ?? '',
+                                  department: fields.department,
+                                  departments: fields.departments,
+                                  role: fields.role,
+                                  roles: fields.roles,
+                                  customRole: '',
+                                  forceContactId: '',
+                                  linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
+                                });
+                              }}
+                              className="text-xs text-gray-500 hover:text-gray-200 underline underline-offset-1"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                          {entry.termsAcceptedAt ? (
+                            <div className="text-xs text-gray-600 leading-tight">
+                              הסכמה: {new Date(entry.termsAcceptedAt).toLocaleDateString('he-IL')}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="max-w-[140px] px-3 py-3 text-gray-400">
+                      <span className="block truncate" title={entry.email || ''}>{entry.email || '—'}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
+                    </td>
+                    <td className="max-w-[120px] px-3 py-3">
+                      <p className="truncate text-white" title={safeProfileRoles(entry).join(', ') || '—'}>{safeProfileRoles(entry).join(', ') || '—'}</p>
+                      <p className="truncate text-[10px] text-gray-500" title={safeProfileDepartments(entry).join(', ') || ''}>{safeProfileDepartments(entry).join(', ') || '—'}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <PresenceBadge user={entry} />
+                    </td>
+                    <td className="px-3 py-3 text-[10px] text-gray-400 whitespace-nowrap">
+                      {formatRelativeTime(entry.lastSeen)}
+                    </td>
+                    <td className="px-3 py-3">
+                      {entry.linkedUids.includes(user.uid) ? (
+                        <RoleBadge role={entry.siteRole} />
+                      ) : (
+                        <div className="relative inline-flex min-w-[90px]">
+                          <select
+                            value={entry.siteRole}
+                            onChange={(event) => void updateUserRole(entry.uid, event.target.value as AdminRole)}
+                            disabled={updatingRole === entry.uid}
+                            className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1 pl-6 pr-2 text-[11px] text-gray-100 outline-none transition-colors hover:bg-gray-700 focus:border-purple-500 disabled:opacity-60"
+                            aria-label={`עדכון הרשאה עבור ${entry.displayName || entry.email}`}
+                          >
+                            {ROLE_OPTIONS.map((option) => (
+                              <option key={`${entry.uid}-${option.value}`} value={option.value}>
+                                {roleLabel(option.value)}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
+                      לא נמצאו משתמשים
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
+
         <CollapsibleSection
           title="Ratings Automation"
           icon={<BarChart3 className="h-5 w-5" />}
@@ -1873,193 +2060,6 @@ export default function AdminPage() {
           )}
         </section>
 
-
-        {/* === USER MANAGEMENT (TOP) === */}
-        <CollapsibleSection
-          title="ניהול משתמשים"
-          icon={<Users className="h-5 w-5" />}
-          badge={
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{overview.stats.totalUsers}</span>
-              <span className="flex items-center gap-1 rounded-full bg-blue-900/40 px-2 py-0.5 text-xs text-blue-300" title="משתמשים עם Push למובייל">
-                <Smartphone className="h-3 w-3" />
-                {overview.users.filter(u => u.hasPush).length}/{overview.users.length} push
-              </span>
-            </div>
-          }
-          collapsed={collapsedSections.users}
-          onToggle={() => toggleSection('users')}
-          accentColor="text-purple-400"
-          actions={
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="חיפוש..."
-                className="w-40 rounded-xl border border-gray-700 bg-gray-800 py-1.5 pl-4 pr-9 text-xs text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none sm:w-52"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-          }
-        >
-          <div className="max-h-[600px] overflow-x-auto overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10 bg-gray-900">
-                <tr className="border-b border-gray-800 text-[11px] text-gray-500">
-                  <SortHeader label="משתמש" sortKey="displayName" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
-                  <SortHeader label="אימייל" sortKey="email" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
-                  <th className="px-3 py-2 text-right font-medium">כניסה</th>
-                  <SortHeader label="תפקיד / מחלקה" sortKey="role" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
-                  <SortHeader label="סטטוס" sortKey="status" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                  <SortHeader label="נראה" sortKey="lastSeen" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} className="px-3" />
-                  <SortHeader label="הרשאה" sortKey="siteRole" activeKey={userSort.key} direction={userSort.direction} onSort={handleUserSort} />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((entry) => (
-                  <tr key={entry.uid} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-shrink-0">
-                          {entry.photoURL ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={entry.photoURL} alt="" className="h-7 w-7 rounded-full object-cover" />
-                          ) : (
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-600 text-xs font-bold">
-                              {entry.displayName?.charAt(0) || '?'}
-                            </div>
-                          )}
-                          {entry.onlineNow ? (
-                            <span className="absolute -bottom-0.5 -left-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-900 bg-green-400" />
-                          ) : null}
-                        </div>
-                        <div className="min-w-0">
-                          {/* שם + אייקונים */}
-                          <div className="flex items-center gap-1">
-                            <p className="truncate font-medium text-white">{entry.displayName || 'ללא שם'}</p>
-                            {entry.hasPush ? (
-                              <span title="push למובייל"><Smartphone className="h-2.5 w-2.5 text-blue-400 flex-shrink-0" /></span>
-                            ) : (
-                              <span title="אין push למובייל"><BellOff className="h-2.5 w-2.5 text-gray-600 flex-shrink-0" /></span>
-                            )}
-                            {entry.appTourSeen ? (
-                              <span title="ביצע סיור"><Sparkles className="h-2.5 w-2.5 text-violet-400 flex-shrink-0" /></span>
-                            ) : null}
-                          </div>
-                          {/* סטטוס פרופיל + פעולות */}
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                            {isFullProfile(entry) ? (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-green-900/40 px-1 py-0.5 text-[9px] text-green-400">
-                                <span className="h-1 w-1 rounded-full bg-green-400" />מלא
-                              </span>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-[9px] text-orange-400">
-                                  {!entry.linkedContactId ? 'לא מקושר' : 'חסר'}
-                                </span>
-                                {reminderSent[entry.uid] ? (
-                                  <span className="text-[9px] text-green-400">✓</span>
-                                ) : (
-                                  <button onClick={() => void sendReminder(entry.uid)} className="text-[9px] text-purple-400 hover:text-purple-300 underline underline-offset-1">תזכורת</button>
-                                )}
-                                <button
-                                  onClick={() => void handleAutoLink(entry.uid)}
-                                  disabled={autoLinkPending[entry.uid]}
-                                  className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-1 disabled:opacity-50"
-                                  title="קשר אוטומטית"
-                                >
-                                  {autoLinkPending[entry.uid] ? '...' : '🔗'}
-                                </button>
-                              </>
-                            )}
-                            {entry.uidCount > 1 ? (
-                              <span className="rounded-full bg-blue-900/30 px-1 py-0.5 text-[9px] text-blue-300">{entry.uidCount}×</span>
-                            ) : null}
-                            <button
-                              onClick={() => {
-                                const fields = safeProfileFields(entry);
-                                setContactSearchTerm('');
-                                setShowContactSearch(false);
-                                setEditModal({
-                                  uid: entry.uid,
-                                  displayName: entry.displayName ?? '',
-                                  phone: entry.phone ?? '',
-                                  department: fields.department,
-                                  departments: fields.departments,
-                                  role: fields.role,
-                                  roles: fields.roles,
-                                  customRole: '',
-                                  forceContactId: '',
-                                  linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
-                                });
-                              }}
-                              className="text-[9px] text-gray-500 hover:text-gray-200 underline underline-offset-1"
-                            >
-                              ✏️
-                            </button>
-                          </div>
-                          {entry.termsAcceptedAt ? (
-                            <div className="text-[9px] text-gray-600 leading-tight">
-                              הסכמה: {new Date(entry.termsAcceptedAt).toLocaleDateString('he-IL')}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="max-w-[140px] px-3 py-2 text-gray-400">
-                      <span className="block truncate" title={entry.email || ''}>{entry.email || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <LoginMethods methods={entry.loginMethods} uidCount={entry.uidCount} />
-                    </td>
-                    <td className="max-w-[120px] px-3 py-2">
-                      <p className="truncate text-white" title={safeProfileRoles(entry).join(', ') || '—'}>{safeProfileRoles(entry).join(', ') || '—'}</p>
-                      <p className="truncate text-[10px] text-gray-500" title={safeProfileDepartments(entry).join(', ') || ''}>{safeProfileDepartments(entry).join(', ') || '—'}</p>
-                    </td>
-                    <td className="px-3 py-2">
-                      <PresenceBadge user={entry} />
-                    </td>
-                    <td className="px-3 py-2 text-[10px] text-gray-400 whitespace-nowrap">
-                      {formatRelativeTime(entry.lastSeen)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {entry.linkedUids.includes(user.uid) ? (
-                        <RoleBadge role={entry.siteRole} />
-                      ) : (
-                        <div className="relative inline-flex min-w-[90px]">
-                          <select
-                            value={entry.siteRole}
-                            onChange={(event) => void updateUserRole(entry.uid, event.target.value as AdminRole)}
-                            disabled={updatingRole === entry.uid}
-                            className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1 pl-6 pr-2 text-[11px] text-gray-100 outline-none transition-colors hover:bg-gray-700 focus:border-purple-500 disabled:opacity-60"
-                            aria-label={`עדכון הרשאה עבור ${entry.displayName || entry.email}`}
-                          >
-                            {ROLE_OPTIONS.map((option) => (
-                              <option key={`${entry.uid}-${option.value}`} value={option.value}>
-                                {roleLabel(option.value)}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-
-                {filteredUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
-                      לא נמצאו משתמשים
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </CollapsibleSection>
 
         {/* גילויים חדשים */}
         <CollapsibleSection
