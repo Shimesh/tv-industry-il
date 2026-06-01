@@ -118,29 +118,30 @@ function stripPopupHtml(html: string): string {
     .trim();
 }
 
-/** Parse popup header line into [name, studio, isoDate] — returns null if not found */
+/** Parse popup header line into {studio, isoDate} by scanning <tr> blocks directly */
 function parsePopupHeader(html: string): { studio: string; isoDate: string } | null {
-  const text = stripPopupHtml(html);
-  for (const line of text.split('\n')) {
-    const parts = line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
-    const dateIdx = parts.findIndex(p => /\d{1,2}\/\d{1,2}\/\d{4}/.test(p));
+  // Process each <tr>...</tr> block and extract its <td> cell texts
+  const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch;
+  while ((trMatch = trRegex.exec(html)) !== null) {
+    const cells: string[] = [];
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let tdMatch;
+    while ((tdMatch = tdRegex.exec(trMatch[1])) !== null) {
+      const cellText = tdMatch[1]
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cellText) cells.push(cellText);
+    }
+    const dateIdx = cells.findIndex(c => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
     if (dateIdx >= 2) {
-      const dm = parts[dateIdx].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      const dm = cells[dateIdx].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if (dm) return {
-        studio: parts[dateIdx - 1],
+        studio: cells[dateIdx - 1],
         isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
       };
-    }
-    if (parts.length === 1 && parts[0].includes('|')) {
-      const segs = parts[0].split('|').map(s => s.trim()).filter(Boolean);
-      const di = segs.findIndex(s => /\d{1,2}\/\d{1,2}\/\d{4}/.test(s));
-      if (di >= 2) {
-        const dm = segs[di].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        if (dm) return {
-          studio: segs[di - 1],
-          isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
-        };
-      }
     }
   }
   return null;
