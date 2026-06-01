@@ -77,3 +77,55 @@ export type WorldCupNewsItem = {
   imageUrl?: string;
   isSourceLogoFallback?: boolean;
 };
+
+export type WorldCupPlayer = {
+  name: string;
+  number?: number;
+  position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  club?: string;
+  caps?: number;
+  goals?: number;
+};
+
+export type WorldCupTournamentResult = {
+  year: number;
+  host: string;
+  stage: string;
+  notes?: string;
+};
+
+export type WorldCupTeamDetail = {
+  id: string;
+  nameHe: string;
+  nameEn: string;
+  flag: string;
+  confederation: 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'CAF' | 'AFC' | 'OFC';
+  coachHe: string;
+  coachEn: string;
+  fifaRanking?: number;
+  worldCupTitles: number;
+  bestResult: string;
+  squad: WorldCupPlayer[];
+  tournamentHistory: WorldCupTournamentResult[];
+  group?: string;
+};
+
+export type MatchLineupPlayer = {
+  name: string;
+  number: number;
+  position: string;
+  isStarter: boolean;
+};
+
+export type MatchDetail = {
+  matchId: string;
+  homeLineup: MatchLineupPlayer[];
+  awayLineup: MatchLineupPlayer[];
+  homeCoach: string;
+  awayCoach: string;
+  referee?: string;
+  refereeCountry?: string;
+  broadcastChannelHe?: string;
+  broadcastTime?: string;
+  attendance?: number;
+};

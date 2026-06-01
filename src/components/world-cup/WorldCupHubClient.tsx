@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { CalendarDays, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Zap } from 'lucide-react';
+import { CalendarDays, ChevronRight, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Users, X, Zap } from 'lucide-react';
 import { channels } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import { db } from '@/lib/firebase';
@@ -11,7 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import ChannelLogo from '@/components/ChannelLogo';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
-import type { WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
+import type { WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
+import { teamDetails } from '@/lib/world-cup/static-data';
 
 type HubProps = {
   matches: WorldCupMatch[];
@@ -32,7 +33,7 @@ type ChatMessage = {
 };
 
 type StageFilter = 'all' | 'group' | 'knockout' | 'final';
-type SectionTab = 'matches' | 'standings' | 'venues' | 'stats';
+type SectionTab = 'matches' | 'standings' | 'venues' | 'stats' | 'teams';
 
 function formatIsraelTime(isoDate: string): string {
   return new Date(isoDate).toLocaleString('he-IL', {
@@ -158,7 +159,7 @@ function StageFilterTabs({ value, onChange }: { value: StageFilter; onChange: (v
   );
 }
 
-function ScheduleGrid({ matches, activeId, onSelect }: { matches: WorldCupMatch[]; activeId: string; onSelect: (match: WorldCupMatch) => void }) {
+function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: WorldCupMatch[]; activeId: string; onSelect: (match: WorldCupMatch) => void; onDetail: (match: WorldCupMatch) => void }) {
   const [stageFilter, setStageFilter] = useState<StageFilter>('all');
 
   const filtered = useMemo(() => {
@@ -195,7 +196,7 @@ function ScheduleGrid({ matches, activeId, onSelect }: { matches: WorldCupMatch[
                   return (
                     <button
                       key={match.id}
-                      onClick={() => onSelect(match)}
+                      onClick={() => { onSelect(match); onDetail(match); }}
                       className={`w-full rounded-lg border px-3 py-2 text-right transition-all hover:-translate-y-0.5 ${isLive ? 'animate-pulse border-red-500/40' : ''}`}
                       style={{
                         borderColor: match.id === activeId ? '#D4AF37' : isLive ? undefined : 'var(--theme-border)',
@@ -506,9 +507,269 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
   );
 }
 
+const positionLabel: Record<string, string> = { GK: 'שוער', DEF: 'הגנה', MID: 'קישור', FWD: 'תקיפה' };
+const positionColor: Record<string, string> = { GK: '#D4AF37', DEF: '#4ade80', MID: '#60a5fa', FWD: '#f87171' };
+const confederationLabel: Record<string, string> = { UEFA: 'אירופה', CONMEBOL: 'דרום אמריקה', CONCACAF: 'צפון/מרכז אמריקה', CAF: 'אפריקה', AFC: 'אסיה', OFC: 'אוקיאניה' };
+
+function TeamDetailPanel({ team, onClose }: { team: WorldCupTeamDetail; onClose: () => void }) {
+  const [tab, setTab] = useState<'squad' | 'history'>('squad');
+  const byPosition = ['GK', 'DEF', 'MID', 'FWD'].map(pos => ({
+    pos,
+    players: team.squad.filter(p => p.position === pos),
+  })).filter(g => g.players.length > 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="relative w-full max-w-lg overflow-hidden rounded-t-3xl sm:rounded-3xl"
+        style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)', maxHeight: '90dvh' }}
+      >
+        <div className="flex items-center gap-3 border-b px-4 py-4" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(135deg,#002046,#064523)' }}>
+          <span className="text-4xl">{team.flag}</span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-black text-white">{team.nameHe}</h2>
+            <p className="text-xs text-white/60">{confederationLabel[team.confederation]} · מאמן: {team.coachHe}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {team.worldCupTitles > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-[#D4AF37] px-2 py-0.5 text-[11px] font-black text-[#002046]">
+                <Trophy className="h-3 w-3" />×{team.worldCupTitles}
+              </span>
+            )}
+            {team.fifaRanking && (
+              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white">
+                FIFA #{team.fifaRanking}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex border-b" style={{ borderColor: 'var(--theme-border)' }}>
+          {(['squad', 'history'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`flex-1 py-2.5 text-xs font-black transition-colors ${tab === t ? 'text-[#D4AF37] border-b-2 border-[#D4AF37]' : 'text-[var(--theme-text-secondary)]'}`}
+            >
+              {t === 'squad' ? '👥 הרכב' : '📅 היסטוריה'}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto" style={{ maxHeight: 'calc(90dvh - 140px)' }}>
+          {tab === 'squad' ? (
+            <div className="p-3 space-y-3">
+              <div className="rounded-lg border px-3 py-2 text-xs text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                🏆 הישג הטוב ביותר: <span className="font-bold text-[var(--theme-text)]">{team.bestResult}</span>
+              </div>
+              {byPosition.map(({ pos, players }) => (
+                <div key={pos}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-black" style={{ background: positionColor[pos] + '22', color: positionColor[pos] }}>
+                      {positionLabel[pos]}
+                    </span>
+                    <span className="text-[10px] text-[var(--theme-text-secondary)]">{players.length} שחקנים</span>
+                  </div>
+                  <div className="space-y-1">
+                    {players.map(p => (
+                      <div key={p.name} className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                        {p.number && (
+                          <span className="w-6 shrink-0 text-center text-[10px] font-black text-[var(--theme-text-secondary)]">#{p.number}</span>
+                        )}
+                        <span className="flex-1 font-bold text-xs text-[var(--theme-text)]">{p.name}</span>
+                        {p.club && <span className="text-[10px] text-[var(--theme-text-secondary)]">{p.club}</span>}
+                        {(p.caps != null || p.goals != null) && (
+                          <span className="text-[10px] text-[#D4AF37] shrink-0">
+                            {p.caps != null ? `${p.caps} מש׳` : ''}
+                            {p.goals != null ? ` · ⚽${p.goals}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 space-y-2">
+              {team.tournamentHistory.length === 0 ? (
+                <p className="text-center text-sm text-[var(--theme-text-secondary)] py-6">אין היסטוריית מונדיאל</p>
+              ) : team.tournamentHistory.map(h => (
+                <div key={h.year} className="flex items-start gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                  <span className="shrink-0 rounded-lg bg-[#002046] px-2 py-1 text-xs font-black text-[#D4AF37]">{h.year}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[var(--theme-text)]">{h.stage}</div>
+                    <div className="text-[10px] text-[var(--theme-text-secondary)]">{h.host}{h.notes ? ` · ${h.notes}` : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function TeamsTab() {
+  const [selectedTeam, setSelectedTeam] = useState<WorldCupTeamDetail | null>(null);
+  const [confFilter, setConfFilter] = useState<string>('all');
+  const confederations = ['all', 'UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
+  const filtered = confFilter === 'all' ? teamDetails : teamDetails.filter(t => t.confederation === confFilter);
+
+  return (
+    <Card className="overflow-hidden">
+      <SectionHeader icon={Users} title="נבחרות מונדיאל 2026" badge={`${teamDetails.length} נבחרות`} />
+      <div className="flex gap-1.5 overflow-x-auto px-4 py-2" style={{ scrollbarWidth: 'none' }}>
+        {confederations.map(c => (
+          <button key={c} onClick={() => setConfFilter(c)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+              confFilter === c ? 'bg-[#D4AF37] text-[#002046] shadow-md' : 'bg-white/10 text-[var(--theme-text-secondary)] hover:bg-white/15'
+            }`}
+          >
+            {c === 'all' ? 'הכל' : confederationLabel[c]}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+        {filtered.map(team => (
+          <button
+            key={team.id}
+            onClick={() => setSelectedTeam(team)}
+            className="flex items-center gap-3 rounded-xl border px-4 py-3 text-right transition-all hover:-translate-y-0.5 hover:border-[#D4AF37]/50"
+            style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
+          >
+            <span className="text-3xl shrink-0">{team.flag}</span>
+            <div className="min-w-0 flex-1">
+              <div className="font-black text-sm text-[var(--theme-text)]">{team.nameHe}</div>
+              <div className="text-[10px] text-[var(--theme-text-secondary)]">{confederationLabel[team.confederation]}{team.group ? ` · בית ${team.group}` : ''}</div>
+              <div className="mt-1 flex items-center gap-1.5">
+                {team.worldCupTitles > 0 && (
+                  <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/15 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                    <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
+                  </span>
+                )}
+                {team.fifaRanking && (
+                  <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">#{team.fifaRanking}</span>
+                )}
+              </div>
+            </div>
+            <div className="shrink-0 text-[var(--theme-text-secondary)]">
+              <ChevronRight className="h-4 w-4" />
+            </div>
+          </button>
+        ))}
+        {filtered.length === 0 && (
+          <div className="col-span-full rounded-xl border p-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
+            אין נבחרות בקונפדרציה זו
+          </div>
+        )}
+      </div>
+      {selectedTeam && (
+        <TeamDetailPanel team={selectedTeam} onClose={() => setSelectedTeam(null)} />
+      )}
+    </Card>
+  );
+}
+
+function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; onClose: () => void; venues: WorldCupVenue[] }) {
+  const venue = venues.find(v => v.id === match.venueId);
+  const homeDetail = teamDetails.find(t => t.id === match.homeTeam.id);
+  const awayDetail = teamDetails.find(t => t.id === match.awayTeam.id);
+  const broadcasterLabel = match.broadcaster === 'kan11' ? 'כאן 11' : match.broadcaster === 'sport5' ? 'ספורט 5' : 'ייקבע';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="relative w-full max-w-2xl overflow-hidden rounded-t-3xl sm:rounded-3xl"
+        style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)', maxHeight: '92dvh' }}
+      >
+        <div className="flex items-center gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(135deg,#002046,#064523)' }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-bold text-white/60 uppercase tracking-wide">{stageLabel(match.stage)}{match.group ? ` · בית ${match.group}` : ''}</div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-2xl">{match.homeTeam.flag}</span>
+              <span className="font-black text-white text-sm">{match.homeTeam.nameHe}</span>
+              <span className="rounded-xl bg-black/30 px-2.5 py-1 font-black text-[#D4AF37] text-base tabular-nums" dir="ltr">
+                {match.homeScore ?? '-'} : {match.awayScore ?? '-'}
+              </span>
+              <span className="font-black text-white text-sm">{match.awayTeam.nameHe}</span>
+              <span className="text-2xl">{match.awayTeam.flag}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20 shrink-0">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto" style={{ maxHeight: 'calc(92dvh - 90px)' }}>
+          <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-4">
+            <div className="rounded-xl border p-3 text-center" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+              <div className="text-[10px] text-[var(--theme-text-secondary)] mb-1">שעת שידור (ישראל)</div>
+              <div className="font-black text-[#D4AF37] text-sm">{formatIsraelTime(match.kickoff)}</div>
+            </div>
+            <div className="rounded-xl border p-3 text-center" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+              <div className="text-[10px] text-[var(--theme-text-secondary)] mb-1">ערוץ שידור</div>
+              <div className="font-black text-[var(--theme-text)] text-sm">{broadcasterLabel}</div>
+            </div>
+            {venue && (
+              <>
+                <div className="rounded-xl border p-3 text-center" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                  <div className="text-[10px] text-[var(--theme-text-secondary)] mb-1">אצטדיון</div>
+                  <div className="font-black text-[var(--theme-text)] text-xs">{venue.nameHe}</div>
+                </div>
+                <div className="rounded-xl border p-3 text-center" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                  <div className="text-[10px] text-[var(--theme-text-secondary)] mb-1">עיר</div>
+                  <div className="font-black text-[var(--theme-text)] text-xs">{venue.cityHe}, {venue.countryHe}</div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="grid gap-3 px-3 pb-3 sm:grid-cols-2">
+            {[{ team: match.homeTeam, detail: homeDetail, side: 'home' }, { team: match.awayTeam, detail: awayDetail, side: 'away' }].map(({ team, detail }) => (
+              <div key={team.id} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--theme-border)' }}>
+                <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: 'var(--theme-bg-secondary)' }}>
+                  <span className="text-2xl">{team.flag}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-black text-sm text-[var(--theme-text)]">{team.nameHe}</div>
+                    {detail && <div className="text-[10px] text-[var(--theme-text-secondary)]">מאמן: {detail.coachHe}</div>}
+                  </div>
+                </div>
+                {detail && detail.squad.length > 0 && (
+                  <div className="divide-y" style={{ borderColor: 'var(--theme-border)' }}>
+                    {detail.squad.slice(0, 11).map(p => (
+                      <div key={p.name} className="flex items-center gap-2 px-3 py-1.5">
+                        {p.number && <span className="w-5 shrink-0 text-center text-[10px] font-black text-[var(--theme-text-secondary)]">{p.number}</span>}
+                        <span className="flex-1 text-xs font-bold text-[var(--theme-text)]">{p.name}</span>
+                        <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold shrink-0"
+                          style={{ background: positionColor[p.position] + '22', color: positionColor[p.position] }}>
+                          {positionLabel[p.position]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (v: SectionTab) => void }) {
   const tabs: { key: SectionTab; label: string; icon: typeof Trophy }[] = [
     { key: 'matches', label: 'משחקים', icon: CalendarDays },
+    { key: 'teams', label: 'נבחרות', icon: Users },
     { key: 'standings', label: 'טבלאות', icon: ShieldCheck },
     { key: 'venues', label: 'אצטדיונים', icon: Landmark },
     { key: 'stats', label: 'סטטיסטיקות', icon: Zap },
@@ -539,6 +800,7 @@ function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (
 
 export default function WorldCupHubClient({ matches, standings, playerStats, venues, source, updatedAt }: HubProps) {
   const [selectedMatch, setSelectedMatch] = useState(() => matches.find((match) => match.status === 'live') ?? matches[0]);
+  const [matchDetail, setMatchDetail] = useState<WorldCupMatch | null>(null);
   const [news, setNews] = useState<WorldCupNewsItem[]>([]);
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
@@ -562,6 +824,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
     standings: useRef<HTMLDivElement>(null),
     venues: useRef<HTMLDivElement>(null),
     stats: useRef<HTMLDivElement>(null),
+    teams: useRef<HTMLDivElement>(null),
   };
 
   const handleSectionChange = (section: SectionTab) => {
@@ -655,7 +918,7 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
               <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
             </Card>
             <div ref={sectionRefs.matches}>
-              <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} />
+              <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
             </div>
           </div>
           <div className="space-y-6">
@@ -673,6 +936,9 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
           </Card>
         )}
 
+        <div ref={sectionRefs.teams}>
+          <TeamsTab />
+        </div>
         <div ref={sectionRefs.standings}>
           <StandingsTables standings={standings} />
         </div>
@@ -683,6 +949,10 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
           <VenuesGrid venues={venues} />
         </div>
       </main>
+
+      {matchDetail && (
+        <MatchDetailModal match={matchDetail} venues={venues} onClose={() => setMatchDetail(null)} />
+      )}
     </div>
   );
 }
