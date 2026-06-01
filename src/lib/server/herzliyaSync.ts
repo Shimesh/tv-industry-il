@@ -82,8 +82,15 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     if (baseUrl) {
       const events = extractHerzliyaEventIds(personalHtml);
+      // Build mapping from production name → herzliyaId.
+      // Index both the raw name AND the cleaned name (studio suffix stripped),
+      // because the server-side text parser removes "אולפן N" from prod.name.
       const nameToId: Record<string, number> = {};
-      for (const e of events) nameToId[e.name] = e.herzliyaId;
+      for (const e of events) {
+        nameToId[e.name] = e.herzliyaId;
+        const cleaned = e.name.replace(/\s*(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?\s*/gi, '').trim();
+        if (cleaned && cleaned !== e.name) nameToId[cleaned] = e.herzliyaId;
+      }
 
       const uniqueIds = [...new Set(events.map(e => e.herzliyaId))];
       const popupCache: Record<number, string> = {};
