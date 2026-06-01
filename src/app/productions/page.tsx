@@ -1168,7 +1168,8 @@ function ProductionsContent() {
         headers: { 'Authorization': `Bearer ${idToken}` },
       }).catch(() => {});
 
-      // Primary sync: await save-sync-url (server-side HTTP fetch, no Puppeteer needed)
+      // Primary sync: await save-sync-url (server-side, no Puppeteer).
+      // On success → show done immediately. On any failure → fall through to GitHub Action polling.
       let syncedViaApi = false;
       try {
         const syncResp = await fetch('/api/calendar/save-sync-url', {
@@ -1183,12 +1184,8 @@ function ProductionsContent() {
             await applyLoadedProductions();
             setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 5000);
-          } else if (syncData.ok && syncData.reason === 'empty_schedule') {
-            syncedViaApi = true;
-            setRequestError('הלוח ריק — לא נמצאו הפקות לשבוע זה');
-            setRequestStatus('error');
-            setTimeout(() => setRequestStatus('idle'), 8000);
           }
+          // empty_schedule / sync_error → fall through to GitHub Action polling silently
         }
       } catch { /* network error — fall through to GitHub Action polling */ }
 
