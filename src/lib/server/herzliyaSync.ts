@@ -98,7 +98,9 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
       );
 
       for (const prod of parsed.productions) {
-        const herzliyaId = nameToId[prod.name];
+        // Use herzliyaId already parsed from the event's onclick attribute.
+        // nameToId[prod.name] would fail when the name was cleaned of studio suffix.
+        const herzliyaId = prod.herzliyaId || nameToId[prod.name];
         if (!herzliyaId || !popupCache[herzliyaId]) continue;
         const popupHtml = popupCache[herzliyaId];
 
