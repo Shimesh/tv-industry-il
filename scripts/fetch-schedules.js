@@ -652,23 +652,31 @@ async function fetchSchedule(browser, url) {
         const studioMatchTitle = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
         let studio = studioMatchTitle ? studioMatchTitle[0] : '';
 
-        // If title doesn't have studio, check the popup table header row.
-        // The ShowCrew popup first row typically has: [production name, studio, date, time]
-        if (!studio && collectedSnapshots.length > 0) {
-          const headerRows = (collectedSnapshots[0].rows || []).slice(0, 3);
-          for (const row of headerRows) {
-            const cells = row.filter((c) => c && c.trim());
-            // First: look for explicit "\u05d0\u05d5\u05dc\u05e4\u05df N" anywhere in the row
-            const studioCell = cells.find((c) => /(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i.test(c));
-            if (studioCell) {
-              studio = studioCell.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i)[0];
-              break;
-            }
-            // Second: take cell immediately before the date cell (dateIdx >= 2 = has production name before it)
+        // If title doesn't have studio, scan ALL table rows in the page.
+        // Reasoning:
+        //   - collectedSnapshots only has high-scoring crew tables (score>=6, rows>=3)
+        //   - The ShowCrew header table has 1 row [name, studio, date, time] \u2192 score<6 \u2192 filtered out
+        //   - activeModalRoot may be null when popup has no .modal-title/font[color="red"]
+        // So we scan document-level rows and look for a standalone "\u05d0\u05d5\u05dc\u05e4\u05df N" cell.
+        // Calendar event names embed studio inside a longer name (e.g. "\u05d0\u05e1\u05ea\u05d8\u05d9\u05e7\u05d4 360 \u05d0\u05d5\u05dc\u05e4\u05df 4"),
+        // while the popup header has studio as a standalone cell \u2192 use ^ anchor to distinguish.
+        if (!studio) {
+          const allPageRows = Array.from(document.querySelectorAll('table tr'));
+          for (const row of allPageRows) {
+            const cells = Array.from(row.querySelectorAll('td,th'))
+              .map((c) => cleanText(c.textContent || ''))
+              .filter((c) => c.length > 0);
+            // Prefer exact standalone "\u05d0\u05d5\u05dc\u05e4\u05df N" / "\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5 N" cell
+            const exactStudio = cells.find((c) => /^(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?$/i.test(c));
+            if (exactStudio) { studio = exactStudio; break; }
+            // Fallback: cell before a date (DD/MM/YYYY) in rows with enough context
             const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
             if (dateIdx >= 2 && cells[dateIdx - 1]) {
-              studio = cells[dateIdx - 1];
-              break;
+              const candidate = cells[dateIdx - 1];
+              if (/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i.test(candidate)) {
+                studio = candidate.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?/i)[0];
+                break;
+              }
             }
           }
         }
@@ -744,6 +752,9 @@ async function fetchSchedule(browser, url) {
         schedule.productions[i].popupParsed = true;
         if (detailed.studio && !prod.studio) {
           schedule.productions[i].studio = detailed.studio;
+          console.log(`  Studio enriched: ${prod.name} → "${detailed.studio}"`);
+        } else {
+          console.log(`  Studio: prod="${prod.studio || ''}" popup="${detailed.studio || ''}" (snapshot.studio="${popupSnapshot?.studio || ''}")`);
         }
 
         console.log(
@@ -1125,29 +1136,10 @@ function parsePopupSnapshot(production, snapshot) {
     accepted: false,
   };
 
-  // Fallback: extract studio from table header rows when snapshot.studio is empty
-  let resolvedStudio = cleanSnapshotText(snapshot?.studio || '');
-  if (!resolvedStudio) {
-    const allRows = tables.flatMap((t) => (t.rows || []).slice(0, 3));
-    for (const row of allRows) {
-      const cells = row.filter((c) => c && c.trim());
-      const studioCell = cells.find((c) => /(?:אולפן|סטודיו|studio)\s*\d+\w?/i.test(c));
-      if (studioCell) {
-        resolvedStudio = studioCell.match(/(?:אולפן|סטודיו|studio)\s*\d+\w?/i)[0];
-        break;
-      }
-      const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
-      if (dateIdx >= 2 && cells[dateIdx - 1]) {
-        resolvedStudio = cells[dateIdx - 1];
-        break;
-      }
-    }
-  }
-
   return {
     crew: best.crew,
     title: titleText,
-    studio: resolvedStudio,
+    studio: cleanSnapshotText(snapshot?.studio || ''),
     rejected: !best.accepted,
     overlapCount: best.overlapCount,
     rawCrewCount: best.crew.length,
