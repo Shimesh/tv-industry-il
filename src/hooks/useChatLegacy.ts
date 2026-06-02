@@ -17,8 +17,15 @@ import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } f
 const CHAT_SNAPSHOT_TIMEOUT_MS = 20_000;
 const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
 const SEND_STEP_TIMEOUT_MS = 12_000;
-// No time-window: isOnline is kept real-time via Socket.IO presence:update events in useChatUsers
+// Socket.IO keeps lastSeen fresh for truly-online users; 5-min window catches stale Firestore docs
+const PRESENCE_STALE_MS = 5 * 60 * 1000;
 const CHAT_ATTACHMENT_MAX_BYTES = 3.5 * 1024 * 1024;
+
+function isPresenceOnline(isOnline: boolean | undefined, lastSeen: number | null | undefined): boolean {
+  if (!isOnline) return false;
+  if (typeof lastSeen !== 'number' || lastSeen <= 0) return false;
+  return Date.now() - lastSeen <= PRESENCE_STALE_MS;
+}
 
 export interface SendMessageResult {
   messageId: string;
@@ -1086,8 +1093,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       if (!current) return member;
       const newName = current.displayName || member.displayName;
       const newPhoto = current.photoURL ?? member.photoURL;
-      const newIsOnline = current.isOnline ?? member.isOnline;
       const newLastSeen = current.lastSeen ?? member.lastSeen;
+      const newIsOnline = isPresenceOnline(current.isOnline ?? member.isOnline, newLastSeen);
       const newStatus = current.status ?? member.status;
       if (
         newName === member.displayName &&
@@ -1108,7 +1115,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     return chat || null;
   }, [enrichedChats, activeChat]);
   const onlineUsers = useMemo(() => (
-    allUsers.filter((u) => u.uid !== user?.uid && u.isOnline === true)
+    allUsers.filter((u) => u.uid !== user?.uid && isPresenceOnline(u.isOnline, u.lastSeen))
   ), [allUsers, user?.uid]);
 
   const messages = [...olderMessages, ...liveMessages];
