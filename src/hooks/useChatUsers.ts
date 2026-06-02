@@ -13,6 +13,7 @@ import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { useAuth, type UserProfile } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { chatTrace, createChatTraceId } from '@/lib/chatTrace';
+import { getChatSocketBridge } from '@/lib/chat-v2/socketClient';
 
 const FIRESTORE_USERS_REST_BASE =
   'https://firestore.googleapis.com/v1/projects/tv-industry-il/databases/(default)/documents/users';
@@ -139,6 +140,26 @@ export function useChatUsers(): UserProfile[] {
       unsub();
     };
   }, [fetchViaRest, user]);
+
+  // Real-time presence via Socket.IO — fires the instant a user goes on/offline
+  useEffect(() => {
+    const bridge = getChatSocketBridge();
+    const unsubPresence = bridge.on('presence:update', (payload) => {
+      setAllUsers((prev) =>
+        prev.map((u) => {
+          if (u.uid !== payload.userId) return u;
+          return {
+            ...u,
+            isOnline: payload.isOnline,
+            lastSeen: payload.lastSeen ?? Date.now(),
+            status: (payload.status as UserProfile['status']) ?? u.status,
+            activeChatId: payload.activeChatId ?? null,
+          } as UserProfile;
+        }),
+      );
+    });
+    return unsubPresence;
+  }, []);
 
   return allUsers;
 }
