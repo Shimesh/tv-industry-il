@@ -496,6 +496,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
       };
       await setDoc(callRef, callRecord);
 
+      // Fire-and-forget push to wake the receiver if the app is closed/backgrounded
+      void user.getIdToken().then((idToken) =>
+        fetch('/api/call/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({
+            callId,
+            receiverId,
+            callerName: profile.displayName,
+            callerPhoto: profile.photoURL ?? null,
+            type,
+          }),
+        }).catch(() => {}),
+      );
+
       void emitCallSignal('call:ring', {
         callId,
         targetUid: receiverId,
