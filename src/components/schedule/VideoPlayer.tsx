@@ -81,6 +81,15 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
   const [dynamicStreamUrl, setDynamicStreamUrl] = useState<string | null>(null);
   const [dynamicEmbedUrl, setDynamicEmbedUrl] = useState<string | null>(null);
   const [dynamicLoading, setDynamicLoading] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setNeedsUserGesture(false);
+    setDynamicStreamUrl(null);
+    setDynamicEmbedUrl(null);
+    setRetryKey(k => k + 1);
+  }, []);
 
   // Reset dynamic state when channel changes
   useEffect(() => {
@@ -89,6 +98,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
     setError(null);
     setNeedsUserGesture(false);
     setIsMuted(initialMuted);
+    setRetryKey(0);
   }, [channel.id, initialMuted]);
 
   // Fetch stream URL at runtime for channels with dynamicStream flag
@@ -110,7 +120,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
       })
       .catch(() => { /* network error → fall through to placeholder */ })
       .finally(() => setDynamicLoading(false));
-  }, [channel.id, stream?.dynamicStream]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id, stream?.dynamicStream, retryKey]);
 
   // Load HLS stream (either static streamUrl or dynamic URL fetched from API)
   useEffect(() => {
@@ -123,6 +134,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
     let hlsInstance: import('hls.js').default | null = null;
     let activeSourceIndex = 0;
     let mediaRecoverAttempts = 0;
+    let networkRecoverAttempts = 0;
 
     const getVideoErrorDetails = () => {
       const videoError = video.error;
@@ -248,10 +260,16 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
             logStreamError('HLS error', data);
             if (data.fatal) {
-              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoverAttempts < 1) {
+              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoverAttempts < 2) {
                 mediaRecoverAttempts += 1;
                 logStreamError('Recovering from fatal HLS media error', data);
                 hlsInstance?.recoverMediaError();
+                return;
+              }
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoverAttempts < 1) {
+                networkRecoverAttempts += 1;
+                logStreamError('Recovering from fatal HLS network error', data);
+                hlsInstance?.startLoad();
                 return;
               }
               if (tryNextSource()) return;
@@ -584,14 +602,22 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
           <div className="text-center text-white px-6">
             <div className="text-4xl mb-3">⚠️</div>
             <p className="text-red-400 mb-4 text-sm">{error}</p>
-            {stream?.websiteUrl && (
+            <div className="flex flex-col items-center gap-2">
               <button
-                onClick={() => window.open(stream.websiteUrl, '_blank')}
-                className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm transition-colors"
+                onClick={handleRetry}
+                className="bg-white/20 hover:bg-white/30 px-5 py-2 rounded-lg text-sm font-bold transition-colors"
               >
-                פתח באתר הערוץ ↗
+                נסה שוב ↺
               </button>
-            )}
+              {stream?.websiteUrl && (
+                <button
+                  onClick={() => window.open(stream.websiteUrl, '_blank')}
+                  className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm transition-colors"
+                >
+                  פתח באתר הערוץ ↗
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

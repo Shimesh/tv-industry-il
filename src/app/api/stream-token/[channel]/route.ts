@@ -147,12 +147,17 @@ export async function GET(
   const requestUserAgent = request.headers.get('user-agent');
 
   try {
-    // === כאן 11 — prefer the stable HTTPS Redge CDN URL ===
+    // === כאן 11 — try scraping live page first, fall back to stable CDN ===
     if (channel === 'kan11') {
-      const html = await fetchPage('https://www.kan.org.il/live/');
-      if (html) {
+      const pagesToTry = [
+        'https://www.kan.org.il/live/',
+        'https://www.kan.org.il/live/tv.aspx?stationid=2',
+      ];
+      for (const pageUrl of pagesToTry) {
+        const html = await fetchPage(pageUrl);
+        if (!html) continue;
         const url = extractM3u8(html);
-        if (url?.includes('cdn-redge.media')) return NextResponse.json({ url, expires: Date.now() + 3600000 });
+        if (url) return NextResponse.json({ url, expires: Date.now() + 3600000 });
       }
       // Return known stable CDN as fallback
       return NextResponse.json({
