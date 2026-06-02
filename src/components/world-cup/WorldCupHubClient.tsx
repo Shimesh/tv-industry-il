@@ -803,49 +803,101 @@ type MatchEvent = {
   detail: string;
 };
 
-function FormationPitch({ squad, flag, teamName }: { squad: import('@/lib/world-cup/types').WorldCupPlayer[]; flag: string; teamName: string }) {
-  const starters = squad.slice(0, 11);
-  const rowY: Record<string, number> = { GK: 87, DEF: 68, MID: 46, FWD: 22 };
+const xSpread: Record<number, number[]> = {
+  1: [50],
+  2: [25, 75],
+  3: [17, 50, 83],
+  4: [12, 37, 63, 88],
+  5: [10, 28, 50, 72, 90],
+};
+
+function FormationPitch({ squad, flag, teamName, formation }: { squad: import('@/lib/world-cup/types').WorldCupPlayer[]; flag: string; teamName: string; formation?: string }) {
   const pColor: Record<string, string> = { GK: '#D4AF37', DEF: '#4ade80', MID: '#60a5fa', FWD: '#f87171' };
 
-  const dots = (['GK', 'DEF', 'MID', 'FWD'] as const).flatMap((pos) => {
-    const players = starters.filter(p => p.position === pos);
-    const n = players.length;
-    return players.map((p, i) => ({
-      p, pos,
-      x: n === 1 ? 50 : 8 + (84 / Math.max(n - 1, 1)) * i,
-      y: rowY[pos],
-    }));
-  });
+  // Use only starters (isStarter !== false and first 11)
+  const starters = squad.filter(p => p.isStarter !== false).slice(0, 11);
+
+  // Parse formation string e.g. "4-3-3" → [4,3,3]
+  const formRows = (formation ?? '').split('-').map(Number).filter(n => n > 0);
+  const totalOutfield = formRows.reduce((a, b) => a + b, 0);
+
+  const gk = starters.filter(p => p.position === 'GK').slice(0, 1);
+  const outfield = starters.filter(p => p.position !== 'GK').slice(0, 10);
+
+  // Assign outfield players to rows bottom-to-top (DEF → MID → FWD)
+  type Dot = { p: typeof starters[0]; x: number; y: number; pos: string };
+  const dots: Dot[] = [];
+
+  if (formRows.length >= 2 && totalOutfield <= 10) {
+    // Use formation-based layout
+    const rowYs = formRows.length === 2 ? [67, 32]
+      : formRows.length === 3 ? [70, 48, 23]
+      : [72, 52, 35, 18];
+    let offset = 0;
+    formRows.forEach((count, ri) => {
+      const rowPlayers = outfield.slice(offset, offset + count);
+      const xs = xSpread[rowPlayers.length] ?? xSpread[4];
+      const pos = ri === 0 ? 'DEF' : ri === formRows.length - 1 ? 'FWD' : 'MID';
+      rowPlayers.forEach((p, i) => dots.push({ p, x: xs[i] ?? 50, y: rowYs[ri], pos }));
+      offset += count;
+    });
+  } else {
+    // Fallback: group by position tag
+    const rowY: Record<string, number> = { DEF: 70, MID: 48, FWD: 23 };
+    (['DEF', 'MID', 'FWD'] as const).forEach(pos => {
+      const players = outfield.filter(p => p.position === pos);
+      const xs = xSpread[Math.min(players.length, 5)] ?? xSpread[4];
+      players.forEach((p, i) => dots.push({ p, x: xs[i] ?? 50, y: rowY[pos], pos }));
+    });
+  }
+
+  // Add GK
+  if (gk.length) dots.push({ p: gk[0], x: 50, y: 88, pos: 'GK' });
+
+  const displayFormation = formation ?? (
+    `${outfield.filter(p => p.position === 'DEF').length}-${outfield.filter(p => p.position === 'MID').length}-${outfield.filter(p => p.position === 'FWD').length}`
+  );
 
   return (
     <div className="overflow-hidden rounded-xl" style={{ background: 'linear-gradient(180deg,#1a6e30 0%,#0e5222 100%)' }}>
       <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
         <span className="text-lg leading-none">{flag}</span>
         <span className="text-xs font-black text-white">{teamName}</span>
-        <span className="mr-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/60">{dots.length} שחקנים</span>
+        <span className="mr-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-white/60">{displayFormation}</span>
       </div>
       <svg viewBox="0 0 100 100" className="w-full" xmlns="http://www.w3.org/2000/svg">
+        {/* Grass stripes */}
         {[0,1,2,3,4,5].map(i => (
-          <rect key={i} x="0" y={i*16.6} width="100" height="8.3" fill={i%2===0?'rgba(0,0,0,.07)':'rgba(255,255,255,.02)'} />
+          <rect key={i} x="0" y={i*16.6} width="100" height="8.3" fill={i%2===0?'rgba(0,0,0,.08)':'rgba(255,255,255,.025)'} />
         ))}
+        {/* Halfway line */}
         <line x1="2" y1="99" x2="98" y2="99" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
+        {/* Penalty arc */}
         <path d="M 34 99 A 16 16 0 0 0 66 99" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
-        <rect x="18" y="84" width="64" height="15" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
-        <rect x="33" y="94" width="34" height="5" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
-        <rect x="38" y="98" width="24" height="3" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.5)" strokeWidth="0.7" rx="0.3" />
-        <circle cx="50" cy="89" r="0.7" fill="rgba(255,255,255,.45)" />
-        {dots.map(({ p, pos, x, y }) => (
-          <g key={p.name} transform={`translate(${x},${y})`}>
-            <circle r="5.2" fill={pColor[pos]} stroke="rgba(255,255,255,.55)" strokeWidth="0.6" />
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="3.6" fontWeight="bold" fill="white">
-              {p.number ?? '?'}
-            </text>
-            <text textAnchor="middle" y="8.2" fontSize="2.7" fill="rgba(255,255,255,.88)">
-              {(p.name.split(' ').pop() || p.name).slice(0, 9)}
-            </text>
-          </g>
-        ))}
+        {/* Penalty box */}
+        <rect x="18" y="83" width="64" height="16" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
+        {/* 6-yard box */}
+        <rect x="33" y="93" width="34" height="6" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="0.5" />
+        {/* Goal */}
+        <rect x="38.5" y="98" width="23" height="3.5" fill="rgba(255,255,255,.15)" stroke="rgba(255,255,255,.6)" strokeWidth="0.7" rx="0.4" />
+        {/* Penalty spot */}
+        <circle cx="50" cy="88.5" r="0.7" fill="rgba(255,255,255,.5)" />
+        {/* Players */}
+        {dots.map(({ p, x, y, pos }) => {
+          const lastName = p.name.split(' ').slice(-1)[0] ?? p.name;
+          const shortName = lastName.length > 8 ? lastName.slice(0, 7) + '.' : lastName;
+          return (
+            <g key={`${p.name}-${x}-${y}`} transform={`translate(${x},${y})`}>
+              <circle r="5.5" fill={pColor[pos] ?? pColor[p.position]} stroke="rgba(255,255,255,.6)" strokeWidth="0.6" />
+              <text textAnchor="middle" dominantBaseline="middle" fontSize="3.8" fontWeight="bold" fill="white">
+                {p.number ?? '?'}
+              </text>
+              <text textAnchor="middle" y="8.8" fontSize="2.8" fill="rgba(255,255,255,.9)" fontWeight="600">
+                {shortName}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -959,10 +1011,10 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   const isLive = match.status === 'live';
   const [tab, setTab] = useState<'lineup' | 'live'>(isLive ? 'live' : 'lineup');
 
-  const homeStarters = homeDetail?.squad.slice(0, 11) ?? [];
-  const homeSubs = homeDetail?.squad.slice(11) ?? [];
-  const awayStarters = awayDetail?.squad.slice(0, 11) ?? [];
-  const awaySubs = awayDetail?.squad.slice(11) ?? [];
+  const homeStarters = (homeDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
+  const homeSubs = homeDetail?.squad.filter(p => p.isStarter === false) ?? [];
+  const awayStarters = (awayDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
+  const awaySubs = awayDetail?.squad.filter(p => p.isStarter === false) ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(6px)' }}>
@@ -1040,10 +1092,10 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
               {/* Formations side by side */}
               <div className="grid gap-3 sm:grid-cols-2">
                 {homeDetail && homeStarters.length > 0 && (
-                  <FormationPitch squad={homeStarters} flag={match.homeTeam.flag} teamName={match.homeTeam.nameHe} />
+                  <FormationPitch squad={homeStarters} flag={match.homeTeam.flag} teamName={match.homeTeam.nameHe} formation={homeDetail.formation} />
                 )}
                 {awayDetail && awayStarters.length > 0 && (
-                  <FormationPitch squad={awayStarters} flag={match.awayTeam.flag} teamName={match.awayTeam.nameHe} />
+                  <FormationPitch squad={awayStarters} flag={match.awayTeam.flag} teamName={match.awayTeam.nameHe} formation={awayDetail.formation} />
                 )}
               </div>
 

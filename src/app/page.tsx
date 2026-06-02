@@ -184,21 +184,7 @@ export default function HomePage() {
           <HotListingsWidget />
         </motion.section>
 
-        {/* 6 → Weather */}
-        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 shadow-[0_0_14px_rgba(14,165,233,0.40)]">
-              <Cloud className="w-4 h-4 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>מזג האוויר</h2>
-              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>תחזית ערים מרכזיות בזמן אמת</p>
-            </div>
-          </div>
-          <HomeInfoWidget />
-        </motion.section>
-
-        {/* 7 → WorldCup + ProCard widgets */}
+        {/* 6 → WorldCup + ProCard widgets */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -214,7 +200,7 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* 8 → Latest News */}
+        {/* 7 → Latest News */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-[0_0_14px_rgba(99,102,241,0.40)]">
@@ -237,7 +223,21 @@ export default function HomePage() {
           )}
         </motion.section>
 
-        {/* 7 → Upcoming Events */}
+        {/* 8 → Weather */}
+        <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 shadow-[0_0_14px_rgba(14,165,233,0.40)]">
+              <Cloud className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>מזג האוויר</h2>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>תחזית ערים מרכזיות בזמן אמת</p>
+            </div>
+          </div>
+          <HomeInfoWidget />
+        </motion.section>
+
+        {/* 9 → Upcoming Events */}
         <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="pb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_0_14px_rgba(59,130,246,0.40)]">

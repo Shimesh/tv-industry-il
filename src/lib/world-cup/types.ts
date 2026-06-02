@@ -82,6 +82,8 @@ export type WorldCupPlayer = {
   name: string;
   number?: number;
   position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  subPosition?: string;
+  isStarter?: boolean;
   club?: string;
   caps?: number;
   goals?: number;
@@ -105,6 +107,7 @@ export type WorldCupTeamDetail = {
   fifaRanking?: number;
   worldCupTitles: number;
   bestResult: string;
+  formation?: string;
   squad: WorldCupPlayer[];
   tournamentHistory: WorldCupTournamentResult[];
   group?: string;
