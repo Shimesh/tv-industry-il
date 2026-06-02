@@ -1602,11 +1602,108 @@ export default function AdminPage() {
 
         {/* === INSIGHTS ROW === */}
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-          <InsightCard title="סיור הושלם" value={tourCompletedCount} total={overview.stats.totalUsers} colorHex="#a78bfa" icon={Sparkles} />
-          <InsightCard title="פרופיל מלא" value={fullProfileCount} total={overview.stats.totalUsers} colorHex="#34d399" icon={CheckCircle} />
-          <InsightCard title="הסכמה לתנאים" value={consentedCount} total={overview.stats.totalUsers} colorHex="#60a5fa" icon={ShieldCheck} />
-          <InsightCard title="Push מופעל" value={pushCount} total={overview.stats.totalUsers} colorHex="#fb923c" icon={Smartphone} />
+          <InsightCard title="סיור הושלם" value={tourCompletedCount} total={overview.stats.totalUsers} colorHex="#a78bfa" icon={Sparkles} onClick={() => setInsightDrilldown(v => v === 'tour' ? null : 'tour')} active={insightDrilldown === 'tour'} />
+          <InsightCard title="פרופיל מלא" value={fullProfileCount} total={overview.stats.totalUsers} colorHex="#34d399" icon={CheckCircle} onClick={() => setInsightDrilldown(v => v === 'profile' ? null : 'profile')} active={insightDrilldown === 'profile'} />
+          <InsightCard title="הסכמה לתנאים" value={consentedCount} total={overview.stats.totalUsers} colorHex="#60a5fa" icon={ShieldCheck} onClick={() => setInsightDrilldown(v => v === 'consent' ? null : 'consent')} active={insightDrilldown === 'consent'} />
+          <InsightCard title="Push מופעל" value={pushCount} total={overview.stats.totalUsers} colorHex="#fb923c" icon={Smartphone} onClick={() => setInsightDrilldown(v => v === 'push' ? null : 'push')} active={insightDrilldown === 'push'} />
         </div>
+
+        {/* === INSIGHT DRILLDOWN PANEL === */}
+        {insightDrilldown && (() => {
+          const drillConfig = {
+            tour: {
+              title: 'סיור הושלם',
+              colorHex: '#a78bfa',
+              yesUsers: overview.users.filter(u => u.appTourSeen),
+              noUsers: overview.users.filter(u => !u.appTourSeen),
+              yesLabel: 'ביצעו סיור',
+              noLabel: 'לא ביצעו סיור',
+              getDate: (_u: AdminUserSummary) => null as string | null,
+            },
+            profile: {
+              title: 'פרופיל מלא',
+              colorHex: '#34d399',
+              yesUsers: overview.users.filter(u => isFullProfile(u)),
+              noUsers: overview.users.filter(u => !isFullProfile(u)),
+              yesLabel: 'פרופיל מלא',
+              noLabel: 'פרופיל חסר',
+              getDate: (_u: AdminUserSummary) => null as string | null,
+            },
+            consent: {
+              title: 'הסכמה לתנאים',
+              colorHex: '#60a5fa',
+              yesUsers: overview.users.filter(u => u.is_consented || u.termsAccepted),
+              noUsers: overview.users.filter(u => !u.is_consented && !u.termsAccepted),
+              yesLabel: 'הסכימו',
+              noLabel: 'לא הסכימו',
+              getDate: (u: AdminUserSummary) => u.termsAcceptedAt ?? null,
+            },
+            push: {
+              title: 'Push מופעל',
+              colorHex: '#fb923c',
+              yesUsers: overview.users.filter(u => u.hasPush),
+              noUsers: overview.users.filter(u => !u.hasPush),
+              yesLabel: 'Push פעיל',
+              noLabel: 'ללא Push',
+              getDate: (_u: AdminUserSummary) => null as string | null,
+            },
+          }[insightDrilldown];
+
+          return (
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800" style={{ borderColor: `${drillConfig.colorHex}20` }}>
+                <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                  <span style={{ color: drillConfig.colorHex }}>▶</span>
+                  פירוט: {drillConfig.title}
+                </h3>
+                <button onClick={() => setInsightDrilldown(null)} className="text-gray-500 hover:text-white text-lg leading-none">×</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-800">
+                {/* YES column */}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full" style={{ background: drillConfig.colorHex }} />
+                    <span className="text-xs font-bold text-gray-300">{drillConfig.yesLabel} ({drillConfig.yesUsers.length})</span>
+                  </div>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {drillConfig.yesUsers.slice(0, 50).map(u => (
+                      <div key={u.uid} className="flex items-center gap-2 text-xs text-gray-300">
+                        <div className="h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-gray-700">
+                          {u.displayName?.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{u.displayName}</p>
+                          {drillConfig.getDate(u) && (
+                            <p className="text-[10px] text-gray-500">{new Date(drillConfig.getDate(u)!).toLocaleDateString('he-IL')}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {drillConfig.yesUsers.length === 0 && <p className="text-xs text-gray-600">אין נתונים</p>}
+                  </div>
+                </div>
+                {/* NO column */}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-gray-600" />
+                    <span className="text-xs font-bold text-gray-500">{drillConfig.noLabel} ({drillConfig.noUsers.length})</span>
+                  </div>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {drillConfig.noUsers.slice(0, 50).map(u => (
+                      <div key={u.uid} className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold bg-gray-800">
+                          {u.displayName?.charAt(0) || '?'}
+                        </div>
+                        <p className="truncate">{u.displayName}</p>
+                      </div>
+                    ))}
+                    {drillConfig.noUsers.length === 0 && <p className="text-xs text-gray-600">אין נתונים</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* === USER MANAGEMENT (TOP) === */}
         <CollapsibleSection
@@ -1790,6 +1887,65 @@ export default function AdminPage() {
                     </td>
                   </tr>
                 ) : null}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
+
+        {/* === UNREGISTERED CONTACTS === */}
+        <CollapsibleSection
+          title="אנשי קשר ללא חשבון"
+          icon={<Contact2 className="h-5 w-5" />}
+          badge={<span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{availableContacts.filter(c => !overview.users.some(u => u.linkedContactId !== null && String(u.linkedContactId) === c.id)).length}</span>}
+          collapsed={collapsedSections.unregistered ?? true}
+          onToggle={() => toggleSection('unregistered')}
+          accentColor="text-blue-400"
+        >
+          <div className="max-h-[500px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-gray-900">
+                <tr className="border-b border-gray-800 text-[11px] text-gray-500">
+                  <th className="px-3 py-2 text-right font-medium">שם</th>
+                  <th className="px-3 py-2 text-right font-medium">טלפון</th>
+                  <th className="px-3 py-2 text-right font-medium">תפקיד</th>
+                  <th className="px-3 py-2 text-right font-medium">מחלקה</th>
+                  <th className="px-3 py-2 text-right font-medium">עריכה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableContacts
+                  .filter(c => !overview.users.some(u => u.linkedContactId !== null && String(u.linkedContactId) === c.id))
+                  .map(c => (
+                    <tr key={c.id} className="border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
+                            {c.firstName?.charAt(0) || '?'}
+                          </div>
+                          <span className="text-sm text-white">{[c.firstName, c.lastName].filter(Boolean).join(' ') || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-400 text-xs dir-ltr">{c.phone || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-300 text-xs">{c.roles?.join(', ') || c.role || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">{c.departments?.join(', ') || c.department || '—'}</td>
+                      <td className="px-3 py-2.5">
+                        <button
+                          onClick={() => setContactEditModal({
+                            contactId: c.id,
+                            displayName: [c.firstName, c.lastName].filter(Boolean).join(' '),
+                            phone: c.phone || '',
+                            department: c.department || '',
+                            departments: c.departments || (c.department ? [c.department] : []),
+                            role: c.role || '',
+                            roles: c.roles || (c.role ? [c.role] : []),
+                            customRole: '',
+                          })}
+                          className="text-xs text-gray-500 hover:text-gray-200 underline underline-offset-1"
+                        >✏️</button>
+                      </td>
+                    </tr>
+                  ))
+                }
               </tbody>
             </table>
           </div>
@@ -2859,6 +3015,77 @@ export default function AdminPage() {
       </div>,
       document.body,
     )}
+
+      {/* Contact Edit Modal */}
+      {contactEditModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl p-6 shadow-xl" style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
+            <h3 className="mb-4 text-lg font-bold" style={{ color: 'var(--theme-text-primary)' }}>
+              ✏️ ערוך איש קשר
+            </h3>
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                שם מלא
+                <input
+                  value={contactEditModal.displayName}
+                  onChange={(e) => setContactEditModal(m => m && { ...m, displayName: e.target.value })}
+                  dir="rtl"
+                  className="rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                טלפון
+                <input
+                  value={contactEditModal.phone}
+                  onChange={(e) => setContactEditModal(m => m && { ...m, phone: e.target.value })}
+                  dir="ltr" type="tel"
+                  className="rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                מחלקות
+                <div className="flex flex-wrap gap-1.5 rounded-lg p-2" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)' }}>
+                  {stringArray(contactEditModal.departments).map((dept) => (
+                    <button key={dept} type="button" onClick={() => setContactEditModal(m => { if (!m) return m; const departments = removeValue(m.departments, dept); return { ...m, departments, department: departments[0] || '' }; })}
+                      className="rounded-full bg-purple-500/20 px-2.5 py-1 text-xs text-purple-100 hover:bg-red-500/20 hover:text-red-100">{dept} ×</button>
+                  ))}
+                  {!stringArray(contactEditModal.departments).length && <span className="text-xs text-gray-500">לא נבחרו מחלקות</span>}
+                </div>
+                <select value="" onChange={(e) => { const d = e.currentTarget.value; setContactEditModal(m => { if (!m) return m; const departments = addUniqueValue(m.departments, d); return { ...m, departments, department: departments[0] || '' }; }); }}
+                  className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}>
+                  <option value="">הוסף מחלקה...</option>
+                  {INDUSTRY_DEPARTMENT_OPTIONS.filter(d => !stringArray(contactEditModal.departments).includes(d)).map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+                תפקידים
+                <div className="flex flex-wrap gap-1.5 rounded-lg p-2" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)' }}>
+                  {stringArray(contactEditModal.roles).map((role) => (
+                    <button key={role} type="button" onClick={() => setContactEditModal(m => { if (!m) return m; const roles = removeValue(m.roles, role); return { ...m, roles, role: roles[0] || '' }; })}
+                      className="rounded-full bg-blue-500/20 px-2.5 py-1 text-xs text-blue-100 hover:bg-red-500/20 hover:text-red-100">{role} ×</button>
+                  ))}
+                  {!stringArray(contactEditModal.roles).length && <span className="text-xs text-gray-500">לא נבחרו תפקידים</span>}
+                </div>
+                <select value="" onChange={(e) => { const r = e.currentTarget.value; setContactEditModal(m => { if (!m) return m; const roles = addUniqueValue(m.roles, r); return { ...m, roles, role: roles[0] || '' }; }); }}
+                  dir="rtl" className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}>
+                  <option value="">הוסף תפקיד...</option>
+                  {roleOptionsForEditor(contactEditModal.roles).filter(r => !stringArray(contactEditModal.roles).includes(r)).map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setContactEditModal(null)} className="rounded-lg px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">ביטול</button>
+              <button onClick={() => void handleContactSave()} disabled={contactEditSaving}
+                className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-50">
+                {contactEditSaving ? 'שומר...' : 'שמור'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {showAddContact && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowAddContact(false); setNewContact({ name: '', phone: '', role: '', department: '' }); } }}>
