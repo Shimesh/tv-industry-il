@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/server/adminAuth';
-import { getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
+import { createDocument, getDocument, listDocuments } from '@/lib/server/firestoreAdminRest';
 import {
   createUserNotification,
   sendFcmPush,
@@ -142,6 +142,21 @@ export async function POST(request: NextRequest) {
     if (sendPush && webPushSubscriptions.length > 0) {
       await sendStandardWebPush({ subscriptions: webPushSubscriptions, title, body: message, linkUrl, type: notificationType });
     }
+
+    // Log to pushLogs (fire-and-forget, non-critical)
+    void createDocument('pushLogs', {
+      sentAt: new Date().toISOString(),
+      title,
+      message,
+      linkUrl: linkUrl ?? null,
+      target,
+      targetUserId: target === 'user' ? targetUserId : null,
+      sentBy: authUser.uid,
+      sentByEmail: (authUser as { uid: string; email?: string | null }).email ?? null,
+      recipientCount: recipients.length,
+      pushTokensCount: sendPush ? fcmTokens.length : 0,
+      webPushCount: sendPush ? webPushSubscriptions.length : 0,
+    }).catch(() => { /* non-critical */ });
 
     await recordRouteMetric({ route: '/api/admin/notifications', ok: true, statusCode: 200 });
     return NextResponse.json({

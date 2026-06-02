@@ -53,6 +53,20 @@ type ToastState = {
 type UserSortKey = 'displayName' | 'email' | 'role' | 'status' | 'lastSeen' | 'siteRole';
 type SortDirection = 'asc' | 'desc';
 type NotificationTarget = 'test' | 'user' | 'all' | 'incomplete_profile';
+
+type PushLogEntry = {
+  id: string;
+  sentAt?: string;
+  title?: string;
+  message?: string;
+  linkUrl?: string | null;
+  target?: string;
+  targetUserId?: string | null;
+  sentByEmail?: string | null;
+  recipientCount?: number;
+  pushTokensCount?: number;
+  webPushCount?: number;
+};
 type PageViewPanelState = {
   page: { key: string; label: string } | null;
   events: PageViewEvent[];
@@ -695,6 +709,8 @@ export default function AdminPage() {
   });
   const [discoveries, setDiscoveries] = useState<ContactDiscovery[]>([]);
   const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
+  const [pushLogs, setPushLogs] = useState<PushLogEntry[]>([]);
+  const [pushLogsLoading, setPushLogsLoading] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     users: false,
     discoveries: false,
@@ -917,6 +933,11 @@ export default function AdminPage() {
       cancelled = true;
     };
   }, [authLoading, user, isAdmin]);
+
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    void loadPushLogs();
+  }, [user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -1317,6 +1338,18 @@ export default function AdminPage() {
     }
   }
 
+  async function loadPushLogs() {
+    setPushLogsLoading(true);
+    try {
+      const data = await fetchWithAuth<{ logs: PushLogEntry[] }>('/api/admin/push-logs');
+      setPushLogs(data.logs ?? []);
+    } catch {
+      // non-critical
+    } finally {
+      setPushLogsLoading(false);
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -1360,6 +1393,7 @@ export default function AdminPage() {
       if (notificationTarget !== 'user') {
         setNotificationTargetUserId('');
       }
+      void loadPushLogs();
     } catch (notificationError) {
       showToast('err', notificationError instanceof Error ? notificationError.message : 'שגיאה בשליחת ההתראה');
     } finally {
@@ -2537,6 +2571,55 @@ export default function AdminPage() {
                     {sendingNotification ? 'שולח התראה...' : 'שלח התראה'}
                   </button>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-blue-400" />
+                    <span className="text-sm font-medium">היסטוריית פוש שנשלח</span>
+                  </div>
+                  <button
+                    onClick={() => void loadPushLogs()}
+                    disabled={pushLogsLoading}
+                    className="rounded-lg bg-gray-800 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {pushLogsLoading ? '...' : 'רענן'}
+                  </button>
+                </div>
+                {pushLogsLoading && pushLogs.length === 0 ? (
+                  <p className="text-xs text-gray-500">טוען...</p>
+                ) : pushLogs.length === 0 ? (
+                  <p className="text-xs text-gray-500">עדיין לא נשלחו פושים</p>
+                ) : (
+                  <div className="max-h-80 space-y-2 overflow-y-auto">
+                    {pushLogs.map((log) => (
+                      <div key={log.id} className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+                        <div className="mb-1 flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-white">{log.title}</p>
+                          <span className="shrink-0 text-xs text-gray-500">{formatRelativeTime(log.sentAt)}</span>
+                        </div>
+                        <p className="mb-1.5 line-clamp-2 text-xs text-gray-400">{log.message}</p>
+                        <div className="flex flex-wrap gap-2 text-[11px]">
+                          <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-blue-300">
+                            {log.target === 'all' ? 'כולם' : log.target === 'user' ? 'יעד ספציפי' : log.target === 'incomplete_profile' ? 'פרופיל חסר' : 'בדיקה'}
+                          </span>
+                          <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-green-300">
+                            {log.recipientCount ?? 0} נמענים
+                          </span>
+                          {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0) > 0 && (
+                            <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-purple-300">
+                              {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0)} push
+                            </span>
+                          )}
+                          {log.sentByEmail && (
+                            <span className="truncate text-gray-600">{log.sentByEmail}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">

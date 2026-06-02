@@ -602,6 +602,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const updateData = {
         answer: { type: answer.type, sdp: answer.sdp },
         status: 'active',
+        answeredAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'calls', currentCall.callId), updateData);
