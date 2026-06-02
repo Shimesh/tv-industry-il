@@ -28,6 +28,8 @@ type RawUser = {
   crewName?: string | null;
   is_consented?: boolean;
   termsAccepted?: boolean;
+  appTourSeen?: boolean;
+  termsAcceptedAt?: string | null;
   linkedContactId?: number | string | null;
   phone?: string | null;
   profileId?: string | null;
@@ -253,6 +255,8 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     onlineNow,
     stalePresence,
     onboardingComplete: Boolean(raw.onboardingComplete),
+    appTourSeen: raw.appTourSeen === true,
+    termsAcceptedAt: typeof raw.termsAcceptedAt === 'string' && raw.termsAcceptedAt ? raw.termsAcceptedAt : null,
     photoURL: raw.photoURL || null,
     city: raw.city || null,
     lastSeen,
@@ -302,6 +306,11 @@ function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
     onlineNow,
     stalePresence,
     onboardingComplete: group.some((user) => user.onboardingComplete === true),
+    appTourSeen: group.some((user) => user.appTourSeen === true),
+    termsAcceptedAt: group
+      .map((user) => user.termsAcceptedAt || null)
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .sort((a, b) => b.localeCompare(a))[0] ?? null,
     photoURL: firstString(group, (user) => user.photoURL) || null,
     city: firstString(group, (user) => user.city) || null,
     lastSeen,

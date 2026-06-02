@@ -540,23 +540,41 @@ function DonutChart({ value, total, color, size = 56 }: { value: number; total: 
   );
 }
 
-function InsightCard({ title, value, total, colorHex, icon: Icon }: {
+function InsightCard({ title, value, total, colorHex, icon: Icon, onClick, active }: {
   title: string; value: number; total: number; colorHex: string; icon: typeof Users;
+  onClick?: () => void; active?: boolean;
 }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-gray-800/80 bg-gray-900 p-4 transition-colors hover:border-gray-700">
+    <button
+      onClick={onClick}
+      className={`group relative flex w-full items-center gap-3 rounded-2xl border p-4 text-right transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
+        active
+          ? 'border-white/20 shadow-lg'
+          : 'border-gray-800/80 hover:border-gray-700'
+      }`}
+      style={{
+        background: active
+          ? `linear-gradient(135deg, ${colorHex}18 0%, ${colorHex}08 100%)`
+          : 'rgb(17, 24, 39)',
+        boxShadow: active ? `0 0 20px ${colorHex}20` : undefined,
+      }}
+      type="button"
+    >
       <DonutChart value={value} total={total} color={colorHex} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 text-right">
         <div className="flex items-baseline gap-1">
           <p className="text-xl font-bold tabular-nums text-white">{value}</p>
           <p className="text-xs text-gray-500">/ {total}</p>
+          <p className="mr-auto text-sm font-bold tabular-nums" style={{ color: colorHex }}>{pct}%</p>
         </div>
         <p className="mt-0.5 truncate text-[11px] leading-tight text-gray-400">{title}</p>
+        <p className="mt-0.5 text-[10px] text-gray-600 group-hover:text-gray-500 transition-colors">לחץ לפרטים ▾</p>
       </div>
-      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/5" style={{ color: colorHex }}>
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: `${colorHex}18`, color: colorHex }}>
         <Icon className="h-4 w-4" />
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -652,11 +670,23 @@ export default function AdminPage() {
     linkedContactId: string | null;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [insightDrilldown, setInsightDrilldown] = useState<'tour' | 'profile' | 'consent' | 'push' | null>(null);
   const [availableContacts, setAvailableContacts] = useState<
     { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[]
   >([]);
   const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [showContactSearch, setShowContactSearch] = useState(false);
+  const [contactEditModal, setContactEditModal] = useState<{
+    contactId: string;
+    displayName: string;
+    phone: string;
+    department: string;
+    departments: string[];
+    role: string;
+    roles: string[];
+    customRole: string;
+  } | null>(null);
+  const [contactEditSaving, setContactEditSaving] = useState(false);
   const [pageViewPanel, setPageViewPanel] = useState<PageViewPanelState>({
     page: null,
     events: [],
@@ -756,6 +786,32 @@ export default function AdminPage() {
       showToast('err', 'שגיאה בשמירה');
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function handleContactSave() {
+    if (!contactEditModal) return;
+    setContactEditSaving(true);
+    try {
+      await fetchWithAuth('/api/admin/contacts/update', {
+        method: 'POST',
+        body: JSON.stringify({
+          contactId: contactEditModal.contactId,
+          displayName: contactEditModal.displayName,
+          phone: contactEditModal.phone,
+          departments: stringArray(contactEditModal.departments),
+          roles: stringArray(contactEditModal.roles),
+          department: stringArray(contactEditModal.departments)[0] || '',
+          role: stringArray(contactEditModal.roles)[0] || '',
+        }),
+      });
+      showToast('ok', 'איש הקשר עודכן');
+      setContactEditModal(null);
+      void loadOverview(true);
+    } catch {
+      showToast('err', 'שגיאה בשמירה');
+    } finally {
+      setContactEditSaving(false);
     }
   }
 
