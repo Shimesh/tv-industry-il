@@ -18,6 +18,9 @@ type NotifyBody = {
   memberUids: string[];
 };
 
+// Must match Socket.IO heartbeat cadence (30s × 6 beats grace)
+const ONLINE_STALE_MS = 3 * 60 * 1000;
+
 type RawUserDoc = {
   id: string;
   fcmTokens?: unknown;
@@ -26,6 +29,13 @@ type RawUserDoc = {
   activeChatId?: string | null;
   lastSeen?: number | string | null;
 };
+
+function isRecentlyOnline(userData: RawUserDoc | null): boolean {
+  if (!userData?.isOnline) return false;
+  const raw = userData.lastSeen;
+  const ms = typeof raw === 'number' ? raw : typeof raw === 'string' ? new Date(raw).getTime() : 0;
+  return ms > 0 && Date.now() - ms <= ONLINE_STALE_MS;
+}
 
 function uniqueStrings(values: unknown[]): string[] {
   return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
@@ -87,12 +97,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const result = userDocs[i];
       const userData = result.status === 'fulfilled' ? result.value : null;
 
-      // Presence check:
+      // Presence check (lastSeen must be within 3 min to count as online):
       // - User is in this exact chat → skip all notifications
       // - User is online but in a different chat → bell only, no push
-      // - User is offline → bell + push
-      const isOnline = userData?.isOnline === true;
-      const isInThisChat = isOnline && userData?.activeChatId === chatId;
+      // - User is offline / lastSeen stale → bell + push
+      const online = isRecentlyOnline(userData);
+      const isInThisChat = online && userData?.activeChatId === chatId;
 
       if (isInThisChat) continue;
 
@@ -108,7 +118,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }),
       );
 
-      if (!isOnline) {
+      if (!online) {
         const fcmTokens = Array.isArray(userData?.fcmTokens) ? userData.fcmTokens as string[] : [];
         const webPushSubs = Array.isArray(userData?.webPushSubscriptions) ? userData.webPushSubscriptions : [];
         pushFcmTokens.push(...fcmTokens);
