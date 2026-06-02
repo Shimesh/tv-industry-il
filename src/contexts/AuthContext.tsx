@@ -369,7 +369,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Register FCM token for consented users — permission-aware
   useEffect(() => {
-    if (!user || !profile?.termsAccepted) return;
+    if (!user || (!profile?.termsAccepted && !profile?.is_consented)) return;
     if (typeof window === 'undefined') return;
     if (!('Notification' in window)) return;
     if (typeof document === 'undefined') return;
