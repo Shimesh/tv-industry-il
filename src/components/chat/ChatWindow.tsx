@@ -372,6 +372,11 @@ export default function ChatWindow({
     handleTyping();
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+    // Keep scroll at bottom after textarea grows
+    if (isAtBottomRef.current && messagesContainerRef.current) {
+      const c = messagesContainerRef.current;
+      requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
+    }
   };
 
   const handleStartVoice = async () => {
@@ -575,7 +580,7 @@ export default function ChatWindow({
 
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto py-2"
+        className="flex-1 min-h-0 overflow-y-auto py-2"
         dir="ltr"
         onScroll={handleScroll}
         style={{
@@ -660,70 +665,83 @@ export default function ChatWindow({
         <div ref={bottomRef} />
       </div>
 
-      {replyTo && !isRecording && (
-        <div className="flex items-center gap-3 border-t px-4 py-2" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
-          <div className="min-w-0 flex-1 border-r-[3px] pr-3" style={{ borderColor: 'var(--theme-accent)' }}>
-            <p className="text-[12px] font-medium text-[var(--theme-accent)]">{replyTo.senderName}</p>
-            <p className="truncate text-[12px] text-[var(--theme-text-secondary)]">{getReplyPreviewText(replyTo)}</p>
+      {/* Bottom section: reply bar + input bar, with emoji/attach as absolute overlays */}
+      <div className="relative shrink-0">
+
+        {/* Emoji picker — floats above the input bar, doesn't push messages */}
+        {showEmoji && !isRecording && (
+          <div
+            className="absolute bottom-full left-0 right-0 z-20 border-t overflow-hidden"
+            style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+          >
+            <EmojiPicker
+              data={emojiData}
+              onEmojiSelect={(emoji: { native?: string }) => {
+                if (emoji.native) {
+                  setText((prev) => prev + emoji.native);
+                  inputRef.current?.focus();
+                }
+              }}
+              theme="dark"
+              locale="he"
+              previewPosition="none"
+              skinTonePosition="search"
+              maxFrequentRows={2}
+              perLine={8}
+              set="native"
+            />
           </div>
-          <button onClick={() => setReplyTo(null)} className="rounded-full p-1 transition-colors hover:bg-[var(--theme-accent-glow)]">
-            <X className="h-4 w-4 text-[var(--theme-text-secondary)]" />
-          </button>
-        </div>
-      )}
+        )}
 
-      {showEmoji && !isRecording && (
-        <div className="border-t" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
-          <EmojiPicker
-            data={emojiData}
-            onEmojiSelect={(emoji: { native?: string }) => {
-              if (emoji.native) {
-                setText((prev) => prev + emoji.native);
-                inputRef.current?.focus();
-              }
-            }}
-            theme="dark"
-            locale="he"
-            previewPosition="none"
-            skinTonePosition="search"
-            maxFrequentRows={2}
-            perLine={8}
-            set="native"
-          />
-        </div>
-      )}
+        {/* Attach panel — floats above the input bar */}
+        {showAttach && !isRecording && (
+          <div
+            className="absolute bottom-full left-0 right-0 z-20 flex justify-center gap-4 border-t p-3"
+            style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+            dir="rtl"
+          >
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
+            >
+              <div className="w-12 h-12 rounded-full bg-[#BF59CF] flex items-center justify-center">
+                <ImageIcon className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-[11px] text-[var(--theme-text-secondary)]">תמונה</span>
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
+            >
+              <div className="w-12 h-12 rounded-full bg-[#5157AE] flex items-center justify-center">
+                <FileText className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-[11px] text-[var(--theme-text-secondary)]">מסמך</span>
+            </button>
+            <button
+              onClick={handleStartVideo}
+              className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
+            >
+              <div className="w-12 h-12 rounded-full bg-[#E03E3E] flex items-center justify-center">
+                <VideoIcon className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-[11px] text-[var(--theme-text-secondary)]">וידאו</span>
+            </button>
+          </div>
+        )}
 
-      {showAttach && !isRecording && (
-        <div className="flex justify-center gap-4 border-t p-3" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
-          >
-            <div className="w-12 h-12 rounded-full bg-[#BF59CF] flex items-center justify-center">
-              <ImageIcon className="w-6 h-6 text-white" />
+        {/* Reply bar */}
+        {replyTo && !isRecording && (
+          <div className="flex items-center gap-3 border-t px-4 py-2" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }} dir="rtl">
+            <div className="min-w-0 flex-1 border-r-[3px] pr-3" style={{ borderColor: 'var(--theme-accent)' }}>
+              <p className="text-[12px] font-medium text-[var(--theme-accent)]">{replyTo.senderName}</p>
+              <p className="truncate text-[12px] text-[var(--theme-text-secondary)]">{getReplyPreviewText(replyTo)}</p>
             </div>
-            <span className="text-[11px] text-[var(--theme-text-secondary)]">תמונה</span>
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
-          >
-            <div className="w-12 h-12 rounded-full bg-[#5157AE] flex items-center justify-center">
-              <FileText className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-[11px] text-[var(--theme-text-secondary)]">מסמך</span>
-          </button>
-          <button
-            onClick={handleStartVideo}
-            className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--theme-accent-glow)]"
-          >
-            <div className="w-12 h-12 rounded-full bg-[#E03E3E] flex items-center justify-center">
-              <VideoIcon className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-[11px] text-[var(--theme-text-secondary)]">וידאו</span>
-          </button>
-        </div>
-      )}
+            <button onClick={() => setReplyTo(null)} className="rounded-full p-1 transition-colors hover:bg-[var(--theme-accent-glow)]">
+              <X className="h-4 w-4 text-[var(--theme-text-secondary)]" />
+            </button>
+          </div>
+        )}
 
       {isRecording && recordingMode === 'video' && (
         <div className="flex justify-center border-t p-2" style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}>
@@ -870,6 +888,8 @@ export default function ChatWindow({
           )}
         </div>
       )}
+
+      </div>{/* end bottom section */}
 
       {/* Info Panel — slides over the entire chat */}
       {showInfo && (
