@@ -1011,7 +1011,27 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       const canUseSocketDirect = socketTransportEnabled && transport.socketReady;
 
       if (!canUseSocketDirect) {
-        return legacy.sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageIdOverride);
+        const legacyResult = await legacy.sendMessage(text, type, file, replyTo, duration, mimeType, clientMessageIdOverride);
+        if (legacyResult) {
+          const memberUids = legacy.chats.find((c) => c.id === activeChatId)?.members ?? [];
+          void (async () => {
+            try {
+              const idToken = await user.getIdToken();
+              await fetch('/api/chat/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({
+                  chatId: activeChatId,
+                  senderUid: user.uid,
+                  senderName: displayName,
+                  messageText: type === 'text' ? text : undefined,
+                  memberUids,
+                }),
+              });
+            } catch { /* non-critical */ }
+          })();
+        }
+        return legacyResult;
       }
 
       const clientMessageId = clientMessageIdOverride || buildClientMessageId(activeChatId);
