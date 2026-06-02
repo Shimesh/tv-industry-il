@@ -67,11 +67,19 @@ function configureAutoplayVideo(video: HTMLVideoElement | null) {
 function MutedLivePreview({ channelId }: { channelId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const loggedKeshetStartRef = useRef<string | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stream = streamConfigs[channelId];
   const [dynamicHlsUrl, setDynamicHlsUrl] = useState<string | null>(null);
   const [dynamicStreamResolved, setDynamicStreamResolved] = useState(false);
   const [failedHlsUrl, setFailedHlsUrl] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const needsDynamicResolution = Boolean((stream?.dynamicStream && !stream.streamUrl) || channelId === 'now14');
+
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!needsDynamicResolution) return;
@@ -108,7 +116,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [channelId, needsDynamicResolution]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, needsDynamicResolution, retryKey]);
 
   const rawHlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
   const hlsUrl = rawHlsUrl && rawHlsUrl !== failedHlsUrl ? rawHlsUrl : null;
@@ -145,6 +154,12 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     const failPreview = (message: string, details?: unknown) => {
       logPlaybackError(message, details);
       setFailedHlsUrl(hlsUrl);
+      // Auto-retry after 15 seconds — handles transient CDN blips
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = setTimeout(() => {
+        setFailedHlsUrl(null);
+        setRetryKey(k => k + 1);
+      }, 15000);
     };
 
     const playMutedPreview = (context: string) => {
@@ -227,7 +242,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       video.removeEventListener('waiting', handleWaiting);
       hls?.destroy();
     };
-  }, [channelId, hlsUrl, isKeshetMobile]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, hlsUrl, isKeshetMobile, retryKey]);
 
   const keepMuted = useCallback(() => {
     configureAutoplayVideo(videoRef.current);
