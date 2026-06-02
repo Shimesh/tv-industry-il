@@ -119,60 +119,43 @@ export function Providers({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
   }, []);
 
-  // Before hydration completes, render children without any client-only UI providers
-  // (ToastProvider renders a fixed <div> that causes server/client HTML mismatch).
-  // ThemeProvider and AuthProvider are pure context — no DOM output — so they are safe.
-  if (!mounted) {
-    return (
-      <ThemeProvider>
-        <WorldCupProvider>
+  // Single stable provider tree — {children} always sits at the same depth so React
+  // never unmounts the page when `mounted` flips from false→true.
+  // Utility components that must not run during SSR are guarded by {mounted && …}.
+  // ToastProvider has its own internal mounted guard for its fixed-position DOM node.
+  return (
+    <ThemeProvider>
+      <WorldCupProvider>
         <AuthProvider>
           <AppConfigProvider>
+            {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally */}
             <AppDataProvider>
               <NotificationProvider>
-                {children}
+                <ToastProvider>
+                  <ProductionRegistryProvider>
+                    {mounted && <VersionAnnouncer />}
+                    {mounted && <FCMForegroundListener />}
+                    {mounted && <PushBanner />}
+                    <CallProvider>
+                      <AccountApprovalGate>
+                        <OnboardingWrapper>
+                          <ConsentBoundary>
+                            <PresenceManager />
+                            <UsageTracker />
+                            <ConsentGate />
+                            {children}
+                            <IncomingCall />
+                            <CallScreen />
+                          </ConsentBoundary>
+                        </OnboardingWrapper>
+                      </AccountApprovalGate>
+                    </CallProvider>
+                  </ProductionRegistryProvider>
+                </ToastProvider>
               </NotificationProvider>
             </AppDataProvider>
           </AppConfigProvider>
         </AuthProvider>
-        </WorldCupProvider>
-      </ThemeProvider>
-    );
-  }
-
-  return (
-    <ThemeProvider>
-      <WorldCupProvider>
-      <AuthProvider>
-        <AppConfigProvider>
-          {/* AppDataProvider must be inside AuthProvider — useContacts() calls useAuth() internally */}
-          <AppDataProvider>
-            <NotificationProvider>
-              <ToastProvider>
-                <ProductionRegistryProvider>
-                <VersionAnnouncer />
-                <FCMForegroundListener />
-                <PushBanner />
-                <CallProvider>
-                  <AccountApprovalGate>
-                    <OnboardingWrapper>
-                      <ConsentBoundary>
-                        <PresenceManager />
-                        <UsageTracker />
-                        <ConsentGate />
-                        {children}
-                        <IncomingCall />
-                        <CallScreen />
-                      </ConsentBoundary>
-                    </OnboardingWrapper>
-                  </AccountApprovalGate>
-                </CallProvider>
-              </ProductionRegistryProvider>
-              </ToastProvider>
-            </NotificationProvider>
-          </AppDataProvider>
-        </AppConfigProvider>
-      </AuthProvider>
       </WorldCupProvider>
     </ThemeProvider>
   );

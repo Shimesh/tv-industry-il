@@ -269,13 +269,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const unsubCandidates = onSnapshot(collection(db, 'calls', callId, 'candidates'), (snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
         if (change.type !== 'added') return;
-        await attachRemoteIceCandidate(pc, change.doc.data().candidate ?? change.doc.data());
+        const data = change.doc.data();
+        // Skip ICE candidates we sent ourselves
+        if (data.from === user?.uid) return;
+        await attachRemoteIceCandidate(pc, data.candidate ?? data);
       });
     });
 
     attachTeardown(unsubCall);
     attachTeardown(unsubCandidates);
-  }, [attachRemoteIceCandidate, attachTeardown, cleanup, flushPendingRemoteCandidates, startDurationTimer]);
+  }, [attachRemoteIceCandidate, attachTeardown, cleanup, flushPendingRemoteCandidates, startDurationTimer, user?.uid]);
 
   const handleIncomingCallDoc = useCallback(async (callId: string) => {
     if (callStateRef.current.status !== 'idle') return;
@@ -403,12 +406,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     const callsRef = collection(db, 'calls');
-    const q = query(callsRef, where('receiverId', '==', user.uid), where('status', '==', 'ringing'));
+    // Filter by receiverId only — avoids requiring a composite index on (receiverId, status).
+    // Status is checked client-side below.
+    const q = query(callsRef, where('receiverId', '==', user.uid));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach(change => {
-        if (change.type === 'added' && callStateRef.current.status === 'idle') {
-          const data = change.doc.data() as Record<string, unknown>;
+        if (change.type !== 'added') return;
+        const data = change.doc.data() as Record<string, unknown>;
+        if (data.status !== 'ringing') return;
+        if (callStateRef.current.status === 'idle') {
           pendingOfferRef.current = toRtcSessionDescription(data.offer) ?? pendingOfferRef.current;
           setCallState(prev => ({
             ...prev,
@@ -453,25 +460,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setCallState(prev => ({ ...prev, remoteStream }));
       };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
       const callRef = doc(collection(db, 'calls'));
       const callId = callRef.id;
-      const callRecord = {
-        callerId: user.uid,
-        callerName: profile.displayName,
-        callerPhoto: profile.photoURL,
-        receiverId,
-        receiverName,
-        type,
-        status: 'ringing',
-        offer: { type: offer.type, sdp: offer.sdp },
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-      await setDoc(callRef, callRecord);
 
+      // Set up onicecandidate BEFORE setLocalDescription so no candidates are missed
       pc.onicecandidate = async (event) => {
         if (!event.candidate) return;
         const candidate = event.candidate.toJSON();
@@ -486,6 +478,23 @@ export function CallProvider({ children }: { children: ReactNode }) {
           from: user.uid,
         });
       };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const callRecord = {
+        callerId: user.uid,
+        callerName: profile.displayName,
+        callerPhoto: profile.photoURL,
+        receiverId,
+        receiverName,
+        type,
+        status: 'ringing',
+        offer: { type: offer.type, sdp: offer.sdp },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(callRef, callRecord);
 
       void emitCallSignal('call:ring', {
         callId,
@@ -542,6 +551,22 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setCallState(prev => ({ ...prev, remoteStream }));
       };
 
+      // Set up onicecandidate BEFORE setLocalDescription so no candidates are missed
+      pc.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        const candidate = event.candidate.toJSON();
+        void emitCallSignal('call:ice', {
+          callId: currentCall.callId!,
+          targetUid: currentCall.callerId,
+          signalType: 'ice',
+          candidate,
+        });
+        await addDoc(collection(db, 'calls', currentCall.callId!, 'candidates'), {
+          candidate,
+          from: user.uid,
+        });
+      };
+
       let offer = pendingOfferRef.current;
       if (!offer) {
         const callDoc = await getDoc(doc(db, 'calls', currentCall.callId));
@@ -577,21 +602,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
         signalType: 'answer',
         sdp: answer.sdp ?? undefined,
       });
-
-      pc.onicecandidate = async (event) => {
-        if (!event.candidate) return;
-        const candidate = event.candidate.toJSON();
-        void emitCallSignal('call:ice', {
-          callId: currentCall.callId!,
-          targetUid: currentCall.callerId,
-          signalType: 'ice',
-          candidate,
-        });
-        await addDoc(collection(db, 'calls', currentCall.callId!, 'candidates'), {
-          candidate,
-          from: user.uid,
-        });
-      };
 
       const unsubCandidates = onSnapshot(collection(db, 'calls', currentCall.callId, 'candidates'), (snapshot) => {
         snapshot.docChanges().forEach(async (change) => {
