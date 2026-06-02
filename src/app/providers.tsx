@@ -15,6 +15,7 @@ import { ToastProvider } from '@/contexts/ToastContext';
 import { ProductionRegistryProvider } from '@/contexts/ProductionRegistryContext';
 import IncomingCall from '@/components/call/IncomingCall';
 import CallScreen from '@/components/call/CallScreen';
+import CallTones from '@/components/call/CallTones';
 import ConsentGate, { useConsentGateState } from '@/components/ConsentGate';
 import OnboardingWrapper from '@/components/onboarding/OnboardingWrapper';
 import AccountApprovalGate from '@/components/AccountApprovalGate';
@@ -144,6 +145,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                             <UsageTracker />
                             <ConsentGate />
                             {children}
+                            <CallTones />
                             <IncomingCall />
                             <CallScreen />
                           </ConsentBoundary>
