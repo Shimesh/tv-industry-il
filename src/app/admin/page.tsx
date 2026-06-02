@@ -939,6 +939,13 @@ export default function AdminPage() {
     void loadPushLogs();
   }, [user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Refresh presence data every 30 seconds so online/offline status stays current
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    const interval = setInterval(() => void loadOverview(true), 30_000);
+    return () => clearInterval(interval);
+  }, [user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!user || !isAdmin) return;
     fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[] }>(

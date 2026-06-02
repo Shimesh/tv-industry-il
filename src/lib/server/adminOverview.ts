@@ -57,7 +57,7 @@ type RawAppConfig = {
   updatedAt?: string | null;
 };
 
-const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+const PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STALE_PRESENCE_MS = 30 * DAY_MS;
 
