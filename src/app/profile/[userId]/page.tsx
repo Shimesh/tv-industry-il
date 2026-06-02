@@ -121,7 +121,7 @@ export default function UserProfilePage() {
             {!isOwnProfile && user && (
               <div className="flex gap-2">
                 <Link
-                  href="/chat"
+                  href={`/chat?userId=${userId}`}
                   className="px-4 py-2 rounded-xl bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] text-sm font-bold flex items-center gap-2 hover:bg-[var(--theme-accent)] hover:text-white transition-all"
                 >
                   <MessageCircle className="w-4 h-4" />

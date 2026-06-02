@@ -1,6 +1,7 @@
 ﻿'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { MessageCircle } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
@@ -148,6 +149,7 @@ function ChatContent() {
   const { user } = useAuth();
   const { contacts } = useAppData();
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
   const allUsers = useChatUsers();
   const {
     chats,
@@ -370,6 +372,27 @@ function ChatContent() {
     },
     [createGroup, setActiveChat, showToast, user]
   );
+
+  // Auto-open chat when navigating from profile page (/chat?userId=xxx)
+  const autoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const targetUserId = searchParams.get('userId');
+    if (!targetUserId || !user || chatsLoading) return;
+    if (autoOpenedRef.current === targetUserId) return;
+    autoOpenedRef.current = targetUserId;
+
+    void (async () => {
+      try {
+        const chatId = await createPrivateChat(targetUserId);
+        if (chatId) {
+          setActiveChat(chatId);
+          setMobileShowChat(true);
+        }
+      } catch {
+        // silent — user can still pick from sidebar
+      }
+    })();
+  }, [searchParams, user, chatsLoading, createPrivateChat, setActiveChat]);
 
   const handleSendMessage = useCallback(
     async (
