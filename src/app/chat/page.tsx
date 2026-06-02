@@ -6,6 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
+import MissedCallsPanel from '@/components/call/MissedCallsPanel';
 import { useChat } from '@/hooks/useChat';
 import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -521,6 +522,7 @@ function ChatContent() {
       }}
     >
       <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full min-h-0 flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
+        <MissedCallsPanel />
         <div className="min-h-0 flex-1">
           <ChatSidebar
             chats={chats}
