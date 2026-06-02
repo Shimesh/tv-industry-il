@@ -1068,6 +1068,25 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
           if (!messageSendResponse?.ok) {
             throw new Error(messageSendResponse?.error || 'message_send_failed');
           }
+
+          // Fire-and-forget push/in-app notification for recipients
+          void (async () => {
+            try {
+              const idToken = await user.getIdToken();
+              await fetch('/api/chat/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({
+                  chatId: activeChatId,
+                  senderUid: user.uid,
+                  senderName: displayName,
+                  messageText: type === 'text' ? text : undefined,
+                  memberUids: transportChat?.members ?? [],
+                }),
+              });
+            } catch { /* non-critical */ }
+          })();
+
           return {
             messageId: clientMessageId,
             clientMessageId,
@@ -1305,6 +1324,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       legacy,
       socketTransportEnabled,
       transport,
+      transportChat,
       updateLocalMessage,
       upsertLocalMessage,
       user,

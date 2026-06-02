@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocument } from '@/lib/server/firestoreAdminRest';
+import { verifyAuthToken } from '@/lib/apiAuth';
 import {
   sendFcmPush,
   sendStandardWebPush,
@@ -32,6 +33,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (secret) {
     const provided = request.headers.get('x-notify-secret')?.trim();
     if (provided !== secret) {
+      // Also accept Firebase Auth token as an alternative to the server secret
+      const authUser = await verifyAuthToken(request);
+      if (!authUser) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+    }
+  } else {
+    // No secret configured — require Firebase Auth to prevent open abuse
+    const authUser = await verifyAuthToken(request);
+    if (!authUser) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
   }
@@ -57,7 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const bodyText = isEncrypted
     ? 'קיבלת הודעה מוצפנת חדשה'
     : (messageText || 'קיבלת הודעה חדשה').slice(0, 120);
-  const linkUrl = '/chat';
+  const linkUrl = `/chat?id=${chatId}`;
 
   try {
     const userDocs = await Promise.allSettled(
