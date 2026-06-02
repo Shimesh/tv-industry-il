@@ -247,7 +247,7 @@ export default function HomePage() {
               <h2 className="text-base font-black leading-none" style={{ color: 'var(--theme-text)' }}>אירועים קרובים</h2>
               <p className="mt-0.5 text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>כנסים, הקרנות ואירועי תעשייה</p>
             </div>
-            <Link href="/news" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
+            <Link href="/news?tab=events" className="mr-auto flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold opacity-60 transition-all hover:opacity-100" style={{ color: 'var(--theme-accent)', borderColor: 'var(--theme-border)' }}>
               כל האירועים <ArrowLeft className="w-3.5 h-3.5" />
             </Link>
           </div>

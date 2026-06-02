@@ -371,7 +371,9 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
 function NewsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'news' | 'events'>('news');
+  const [activeTab, setActiveTab] = useState<'news' | 'events'>(
+    searchParams.get('tab') === 'events' ? 'events' : 'news'
+  );
   const [eventCatFilter, setEventCatFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
 
