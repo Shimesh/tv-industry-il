@@ -22,6 +22,9 @@ type RawUserDoc = {
   id: string;
   fcmTokens?: unknown;
   webPushSubscriptions?: unknown;
+  isOnline?: boolean;
+  activeChatId?: string | null;
+  lastSeen?: number | string | null;
 };
 
 function uniqueStrings(values: unknown[]): string[] {
@@ -75,9 +78,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       recipientUids.map((uid) => getDocument<RawUserDoc>(`users/${uid}`)),
     );
 
-    const allFcmTokens: string[] = [];
-    const allWebPushSubs: unknown[] = [];
-
+    const pushFcmTokens: string[] = [];
+    const pushWebPushSubs: unknown[] = [];
     const bellPromises: Promise<void>[] = [];
 
     for (let i = 0; i < recipientUids.length; i++) {
@@ -85,11 +87,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const result = userDocs[i];
       const userData = result.status === 'fulfilled' ? result.value : null;
 
-      const fcmTokens = Array.isArray(userData?.fcmTokens) ? userData.fcmTokens as string[] : [];
-      const webPushSubs = Array.isArray(userData?.webPushSubscriptions) ? userData.webPushSubscriptions : [];
+      // Presence check:
+      // - User is in this exact chat → skip all notifications
+      // - User is online but in a different chat → bell only, no push
+      // - User is offline → bell + push
+      const isOnline = userData?.isOnline === true;
+      const isInThisChat = isOnline && userData?.activeChatId === chatId;
 
-      allFcmTokens.push(...fcmTokens);
-      allWebPushSubs.push(...webPushSubs);
+      if (isInThisChat) continue;
 
       bellPromises.push(
         createUserNotification({
@@ -102,17 +107,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           createdBy: senderUid,
         }),
       );
+
+      if (!isOnline) {
+        const fcmTokens = Array.isArray(userData?.fcmTokens) ? userData.fcmTokens as string[] : [];
+        const webPushSubs = Array.isArray(userData?.webPushSubscriptions) ? userData.webPushSubscriptions : [];
+        pushFcmTokens.push(...fcmTokens);
+        pushWebPushSubs.push(...webPushSubs);
+      }
     }
 
     await Promise.all(bellPromises);
 
-    const tokens = uniqueStrings(allFcmTokens);
+    const tokens = uniqueStrings(pushFcmTokens);
     if (tokens.length > 0) {
       const { failedTokens } = await sendFcmPush({ tokens, title, body: bodyText, linkUrl, type: 'new_message' });
       if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
     }
 
-    const webPushSubscriptions = uniqueWebPushSubscriptions(allWebPushSubs);
+    const webPushSubscriptions = uniqueWebPushSubscriptions(pushWebPushSubs);
     if (webPushSubscriptions.length > 0) {
       await sendStandardWebPush({ subscriptions: webPushSubscriptions, title, body: bodyText, linkUrl, type: 'new_message' });
     }
