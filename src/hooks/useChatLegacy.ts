@@ -17,7 +17,7 @@ import { chatTrace, createChatTraceId, logChatPipelineIssue, withChatTimeout } f
 const CHAT_SNAPSHOT_TIMEOUT_MS = 20_000;
 const MESSAGE_SNAPSHOT_TIMEOUT_MS = 10_000;
 const SEND_STEP_TIMEOUT_MS = 12_000;
-const PRESENCE_WINDOW_MS = 3 * 60 * 1000; // 3 min — Socket.IO heartbeat fires every 30s so 3 min = 6 missed beats
+// No time-window: isOnline is kept real-time via Socket.IO presence:update events in useChatUsers
 const CHAT_ATTACHMENT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 export interface SendMessageResult {
@@ -1107,15 +1107,9 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
     const chat = enrichedChats.find(c => c.id === activeChat);
     return chat || null;
   }, [enrichedChats, activeChat]);
-  const onlineUsers = useMemo(() => {
-    const now = Date.now();
-    return allUsers.filter((u) => (
-      u.uid !== user?.uid &&
-      u.isOnline === true &&
-      typeof u.lastSeen === 'number' &&
-      now - u.lastSeen <= PRESENCE_WINDOW_MS
-    ));
-  }, [allUsers, user?.uid]);
+  const onlineUsers = useMemo(() => (
+    allUsers.filter((u) => u.uid !== user?.uid && u.isOnline === true)
+  ), [allUsers, user?.uid]);
 
   const messages = [...olderMessages, ...liveMessages];
 
