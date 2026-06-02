@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { CalendarDays, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Zap } from 'lucide-react';
+import { CalendarDays, ChevronDown, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Tv, Zap } from 'lucide-react';
 import { channels } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import { db } from '@/lib/firebase';
@@ -99,13 +99,41 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
-function SectionHeader({ icon: Icon, title, badge }: { icon: typeof Trophy; title: string; badge?: string }) {
+function CollapsibleCard({
+  icon: Icon,
+  title,
+  badge,
+  subtitle,
+  defaultOpen = false,
+  className = '',
+  children,
+}: {
+  icon: typeof Trophy;
+  title: string;
+  badge?: string;
+  subtitle?: React.ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
-      <Icon className="h-5 w-5 text-[#D4AF37]" />
-      <h2 className="text-lg font-black text-[var(--theme-text)]">{title}</h2>
-      {badge && <span className="mr-auto rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[11px] font-bold text-[#D4AF37]">{badge}</span>}
-    </div>
+    <section className={`rounded-2xl border overflow-hidden ${className}`} style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-4 py-3 text-right transition-colors hover:bg-white/5"
+        style={{ borderBottom: open ? '1px solid var(--theme-border)' : 'none' }}
+      >
+        <Icon className="h-5 w-5 shrink-0 text-[#D4AF37]" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-black text-[var(--theme-text)]">{title}</h2>
+          {subtitle && <p className="truncate text-xs text-[var(--theme-text-secondary)]">{subtitle}</p>}
+        </div>
+        {badge && <span className="shrink-0 rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[11px] font-bold text-[#D4AF37]">{badge}</span>}
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--theme-text-secondary)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && children}
+    </section>
   );
 }
 
@@ -177,8 +205,7 @@ function ScheduleGrid({ matches, activeId, onSelect }: { matches: WorldCupMatch[
   }, [filtered]);
 
   return (
-    <Card className="overflow-hidden">
-      <SectionHeader icon={CalendarDays} title="לוח משחקים" badge={`${matches.length} משחקים`} />
+    <CollapsibleCard icon={CalendarDays} title="לוח משחקים" badge={`${matches.length} משחקים`} className="overflow-hidden">
       <StageFilterTabs value={stageFilter} onChange={setStageFilter} />
       <div className="max-h-[600px] overflow-y-auto">
         <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -233,7 +260,7 @@ function ScheduleGrid({ matches, activeId, onSelect }: { matches: WorldCupMatch[
           )}
         </div>
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -246,8 +273,7 @@ function StandingsTables({ standings }: { standings: WorldCupStanding[] }) {
   }, [standings]);
 
   return (
-    <Card className="overflow-hidden">
-      <SectionHeader icon={ShieldCheck} title="טבלאות בתים" badge={`${Object.keys(groups).length} בתים`} />
+    <CollapsibleCard icon={ShieldCheck} title="טבלאות בתים" badge={`${Object.keys(groups).length} בתים`} className="overflow-hidden">
       <div className="grid gap-4 p-3 sm:grid-cols-2">
         {Object.entries(groups).map(([group, rows]) => (
           <div key={group} className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
@@ -280,14 +306,13 @@ function StandingsTables({ standings }: { standings: WorldCupStanding[] }) {
           </div>
         ))}
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
 function PlayerStatsTable({ stats }: { stats: WorldCupPlayerStat[] }) {
   return (
-    <Card className="overflow-hidden">
-      <SectionHeader icon={Zap} title="מלכי שערים" />
+    <CollapsibleCard icon={Zap} title="מלכי שערים" className="overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-right text-sm">
           <thead style={{ color: 'var(--theme-text-secondary)' }}>
@@ -305,7 +330,7 @@ function PlayerStatsTable({ stats }: { stats: WorldCupPlayerStat[] }) {
           </tbody>
         </table>
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -368,8 +393,7 @@ function VenuesGrid({ venues }: { venues: WorldCupVenue[] }) {
   }, [venues]);
 
   return (
-    <Card className="overflow-hidden">
-      <SectionHeader icon={Landmark} title="16 אצטדיונים" badge="3 מדינות" />
+    <CollapsibleCard icon={Landmark} title="16 אצטדיונים" badge="3 מדינות" className="overflow-hidden">
       <div className="space-y-4 p-3">
         {grouped.map(([country, countryVenues]) => (
           <div key={country}>
@@ -401,7 +425,7 @@ function VenuesGrid({ venues }: { venues: WorldCupVenue[] }) {
           </div>
         ))}
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -446,17 +470,11 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
   };
 
   const canModerate = profile?.siteRole === 'admin' || profile?.siteRole === 'moderator';
+  const subtitle = `${match.homeTeam.flag} ${match.homeTeam.nameHe} נגד ${match.awayTeam.nameHe} ${match.awayTeam.flag}`;
 
   return (
-    <Card className="flex min-h-[420px] flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
-        <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
-        <div className="min-w-0">
-          <h2 className="text-base font-black text-[var(--theme-text)]">צ׳אט משחק</h2>
-          <p className="truncate text-xs text-[var(--theme-text-secondary)]">{match.homeTeam.flag} {match.homeTeam.nameHe} נגד {match.awayTeam.nameHe} {match.awayTeam.flag}</p>
-        </div>
-      </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+    <CollapsibleCard icon={MessageCircle} title="צ׳אט משחק" subtitle={subtitle} className="flex flex-col overflow-hidden">
+      <div className="min-h-[380px] flex-1 space-y-2 overflow-y-auto p-3">
         {messages.length === 0 ? (
           <p className="rounded-xl border p-4 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
             עוד אין הודעות למשחק הזה. היו הראשונים!
@@ -502,7 +520,7 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
           <p className="text-center text-sm text-[var(--theme-text-secondary)]">צריך להתחבר כדי להשתתף בצ׳אט.</p>
         )}
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -651,9 +669,11 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
-            <Card className="overflow-hidden p-3">
-              <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
-            </Card>
+            <CollapsibleCard icon={Tv} title="שידור ישיר · כאן 11" subtitle={`${selectedMatch.homeTeam.flag} ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe} ${selectedMatch.awayTeam.flag}`} className="overflow-hidden">
+              <div className="p-3">
+                <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
+              </div>
+            </CollapsibleCard>
             <div ref={sectionRefs.matches}>
               <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} />
             </div>
@@ -664,13 +684,11 @@ export default function WorldCupHubClient({ matches, standings, playerStats, ven
         </div>
 
         {news.length > 0 && (
-          <Card className="overflow-hidden p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-[#D4AF37]" />
-              <h2 className="text-lg font-black text-[var(--theme-text)]">חדשות מונדיאל</h2>
+          <CollapsibleCard icon={Trophy} title="חדשות מונדיאל" badge={`${news.length}`} className="overflow-hidden">
+            <div className="p-4">
+              <LatestNewsCarousel news={news} />
             </div>
-            <LatestNewsCarousel news={news} />
-          </Card>
+          </CollapsibleCard>
         )}
 
         <div ref={sectionRefs.standings}>
