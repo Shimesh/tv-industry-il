@@ -84,6 +84,14 @@ export default function NewChatModal({
         .filter(Boolean)
     );
 
+    // Also exclude the current user's contact entry so they don't appear as a contact
+    const selfUser = users.find((u) => u.uid === currentUserId);
+    if (selfUser?.displayName) registeredNames.add(normalizeName(selfUser.displayName));
+    if (selfUser?.phone) {
+      const selfPhone = normalizePhone(selfUser.phone);
+      if (selfPhone) registeredPhones.add(selfPhone);
+    }
+
     for (const contact of contacts) {
       const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
       if (!fullName) continue;
@@ -379,7 +387,16 @@ export default function NewChatModal({
         </div>
 
         {mode === 'group' && (
-          <div className="border-t border-[#2A3942] p-3">
+          <div className="border-t border-[#2A3942] p-3 space-y-2">
+            {!groupName.trim() && (
+              <p className="text-center text-[11px] text-[#8696a0]">יש להזין שם לקבוצה</p>
+            )}
+            {groupName.trim() && selectedUsers.length === 0 && (
+              <p className="text-center text-[11px] text-[#8696a0]">יש לבחור לפחות חבר אחד</p>
+            )}
+            {groupName.trim() && selectedUsers.length > 0 && (
+              <p className="text-center text-[11px] text-[#8696a0]">אתה תתווסף לקבוצה אוטומטית</p>
+            )}
             <button
               onClick={() => {
                 if (groupName.trim() && selectedUsers.length > 0) {
@@ -388,9 +405,9 @@ export default function NewChatModal({
                 }
               }}
               disabled={creating || !groupName.trim() || selectedUsers.length === 0}
-              className="w-full rounded-xl bg-[#00A884] py-3 text-sm font-bold text-white transition-colors hover:bg-[#06CF9C] disabled:cursor-not-allowed disabled:opacity-30"
+              className="w-full rounded-xl bg-[#00A884] py-3 text-sm font-bold text-white transition-colors hover:bg-[#06CF9C] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {creating ? 'יוצר...' : `צור קבוצה (${selectedUsers.length} חברים)`}
+              {creating ? 'יוצר...' : selectedUsers.length > 0 ? `צור קבוצה (${selectedUsers.length + 1} חברים כולל אתה)` : 'צור קבוצה'}
             </button>
           </div>
         )}
