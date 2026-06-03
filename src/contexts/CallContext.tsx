@@ -144,6 +144,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const seenCandidateKeysRef = useRef<Set<string>>(new Set());
   const teardownRef = useRef<Array<() => void>>([]);
   const pendingCallActionRef = useRef<{ callId: string; action: 'answer' | 'decline' } | null>(null);
+  // Prevents cleanup() from executing twice in rapid succession (e.g. Firestore
+  // listener fires before the direct endCall() cleanup call resolves).
+  const cleanupRunningRef = useRef(false);
   const socketCallEnabled = isCallSignalingSocketEnabled();
   const signalingMode: 'firestore' | 'socket-ready' = socketCallEnabled ? 'socket-ready' : 'firestore';
   const signalingDetail = socketCallEnabled
@@ -198,11 +201,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cleanup = useCallback(() => {
+    // Guard against the Firestore listener and endCall() both calling cleanup()
+    // in the same event-loop turn (Firestore applies writes locally before the
+    // await resolves, so the snapshot callback runs first, then endCall() calls
+    // cleanup() again). Without this guard we get a double setCallState() which
+    // causes an extra re-render cascade that can unmount ChatWindow and wipe the
+    // user's typed message.
+    if (cleanupRunningRef.current) return;
+    cleanupRunningRef.current = true;
+
     clearTeardown();
 
     if (peerConnection.current) {
       peerConnection.current.ontrack = null;
       peerConnection.current.onicecandidate = null;
+      peerConnection.current.oniceconnectionstatechange = null;
       peerConnection.current.close();
       peerConnection.current = null;
     }
@@ -219,6 +232,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     appliedRemoteAnswerRef.current = false;
     seenCandidateKeysRef.current.clear();
     setCallState(initialCallState);
+
+    cleanupRunningRef.current = false;
   }, [clearTeardown]);
 
   const attachTeardown = useCallback((dispose: () => void) => {
@@ -522,19 +537,23 @@ export function CallProvider({ children }: { children: ReactNode }) {
       });
     });
 
-    attachTeardown(unsubReceiver);
-    attachTeardown(unsubCaller);
+    // Do NOT add these to teardownRef — they must survive individual call
+    // cleanup() calls so the app can keep detecting incoming calls after a
+    // call ends. Let the effect's own cleanup function manage them.
     return () => { unsubReceiver(); unsubCaller(); };
-  }, [attachTeardown, profile?.displayName, profile?.photoURL, user]);
+  }, [profile?.displayName, profile?.photoURL, user]);
 
   const startCall = async (receiverId: string, receiverName: string, type: 'voice' | 'video') => {
     if (!user || !profile) return;
 
     try {
+      // Reset the guard so cleanup() is allowed to run for this new call.
+      cleanupRunningRef.current = false;
       cleanup();
       pendingOfferRef.current = null;
       appliedRemoteAnswerRef.current = false;
       seenCandidateKeysRef.current.clear();
+      pendingRemoteCandidatesRef.current = [];
 
       const localStream = await getLocalStream(type === 'video');
       localStreamRef.current = localStream;
@@ -544,18 +563,30 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      // Use event.track directly (event.streams[0] is undefined on some iOS Safari versions).
-      // Always create a new MediaStream reference so React sees a state change and
-      // CallScreen's useEffect re-runs to re-assign srcObject on the video/audio elements.
+      // Prefer event.streams[0] — it's the same MediaStream for all tracks added
+      // via addTrack(track, stream), so we always get the full stream in one hit.
+      // Fall back to building a new MediaStream for iOS Safari where streams[0]
+      // may be absent. Always store a new reference so CallScreen's srcObject
+      // useEffect re-runs.
       pc.ontrack = (event) => {
-        const track = event.track ?? event.streams?.[0]?.getTracks()?.[0];
+        if (event.streams?.[0]) {
+          const stream = event.streams[0];
+          setCallState(prev => prev.remoteStream === stream ? prev : { ...prev, remoteStream: stream });
+          return;
+        }
+        const track = event.track;
         if (!track) return;
         setCallState(prev => {
-          const existing = prev.remoteStream;
-          if (existing?.getTrackById(track.id)) return prev;
-          const allTracks = existing ? [...existing.getTracks(), track] : [track];
+          if (prev.remoteStream?.getTrackById(track.id)) return prev;
+          const allTracks = prev.remoteStream ? [...prev.remoteStream.getTracks(), track] : [track];
           return { ...prev, remoteStream: new MediaStream(allTracks) };
         });
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'failed') {
+          console.warn('[WebRTC] ICE connection failed on caller side — TURN server may be unreachable.');
+        }
       };
 
       const callRef = doc(collection(db, 'calls'));
@@ -657,6 +688,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (!currentCall.callId || !user || !profile) return;
 
     try {
+      // Reset cleanup guard and stale ICE state for this new answer attempt.
+      cleanupRunningRef.current = false;
+      seenCandidateKeysRef.current.clear();
+      pendingRemoteCandidatesRef.current = [];
+      appliedRemoteAnswerRef.current = false;
+
       const localStream = await getLocalStream(currentCall.type === 'video');
       localStreamRef.current = localStream;
 
@@ -665,15 +702,29 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
+      // Prefer event.streams[0] — covers the case where the caller sent both
+      // audio and video tracks as part of the same stream (addTrack(t, stream)).
+      // Fall back to building a MediaStream for iOS Safari where streams[0] may
+      // be absent.
       pc.ontrack = (event) => {
-        const track = event.track ?? event.streams?.[0]?.getTracks()?.[0];
+        if (event.streams?.[0]) {
+          const stream = event.streams[0];
+          setCallState(prev => prev.remoteStream === stream ? prev : { ...prev, remoteStream: stream });
+          return;
+        }
+        const track = event.track;
         if (!track) return;
         setCallState(prev => {
-          const existing = prev.remoteStream;
-          if (existing?.getTrackById(track.id)) return prev;
-          const allTracks = existing ? [...existing.getTracks(), track] : [track];
+          if (prev.remoteStream?.getTrackById(track.id)) return prev;
+          const allTracks = prev.remoteStream ? [...prev.remoteStream.getTracks(), track] : [track];
           return { ...prev, remoteStream: new MediaStream(allTracks) };
         });
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'failed') {
+          console.warn('[WebRTC] ICE connection failed on receiver side — TURN server may be unreachable.');
+        }
       };
 
       // Set up onicecandidate BEFORE setLocalDescription so no candidates are missed
@@ -691,6 +742,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
           from: user.uid,
         });
       };
+
+      // Subscribe to the caller's ICE candidates BEFORE setRemoteDescription so
+      // any candidates that arrive (or are replayed from Firestore) during the
+      // async SDP processing are queued via pendingRemoteCandidatesRef and
+      // flushed correctly once remoteDescription is set.
+      const unsubCandidates = onSnapshot(collection(db, 'calls', currentCall.callId, 'candidates'), (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type !== 'added') return;
+          const data = change.doc.data();
+          if (data.from === user.uid) return;
+          await attachRemoteIceCandidate(pc, data.candidate ?? data);
+        });
+      });
+      attachTeardown(unsubCandidates);
 
       let offer = pendingOfferRef.current;
       if (!offer) {
@@ -729,14 +794,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
         sdp: answer.sdp ?? undefined,
       });
 
-      const unsubCandidates = onSnapshot(collection(db, 'calls', currentCall.callId, 'candidates'), (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type !== 'added') return;
-          const data = change.doc.data();
-          if (data.from === user.uid) return;
-          await attachRemoteIceCandidate(pc, data.candidate ?? data);
-        });
-      });
       const unsubCall = onSnapshot(doc(db, 'calls', currentCall.callId), (snapshot) => {
         const data = snapshot.data() as Record<string, unknown> | undefined;
         if (!data) return;
@@ -744,7 +801,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
           cleanup();
         }
       });
-      attachTeardown(unsubCandidates);
       attachTeardown(unsubCall);
 
       appliedRemoteAnswerRef.current = true;
@@ -753,7 +809,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         status: 'active',
         localStream,
         isFrontCamera: true,
-        // remoteStream is set by ontrack — don't overwrite it here
+        // remoteStream is populated by ontrack — do not overwrite here
       }));
       startDurationTimer();
     } catch (err) {
