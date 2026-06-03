@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Check,
@@ -342,8 +342,23 @@ export default function MessageBubble({
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPending = isOwn && message.localState === 'sending';
   const isFailed = isOwn && message.localState === 'failed';
+
+  const handleTouchStart = useCallback(() => {
+    longPressTimer.current = setTimeout(() => {
+      setShowMenu(true);
+      setShowInfo(false);
+    }, 420);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
   if (message.deletedAt) {
     return (
@@ -394,11 +409,9 @@ export default function MessageBubble({
     <div
       className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-[3px] px-[4.5%] group`}
       onMouseLeave={() => setShowMenu(false)}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, a')) return;
-        setShowMenu(v => !v);
-        if (!showMenu) setShowInfo(false);
-      }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
     >
       {!isOwn && isGroup && showSender && (
         <div
