@@ -7,6 +7,8 @@ import {
   ArrowRight,
   Ban,
   Check,
+  EyeOff,
+  Eye,
   Loader2,
   Search,
   ShieldCheck,
@@ -31,6 +33,8 @@ type ManagedUser = {
   createdAt: string | null;
   isPrimaryAdmin: boolean;
   hasDisplayName?: boolean;
+  isOnline?: boolean;
+  isPrivate?: boolean;
 };
 
 type ConfirmAction =
@@ -154,6 +158,22 @@ export default function AdminUsersPage() {
       await loadUsers();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'עדכון הסטטוס נכשל');
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  async function togglePrivacy(target: ManagedUser) {
+    setBusyUid(target.uid);
+    setError(null);
+    try {
+      await fetchWithAuth(`/api/admin/users/${encodeURIComponent(target.uid)}/privacy`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isPrivate: !target.isPrivate }),
+      });
+      await loadUsers();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'עדכון הפרטיות נכשל');
     } finally {
       setBusyUid(null);
     }
@@ -377,6 +397,20 @@ export default function AdminUsersPage() {
                         ) : (
                           <span className="text-xs text-gray-500">מנהל ראשי</span>
                         )}
+                        {!entry.isPrimaryAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => void togglePrivacy(entry)}
+                            disabled={busyUid === entry.uid}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
+                              entry.isPrivate ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-700 hover:bg-slate-600'
+                            }`}
+                            title={entry.isPrivate ? 'הסר פרטיות' : 'הפוך לפרטי'}
+                          >
+                            {entry.isPrivate ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            {entry.isPrivate ? 'ציבורי' : 'פרטי'}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -442,23 +476,39 @@ function UserIdentity({ user, compact = false }: { user: ManagedUser; compact?: 
   const label = user.displayName || user.email || user.uid;
   const initial = label.charAt(0) || '?';
   const showEmailLine = Boolean(user.email && (user.hasDisplayName || user.displayName !== user.email));
+  const avatarSize = compact ? 'h-9 w-9' : 'h-11 w-11';
 
   return (
     <div className="flex min-w-0 items-center gap-3">
-      {user.photoURL ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={user.photoURL} alt="" className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} rounded-full object-cover`} />
-      ) : (
-        <div className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} flex shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-bold`}>
-          {initial}
-        </div>
-      )}
+      <div className="relative shrink-0">
+        {user.photoURL ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={user.photoURL} alt="" className={`${avatarSize} rounded-full object-cover`} />
+        ) : (
+          <div className={`${avatarSize} flex items-center justify-center rounded-full bg-purple-600 text-sm font-bold`}>
+            {initial}
+          </div>
+        )}
+        {/* Online / offline status dot */}
+        <span
+          className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-gray-900 ${
+            user.isOnline ? 'bg-green-400' : 'bg-gray-500'
+          }`}
+          title={user.isOnline ? 'מחובר' : 'לא מחובר'}
+        />
+      </div>
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <p className="truncate font-semibold text-white" dir={user.hasDisplayName ? 'rtl' : 'ltr'}>{label}</p>
           {user.isPrimaryAdmin ? (
             <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-200">
               מנהל ראשי
+            </span>
+          ) : null}
+          {user.isPrivate ? (
+            <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+              <EyeOff className="h-2.5 w-2.5" />
+              פרטי
             </span>
           ) : null}
         </div>

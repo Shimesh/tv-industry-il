@@ -19,6 +19,7 @@ type RawUser = {
   displayName?: string;
   linkedContactId?: string | number | null;
   profileId?: string;
+  isPrivate?: boolean;
 };
 type RawPost = {
   id?: string;
@@ -310,7 +311,7 @@ function findBestMasterMatch(title: string, master: Map<string, IndustryMasterEn
 
 async function loadLinkedUserIds(contact: RawContact, normalizedContactName: string): Promise<Set<string>> {
   const contactId = String(contact.id || '');
-  const users = await listDocuments<RawUser>('users').catch(() => []);
+  const users = (await listDocuments<RawUser>('users').catch(() => [])).filter((u) => !u.isPrivate);
   return users.reduce((acc, user) => {
     const linkedContactId = user.linkedContactId === null || user.linkedContactId === undefined
       ? ''
