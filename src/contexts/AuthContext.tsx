@@ -367,33 +367,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // Register FCM token for consented users — permission-aware
+  // Register FCM token for consented users — auto-request permission on login
   useEffect(() => {
     if (!user || (!profile?.termsAccepted && !profile?.is_consented)) return;
     if (typeof window === 'undefined') return;
     if (!('Notification' in window)) return;
-    if (typeof document === 'undefined') return;
 
     const uid = user.uid;
+    const permission = window.Notification.permission;
 
-    if (window.Notification.permission === 'granted') {
+    // 'denied' — respect the user's choice, do nothing
+    if (permission === 'denied') return;
+
+    // 'granted' or 'default' — request/refresh the token.
+    // For 'default', the browser will show its native permission dialog.
+    // We delay slightly so the page finishes rendering before the prompt appears.
+    const timer = setTimeout(() => {
       import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
         void registerFcmToken(uid);
       }).catch(() => undefined);
-      return;
-    }
+    }, 2000);
 
-    if (window.Notification.permission === 'default') {
-      const handleGesture = () => {
-        import('@/components/FCMTokenRegistration').then(({ registerFcmToken }) => {
-          void registerFcmToken(uid);
-        }).catch(() => undefined);
-      };
-      document.addEventListener('click', handleGesture, { capture: true, once: true });
-      return () => document.removeEventListener('click', handleGesture, true);
-    }
-    // 'denied' — do nothing
-  }, [user, user?.uid, profile?.termsAccepted]);
+    return () => clearTimeout(timer);
+  }, [user, user?.uid, profile?.termsAccepted, profile?.is_consented]);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
