@@ -2,17 +2,29 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Tv } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 interface AuthGuardProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
 
+function hasCachedSession(): boolean {
+  try {
+    return Boolean(
+      typeof window !== 'undefined' &&
+      window.sessionStorage.getItem('tv-session-bootstrap-cache'),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function AuthGuard({ children, fallback }: AuthGuardProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  // Computed once on first render — avoids re-reads on every update
+  const cachedRef = useRef(hasCachedSession());
 
   useEffect(() => {
     if (!loading && !user) {
@@ -21,18 +33,10 @@ export default function AuthGuard({ children, fallback }: AuthGuardProps) {
   }, [user, loading, router]);
 
   if (loading) {
-    return (
-      fallback || (
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center animate-pulse">
-              <Tv className="w-8 h-8 text-white" />
-            </div>
-            <p className="text-[var(--theme-text-secondary)]">טוען...</p>
-          </div>
-        </div>
-      )
-    );
+    // If there's a cached session the user was previously logged in —
+    // render children optimistically so the page is visible immediately.
+    if (cachedRef.current) return <>{children}</>;
+    return fallback ?? null;
   }
 
   if (!user) return null;

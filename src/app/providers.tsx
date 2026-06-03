@@ -105,23 +105,16 @@ function UsageTracker() {
 }
 
 function ConsentBoundary({ children }: { children: React.ReactNode }) {
-  const { isCheckingConsent, requiresConsent } = useConsentGateState();
+  const { requiresConsent } = useConsentGateState();
 
-  if (isCheckingConsent) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center px-4" dir="rtl">
-        <div className="rounded-xl border px-5 py-4 text-sm font-semibold" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
-          טוען את פרטי המשתמש...
-        </div>
-      </div>
-    );
-  }
-
-  if (requiresConsent) {
-    return <ConsentGate />;
-  }
-
-  return <>{children}</>;
+  // Always render children immediately — ConsentGate is a fixed overlay and
+  // will appear on top if consent is required once the profile loads.
+  return (
+    <>
+      {children}
+      {requiresConsent && <ConsentGate />}
+    </>
+  );
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
