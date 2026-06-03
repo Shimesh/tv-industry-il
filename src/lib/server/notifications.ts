@@ -221,7 +221,18 @@ export async function sendStandardWebPush(params: SendWebPushParams) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
   const linkUrl = cleanInternalLink(params.linkUrl) || '/';
   const link = `${appUrl}${linkUrl}`;
+  const tag = (params.type || '').startsWith('world_cup_') ? params.type! : 'tv-industry-push';
   const payload = JSON.stringify({
+    notification: {
+      title: params.title,
+      body: params.body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-72x72.png',
+      tag,
+      renotify: true,
+      dir: 'rtl',
+      lang: 'he',
+    },
     data: {
       title: params.title,
       body: params.body,
