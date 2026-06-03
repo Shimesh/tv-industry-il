@@ -56,6 +56,18 @@ export default function UserProfilePage() {
     if (userId) fetchProfile();
   }, [userId]);
 
+  // Must be before any early returns to satisfy Rules of Hooks
+  const isOwnProfile = user?.uid === userId;
+  const STALE_MS = 5 * 60 * 1000;
+  const isActuallyOnline = useMemo(() => {
+    if (!profile) return false;
+    if (isOwnProfile) return true;
+    const ls = profile.lastSeen;
+    if (typeof ls !== 'number' || ls <= 0) return Boolean(profile.isOnline);
+    return Date.now() - ls <= STALE_MS;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, isOwnProfile]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -87,17 +99,6 @@ export default function UserProfilePage() {
   }
 
   const statusInfo = statusLabels[profile.status] || statusLabels.offline;
-  const isOwnProfile = user?.uid === userId;
-  // isOnline in Firestore can be stale (browser closed without socket sending "away").
-  // Cross-check with lastSeen: if > 5 min ago treat as offline regardless of flag.
-  const STALE_MS = 5 * 60 * 1000;
-  const isActuallyOnline = useMemo(() => {
-    if (isOwnProfile) return true;
-    const ls = profile.lastSeen;
-    if (typeof ls !== 'number' || ls <= 0) return Boolean(profile.isOnline);
-    return Date.now() - ls <= STALE_MS;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.isOnline, profile.lastSeen, isOwnProfile]);
   const professional = normalizeProfessionalFields(profile);
 
   return (
