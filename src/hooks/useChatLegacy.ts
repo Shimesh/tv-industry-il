@@ -161,6 +161,7 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   const observedClientMessageIdsRef = useRef<Set<string>>(new Set());
   const repairedMissingSummaryRef = useRef<Set<string>>(new Set());
   const lastTypingWriteRef = useRef<{ chatId: string; isTyping: boolean; at: number } | null>(null);
+  const justCreatedChatsRef = useRef<Set<string>>(new Set());
   // Ref for getChatKey so the messages effect doesn't re-subscribe on every chats/allUsers change
   const getChatKeyRef = useRef<((chatId: string, encryptedKeys?: Record<string, string>) => Promise<string | null>) | null>(null);
 
@@ -468,7 +469,12 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
   useEffect(() => {
     if (!user || chatsLoading || !activeChat) return;
     const selected = chats.find(chat => chat.id === activeChat);
-    if (selected?.members.includes(user.uid)) return;
+    if (selected?.members.includes(user.uid)) {
+      justCreatedChatsRef.current.delete(activeChat);
+      return;
+    }
+    // Allow newly created chats a window to appear in the Firestore subscription
+    if (justCreatedChatsRef.current.has(activeChat)) return;
     chatTrace('selection', 'active-chat-invalid', { chatId: activeChat, uid: user.uid }, { level: 'warn' });
     localStorage.removeItem('tv-chat-active');
     setActiveChatState(null);
@@ -997,6 +1003,10 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       chatTrace('create-chat', 'private:start', { traceId, otherUserId, uid: user.uid });
       const result = await fetchChatApi<{ chatId?: string }>({ type: 'private', otherUserId });
       chatTrace('create-chat', 'private:ok', { traceId, chatId: result.chatId, otherUserId });
+      if (result.chatId) {
+        justCreatedChatsRef.current.add(result.chatId);
+        setTimeout(() => justCreatedChatsRef.current.delete(result.chatId!), 15_000);
+      }
       return result.chatId || null;
     } catch (err) {
       console.error('Create chat error:', err);
@@ -1014,6 +1024,8 @@ export function useChat({ allUsers }: { allUsers: UserProfile[] }) {
       const result = await fetchChatApi<{ chatId?: string }>({ type: 'group', name, memberIds });
       if (result.chatId) {
         chatTrace('create-chat', 'group:ok', { traceId, chatId: result.chatId, memberCount: memberIds.length });
+        justCreatedChatsRef.current.add(result.chatId);
+        setTimeout(() => justCreatedChatsRef.current.delete(result.chatId!), 15_000);
         return result.chatId;
       }
       throw new Error('Group creation did not return a chat id');

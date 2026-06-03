@@ -83,6 +83,20 @@ export default function NewChatModal({
         .map((person) => normalizePhone(person.phone!) ?? '')
         .filter(Boolean)
     );
+    // Contact IDs that are already linked to a registered user
+    const linkedContactIds = new Set(
+      users
+        .filter((u) => u.linkedContactId != null && String(u.linkedContactId).trim())
+        .map((u) => String(u.linkedContactId).trim())
+    );
+
+    // Also exclude the current user's contact entry (name/phone fallback before link API runs)
+    const selfUser = users.find((u) => u.uid === currentUserId);
+    if (selfUser?.displayName) registeredNames.add(normalizeName(selfUser.displayName));
+    if (selfUser?.phone) {
+      const selfPhone = normalizePhone(selfUser.phone);
+      if (selfPhone) registeredPhones.add(selfPhone);
+    }
 
     // Contact IDs that are already linked to a registered user
     const linkedContactIds = new Set(

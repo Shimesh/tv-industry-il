@@ -7,7 +7,6 @@ import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
-import MissedCallsPanel from '@/components/call/MissedCallsPanel';
 import { useChat } from '@/hooks/useChat';
 import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -375,7 +374,6 @@ function ChatContent() {
 
   // Open existing chat when navigating from profile page (/chat?userId=xxx).
   // Does NOT create a new chat — only opens one that already exists.
-  // A new chat is only created when the user explicitly sends a message.
   const autoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     const targetUserId = searchParams.get('userId');
@@ -392,7 +390,6 @@ function ChatContent() {
       setActiveChat(existing.id);
       setMobileShowChat(true);
     }
-    // No existing chat → stay on chat page, user can start a new conversation manually
   }, [searchParams, user, chatsLoading, chats, setActiveChat]);
 
   const handleSendMessage = useCallback(
@@ -546,9 +543,7 @@ function ChatContent() {
       }}
     >
       <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full min-h-0 flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
-        <MissedCallsPanel />
-        <div className="min-h-0 flex-1">
-          <ChatSidebar
+        <ChatSidebar
             chats={chats}
             activeChatId={activeChat}
             currentUserId={user.uid}
@@ -560,7 +555,6 @@ function ChatContent() {
             onNewChat={() => setShowNewChat(true)}
             onSelectOnlineUser={handleSelectOnlineUser}
           />
-        </div>
       </div>
 
       <div className={`flex-1 flex h-full min-h-0 flex-col min-w-0 ${!mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>

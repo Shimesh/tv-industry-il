@@ -636,6 +636,7 @@ export default function ChatWindow({
                     showSender={showSender}
                     isGroup={isGroup}
                     chatMembers={chat.members}
+                    chatMembersInfo={chat.membersInfo?.map(m => ({ uid: m.uid ?? '', displayName: m.displayName, photoURL: m.photoURL }))}
                     onReply={(m) => {
                       setReplyTo(m);
                       inputRef.current?.focus();
