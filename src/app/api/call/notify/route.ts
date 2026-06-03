@@ -16,6 +16,7 @@ type CallNotifyBody = {
   callerName: string;
   callerPhoto?: string | null;
   type: 'voice' | 'video';
+  actionToken?: string;
 };
 
 type RawUserDoc = {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const { callId, receiverId, callerName, type } = body;
+  const { callId, receiverId, callerName, type, actionToken } = body;
   if (!callId || !receiverId || !callerName) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
   }
@@ -48,6 +49,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const bodyText = callerName;
   const linkUrl = '/chat';
 
+  const extraData: Record<string, string> = {
+    callId,
+    notifType: 'incoming_call',
+    callerName,
+  };
+  if (body.callerPhoto) extraData.callerPhoto = body.callerPhoto;
+  if (actionToken) extraData.actionToken = actionToken;
+
   try {
     const userDoc = await getDocument<RawUserDoc>(`users/${receiverId}`);
     const fcmTokens = Array.isArray(userDoc?.fcmTokens) ? (userDoc.fcmTokens as string[]) : [];
@@ -59,14 +68,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         title,
         body: bodyText,
         linkUrl,
-        type: 'general',
+        type: 'incoming_call',
+        extraData,
       });
       if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
     }
 
     const subscriptions = uniqueWebPushSubscriptions(webPushSubs);
     if (subscriptions.length > 0) {
-      await sendStandardWebPush({ subscriptions, title, body: bodyText, linkUrl, type: 'general' });
+      await sendStandardWebPush({
+        subscriptions,
+        title,
+        body: bodyText,
+        linkUrl,
+        type: 'incoming_call',
+        extraData,
+      });
     }
 
     return NextResponse.json({ ok: true });

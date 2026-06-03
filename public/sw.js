@@ -1,7 +1,5 @@
 
-const CACHE_NAME = 'tv-industry-il-v2.8.29';
-
-const CACHE_NAME = 'tv-industry-il-v2.8.29';
+const CACHE_NAME = 'tv-industry-il-v2.8.30';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -47,9 +45,37 @@ self.addEventListener('push', (event) => {
   const title = notification.title || data.title || 'TV Industry IL';
   const body = notification.body || data.body || '';
   const link = payload?.fcmOptions?.link || data.link || data.linkUrl || '/';
-  const tag = data.type && data.type.startsWith('world_cup_') ? data.type : 'tv-industry-push';
+  const notifType = data.notifType || data.type || '';
 
   if (!title && !body) return;
+
+  // Incoming call — show with answer/decline action buttons
+  if (notifType === 'incoming_call') {
+    const callId = data.callId || '';
+    const actionToken = data.actionToken || '';
+    const tag = `incoming-call-${callId}`;
+
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body,
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-72x72.png',
+        tag,
+        renotify: true,
+        requireInteraction: true,
+        dir: 'rtl',
+        lang: 'he',
+        actions: [
+          { action: 'decline', title: '✕ דחה' },
+          { action: 'answer', title: '✓ ענה' },
+        ],
+        data: { link, callId, actionToken, notifType: 'incoming_call' },
+      }),
+    );
+    return;
+  }
+
+  const tag = data.type && data.type.startsWith('world_cup_') ? data.type : 'tv-industry-push';
 
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -67,7 +93,40 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const link = event.notification.data?.link || '/';
+  const notifData = event.notification.data || {};
+
+  // Handle call action buttons
+  if (notifData.notifType === 'incoming_call') {
+    const { callId, actionToken } = notifData;
+
+    if (event.action === 'decline') {
+      event.waitUntil(
+        fetch('/api/call/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callId, action: 'decline', token: actionToken }),
+        }).catch(() => {}),
+      );
+      return;
+    }
+
+    // 'answer' action or tap on notification body — open app and auto-answer
+    const answerUrl = `/chat?callId=${encodeURIComponent(callId)}&callAction=answer`;
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            void client.navigate(answerUrl);
+            return client.focus();
+          }
+        }
+        return clients.openWindow(answerUrl);
+      }),
+    );
+    return;
+  }
+
+  const link = notifData.link || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
@@ -77,7 +136,7 @@ self.addEventListener('notificationclick', (event) => {
         }
       }
       return clients.openWindow(link);
-    })
+    }),
   );
 });
 

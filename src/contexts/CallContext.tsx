@@ -143,6 +143,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const appliedRemoteAnswerRef = useRef(false);
   const seenCandidateKeysRef = useRef<Set<string>>(new Set());
   const teardownRef = useRef<Array<() => void>>([]);
+  const pendingCallActionRef = useRef<{ callId: string; action: 'answer' | 'decline' } | null>(null);
   const socketCallEnabled = isCallSignalingSocketEnabled();
   const signalingMode: 'firestore' | 'socket-ready' = socketCallEnabled ? 'socket-ready' : 'firestore';
   const signalingDetail = socketCallEnabled
@@ -154,6 +155,36 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     callStateRef.current = callState;
   }, [callState]);
+
+  // Read URL params set by SW notification action buttons (answer/decline)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const callId = params.get('callId');
+    const callAction = params.get('callAction');
+    if (callId && (callAction === 'answer' || callAction === 'decline')) {
+      pendingCallActionRef.current = { callId, action: callAction };
+      const url = new URL(window.location.href);
+      url.searchParams.delete('callId');
+      url.searchParams.delete('callAction');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  // Auto-answer / auto-decline when the targeted ringing call appears
+  useEffect(() => {
+    if (callState.status !== 'ringing' || !callState.callId) return;
+    const pending = pendingCallActionRef.current;
+    if (!pending || pending.callId !== callState.callId) return;
+    pendingCallActionRef.current = null;
+
+    if (pending.action === 'answer') {
+      void answerCall();
+    } else {
+      void declineCall();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callState.status, callState.callId]);
 
   const clearTeardown = useCallback(() => {
     while (teardownRef.current.length > 0) {
@@ -549,6 +580,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      const actionToken = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
       const callRecord = {
         callerId: user.uid,
         callerName: profile.displayName,
@@ -558,6 +593,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         type,
         status: 'ringing',
         offer: { type: offer.type, sdp: offer.sdp },
+        actionToken,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -574,6 +610,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             callerName: profile.displayName,
             callerPhoto: profile.photoURL ?? null,
             type,
+            actionToken,
           }),
         }).catch(() => {}),
       );

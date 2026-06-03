@@ -5,7 +5,7 @@ import { Search, Plus, MessageCircle, AlertTriangle, Loader2, Phone } from 'luci
 import type { ChatRoom } from '@/hooks/useChat';
 import type { UserProfile } from '@/contexts/AuthContext';
 import OnlineUsers from './OnlineUsers';
-import MissedCallsPanel from '@/components/call/MissedCallsPanel';
+import CallHistoryPanel from '@/components/call/CallHistoryPanel';
 
 function statusDotColor(isOnline?: boolean, status?: string): string | null {
   if (!isOnline) return null;
@@ -296,7 +296,7 @@ export default function ChatSidebar({
       ) : (
         /* Calls Tab */
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
-          <MissedCallsPanel showEmptyState />
+          <CallHistoryPanel />
         </div>
       )}
 

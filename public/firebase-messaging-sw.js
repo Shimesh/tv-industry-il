@@ -1,7 +1,5 @@
 
-const CACHE_NAME = 'tv-industry-il-v2.8.29';
-
-const CACHE_NAME = 'tv-industry-il-v2.8.29';
+const CACHE_NAME = 'tv-industry-il-v2.8.30';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
@@ -38,6 +36,30 @@ function showAppNotification(payload) {
   const title = notification.title || data.title || 'TV Industry IL';
   const body = notification.body || data.body || '';
   const link = payload?.fcmOptions?.link || data.link || data.linkUrl || '/';
+  const notifType = data.notifType || data.type || '';
+
+  // Incoming call — show with answer/decline action buttons
+  if (notifType === 'incoming_call') {
+    const callId = data.callId || '';
+    const actionToken = data.actionToken || '';
+    const tag = `incoming-call-${callId}`;
+    return self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-72x72.png',
+      tag,
+      renotify: true,
+      requireInteraction: true,
+      dir: 'rtl',
+      lang: 'he',
+      actions: [
+        { action: 'decline', title: '✕ דחה' },
+        { action: 'answer', title: '✓ ענה' },
+      ],
+      data: { link, callId, actionToken, notifType: 'incoming_call' },
+    });
+  }
+
   const tag = data.type && data.type.startsWith('world_cup_') ? data.type : 'tv-industry-push';
 
   return self.registration.showNotification(title, {
@@ -54,7 +76,39 @@ function showAppNotification(payload) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const link = event.notification.data?.link || '/';
+  const notifData = event.notification.data || {};
+
+  // Handle call action buttons
+  if (notifData.notifType === 'incoming_call') {
+    const { callId, actionToken } = notifData;
+
+    if (event.action === 'decline') {
+      event.waitUntil(
+        fetch('/api/call/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callId, action: 'decline', token: actionToken }),
+        }).catch(() => {}),
+      );
+      return;
+    }
+
+    const answerUrl = `/chat?callId=${encodeURIComponent(callId)}&callAction=answer`;
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            void client.navigate(answerUrl);
+            return client.focus();
+          }
+        }
+        return clients.openWindow(answerUrl);
+      }),
+    );
+    return;
+  }
+
+  const link = notifData.link || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

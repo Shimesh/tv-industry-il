@@ -26,6 +26,7 @@ type SendFcmPushParams = {
   body: string;
   linkUrl?: string;
   type?: string;
+  extraData?: Record<string, string>;
 };
 
 export type StoredWebPushSubscription = {
@@ -43,6 +44,7 @@ type SendWebPushParams = {
   body: string;
   linkUrl?: string;
   type?: string;
+  extraData?: Record<string, string>;
 };
 
 function uniqueStrings(values: unknown[]): string[] {
@@ -132,6 +134,7 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
         link,
         linkUrl,
         type: params.type || 'general',
+        ...(params.extraData || {}),
       },
       android: {
         priority: 'high',
@@ -239,6 +242,7 @@ export async function sendStandardWebPush(params: SendWebPushParams) {
       link,
       linkUrl,
       type: params.type || 'general',
+      ...(params.extraData || {}),
     },
   });
 

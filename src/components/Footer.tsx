@@ -117,7 +117,7 @@ export default function Footer() {
               dir="ltr"
             >
 
-              v2.8.29
+              v2.8.30
 </span>
             <span className="opacity-45" dir="ltr">By Yaron Orbach</span>
           </div>
