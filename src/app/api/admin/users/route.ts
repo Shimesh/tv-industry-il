@@ -20,6 +20,8 @@ type RawUser = {
   approvalStatus?: string | null;
   lastSeen?: string | null;
   createdAt?: string | null;
+  isOnline?: boolean;
+  isPrivate?: boolean;
 };
 
 export type AdminManagedUser = {
@@ -38,6 +40,8 @@ export type AdminManagedUser = {
   createdAt: string | null;
   isPrimaryAdmin: boolean;
   hasDisplayName: boolean;
+  isOnline: boolean;
+  isPrivate: boolean;
 };
 
 function cleanString(value: unknown): string {
@@ -48,7 +52,7 @@ function isBrokenOrEmptyName(value: unknown): boolean {
   if (typeof value !== 'string') return true;
   const trimmed = value.trim();
   if (!trimmed) return true;
-  return /[\u05f3\uFFFD]/.test(trimmed);
+  return /[׳�]/.test(trimmed);
 }
 
 function displayInfoFor(user: RawUser): { label: string; hasDisplayName: boolean } {
@@ -91,6 +95,8 @@ function toManagedUser(user: RawUser, primaryAdminUid: string): AdminManagedUser
     createdAt: cleanString(user.createdAt) || null,
     isPrimaryAdmin,
     hasDisplayName: display.hasDisplayName,
+    isOnline: user.isOnline === true,
+    isPrivate: user.isPrivate === true,
   };
 }
 
