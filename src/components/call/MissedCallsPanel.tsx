@@ -24,7 +24,7 @@ function formatTimeAgo(ts: { seconds: number } | null): string {
   return `לפני ${Math.floor(diffHours / 24)} ימים`;
 }
 
-export default function MissedCallsPanel() {
+export default function MissedCallsPanel({ showEmptyState = false }: { showEmptyState?: boolean }) {
   const { user } = useAuth();
   const [missedCalls, setMissedCalls] = useState<MissedCall[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -55,7 +55,15 @@ export default function MissedCallsPanel() {
 
   const visible = missedCalls.filter((c) => !dismissed.has(c.id));
 
-  if (visible.length === 0) return null;
+  if (visible.length === 0) {
+    if (!showEmptyState) return null;
+    return (
+      <div className="flex flex-col items-center justify-center p-10 text-center" dir="rtl">
+        <Phone className="mb-3 h-12 w-12 opacity-30" style={{ color: 'var(--theme-text-secondary)' }} />
+        <p className="text-[13px]" style={{ color: 'var(--theme-text-secondary)' }}>אין שיחות שלא נענו</p>
+      </div>
+    );
+  }
 
   return (
     <div

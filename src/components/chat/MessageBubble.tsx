@@ -394,6 +394,11 @@ export default function MessageBubble({
     <div
       className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-[3px] px-[4.5%] group`}
       onMouseLeave={() => setShowMenu(false)}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a')) return;
+        setShowMenu(v => !v);
+        if (!showMenu) setShowInfo(false);
+      }}
     >
       {!isOwn && isGroup && showSender && (
         <div
@@ -609,7 +614,7 @@ export default function MessageBubble({
           />
         )}
 
-        <div className={`absolute top-[2px] ${isOwn ? 'left-[2px]' : 'right-[2px]'} opacity-0 group-hover:opacity-100 transition-opacity z-10`}>
+        <div className={`absolute top-[2px] ${isOwn ? 'left-[2px]' : 'right-[2px]'} transition-opacity z-10 ${showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <div className="flex items-center gap-0 bg-[#111B21ee] rounded-lg shadow-lg overflow-hidden">
             <button
               onClick={() => onReply(message)}
