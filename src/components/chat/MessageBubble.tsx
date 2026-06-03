@@ -627,58 +627,58 @@ export default function MessageBubble({
           />
         )}
 
-        <div className={`absolute top-[2px] ${isOwn ? 'left-[2px]' : 'right-[2px]'} transition-opacity z-10 ${showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <div className="flex items-center gap-0 bg-[#111B21ee] rounded-lg shadow-lg overflow-hidden">
+        <div className={`absolute top-[-2px] ${isOwn ? 'left-[-2px]' : 'right-[-2px]'} transition-opacity z-10 ${showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className="flex items-center gap-0.5 bg-[#111B21f0] rounded-xl shadow-xl overflow-hidden px-0.5 py-0.5">
             <button
               onClick={() => onReply(message)}
-              className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+              className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
               title='השב'
             >
-              <Reply className="w-3.5 h-3.5 text-[#aebac1]" />
+              <Reply className="w-5 h-5 text-[#aebac1]" />
             </button>
             {isOwn && !isPending && !isFailed && (
               <button
                 onClick={() => setShowInfo(v => !v)}
-                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
                 title='מידע'
               >
-                <Info className="w-3.5 h-3.5 text-[#aebac1]" />
+                <Info className="w-5 h-5 text-[#aebac1]" />
               </button>
             )}
             {message.type === 'text' && message.text && (
               <button
                 onClick={() => navigator.clipboard.writeText(message.text)}
-                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
                 title='העתק'
               >
-                <Copy className="w-3.5 h-3.5 text-[#aebac1]" />
+                <Copy className="w-5 h-5 text-[#aebac1]" />
               </button>
             )}
             {isOwn && (
               <button
                 onClick={() => onDelete(message.id)}
-                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
                 title='מחק'
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <Trash2 className="w-5 h-5 text-red-400" />
               </button>
             )}
             {isFailed && isOwn && onRetry && message.localPayload && (
               <button
                 onClick={() => onRetry(message)}
-                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
                 title='נסה שוב'
               >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
+                <RotateCcw className="w-5 h-5 text-amber-300" />
               </button>
             )}
             {isFailed && isOwn && onDismissOptimistic && (
               <button
                 onClick={() => onDismissOptimistic(message.id)}
-                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                className="p-2.5 hover:bg-[#ffffff15] transition-colors rounded-lg"
                 title='הסר'
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <Trash2 className="w-5 h-5 text-red-400" />
               </button>
             )}
           </div>
