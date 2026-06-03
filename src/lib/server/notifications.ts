@@ -295,8 +295,8 @@ export async function notifyAdminsOfPendingUser(params: {
     if (fcmTokens.length > 0) {
       const { failedTokens } = await sendFcmPush({
         tokens: fcmTokens,
-        title: 'New User Waiting',
-        body: `New User Waiting: ${params.displayLabel} is requesting access to TV Industry IL.`,
+        title: 'משתמש חדש ממתין לאישור',
+        body: `${params.displayLabel} ממתין/ה לאישור גישה`,
         linkUrl,
       });
       if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
@@ -316,8 +316,8 @@ export async function notifyAdminsOfPendingUser(params: {
     if (subscriptions.length > 0) {
       await sendStandardWebPush({
         subscriptions,
-        title: 'New User Waiting',
-        body: `New User Waiting: ${params.displayLabel} is requesting access to TV Industry IL.`,
+        title: 'משתמש חדש ממתין לאישור',
+        body: `${params.displayLabel} ממתין/ה לאישור גישה`,
         linkUrl,
       });
     }

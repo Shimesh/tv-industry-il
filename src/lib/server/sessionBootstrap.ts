@@ -228,7 +228,7 @@ export async function finalizeUserOnboardingProfile(
   if (created && patch.approvalStatus === 'pending') {
     await notifyAdminsOfPendingUser({
       uid: authUser.uid,
-      displayLabel: firstNonEmpty(patch.displayName, email, authUser.uid),
+      displayLabel: firstNonEmpty(contactName, patch.displayName, email, authUser.uid),
     });
   }
 
