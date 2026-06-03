@@ -4,7 +4,7 @@ import type { ErrorInfo } from 'react';
 import { auth } from '@/lib/firebase';
 
 
-const APP_VERSION = '2.8.28';
+const APP_VERSION = '2.8.29';
 const RECENT_ERROR_TTL_MS = 60_000;
 const recentErrors = new Map<string, number>();
 

@@ -235,6 +235,8 @@ export default function ChatWindow({
   const otherMember = chat.type === 'private'
     ? chat.membersInfo.find((m) => m.uid && m.uid !== currentUserId)
     : null;
+  // Self-chat: private chat where both members share the same UID
+  const isSelfChat = chat.type === 'private' && !otherMember;
   const otherUserProfile = otherMember?.uid
     ? allUsers.find(u => u.uid === otherMember.uid) ?? null
     : null;
@@ -479,10 +481,13 @@ export default function ChatWindow({
         </button>
 
         {(() => {
-          const isOtherOnline = !isGroup && otherMember?.uid
-            ? (otherMember.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember.uid))
-            : false;
-          const dotColor = !isGroup && otherMember?.uid
+          const isOtherOnline = !isGroup && (
+            isSelfChat ||
+            (otherMember?.uid
+              ? (otherMember.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember.uid))
+              : false)
+          );
+          const dotColor = !isGroup
             ? statusDotColor(isOtherOnline, otherUserProfile?.status)
             : null;
           return (
@@ -512,7 +517,7 @@ export default function ChatWindow({
               >
                 {chatName.charAt(0)}
               </div>
-              {(!isGroup && otherMember?.uid) && (
+              {!isGroup && (isSelfChat || !!otherMember?.uid) && (
                 <span
                   className="absolute bottom-0 right-0 h-[11px] w-[11px] rounded-full border-2"
                   style={{ backgroundColor: dotColor || 'var(--theme-success)', borderColor: 'var(--theme-bg-secondary)' }}
@@ -537,7 +542,7 @@ export default function ChatWindow({
               <span className="text-[var(--theme-accent)]">{typingUsers.join(', ')} מקליד/ה...</span>
             ) : isGroup ? (
               `${chat.members.length} משתתפים`
-            ) : (otherMember?.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember?.uid)) ? (
+            ) : (isSelfChat || otherMember?.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember?.uid)) ? (
               <span className="text-[var(--theme-success)]">מחובר/ת</span>
             ) : formatLastSeen(otherUserProfile?.lastSeen) ? (
               formatLastSeen(otherUserProfile?.lastSeen)
