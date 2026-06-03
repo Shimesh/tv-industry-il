@@ -552,14 +552,14 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
           />
 
           <div className="relative z-10 text-center px-6">
-            <ChannelLogo channel={channel} size={96} rounded={16} className="mb-4 drop-shadow-2xl" />
-            <h3 className="text-2xl font-black mb-1 tracking-tight">{channel.name}</h3>
+            <ChannelLogo channel={channel} size={64} rounded={12} className="mb-2 drop-shadow-2xl" />
+            <h3 className="text-lg font-black mb-0.5 tracking-tight">{channel.name}</h3>
             {currentProgram && (
-              <p className="text-white/50 text-sm mb-5">כרגע: {currentProgram}</p>
+              <p className="text-white/50 text-sm mb-3">כרגע: {currentProgram}</p>
             )}
 
             {stream ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {/* Status badge */}
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
                   style={{
@@ -577,7 +577,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
                     href={stream.websiteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all duration-200 hover:scale-105 hover:shadow-2xl active:scale-100"
+                    className="inline-flex items-center gap-3 px-5 py-2 rounded-xl text-white font-bold text-sm transition-all duration-200 hover:scale-105 hover:shadow-2xl active:scale-100"
                     style={{
                       background: `linear-gradient(135deg, ${channel.color}, ${channel.color}cc)`,
                       boxShadow: `0 8px 30px ${channel.color}35`,
