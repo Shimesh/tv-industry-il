@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Wait for Vercel deployment to complete
-        run: sleep 300
+        run: sleep 60
 
       - name: Trigger version announcement push
         run: |
