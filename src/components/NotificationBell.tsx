@@ -64,6 +64,7 @@ export default function NotificationBell() {
     markAsRead,
     markAllAsRead,
     clearAll,
+    refreshNotifications,
     browserPermission,
     requestBrowserPermission,
   } = useNotifications();
@@ -94,7 +95,11 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void refreshNotifications().catch(() => {});
+        }}
         className="relative rounded-lg p-2 transition-all hover:bg-[var(--theme-accent-glow)]"
         style={{ color: 'var(--theme-text-secondary)' }}
         aria-label="התראות"

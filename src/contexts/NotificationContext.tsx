@@ -40,6 +40,7 @@ interface NotificationContextType {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   clearAll: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   browserPermission: NotificationPermission | 'default';
   requestBrowserPermission: () => Promise<void>;
 }
@@ -51,6 +52,7 @@ const NotificationContext = createContext<NotificationContextType>({
   markAsRead: async () => {},
   markAllAsRead: async () => {},
   clearAll: async () => {},
+  refreshNotifications: async () => {},
   browserPermission: 'default',
   requestBrowserPermission: async () => {},
 });
@@ -393,6 +395,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       markAsRead,
       markAllAsRead,
       clearAll,
+      refreshNotifications,
       browserPermission,
       requestBrowserPermission,
     }}>
