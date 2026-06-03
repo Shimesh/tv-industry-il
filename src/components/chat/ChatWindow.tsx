@@ -30,6 +30,7 @@ import { useCall } from '@/contexts/CallContext';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import type { ChatConnectionState, ChatUiMessage } from './chatTypes';
 import type { UserProfile } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 const EmojiPicker = dynamic(() => import('@emoji-mart/react').then(mod => mod.default), { ssr: false });
 
@@ -185,6 +186,8 @@ export default function ChatWindow({
   const [searchQuery, setSearchQuery] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const markedReadRef = useRef(new Set<string>());
+  const { notifications, markAsRead } = useNotifications();
 
   useEffect(() => {
     const goOffline = () => setIsOffline(true);
@@ -312,6 +315,17 @@ export default function ChatWindow({
     setShowInfo(false);
   }, [chat.id]);
 
+  // Auto-mark chat message notifications as read while viewing this chat
+  useEffect(() => {
+    const target = `/chat?id=${chat.id}`;
+    for (const n of notifications) {
+      if (!n.read && n.type === 'new_message' && n.linkUrl === target && !markedReadRef.current.has(n.id)) {
+        markedReadRef.current.add(n.id);
+        void markAsRead(n.id);
+      }
+    }
+  }, [chat.id, notifications, markAsRead]);
+
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -348,6 +362,7 @@ export default function ChatWindow({
     }
     if (inputRef.current) inputRef.current.style.height = 'auto';
     await onSendMessage(textToSend, 'text', undefined, reply);
+    inputRef.current?.focus();
   }, [onSendMessage, onSetTyping, replyTo, setReplyTo, setShowEmoji, setText, text]);
 
   const handleFileUpload = useCallback(async (file: File) => {
@@ -873,6 +888,7 @@ export default function ChatWindow({
 
           {text.trim() ? (
             <button
+              onPointerDown={(e) => e.preventDefault()}
               onClick={handleSend}
               className="shrink-0 rounded-full bg-[var(--theme-accent)] p-2.5 text-white transition-colors hover:opacity-90"
             >

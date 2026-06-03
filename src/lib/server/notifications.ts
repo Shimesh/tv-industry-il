@@ -133,6 +133,19 @@ export async function sendFcmPush(params: SendFcmPushParams): Promise<{ failedTo
         linkUrl,
         type: params.type || 'general',
       },
+      android: {
+        priority: 'high',
+        notification: {
+          priority: 'high',
+          defaultSound: true,
+          channelId: 'default',
+          tag,
+        },
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default', badge: 1 } },
+      },
       webpush: {
         headers: { Urgency: 'high' },
         fcmOptions: { link },
