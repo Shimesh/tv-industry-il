@@ -47,7 +47,10 @@ export default function ChatInfoPanel({
     ? onlineUsers.some(u => u.uid === otherUser.uid)
     : false;
 
-  const onlineUserIds = useMemo(() => new Set(onlineUsers.map(u => u.uid)), [onlineUsers]);
+  const onlineUserIds = useMemo(
+    () => new Set([...onlineUsers.map(u => u.uid), currentUserId]),
+    [onlineUsers, currentUserId],
+  );
 
   // For groups: users not already in the chat
   const addableCandidates = useMemo(() => {
