@@ -281,6 +281,13 @@ export default function ChatWindow({
 
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
+      // Scroll to bottom on first load (covers fresh open, push/bell entry)
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+          isAtBottomRef.current = true;
+        }
+      });
       return;
     }
 
@@ -373,7 +380,13 @@ export default function ChatWindow({
       typingTimeoutRef.current = null;
     }
     if (inputRef.current) inputRef.current.style.height = 'auto';
+    isAtBottomRef.current = true;
     await onSendMessage(textToSend, 'text', undefined, reply);
+    requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    });
     inputRef.current?.focus();
   }, [onSendMessage, onSetTyping, replyTo, setReplyTo, setShowEmoji, setText, text]);
 
@@ -382,9 +395,15 @@ export default function ChatWindow({
     const reply = replyTo
       ? { messageId: replyTo.id, text: getReplyPreviewText(replyTo), senderName: replyTo.senderName }
       : null;
+    isAtBottomRef.current = true;
     await onSendMessage(file.name, isImage ? 'image' : 'file', file, reply);
     setReplyTo(null);
     setShowAttach(false);
+    requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    });
   }, [onSendMessage, replyTo, setReplyTo, setShowAttach]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
