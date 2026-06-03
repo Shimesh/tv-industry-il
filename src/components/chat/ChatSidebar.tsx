@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { Search, Plus, MessageCircle, AlertTriangle, Loader2 } from 'lucide-react';
-
-function statusDotColor(isOnline?: boolean, status?: string): string | null {
-  if (!isOnline) return null; // no dot for offline in sidebar
-  if (status === 'busy') return '#ef4444'; // red
-  return 'var(--theme-success)'; // green
-}
 import type { ChatRoom } from '@/hooks/useChat';
 import type { UserProfile } from '@/contexts/AuthContext';
 import OnlineUsers from './OnlineUsers';
+import MissedCallsPanel from '@/components/call/MissedCallsPanel';
+
+function statusDotColor(isOnline?: boolean, status?: string): string | null {
+  if (!isOnline) return null;
+  if (status === 'busy') return '#ef4444';
+  return 'var(--theme-success)';
+}
 
 interface ChatSidebarProps {
   chats: ChatRoom[];
@@ -144,17 +145,21 @@ export default function ChatSidebar({
             )}
           </div>
         ) : filteredChats.length === 0 ? (
-          <div className="p-8 text-center">
-            <MessageCircle className="mx-auto mb-3 h-12 w-12 text-[var(--theme-text-secondary)] opacity-40" />
-            <p className="text-[13px] text-[var(--theme-text-secondary)]">
-              {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--theme-text-secondary)] opacity-75">
-              לחצו על `+` כדי להתחיל שיחה חדשה
-            </p>
-          </div>
+          <>
+            <div className="p-8 text-center">
+              <MessageCircle className="mx-auto mb-3 h-12 w-12 text-[var(--theme-text-secondary)] opacity-40" />
+              <p className="text-[13px] text-[var(--theme-text-secondary)]">
+                {search ? 'לא נמצאו שיחות' : 'אין שיחות עדיין'}
+              </p>
+              <p className="mt-1 text-[11px] text-[var(--theme-text-secondary)] opacity-75">
+                לחצו על `+` כדי להתחיל שיחה חדשה
+              </p>
+            </div>
+            <MissedCallsPanel />
+          </>
         ) : (
-          filteredChats.map(chat => {
+          <>
+          {filteredChats.map(chat => {
             const isActive = chat.id === activeChatId;
             const chatName = getChatName(chat, currentUserId);
             const chatPhoto = getChatPhoto(chat, currentUserId);
@@ -247,7 +252,9 @@ export default function ChatSidebar({
                 </div>
               </button>
             );
-          })
+          })}
+          <MissedCallsPanel />
+          </>
         )}
       </div>
 

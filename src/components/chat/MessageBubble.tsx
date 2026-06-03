@@ -16,8 +16,16 @@ import {
   RotateCcw,
   AlertTriangle,
   Loader2,
+  Info,
+  X,
 } from 'lucide-react';
 import type { ChatUiMessage } from './chatTypes';
+
+interface MemberInfo {
+  uid: string;
+  displayName: string;
+  photoURL?: string | null;
+}
 
 interface MessageBubbleProps {
   message: ChatUiMessage;
@@ -26,6 +34,7 @@ interface MessageBubbleProps {
   showSender: boolean;
   isGroup: boolean;
   chatMembers: string[];
+  chatMembersInfo?: MemberInfo[];
   onReply: (message: ChatUiMessage) => void;
   onDelete: (messageId: string) => void;
   onRetry?: (message: ChatUiMessage) => void;
@@ -96,6 +105,142 @@ function getPendingLabel(message: ChatUiMessage): string {
   }
 
   return localStatus || 'שולח...';
+}
+
+function formatTimestamp(ts: number): string {
+  return new Date(ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTimestamp(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function MessageInfoPanel({
+  message,
+  currentUserId,
+  chatMembers,
+  chatMembersInfo,
+  isGroup,
+  onClose,
+}: {
+  message: ChatUiMessage;
+  currentUserId: string;
+  chatMembers: string[];
+  chatMembersInfo: MemberInfo[];
+  isGroup: boolean;
+  onClose: () => void;
+}) {
+  const others = chatMembers.filter(uid => uid !== currentUserId);
+  const memberMap = new Map(chatMembersInfo.map(m => [m.uid, m]));
+
+  if (!isGroup) {
+    const otherId = others[0];
+    const readTs = otherId ? message.readBy?.[otherId] : null;
+    const deliveredTs = otherId ? message.deliveredTo?.[otherId] : null;
+    return (
+      <div
+        className="absolute bottom-full mb-1 right-0 z-30 w-[200px] rounded-xl bg-[#111B21] shadow-xl border border-white/10 text-right overflow-hidden"
+        dir="rtl"
+      >
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+          <span className="text-[12px] font-semibold text-[#E9EDEF]">מידע על ההודעה</span>
+          <button onClick={onClose} className="text-[#8696a0] hover:text-white transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[#8696a0]">
+              {readTs ? formatDateTimestamp(readTs) : '—'}
+            </span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-[#53BDEB]">נקרא</span>
+              <CheckCheck className="w-3.5 h-3.5 text-[#53BDEB]" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[#8696a0]">
+              {deliveredTs ? formatDateTimestamp(deliveredTs) : '—'}
+            </span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-[#8696a0]">נמסר</span>
+              <CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const read = others.filter(uid => message.readBy?.[uid]).sort((a, b) => (message.readBy[b] || 0) - (message.readBy[a] || 0));
+  const delivered = others.filter(uid => !message.readBy?.[uid] && message.deliveredTo?.[uid]);
+  const pending = others.filter(uid => !message.readBy?.[uid] && !message.deliveredTo?.[uid]);
+
+  const MemberRow = ({ uid, ts }: { uid: string; ts: number | null }) => {
+    const info = memberMap.get(uid);
+    const name = info?.displayName || uid.slice(0, 8);
+    return (
+      <div className="flex items-center gap-2 py-1">
+        {info?.photoURL ? (
+          <img src={info.photoURL} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-[#2a3942] flex items-center justify-center shrink-0 text-[11px] text-white font-bold">
+            {name.charAt(0)}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-[12px] text-[#E9EDEF] truncate">{name}</p>
+          {ts && <p className="text-[10px] text-[#8696a0]">{formatTimestamp(ts)}</p>}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="absolute bottom-full mb-1 right-0 z-30 w-[230px] max-h-[280px] overflow-y-auto rounded-xl bg-[#111B21] shadow-xl border border-white/10 text-right"
+      dir="rtl"
+    >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 sticky top-0 bg-[#111B21]">
+        <span className="text-[12px] font-semibold text-[#E9EDEF]">מידע על ההודעה</span>
+        <button onClick={onClose} className="text-[#8696a0] hover:text-white transition-colors">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {read.length > 0 && (
+        <div className="px-3 pt-2 pb-1">
+          <div className="flex items-center gap-1 mb-1">
+            <CheckCheck className="w-3 h-3 text-[#53BDEB]" />
+            <span className="text-[10px] font-bold text-[#53BDEB] uppercase tracking-wide">קראו ({read.length})</span>
+          </div>
+          {read.map(uid => <MemberRow key={uid} uid={uid} ts={message.readBy[uid] || null} />)}
+        </div>
+      )}
+      {delivered.length > 0 && (
+        <div className="px-3 pt-2 pb-1 border-t border-white/5">
+          <div className="flex items-center gap-1 mb-1">
+            <CheckCheck className="w-3 h-3 text-[#8696a0]" />
+            <span className="text-[10px] font-bold text-[#8696a0] uppercase tracking-wide">קיבלו ({delivered.length})</span>
+          </div>
+          {delivered.map(uid => <MemberRow key={uid} uid={uid} ts={message.deliveredTo[uid] || null} />)}
+        </div>
+      )}
+      {pending.length > 0 && (
+        <div className="px-3 pt-2 pb-2 border-t border-white/5">
+          <div className="flex items-center gap-1 mb-1">
+            <Check className="w-3 h-3 text-[#8696a0]" />
+            <span className="text-[10px] font-bold text-[#8696a0] uppercase tracking-wide">ממתין ({pending.length})</span>
+          </div>
+          {pending.map(uid => <MemberRow key={uid} uid={uid} ts={null} />)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function VoiceMessagePlayer({
@@ -188,6 +333,7 @@ export default function MessageBubble({
   showSender,
   isGroup,
   chatMembers,
+  chatMembersInfo = [],
   onReply,
   onDelete,
   onRetry,
@@ -195,6 +341,7 @@ export default function MessageBubble({
 }: MessageBubbleProps) {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const isPending = isOwn && message.localState === 'sending';
   const isFailed = isOwn && message.localState === 'failed';
 
@@ -278,7 +425,7 @@ export default function MessageBubble({
       )}
       {!isOwn && isGroup && !showSender && <div className="w-[34px] shrink-0" />}
 
-      <div className="relative max-w-[65%] min-w-[90px]">
+      <div className="relative max-w-[65%] min-w-[90px]" onMouseLeave={() => setShowInfo(false)}>
         <div
           className={`relative px-[9px] pt-[6px] pb-[8px] shadow-sm ${
             isOwn
@@ -451,6 +598,17 @@ export default function MessageBubble({
           )}
         </div>
 
+        {showInfo && isOwn && !isPending && !isFailed && (
+          <MessageInfoPanel
+            message={message}
+            currentUserId={currentUserId}
+            chatMembers={chatMembers}
+            chatMembersInfo={chatMembersInfo}
+            isGroup={isGroup}
+            onClose={() => setShowInfo(false)}
+          />
+        )}
+
         <div className={`absolute top-[2px] ${isOwn ? 'left-[2px]' : 'right-[2px]'} opacity-0 group-hover:opacity-100 transition-opacity z-10`}>
           <div className="flex items-center gap-0 bg-[#111B21ee] rounded-lg shadow-lg overflow-hidden">
             <button
@@ -460,6 +618,15 @@ export default function MessageBubble({
             >
               <Reply className="w-3.5 h-3.5 text-[#aebac1]" />
             </button>
+            {isOwn && !isPending && !isFailed && (
+              <button
+                onClick={() => setShowInfo(v => !v)}
+                className="p-1.5 hover:bg-[#ffffff15] transition-colors"
+                title='מידע'
+              >
+                <Info className="w-3.5 h-3.5 text-[#aebac1]" />
+              </button>
+            )}
             {message.type === 'text' && message.text && (
               <button
                 onClick={() => navigator.clipboard.writeText(message.text)}

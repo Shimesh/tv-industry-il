@@ -1,12 +1,12 @@
 ﻿'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { MessageCircle } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import NewChatModal from '@/components/chat/NewChatModal';
-import MissedCallsPanel from '@/components/call/MissedCallsPanel';
 import { useChat } from '@/hooks/useChat';
 import { useChatUsers } from '@/hooks/useChatUsers';
 import { useAuth } from '@/contexts/AuthContext';
@@ -148,6 +148,7 @@ function ChatContent() {
   const { user } = useAuth();
   const { contacts } = useAppData();
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
   const allUsers = useChatUsers();
   const {
     chats,
@@ -371,6 +372,26 @@ function ChatContent() {
     [createGroup, setActiveChat, showToast, user]
   );
 
+  // Open existing chat when navigating from profile page (/chat?userId=xxx).
+  // Does NOT create a new chat — only opens one that already exists.
+  const autoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const targetUserId = searchParams.get('userId');
+    if (!targetUserId || !user || chatsLoading) return;
+    if (autoOpenedRef.current === targetUserId) return;
+    autoOpenedRef.current = targetUserId;
+
+    const existing = chats.find(
+      (c) => c.type === 'private' &&
+        c.members.includes(targetUserId) &&
+        c.members.includes(user.uid)
+    );
+    if (existing) {
+      setActiveChat(existing.id);
+      setMobileShowChat(true);
+    }
+  }, [searchParams, user, chatsLoading, chats, setActiveChat]);
+
   const handleSendMessage = useCallback(
     async (
       text: string,
@@ -522,9 +543,7 @@ function ChatContent() {
       }}
     >
       <div className={`w-full lg:w-[320px] xl:w-[360px] shrink-0 relative flex h-full min-h-0 flex-col ${mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
-        <MissedCallsPanel />
-        <div className="min-h-0 flex-1">
-          <ChatSidebar
+        <ChatSidebar
             chats={chats}
             activeChatId={activeChat}
             currentUserId={user.uid}
@@ -536,7 +555,6 @@ function ChatContent() {
             onNewChat={() => setShowNewChat(true)}
             onSelectOnlineUser={handleSelectOnlineUser}
           />
-        </div>
       </div>
 
       <div className={`flex-1 flex h-full min-h-0 flex-col min-w-0 ${!mobileShowChat ? 'hidden lg:flex' : 'flex'}`}>
