@@ -235,8 +235,9 @@ export default function ChatWindow({
   const otherMember = chat.type === 'private'
     ? chat.membersInfo.find((m) => m.uid && m.uid !== currentUserId)
     : null;
-  // Self-chat: private chat where both members share the same UID
-  const isSelfChat = chat.type === 'private' && !otherMember;
+  // Detect self-chat from the authoritative members array (all UIDs identical)
+  // membersInfo can contain stale/mismatched UIDs, so don't rely on it for this check.
+  const isSelfChat = chat.type === 'private' && new Set(chat.members).size <= 1;
   const otherUserProfile = otherMember?.uid
     ? allUsers.find(u => u.uid === otherMember.uid) ?? null
     : null;

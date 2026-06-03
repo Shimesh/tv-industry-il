@@ -199,14 +199,15 @@ export default function ChatSidebar({
                   ? chat.membersInfo?.find(m => m.uid !== currentUserId)
                   : null;
                 const otherMemberUid = otherMember?.uid ?? null;
-                const isSelfChat = chat.type === 'private' && !otherMemberUid;
+                // Detect self-chat from the authoritative members array (all UIDs identical)
+                const isSelfChat = chat.type === 'private' && new Set(chat.members).size <= 1;
                 const isOtherOnline = isSelfChat || (otherMemberUid
                   ? (otherMemberUid === currentUserId || onlineUserIds.has(otherMemberUid))
                   : false);
                 const dotColor = statusDotColor(isOtherOnline, otherMember?.status);
-                const avatarDotColor = otherMemberUid
-                  ? presenceDotColor(isOtherOnline, otherMember?.status)
-                  : null;
+                const avatarDotColor = isSelfChat
+                  ? 'var(--theme-success)'
+                  : (otherMemberUid ? presenceDotColor(isOtherOnline, otherMember?.status) : null);
 
                 return (
                   <button
