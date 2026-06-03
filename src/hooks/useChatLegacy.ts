@@ -23,7 +23,8 @@ const CHAT_ATTACHMENT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 function isPresenceOnline(isOnline: boolean | undefined, lastSeen: number | null | undefined): boolean {
   if (!isOnline) return false;
-  if (typeof lastSeen !== 'number' || lastSeen <= 0) return false;
+  // If lastSeen is missing, trust the isOnline flag (legacy/new session)
+  if (typeof lastSeen !== 'number' || lastSeen <= 0) return true;
   return Date.now() - lastSeen <= PRESENCE_STALE_MS;
 }
 

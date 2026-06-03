@@ -373,7 +373,9 @@ function ChatContent() {
     [createGroup, setActiveChat, showToast, user]
   );
 
-  // Auto-open chat when navigating from profile page (/chat?userId=xxx)
+  // Open existing chat when navigating from profile page (/chat?userId=xxx).
+  // Does NOT create a new chat — only opens one that already exists.
+  // A new chat is only created when the user explicitly sends a message.
   const autoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     const targetUserId = searchParams.get('userId');
@@ -381,18 +383,17 @@ function ChatContent() {
     if (autoOpenedRef.current === targetUserId) return;
     autoOpenedRef.current = targetUserId;
 
-    void (async () => {
-      try {
-        const chatId = await createPrivateChat(targetUserId);
-        if (chatId) {
-          setActiveChat(chatId);
-          setMobileShowChat(true);
-        }
-      } catch {
-        // silent — user can still pick from sidebar
-      }
-    })();
-  }, [searchParams, user, chatsLoading, createPrivateChat, setActiveChat]);
+    const existing = chats.find(
+      (c) => c.type === 'private' &&
+        c.members.includes(targetUserId) &&
+        c.members.includes(user.uid)
+    );
+    if (existing) {
+      setActiveChat(existing.id);
+      setMobileShowChat(true);
+    }
+    // No existing chat → stay on chat page, user can start a new conversation manually
+  }, [searchParams, user, chatsLoading, chats, setActiveChat]);
 
   const handleSendMessage = useCallback(
     async (
