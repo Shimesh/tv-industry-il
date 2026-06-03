@@ -37,6 +37,30 @@ function PresenceManager() {
   return null;
 }
 
+function ContactLinker() {
+  const { user, profile } = useAuth();
+  const linkedRef = useRef(false);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    if (profile.linkedContactId != null && String(profile.linkedContactId).trim()) return;
+    if (linkedRef.current) return;
+    linkedRef.current = true;
+
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/user/link-contact', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch { /* silent */ }
+    })();
+  }, [user, profile]);
+
+  return null;
+}
+
 function UsageTracker() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
@@ -137,6 +161,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     {mounted && <VersionAnnouncer />}
                     {mounted && <FCMForegroundListener />}
                     {mounted && <PushBanner />}
+                    {mounted && <ContactLinker />}
                     <CallProvider>
                       <AccountApprovalGate>
                         <OnboardingWrapper>
