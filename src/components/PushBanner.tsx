@@ -1,18 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { registerFcmToken } from '@/components/FCMTokenRegistration';
 
-const DISMISSED_KEY = 'push_banner_dismissed_v3';
+// Tracks when the banner was LAST SHOWN (not dismissed) — resets every N days.
+const LAST_SHOWN_KEY = 'push_banner_shown_v4';
 const COOLDOWN_DEFAULT_DAYS = 3;
 const COOLDOWN_DENIED_DAYS = 7;
 
-function getDismissedAt(): number | null {
+function getLastShownAt(): number | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
+    const raw = localStorage.getItem(LAST_SHOWN_KEY);
     if (!raw) return null;
     const ts = parseInt(raw, 10);
     return isNaN(ts) ? null : ts;
@@ -21,17 +22,19 @@ function getDismissedAt(): number | null {
   }
 }
 
-function saveDismissed() {
+function saveShown() {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(DISMISSED_KEY, String(Date.now()));
+    localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()));
   } catch {}
 }
 
-function isCooldownOver(cooldownDays: number): boolean {
-  const dismissedAt = getDismissedAt();
-  if (dismissedAt === null) return true;
-  return Date.now() - dismissedAt > cooldownDays * 24 * 60 * 60 * 1000;
+function shouldShowNow(permission: NotificationPermission): boolean {
+  if (permission === 'granted') return false;
+  const cooldownDays = permission === 'denied' ? COOLDOWN_DENIED_DAYS : COOLDOWN_DEFAULT_DAYS;
+  const lastShown = getLastShownAt();
+  if (!lastShown) return true;
+  return Date.now() - lastShown > cooldownDays * 24 * 60 * 60 * 1000;
 }
 
 export default function PushBanner() {
@@ -40,21 +43,35 @@ export default function PushBanner() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const permStatusRef = useRef<PermissionStatus | null>(null);
 
+  // Read initial permission
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     setPermission(Notification.permission);
+
+    // Monitor permission changes (e.g. after AuthContext triggers the browser dialog)
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'notifications' as PermissionName }).then((status) => {
+        permStatusRef.current = status;
+        status.onchange = () => setPermission(Notification.permission);
+      }).catch(() => undefined);
+    }
+
+    return () => {
+      if (permStatusRef.current) permStatusRef.current.onchange = null;
+    };
   }, []);
 
+  // Decide whether to show the banner
   useEffect(() => {
     if (!profile?.is_consented && !profile?.termsAccepted) return;
-    if (permission === null) return;
+    if (permission === null || permission === 'granted') return;
     if (typeof window === 'undefined' || !('Notification' in window)) return;
 
-    if (permission === 'default' && isCooldownOver(COOLDOWN_DEFAULT_DAYS)) {
+    if (shouldShowNow(permission)) {
       setVisible(true);
-    } else if (permission === 'denied' && isCooldownOver(COOLDOWN_DENIED_DAYS)) {
-      setVisible(true);
+      saveShown(); // record that we showed it NOW
     }
   }, [profile?.is_consented, profile?.termsAccepted, permission]);
 
@@ -62,14 +79,10 @@ export default function PushBanner() {
 
   const isDenied = permission === 'denied';
 
-  const dismiss = () => {
-    saveDismissed();
-    setVisible(false);
-  };
+  const dismiss = () => setVisible(false);
 
   const handleEnable = async () => {
     if (isDenied) {
-      // Can't re-request — send user to browser settings
       dismiss();
       return;
     }
@@ -82,8 +95,9 @@ export default function PushBanner() {
       setPermission('granted');
       dismiss();
     } else if (result.reason?.startsWith('permission-')) {
-      setPermission('denied');
+      setPermission(Notification.permission);
       setError(false);
+      dismiss();
     } else {
       setError(true);
     }
@@ -113,7 +127,7 @@ export default function PushBanner() {
           {error
             ? 'לא הצלחנו להפעיל התראות. נסה שוב.'
             : isDenied
-            ? 'התראות חסומות — כדאי להפעיל בהגדרות הדפדפן כדי לקבל עדכונים בזמן אמת'
+            ? 'התראות חסומות — להפעלה: הגדרות דפדפן ← אתרים ← התראות ← הסר חסימה'
             : 'הישאר מעודכן על הפקות בזמן אמת!'}
         </span>
       </div>
