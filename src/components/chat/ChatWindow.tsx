@@ -461,7 +461,7 @@ export default function ChatWindow({
 
         {(() => {
           const isOtherOnline = !isGroup && otherMember?.uid
-            ? onlineUsers.some(u => u.uid === otherMember.uid)
+            ? (otherMember.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember.uid))
             : false;
           const dotColor = !isGroup && otherMember?.uid
             ? statusDotColor(isOtherOnline, otherUserProfile?.status)
@@ -518,7 +518,7 @@ export default function ChatWindow({
               <span className="text-[var(--theme-accent)]">{typingUsers.join(', ')} מקליד/ה...</span>
             ) : isGroup ? (
               `${chat.members.length} משתתפים`
-            ) : onlineUsers.some(u => u.uid === otherMember?.uid) ? (
+            ) : (otherMember?.uid === currentUserId || onlineUsers.some(u => u.uid === otherMember?.uid)) ? (
               <span className="text-[var(--theme-success)]">מחובר/ת</span>
             ) : formatLastSeen(otherUserProfile?.lastSeen) ? (
               formatLastSeen(otherUserProfile?.lastSeen)

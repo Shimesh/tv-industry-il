@@ -13,6 +13,12 @@ function statusDotColor(isOnline?: boolean, status?: string): string | null {
   return 'var(--theme-success)';
 }
 
+function presenceDotColor(isOnline: boolean, status?: string): string {
+  if (!isOnline) return '#6b7280';
+  if (status === 'busy') return '#ef4444';
+  return 'var(--theme-success)';
+}
+
 interface ChatSidebarProps {
   chats: ChatRoom[];
   activeChatId: string | null;
@@ -193,8 +199,13 @@ export default function ChatSidebar({
                   ? chat.membersInfo?.find(m => m.uid !== currentUserId)
                   : null;
                 const otherMemberUid = otherMember?.uid ?? null;
-                const isOtherOnline = otherMemberUid ? onlineUserIds.has(otherMemberUid) : false;
+                const isOtherOnline = otherMemberUid
+                  ? (otherMemberUid === currentUserId || onlineUserIds.has(otherMemberUid))
+                  : false;
                 const dotColor = statusDotColor(isOtherOnline, otherMember?.status);
+                const avatarDotColor = otherMemberUid
+                  ? presenceDotColor(isOtherOnline, otherMember?.status)
+                  : null;
 
                 return (
                   <button
@@ -225,10 +236,10 @@ export default function ChatSidebar({
                       >
                         {chatInitial}
                       </div>
-                      {dotColor && (
+                      {avatarDotColor && (
                         <span
                           className="absolute bottom-0.5 right-0.5 w-[12px] h-[12px] rounded-full border-2 border-[var(--theme-bg)]"
-                          style={{ backgroundColor: dotColor }}
+                          style={{ backgroundColor: avatarDotColor }}
                         />
                       )}
                     </div>
