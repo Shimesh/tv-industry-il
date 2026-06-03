@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
@@ -239,6 +239,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [bootstrapContactsTotal, setBootstrapContactsTotal] = useState<number | null>(null);
   const [bootstrapContactsUpdatedAt, setBootstrapContactsUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Debounced logout: if onAuthStateChanged fires null while a cached session exists,
+  // we wait briefly before committing to logged-out state. Firebase can fire null
+  // transiently (e.g. after a SW-triggered page reload) before re-firing with the user.
+  const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const cachedBootstrap = readCachedBootstrap();
@@ -267,12 +271,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           AUTH_PROFILE_CACHE_KEY,
           JSON.stringify({ profile, resolved: true }),
         );
-      } else if (!profile) {
+      } else if (!profile && !loading) {
+        // Only clear cache when definitively logged out — not while still loading
         window.sessionStorage.removeItem(SESSION_BOOTSTRAP_CACHE_KEY);
         window.sessionStorage.removeItem(AUTH_PROFILE_CACHE_KEY);
       }
     } catch {}
-  }, [profile, profileReady, profileSource, bootstrapContactsTotal, bootstrapContactsUpdatedAt]);
+  }, [profile, profileReady, profileSource, bootstrapContactsTotal, bootstrapContactsUpdatedAt, loading]);
 
   const fetchSessionBootstrap = async (firebaseUser: User) => {
     const token = await firebaseUser.getIdToken();
@@ -310,18 +315,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    const commitLogout = () => {
+      logoutTimerRef.current = null;
+      setUser(null);
+      setProfile(null);
+      setProfileReady(false);
+      setProfileSource('fallback');
+      setBootstrapContactsTotal(null);
+      setBootstrapContactsUpdatedAt(null);
+      setLoading(false);
+    };
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
+      // Cancel any pending debounced logout — user is active again
+      if (logoutTimerRef.current) {
+        clearTimeout(logoutTimerRef.current);
+        logoutTimerRef.current = null;
+      }
 
       if (!firebaseUser) {
-        setProfile(null);
-        setProfileReady(false);
-        setProfileSource('fallback');
-        setBootstrapContactsTotal(null);
-        setBootstrapContactsUpdatedAt(null);
-        setLoading(false);
+        // Guard against transient null: Firebase can fire null briefly after a SW-triggered
+        // page reload or token refresh, then re-fire with the real user milliseconds later.
+        // If a cached session exists, defer the logout 800ms so we don't flash "logged out".
+        const hasCachedSession = !!readCachedBootstrap()?.profile;
+        if (hasCachedSession) {
+          logoutTimerRef.current = setTimeout(commitLogout, 800);
+        } else {
+          commitLogout();
+        }
         return;
       }
+
+      setUser(firebaseUser);
 
       const fallback = defaultProfile(firebaseUser);
       const cached = readCachedBootstrap();
@@ -364,7 +389,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    };
   }, []);
 
   // Register FCM token for consented users — auto-request permission on login
@@ -391,11 +419,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [user, user?.uid, profile?.termsAccepted, profile?.is_consented]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, name: string, phone: string, department: string, role: string) => {
+  const signUp = useCallback(async (email: string, password: string, name: string, phone: string, department: string, role: string) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
 
@@ -431,9 +459,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     setProfileReady(Boolean(payload.profile));
     setProfileSource(payload.profile ? 'server' : 'fallback');
-  };
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
@@ -442,9 +470,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (auth.currentUser) return;
       if (authError.code !== 'auth/popup-closed-by-user') throw error;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await signOut(auth);
     setUser(null);
     setProfile(null);
@@ -452,9 +480,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileSource('fallback');
     setBootstrapContactsTotal(null);
     setBootstrapContactsUpdatedAt(null);
-  };
+  }, []);
 
-  const updateUserProfile = async (data: Partial<UserProfile>) => {
+  const updateUserProfile = useCallback(async (data: Partial<UserProfile>) => {
     if (!user) return;
     let previousProfile: UserProfile | null = null;
     setProfile((prev) => {
@@ -483,9 +511,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileReady(Boolean(previousProfile));
       throw error;
     }
-  };
+  }, [user]);
 
-  const refreshUserProfile = async () => {
+  const refreshUserProfile = useCallback(async () => {
     if (!user) return;
     if (typeof window !== 'undefined') {
       try {
@@ -498,9 +526,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await user.getIdToken(true).catch(() => undefined);
     const bootstrap = await fetchSessionBootstrap(user);
     applyBootstrap(bootstrap);
-  };
+  }, [user]);
 
-  const deleteDirectoryProfile = async () => {
+  const deleteDirectoryProfile = useCallback(async () => {
     if (!user) return;
     const token = await user.getIdToken();
     const response = await fetch('/api/me/profile', {
@@ -523,9 +551,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } : prev);
     setProfileReady(false);
     setProfileSource('fallback');
-  };
+  }, [user]);
 
-  const repairUserProfile = async () => {
+  const repairUserProfile = useCallback(async () => {
     if (!user) return;
     const token = await user.getIdToken();
     await fetch('/api/me/repair-profile', {
@@ -536,33 +564,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const bootstrap = await fetchSessionBootstrap(user);
     applyBootstrap(bootstrap);
-  };
+  }, [user]);
 
-  const canDo = (permission: Permission): boolean => can(profile?.siteRole, permission);
-  const hasRoleLevel = (role: UserRole): boolean => hasRole(profile?.siteRole, role);
+  const canDo = useCallback((permission: Permission): boolean => can(profile?.siteRole, permission), [profile?.siteRole]);
+  const hasRoleLevel = useCallback((role: UserRole): boolean => hasRole(profile?.siteRole, role), [profile?.siteRole]);
+
+  const contextValue = useMemo(() => ({
+    user,
+    profile,
+    loading,
+    profileReady,
+    profileSource,
+    bootstrapContactsTotal,
+    bootstrapContactsUpdatedAt,
+    signIn,
+    signUp,
+    signInWithGoogle,
+    logout,
+    updateUserProfile,
+    refreshUserProfile,
+    deleteDirectoryProfile,
+    repairUserProfile,
+    can: canDo,
+    hasRole: hasRoleLevel,
+  }), [
+    user, profile, loading, profileReady, profileSource,
+    bootstrapContactsTotal, bootstrapContactsUpdatedAt,
+    signIn, signUp, signInWithGoogle, logout, updateUserProfile,
+    refreshUserProfile, deleteDirectoryProfile, repairUserProfile,
+    canDo, hasRoleLevel,
+  ]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        profileReady,
-        profileSource,
-        bootstrapContactsTotal,
-        bootstrapContactsUpdatedAt,
-        signIn,
-        signUp,
-        signInWithGoogle,
-        logout,
-        updateUserProfile,
-        refreshUserProfile,
-        deleteDirectoryProfile,
-        repairUserProfile,
-        can: canDo,
-        hasRole: hasRoleLevel,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
