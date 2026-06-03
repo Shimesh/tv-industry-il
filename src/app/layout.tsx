@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from './providers';
 import Navigation from '@/components/Navigation';
 import QuickMenuRoot from '@/components/QuickMenuRoot';
-import Footer from '@/components/Footer';
+import ConditionalFooter from '@/components/ConditionalFooter';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -80,7 +80,7 @@ export default function RootLayout({
             >
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
-            <Footer />
+            <ConditionalFooter />
             <ServiceWorkerRegistration />
             <InstallPrompt />
             <AccessibilityWidget />
