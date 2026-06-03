@@ -12,8 +12,6 @@ import {
 
 const APP_VERSION: string = packageJson.version;
 
-let announced = false;
-
 type RawUserForAnnounce = {
   id: string;
   siteRole?: string | null;
@@ -21,17 +19,26 @@ type RawUserForAnnounce = {
   webPushSubscriptions?: unknown;
 };
 
+export type AnnounceResult =
+  | { status: 'skipped'; reason: 'already-announced'; firestoreVersion: string }
+  | { status: 'announced'; version: string; admins: number; fcmTokens: number; webPushSubs: number }
+  | { status: 'error'; error: string };
+
 function uniqueStrings(values: unknown[]): string[] {
   return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
 }
 
-export async function checkAndAnnounceVersion(): Promise<void> {
-  if (announced) return;
-  announced = true;
-
+export async function checkAndAnnounceVersion(): Promise<AnnounceResult> {
   try {
     const doc = await getDocument<{ version: string }>('system/appVersion');
-    if (doc?.version === APP_VERSION) return;
+    const firestoreVersion = doc?.version ?? '(none)';
+
+    if (firestoreVersion === APP_VERSION) {
+      console.log(`[version] Already on ${APP_VERSION} — skipping`);
+      return { status: 'skipped', reason: 'already-announced', firestoreVersion };
+    }
+
+    console.log(`[version] New version detected: Firestore=${firestoreVersion} → App=${APP_VERSION}`);
 
     await patchDocument('system/appVersion', {
       version: APP_VERSION,
@@ -62,9 +69,6 @@ export async function checkAndAnnounceVersion(): Promise<void> {
       }),
     );
 
-    // Send web push to ALL admins (not filtered by FCM token presence).
-    // Both FCM and web push use the same notification tag so the browser
-    // deduplicates if both arrive — ensuring at least one path succeeds.
     const webPushSubs: StoredWebPushSubscription[] = uniqueWebPushSubscriptions(
       adminUids.flatMap((uid) => {
         const v = webPushByUid.get(uid);
@@ -72,27 +76,27 @@ export async function checkAndAnnounceVersion(): Promise<void> {
       }),
     );
 
-    console.log(`[version] ${APP_VERSION} → admins: ${adminUids.length}, fcm tokens: ${fcmTokens.length}, web push subs: ${webPushSubs.length}`);
+    console.log(`[version] ${APP_VERSION} → admins: ${adminUids.length}, fcm: ${fcmTokens.length}, webpush: ${webPushSubs.length}`);
 
     if (fcmTokens.length > 0) {
       const { failedTokens } = await sendFcmPush({ tokens: fcmTokens, title, body: message, linkUrl });
       console.log(`[version] FCM sent to ${fcmTokens.length} tokens, ${failedTokens.length} failed`);
       if (failedTokens.length > 0) void removeFcmTokensFromUsers(failedTokens);
     } else {
-      console.warn('[version] No FCM tokens found for admins — FCM push skipped');
+      console.warn('[version] No FCM tokens — FCM push skipped');
     }
 
     if (webPushSubs.length > 0) {
       await sendStandardWebPush({ subscriptions: webPushSubs, title, body: message, linkUrl });
       console.log(`[version] Web push sent to ${webPushSubs.length} subscriptions`);
     } else {
-      console.warn('[version] No web push subscriptions found for admins');
+      console.warn('[version] No web push subscriptions — web push skipped');
     }
 
-    if (fcmTokens.length === 0 && webPushSubs.length === 0) {
-      console.warn('[version] No push tokens or subscriptions found — push not sent at all');
-    }
+    return { status: 'announced', version: APP_VERSION, admins: adminUids.length, fcmTokens: fcmTokens.length, webPushSubs: webPushSubs.length };
   } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
     console.error('[version] announce failed:', err);
+    return { status: 'error', error };
   }
 }

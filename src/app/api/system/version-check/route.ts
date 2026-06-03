@@ -5,6 +5,6 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET() {
-  await checkAndAnnounceVersion();
-  return NextResponse.json({ ok: true });
+  const result = await checkAndAnnounceVersion();
+  return NextResponse.json({ ok: true, ...result });
 }

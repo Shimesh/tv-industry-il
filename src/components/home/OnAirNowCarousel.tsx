@@ -316,10 +316,12 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
-  // When a dynamic-stream channel failed to resolve its HLS URL, skip the iframe
-  // fallback — third-party embeds (e.g. Mako) render a paused player UI that
-  // overlaps the card's channel-info overlay and looks broken.
-  if (needsDynamicResolution && dynamicStreamResolved && !dynamicHlsUrl) {
+  // For dynamic-stream channels, never fall back to the iframe — third-party
+  // embeds (e.g. Mako) render a paused player UI that overlaps the card's
+  // channel-info overlay and looks broken.  Show a clean external-link badge
+  // whenever we have no working HLS: either the API returned no URL at all, or
+  // the URL was tried and failed (hlsUrl is null in both cases once resolved).
+  if (needsDynamicResolution && !hlsUrl) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950">
         <ExternalLink className="h-7 w-7 text-white/35" />
