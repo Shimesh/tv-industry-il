@@ -5,7 +5,7 @@ import { useCall } from '@/contexts/CallContext';
 import UserAvatar from '@/components/UserAvatar';
 import {
   PhoneOff, Mic, MicOff, Video, VideoOff,
-  Volume2, VolumeX, Bluetooth, ChevronUp, Check,
+  Volume2, Bluetooth, Check, SwitchCamera,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -20,7 +20,7 @@ const canSelectSink =
   'setSinkId' in HTMLAudioElement.prototype;
 
 export default function CallScreen() {
-  const { callState, endCall, toggleMute, toggleVideo } = useCall();
+  const { callState, endCall, toggleMute, toggleVideo, toggleCamera } = useCall();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<ExtendedAudioElement>(null);
@@ -135,17 +135,30 @@ export default function CallScreen() {
                 <div className="flex h-full w-full items-center justify-center bg-gray-800">
                   <VideoOff className="h-8 w-8 text-gray-400" />
                 </div>
-              ) : (
+              ) : callState.localStream ? (
                 <video
                   ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted
                   className="h-full w-full object-cover"
-                  style={{ transform: 'scaleX(-1)' }}
+                  style={{ transform: callState.isFrontCamera ? 'scaleX(-1)' : 'none' }}
                 />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-gray-900">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                </div>
               )}
             </div>
+
+            {/* Reconnecting overlay — shown when recovering an active call without media */}
+            {callState.status === 'active' && !callState.remoteStream && !callState.localStream && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70">
+                <UserAvatar name={remoteName} size="xl" />
+                <h2 className="text-xl font-bold text-white">{remoteName}</h2>
+                <p className="text-sm text-gray-300">שיחה בתהליך — אין אפשרות להתחבר מחדש</p>
+              </div>
+            )}
 
             {/* Calling overlay */}
             {callState.status === 'calling' && (
@@ -277,6 +290,17 @@ export default function CallScreen() {
               title={callState.isVideoOff ? 'הפעל מצלמה' : 'כבה מצלמה'}
             >
               {callState.isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+            </button>
+          )}
+
+          {/* Switch Camera (video only, when camera is on) */}
+          {isVideo && !callState.isVideoOff && (
+            <button
+              onClick={() => void toggleCamera()}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition-all hover:bg-white/20"
+              title={callState.isFrontCamera ? 'עבור למצלמה אחורית' : 'עבור למצלמה קדמית'}
+            >
+              <SwitchCamera className="h-5 w-5" />
             </button>
           )}
 

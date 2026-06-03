@@ -39,6 +39,7 @@ export interface CallState {
   remoteStream: MediaStream | null;
   isMuted: boolean;
   isVideoOff: boolean;
+  isFrontCamera: boolean;
   duration: number;
 }
 
@@ -50,6 +51,7 @@ interface CallContextType {
   declineCall: () => Promise<void>;
   toggleMute: () => void;
   toggleVideo: () => void;
+  toggleCamera: () => Promise<void>;
   signalingMode: 'firestore' | 'socket-ready';
   signalingDetail: string;
 }
@@ -68,6 +70,7 @@ const initialCallState: CallState = {
   remoteStream: null,
   isMuted: false,
   isVideoOff: false,
+  isFrontCamera: true,
   duration: 0,
 };
 
@@ -79,6 +82,7 @@ const CallContext = createContext<CallContextType>({
   declineCall: async () => {},
   toggleMute: () => {},
   toggleVideo: () => {},
+  toggleCamera: async () => {},
   signalingMode: 'firestore',
   signalingDetail: 'Firestore signaling is active.',
 });
@@ -406,16 +410,26 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     const callsRef = collection(db, 'calls');
-    // Filter by receiverId only — avoids requiring a composite index on (receiverId, status).
-    // Status is checked client-side below.
-    const q = query(callsRef, where('receiverId', '==', user.uid));
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Helper: is this call document recent enough to recover?
+    const isRecent = (data: Record<string, unknown>) => {
+      const ts = data.createdAt;
+      const ms = ts && typeof ts === 'object' && 'toMillis' in ts
+        ? (ts as { toMillis: () => number }).toMillis()
+        : typeof ts === 'number' ? ts : 0;
+      return ms > 0 && Date.now() - ms < TWO_HOURS_MS;
+    };
+
+    // Listener A: calls where current user is the RECEIVER
+    const receiverQ = query(callsRef, where('receiverId', '==', user.uid));
+    const unsubReceiver = onSnapshot(receiverQ, (snapshot) => {
       snapshot.docChanges().forEach(change => {
         if (change.type !== 'added') return;
         const data = change.doc.data() as Record<string, unknown>;
-        if (data.status !== 'ringing') return;
-        if (callStateRef.current.status === 'idle') {
+        if (callStateRef.current.status !== 'idle') return;
+
+        if (data.status === 'ringing') {
           pendingOfferRef.current = toRtcSessionDescription(data.offer) ?? pendingOfferRef.current;
           setCallState(prev => ({
             ...prev,
@@ -429,13 +443,58 @@ export function CallProvider({ children }: { children: ReactNode }) {
             receiverId: user.uid,
             receiverName: profile?.displayName || '',
           }));
+        } else if (data.status === 'active' && isRecent(data)) {
+          // Recovery: app was killed/restarted during an active call
+          setCallState(prev => ({
+            ...prev,
+            callId: change.doc.id,
+            callerId: typeof data.callerId === 'string' ? data.callerId : '',
+            status: 'active',
+            type: data.type === 'video' ? 'video' : 'voice',
+            isIncoming: true,
+            callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
+            callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
+            receiverId: user.uid,
+            receiverName: profile?.displayName || '',
+            localStream: null,
+            remoteStream: null,
+            isFrontCamera: true,
+          }));
         }
       });
     });
 
-    attachTeardown(unsubscribe);
-    return () => unsubscribe();
-  }, [attachTeardown, profile?.displayName, user]);
+    // Listener B: calls where current user is the CALLER (for active-call recovery)
+    const callerQ = query(callsRef, where('callerId', '==', user.uid));
+    const unsubCaller = onSnapshot(callerQ, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type !== 'added') return;
+        const data = change.doc.data() as Record<string, unknown>;
+        if (callStateRef.current.status !== 'idle') return;
+        if (data.status !== 'active' || !isRecent(data)) return;
+
+        setCallState(prev => ({
+          ...prev,
+          callId: change.doc.id,
+          callerId: user.uid,
+          status: 'active',
+          type: data.type === 'video' ? 'video' : 'voice',
+          isIncoming: false,
+          callerName: profile?.displayName || '',
+          callerPhoto: profile?.photoURL || null,
+          receiverId: typeof data.receiverId === 'string' ? data.receiverId : '',
+          receiverName: typeof data.receiverName === 'string' ? data.receiverName : '',
+          localStream: null,
+          remoteStream: null,
+          isFrontCamera: true,
+        }));
+      });
+    });
+
+    attachTeardown(unsubReceiver);
+    attachTeardown(unsubCaller);
+    return () => { unsubReceiver(); unsubCaller(); };
+  }, [attachTeardown, profile?.displayName, profile?.photoURL, user]);
 
   const startCall = async (receiverId: string, receiverName: string, type: 'voice' | 'video') => {
     if (!user || !profile) return;
@@ -545,6 +604,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         remoteStream: null, // populated by ontrack when remote tracks arrive
         isMuted: false,
         isVideoOff: false,
+        isFrontCamera: true,
         duration: 0,
       });
 
@@ -655,6 +715,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         ...prev,
         status: 'active',
         localStream,
+        isFrontCamera: true,
         // remoteStream is set by ontrack — don't overwrite it here
       }));
       startDurationTimer();
@@ -724,6 +785,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const toggleCamera = async () => {
+    if (!peerConnection.current || !localStreamRef.current) return;
+    const isFront = callStateRef.current.isFrontCamera;
+    const newFacing = isFront ? 'environment' : 'user';
+    try {
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacing },
+      });
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      // Replace track on the sender — no renegotiation needed
+      const sender = peerConnection.current.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newVideoTrack);
+
+      // Stop old video track and build new local stream
+      localStreamRef.current.getVideoTracks().forEach(t => t.stop());
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      const newStream = new MediaStream([...audioTracks, newVideoTrack]);
+      localStreamRef.current = newStream;
+
+      setCallState(prev => ({ ...prev, localStream: newStream, isFrontCamera: !isFront }));
+    } catch (err) {
+      console.error('Error switching camera:', err);
+    }
+  };
+
   return (
     <CallContext.Provider value={{
       callState,
@@ -733,6 +821,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       declineCall,
       toggleMute,
       toggleVideo,
+      toggleCamera,
       signalingMode,
       signalingDetail,
     }}>
