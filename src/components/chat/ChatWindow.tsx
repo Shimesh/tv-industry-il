@@ -917,7 +917,7 @@ export default function ChatWindow({
               placeholder="הקלד הודעה"
               rows={1}
               dir="auto"
-              className="max-h-[120px] w-full resize-none rounded-lg border px-3 py-[9px] text-[14px] leading-[20px] text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-text-secondary)]"
+              className="max-h-[120px] w-full resize-none rounded-lg border px-3 py-[9px] text-[16px] leading-[20px] text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-text-secondary)]"
               style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', scrollbarWidth: 'none' }}
             />
           </div>
