@@ -454,10 +454,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      const remoteStream = new MediaStream();
+      // Use event.track directly (event.streams[0] is undefined on some iOS Safari versions).
+      // Always create a new MediaStream reference so React sees a state change and
+      // CallScreen's useEffect re-runs to re-assign srcObject on the video/audio elements.
       pc.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
-        setCallState(prev => ({ ...prev, remoteStream }));
+        const track = event.track ?? event.streams?.[0]?.getTracks()?.[0];
+        if (!track) return;
+        setCallState(prev => {
+          const existing = prev.remoteStream;
+          if (existing?.getTrackById(track.id)) return prev;
+          const allTracks = existing ? [...existing.getTracks(), track] : [track];
+          return { ...prev, remoteStream: new MediaStream(allTracks) };
+        });
       };
 
       const callRef = doc(collection(db, 'calls'));
@@ -534,7 +542,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         receiverId,
         receiverName,
         localStream,
-        remoteStream,
+        remoteStream: null, // populated by ontrack when remote tracks arrive
         isMuted: false,
         isVideoOff: false,
         duration: 0,
@@ -560,10 +568,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      const remoteStream = new MediaStream();
       pc.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
-        setCallState(prev => ({ ...prev, remoteStream }));
+        const track = event.track ?? event.streams?.[0]?.getTracks()?.[0];
+        if (!track) return;
+        setCallState(prev => {
+          const existing = prev.remoteStream;
+          if (existing?.getTrackById(track.id)) return prev;
+          const allTracks = existing ? [...existing.getTracks(), track] : [track];
+          return { ...prev, remoteStream: new MediaStream(allTracks) };
+        });
       };
 
       // Set up onicecandidate BEFORE setLocalDescription so no candidates are missed
@@ -642,7 +655,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         ...prev,
         status: 'active',
         localStream,
-        remoteStream,
+        // remoteStream is set by ontrack — don't overwrite it here
       }));
       startDurationTimer();
     } catch (err) {

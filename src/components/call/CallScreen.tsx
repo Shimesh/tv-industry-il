@@ -33,16 +33,28 @@ export default function CallScreen() {
   useEffect(() => {
     if (localVideoRef.current && callState.localStream) {
       localVideoRef.current.srcObject = callState.localStream;
+      void localVideoRef.current.play().catch(() => {});
     }
   }, [callState.localStream]);
 
-  // Attach remote stream to both video (for video calls) and dedicated audio element
+  // Re-attach local stream when video is toggled back on (element re-mounts without srcObject)
+  useEffect(() => {
+    if (!callState.isVideoOff && localVideoRef.current && callState.localStream) {
+      localVideoRef.current.srcObject = callState.localStream;
+      void localVideoRef.current.play().catch(() => {});
+    }
+  }, [callState.isVideoOff, callState.localStream]);
+
+  // Attach remote stream — ontrack always creates a new MediaStream reference so this
+  // effect re-runs on every track arrival and re-calls .play() for iOS Safari autoplay.
   useEffect(() => {
     if (remoteVideoRef.current && callState.remoteStream) {
       remoteVideoRef.current.srcObject = callState.remoteStream;
+      void remoteVideoRef.current.play().catch(() => {});
     }
     if (remoteAudioRef.current && callState.remoteStream) {
       remoteAudioRef.current.srcObject = callState.remoteStream;
+      void remoteAudioRef.current.play().catch(() => {});
     }
   }, [callState.remoteStream]);
 
