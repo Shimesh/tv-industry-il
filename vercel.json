@@ -12,6 +12,22 @@
     {
       "path": "/api/cron/sync-calendar",
       "schedule": "0 5 * * *"
-    }
+    },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "1 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "2 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "3 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "4 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "5 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "6 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "7 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "8 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "9 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "10 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "11 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "12 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "13 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "14 6 * * *" },
+    { "path": "/api/cron/scrape-ratings/telegram", "schedule": "15 6 * * *" }
   ]
 }
