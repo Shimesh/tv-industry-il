@@ -30,6 +30,7 @@ import { useCall } from '@/contexts/CallContext';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import type { ChatConnectionState, ChatUiMessage } from './chatTypes';
 import type { UserProfile } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 const EmojiPicker = dynamic(() => import('@emoji-mart/react').then(mod => mod.default), { ssr: false });
 
@@ -185,6 +186,9 @@ export default function ChatWindow({
   const [searchQuery, setSearchQuery] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const markedReadRef = useRef(new Set<string>());
+  const chatOpenedAtRef = useRef<number>(Date.now());
+  const { notifications, markAsRead } = useNotifications();
 
   useEffect(() => {
     const goOffline = () => setIsOffline(true);
@@ -310,7 +314,29 @@ export default function ChatWindow({
   // Close info panel when switching chats
   useEffect(() => {
     setShowInfo(false);
+    chatOpenedAtRef.current = Date.now();
+    markedReadRef.current.clear();
   }, [chat.id]);
+
+  // Auto-mark new_message notifications as read only if they arrived AFTER
+  // the user opened this chat (i.e. the user is actively watching).
+  // Notifications that existed before opening (e.g. triggered by a push)
+  // are left untouched so they still appear in the bell.
+  useEffect(() => {
+    const target = `/chat?id=${chat.id}`;
+    for (const n of notifications) {
+      if (
+        !n.read &&
+        n.type === 'new_message' &&
+        n.linkUrl === target &&
+        !markedReadRef.current.has(n.id) &&
+        n.createdAt > chatOpenedAtRef.current
+      ) {
+        markedReadRef.current.add(n.id);
+        void markAsRead(n.id);
+      }
+    }
+  }, [chat.id, notifications, markAsRead]);
 
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
