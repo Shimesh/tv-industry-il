@@ -11,12 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for Vercel deployment to complete
-        run: sleep 60
-
-      - name: Trigger version announcement push
+      - name: Wait for Vercel deployment and trigger version announcement
         run: |
-          curl -f --max-time 30 \
-            https://tv-industry-il.vercel.app/api/system/version-check \
-            && echo "Version announcement triggered" \
-            || echo "Version check call failed (non-fatal)"
+          echo "Waiting 150s for Vercel to finish deploying..."
+          sleep 150
+          for attempt in 1 2 3; do
+            echo "Announcement attempt $attempt..."
+            curl -sf --max-time 30 \
+              https://tv-industry-il.vercel.app/api/system/version-check \
+              && echo "Version announcement triggered" \
+              || echo "Attempt $attempt failed (non-fatal)"
+            if [ "$attempt" -lt 3 ]; then sleep 60; fi
+          done
