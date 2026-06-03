@@ -316,6 +316,18 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     );
   }
 
+  // When a dynamic-stream channel failed to resolve its HLS URL, skip the iframe
+  // fallback — third-party embeds (e.g. Mako) render a paused player UI that
+  // overlaps the card's channel-info overlay and looks broken.
+  if (needsDynamicResolution && dynamicStreamResolved && !dynamicHlsUrl) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950">
+        <ExternalLink className="h-7 w-7 text-white/35" />
+        <span className="text-xs font-bold text-white/70">צפייה דרך אתר הערוץ</span>
+      </div>
+    );
+  }
+
   if ((stream.type === 'iframe' || stream.type === 'youtube') && stream.embedUrl) {
     return (
       <iframe
