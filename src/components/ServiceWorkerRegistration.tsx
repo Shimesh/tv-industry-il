@@ -6,9 +6,22 @@ export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
+    // Guard against double-reloads when two SWs (sw.js + firebase-messaging-sw.js)
+    // both activate in quick succession — the second controllerchange fires after
+    // the first reload, on the new page, so `refreshing` resets to false.
+    // sessionStorage persists across reloads in the same tab, giving us a
+    // cross-reload cooldown window.
+    const SW_RELOAD_KEY = 'sw-reloaded-at';
+    const SW_RELOAD_COOLDOWN_MS = 15_000;
+
     let refreshing = false;
     const handleControllerChange = () => {
       if (refreshing) return;
+      try {
+        const last = parseInt(sessionStorage.getItem(SW_RELOAD_KEY) || '0', 10);
+        if (Date.now() - last < SW_RELOAD_COOLDOWN_MS) return;
+        sessionStorage.setItem(SW_RELOAD_KEY, String(Date.now()));
+      } catch {}
       refreshing = true;
       window.location.reload();
     };

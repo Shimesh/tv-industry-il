@@ -147,6 +147,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // Prevents cleanup() from executing twice in rapid succession (e.g. Firestore
   // listener fires before the direct endCall() cleanup call resolves).
   const cleanupRunningRef = useRef(false);
+  // Ref-based profile snapshot so the Firestore listener effect doesn't
+  // re-subscribe every time the profile finishes loading during auth init
+  // (null → fallback → server), which would trigger spurious 'added' snapshots.
+  const profileRef = useRef({ displayName: profile?.displayName || '', photoURL: profile?.photoURL || null });
   const socketCallEnabled = isCallSignalingSocketEnabled();
   const signalingMode: 'firestore' | 'socket-ready' = socketCallEnabled ? 'socket-ready' : 'firestore';
   const signalingDetail = socketCallEnabled
@@ -158,6 +162,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     callStateRef.current = callState;
   }, [callState]);
+
+  useEffect(() => {
+    profileRef.current = { displayName: profile?.displayName || '', photoURL: profile?.photoURL || null };
+  }, [profile?.displayName, profile?.photoURL]);
 
   // Read URL params set by SW notification action buttons (answer/decline)
   useEffect(() => {
@@ -350,7 +358,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
         callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
         receiverId: typeof data.receiverId === 'string' ? data.receiverId : (user?.uid ?? ''),
-        receiverName: typeof data.receiverName === 'string' ? data.receiverName : (profile?.displayName ?? ''),
+        receiverName: typeof data.receiverName === 'string' ? data.receiverName : (profileRef.current.displayName ?? ''),
         localStream: null,
         remoteStream: null,
         isMuted: false,
@@ -360,7 +368,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error hydrating incoming call from Firestore:', error);
     }
-  }, [profile?.displayName, user?.uid]);
+  }, [user?.uid]);
 
   const handleSocketCallSignal = useCallback(async (event: ChatV2CallSignalPayload & { fromUid?: string; timestamp?: number; toUid?: string }) => {
     if (!user) return;
@@ -487,7 +495,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
             callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
             receiverId: user.uid,
-            receiverName: profile?.displayName || '',
+            receiverName: profileRef.current.displayName,
           }));
         } else if (data.status === 'active' && isRecent(data)) {
           // Recovery: app was killed/restarted during an active call
@@ -501,7 +509,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             callerName: typeof data.callerName === 'string' ? data.callerName : 'משתמש',
             callerPhoto: typeof data.callerPhoto === 'string' ? data.callerPhoto : null,
             receiverId: user.uid,
-            receiverName: profile?.displayName || '',
+            receiverName: profileRef.current.displayName,
             localStream: null,
             remoteStream: null,
             isFrontCamera: true,
@@ -526,8 +534,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
           status: 'active',
           type: data.type === 'video' ? 'video' : 'voice',
           isIncoming: false,
-          callerName: profile?.displayName || '',
-          callerPhoto: profile?.photoURL || null,
+          callerName: profileRef.current.displayName,
+          callerPhoto: profileRef.current.photoURL,
           receiverId: typeof data.receiverId === 'string' ? data.receiverId : '',
           receiverName: typeof data.receiverName === 'string' ? data.receiverName : '',
           localStream: null,
@@ -541,7 +549,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     // cleanup() calls so the app can keep detecting incoming calls after a
     // call ends. Let the effect's own cleanup function manage them.
     return () => { unsubReceiver(); unsubCaller(); };
-  }, [profile?.displayName, profile?.photoURL, user]);
+  }, [user]);
 
   const startCall = async (receiverId: string, receiverName: string, type: 'voice' | 'video') => {
     if (!user || !profile) return;
