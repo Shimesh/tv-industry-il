@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import UserAvatar from '@/components/UserAvatar';
@@ -34,7 +34,17 @@ export default function UserProfilePage() {
         const profileRef = doc(db, 'users', userId);
         const profileSnap = await getDoc(profileRef);
         if (profileSnap.exists()) {
-          setProfile({ uid: userId, ...profileSnap.data() } as UserProfile);
+          const data = profileSnap.data();
+          // Normalise lastSeen to ms-since-epoch so isPresenceOnline works correctly
+          const rawLastSeen = data.lastSeen;
+          const lastSeenMs = rawLastSeen instanceof Timestamp
+            ? rawLastSeen.toMillis()
+            : typeof rawLastSeen === 'number'
+              ? rawLastSeen
+              : typeof rawLastSeen === 'string'
+                ? Date.parse(rawLastSeen) || null
+                : null;
+          setProfile({ uid: userId, ...data, lastSeen: lastSeenMs } as UserProfile);
         } else {
           setNotFound(true);
         }
@@ -78,6 +88,16 @@ export default function UserProfilePage() {
 
   const statusInfo = statusLabels[profile.status] || statusLabels.offline;
   const isOwnProfile = user?.uid === userId;
+  // isOnline in Firestore can be stale (browser closed without socket sending "away").
+  // Cross-check with lastSeen: if > 5 min ago treat as offline regardless of flag.
+  const STALE_MS = 5 * 60 * 1000;
+  const isActuallyOnline = useMemo(() => {
+    if (isOwnProfile) return true;
+    const ls = profile.lastSeen;
+    if (typeof ls !== 'number' || ls <= 0) return Boolean(profile.isOnline);
+    return Date.now() - ls <= STALE_MS;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.isOnline, profile.lastSeen, isOwnProfile]);
   const professional = normalizeProfessionalFields(profile);
 
   return (
@@ -93,7 +113,7 @@ export default function UserProfilePage() {
             className="flex flex-col sm:flex-row items-center gap-6"
           >
             {/* Avatar */}
-            <UserAvatar name={profile.displayName} photoURL={profile.photoURL} size="xl" isOnline={profile.isOnline} />
+            <UserAvatar name={profile.displayName} photoURL={profile.photoURL} size="xl" isOnline={isActuallyOnline} />
 
             <div className="text-center sm:text-right flex-1">
               <h1 className="text-2xl font-black text-[var(--theme-text)]">{profile.displayName}</h1>
@@ -212,9 +232,9 @@ export default function UserProfilePage() {
                   <span className="text-sm font-medium text-[var(--theme-text)]">{statusInfo.label}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${profile.isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
+                  <span className={`w-3 h-3 rounded-full ${isActuallyOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
                   <span className="text-sm text-[var(--theme-text-secondary)]">
-                    {profile.isOnline ? 'מחובר/ת כעת' : 'לא מחובר/ת'}
+                    {isActuallyOnline ? 'מחובר/ת כעת' : 'לא מחובר/ת'}
                   </span>
                 </div>
               </div>
