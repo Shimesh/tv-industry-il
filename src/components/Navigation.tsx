@@ -368,7 +368,7 @@ export default function Navigation() {
                   </div>
                 ) : null}
               </div>
-            ) : (
+            ) : !loading ? (
               <Link
                 href="/login"
                 onClick={(event) => {
@@ -381,7 +381,7 @@ export default function Navigation() {
                 <LogIn className="h-4 w-4" />
                 <span className="whitespace-nowrap">הרשמה / כניסה</span>
               </Link>
-            )}
+            ) : null}
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
