@@ -2242,22 +2242,22 @@ function ProductionsContent() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
             <Clapperboard className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-black" style={{ color: 'var(--theme-text)' }}>
               יומן אישי
             </h1>
-            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+            <p className="text-xs truncate" style={{ color: 'var(--theme-text-secondary)' }}>
               הדבק הודעת WhatsApp או לינק ללוח העבודה
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {showCalendarMenu && (
             <>
               {/* Backdrop */}

@@ -43,13 +43,13 @@ export default function CalendarNavigation({
   return (
     <div className="flex flex-col gap-3 mb-4">
       {/* Top row: navigation + view switcher */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-1.5 min-w-0">
 
         {/* Period navigation */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
           <button
             onClick={onPrev}
-            className="rounded-xl px-3 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
+            className="shrink-0 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
             style={{
               background: 'var(--theme-bg-secondary)',
               color: 'var(--theme-text-secondary)',
@@ -60,12 +60,12 @@ export default function CalendarNavigation({
           </button>
 
           <h2
-            className="text-sm sm:text-base font-bold min-w-[110px] sm:min-w-[160px] text-center select-none"
+            className="min-w-0 flex-1 truncate text-xs sm:text-sm font-bold text-center select-none"
             style={{ color: 'var(--theme-text)' }}
           >
             {loading ? (
               <span
-                className="inline-block w-24 h-5 rounded animate-pulse"
+                className="inline-block w-16 h-4 rounded animate-pulse"
                 style={{ background: 'var(--theme-bg-secondary)' }}
               />
             ) : (
@@ -75,7 +75,7 @@ export default function CalendarNavigation({
 
           <button
             onClick={onNext}
-            className="rounded-xl px-3 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
+            className="shrink-0 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all hover:opacity-80 active:scale-95"
             style={{
               background: 'var(--theme-bg-secondary)',
               color: 'var(--theme-text-secondary)',
