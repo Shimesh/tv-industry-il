@@ -720,6 +720,12 @@ export default function AdminPage() {
     analytics: false,
   });
   const draftDirtyRef = useRef(false);
+  const manualPasteRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (showManualPaste) {
+      manualPasteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [showManualPaste]);
 
   const isAdmin = profile?.siteRole === 'admin';
 
@@ -2071,7 +2077,7 @@ export default function AdminPage() {
           </div>
 
           {showManualPaste && (
-            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" dir="rtl" ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" dir="rtl" ref={manualPasteRef}>
               <h3 className="mb-1 text-sm font-bold text-amber-300">ייבוא ידני ממדרוג</h3>
               <p className="mb-4 text-xs text-gray-400">
                 פתח את <a href="https://midrug.safenet.co.il/app/" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">midrug.safenet.co.il/app</a>,
