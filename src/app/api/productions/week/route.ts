@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
       productions,
       lastSyncAt,
       lastSyncStatus,
+    }, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0' },
     });
   } catch (error) {
     recordRouteMetric({ route: '/api/productions/week', ok: false, statusCode: 500, error }).catch(() => {});

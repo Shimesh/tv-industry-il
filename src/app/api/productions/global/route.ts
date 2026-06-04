@@ -179,7 +179,9 @@ export async function GET(request: NextRequest) {
       : docs;
 
     const productions = sourceDocs.map(fromGlobalProduction);
-    return NextResponse.json({ success: true, count: productions.length, productions, identity });
+    return NextResponse.json({ success: true, count: productions.length, productions, identity }, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0' },
+    });
   } catch (error) {
     console.error('[/api/productions/global GET]', error);
     return NextResponse.json({ success: false, count: 0, productions: [] });

@@ -504,6 +504,7 @@ function ProductionsContent() {
         token
           ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
               headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
             })
               .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[]; lastSyncAt?: number | null }>) : { productions: [] as Production[], lastSyncAt: null }))
               .catch(() => ({ productions: [] as Production[], lastSyncAt: null }))
@@ -512,6 +513,7 @@ function ProductionsContent() {
         token && normalizedPhone
           ? fetch(`/api/productions/global?phone=${encodeURIComponent(normalizedPhone)}&weekStart=${weekStart}&weekEnd=${weekEnd}`, {
               headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
             })
               .then((r) => (r.ok ? (r.json() as Promise<{ productions: Production[] }>) : { productions: [] as Production[] }))
               .catch(() => ({ productions: [] as Production[] }))
@@ -1653,7 +1655,7 @@ function ProductionsContent() {
         sunday.setDate(now.getDate() - now.getDay());
         const weekId = getWeekId(toLocalDate(sunday));
         const entry = cache[weekId];
-        if (entry && Date.now() - entry.savedAt < 24 * 60 * 60 * 1000 && entry.data.length > 0) {
+        if (entry && Date.now() - entry.savedAt < 30 * 60 * 1000 && entry.data.length > 0) {
           productionsByWeekRef.current.set(weekId, entry.data);
           setProductions(entry.data);
           setCurrentWeekId(weekId);
@@ -1676,6 +1678,31 @@ function ProductionsContent() {
     };
 
     checkPending();
+  }, [user, handleReloadLatest]);
+
+  // Auto-refresh calendar every hour so external sync changes (e.g. Herzliya) appear automatically
+  useEffect(() => {
+    if (!user) return;
+    const HOUR_MS = 60 * 60 * 1000;
+    const id = window.setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      // Evict in-memory and localStorage cache for current week so fetch goes to API
+      const now = new Date();
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - now.getDay());
+      const weekId = getWeekId(toLocalDate(sunday));
+      productionsByWeekRef.current.delete(weekId);
+      try {
+        const raw = localStorage.getItem('productions_cache_v2');
+        if (raw) {
+          const cache = JSON.parse(raw) as Record<string, unknown>;
+          delete cache[weekId];
+          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+        }
+      } catch { /* ignore */ }
+      await handleReloadLatest();
+    }, HOUR_MS);
+    return () => window.clearInterval(id);
   }, [user, handleReloadLatest]);
 
   // ===== AI-Powered Parse =====
