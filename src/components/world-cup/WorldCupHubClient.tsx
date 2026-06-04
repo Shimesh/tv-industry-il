@@ -233,15 +233,18 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: di * 0.05 }}
-              className="rounded-xl border p-3"
+              className="overflow-hidden rounded-xl border"
               style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
             >
-              <div className="mb-2.5 flex items-center gap-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
-                <CalendarDays className="h-3 w-3 text-[#D4AF37]" />
-                {new Date(`${day}T12:00:00`).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
-                <span className="mr-auto rounded-full bg-white/8 px-1.5 py-0.5 text-[9px]">{dayMatches.length}</span>
+              {/* Day header */}
+              <div className="flex items-center gap-1.5 border-b px-3 py-2.5" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(135deg, rgba(0,32,70,.75), rgba(6,53,24,.75))' }}>
+                <CalendarDays className="h-3.5 w-3.5 text-[#D4AF37]" />
+                <span className="text-xs font-black text-white/90">
+                  {new Date(`${day}T12:00:00`).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+                <span className="mr-auto rounded-full bg-[#D4AF37]/20 px-1.5 py-0.5 text-[9px] font-bold text-[#D4AF37]">{dayMatches.length}</span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 p-2.5">
                 {dayMatches.map((match, mi) => {
                   const isLive = match.status === 'live';
                   const isFinished = match.status === 'finished';
@@ -252,40 +255,70 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: di * 0.05 + mi * 0.04 }}
-                      whileHover={{ y: -2, transition: { duration: 0.15 } }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ scale: 1.01, transition: { duration: 0.15 } }}
+                      whileTap={{ scale: 0.97 }}
                       onClick={() => { onSelect(match); onDetail(match); }}
-                      className={`w-full rounded-xl border px-3 py-2.5 text-right transition-colors ${isLive ? 'border-red-500/40' : ''}`}
+                      className="relative w-full overflow-hidden rounded-xl border text-right transition-all"
                       style={{
-                        borderColor: isActive ? '#D4AF37' : isLive ? undefined : 'var(--theme-border)',
-                        background: isActive ? 'rgba(212,175,55,.12)' : isLive ? 'rgba(239,68,68,.07)' : 'var(--theme-bg-card)',
-                        boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,.3)' : undefined,
+                        borderColor: isActive ? '#D4AF37' : isLive ? 'rgba(239,68,68,.45)' : 'var(--theme-border)',
+                        background: isActive
+                          ? 'linear-gradient(135deg, rgba(212,175,55,.13), rgba(212,175,55,.04))'
+                          : isLive
+                          ? 'linear-gradient(135deg, rgba(239,68,68,.10), rgba(239,68,68,.03))'
+                          : 'var(--theme-bg-card)',
+                        boxShadow: isActive
+                          ? '0 2px 16px rgba(212,175,55,.18), 0 0 0 1px rgba(212,175,55,.22)'
+                          : isLive
+                          ? '0 2px 10px rgba(239,68,68,.12)'
+                          : undefined,
                       }}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-xs font-bold ${isLive ? 'text-red-400' : isFinished ? 'text-[var(--theme-text-secondary)]' : 'text-[#D4AF37]'}`}>
-                          {match.status === 'scheduled' ? (
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatIsraelTimeShort(match.kickoff)}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              {isLive && <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />}
-                              {statusLabel(match)}
-                            </span>
+                      {isLive && (
+                        <motion.div
+                          className="pointer-events-none absolute inset-0"
+                          animate={{ opacity: [0.07, 0.18, 0.07] }}
+                          transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                          style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(239,68,68,1), transparent 70%)' }}
+                        />
+                      )}
+                      {/* Status row */}
+                      <div className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5"
+                           style={{ borderColor: isActive ? 'rgba(212,175,55,.18)' : 'var(--theme-border)', background: 'rgba(0,0,0,.12)' }}>
+                        <span className={`flex items-center gap-1 text-[10px] font-black ${isLive ? 'text-red-400' : isFinished ? 'text-[var(--theme-text-secondary)]' : 'text-[#D4AF37]'}`}>
+                          {isLive && (
+                            <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
                           )}
+                          {match.status === 'scheduled' ? (
+                            <><Clock className="h-3 w-3" />{formatIsraelTimeShort(match.kickoff)}</>
+                          ) : statusLabel(match)}
                         </span>
                         <span className="rounded-full bg-white/6 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">
                           {stageLabel(match.stage)}{match.group ? ` · ${match.group}` : ''}
                         </span>
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2 text-sm font-black text-[var(--theme-text)]">
-                        <span className="min-w-0 truncate">{match.homeTeam.flag} {match.homeTeam.nameHe}</span>
-                        <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs tabular-nums ${isFinished ? 'bg-white/10 text-[var(--theme-text)]' : 'text-[var(--theme-text-secondary)]'}`} dir="ltr">
-                          {match.homeScore != null ? `${match.homeScore} – ${match.awayScore}` : 'vs'}
-                        </span>
-                        <span className="min-w-0 truncate text-left">{match.awayTeam.nameHe} {match.awayTeam.flag}</span>
+                      {/* Teams + score */}
+                      <div className="flex items-center gap-2 px-2.5 py-2.5">
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <span className="text-2xl leading-none">{match.homeTeam.flag}</span>
+                          <span className="min-w-0 truncate text-xs font-black text-[var(--theme-text)]">{match.homeTeam.nameHe}</span>
+                        </div>
+                        <div className={`shrink-0 min-w-[48px] rounded-lg px-1.5 py-1 text-center font-black tabular-nums ${
+                          isLive ? 'border border-red-500/30 bg-red-500/15 text-sm text-red-300'
+                          : isFinished ? 'bg-white/10 text-sm text-[var(--theme-text)]'
+                          : 'bg-[#D4AF37]/12 text-xs text-[#D4AF37]'
+                        }`} dir="ltr">
+                          {isLive ? (
+                            <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
+                              {match.homeScore ?? '0'}:{match.awayScore ?? '0'}
+                            </motion.span>
+                          ) : match.homeScore != null
+                            ? `${match.homeScore}:${match.awayScore}`
+                            : 'vs'}
+                        </div>
+                        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                          <span className="min-w-0 truncate text-left text-xs font-black text-[var(--theme-text)]">{match.awayTeam.nameHe}</span>
+                          <span className="text-2xl leading-none">{match.awayTeam.flag}</span>
+                        </div>
                       </div>
                     </motion.button>
                   );
@@ -740,7 +773,13 @@ function TeamsTab() {
   const [selectedTeam, setSelectedTeam] = useState<WorldCupTeamDetail | null>(null);
   const [confFilter, setConfFilter] = useState<string>('all');
   const confederations = ['all', 'UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
-  const filtered = confFilter === 'all' ? teamDetails : teamDetails.filter(t => t.confederation === confFilter);
+  const base = confFilter === 'all' ? teamDetails : teamDetails.filter(t => t.confederation === confFilter);
+  const filtered = [...base].sort((a, b) => {
+    if (a.fifaRanking == null && b.fifaRanking == null) return 0;
+    if (a.fifaRanking == null) return 1;
+    if (b.fifaRanking == null) return -1;
+    return a.fifaRanking - b.fifaRanking;
+  });
 
   return (
     <CollapsibleCard icon={Users} title="נבחרות מונדיאל 2026" badge={`${teamDetails.length} נבחרות`} className="overflow-hidden">
@@ -840,7 +879,7 @@ function TeamsTab() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-2">
                   <div
                     className="rounded-2xl px-3 py-2 backdrop-blur-md"
-                    style={{ background: 'rgba(0,0,0,.50)', border: '1px solid rgba(255,255,255,.15)' }}
+                    style={{ background: 'rgba(0,0,0,.72)', border: '1px solid rgba(255,255,255,.22)' }}
                   >
                     <div
                       className="font-black text-white leading-tight"
@@ -853,20 +892,20 @@ function TeamsTab() {
                   {(team.worldCupTitles > 0 || team.group || team.fifaRanking) && (
                     <div className="flex flex-wrap items-center justify-center gap-1">
                       {team.worldCupTitles > 0 && (
-                        <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/30 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37] backdrop-blur-sm">
+                        <span className="flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37] backdrop-blur-sm" style={{ border: '1px solid rgba(212,175,55,.38)' }}>
                           <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
                         </span>
                       )}
                       {team.group && (
                         <span
-                          className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white/85 backdrop-blur-sm"
-                          style={{ background: `rgba(${accent},.30)` }}
+                          className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur-sm"
+                          style={{ border: `1px solid rgba(${accent},.48)` }}
                         >
                           בית {team.group}
                         </span>
                       )}
                       {team.fifaRanking && (
-                        <span className="rounded-full bg-white/12 px-1.5 py-0.5 text-[9px] text-white/55 backdrop-blur-sm">
+                        <span className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] text-white/90 backdrop-blur-sm" style={{ border: '1px solid rgba(255,255,255,.18)' }}>
                           #{team.fifaRanking}
                         </span>
                       )}
@@ -1311,7 +1350,16 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
     return () => window.clearInterval(id);
   }, [matches]);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
-  const selectedVenue = venues.find((venue) => venue.id === selectedMatch.venueId);
+  const featureMatch = useMemo(() => {
+    const live = matches.find((m) => m.status === 'live');
+    if (live) return live;
+    return (
+      [...matches]
+        .filter((m) => m.status === 'scheduled')
+        .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? matches[0]
+    );
+  }, [matches]);
+  const selectedVenue = venues.find((venue) => venue.id === featureMatch.venueId);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1398,21 +1446,24 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           <Card className="border-[#D4AF37]/35 bg-black/20 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className={`text-xs font-bold ${selectedMatch.status === 'live' ? 'text-red-400' : 'text-[#D4AF37]'}`}>{statusLabel(selectedMatch)}</p>
-                <h2 className="truncate text-lg font-black text-white sm:text-xl">{stageLabel(selectedMatch.stage)}{selectedMatch.group ? ` · בית ${selectedMatch.group}` : ''}</h2>
+                <div className="mb-0.5 flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-[#D4AF37]/70 uppercase tracking-wider">המשחק הבא</span>
+                </div>
+                <p className={`text-xs font-bold ${featureMatch.status === 'live' ? 'text-red-400' : 'text-[#D4AF37]'}`}>{statusLabel(featureMatch)}</p>
+                <h2 className="truncate text-lg font-black text-white sm:text-xl">{stageLabel(featureMatch.stage)}{featureMatch.group ? ` · בית ${featureMatch.group}` : ''}</h2>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2 py-1">
                 <ChannelLogo channel={kan11} size={22} rounded={6} />
                 <span className="text-[11px] font-bold text-white/80">כאן 11</span>
               </div>
             </div>
-            <MatchScore match={selectedMatch} />
+            <MatchScore match={featureMatch} />
             <div className="mt-3 flex items-center justify-between text-xs text-white/55">
               <span>{selectedVenue ? `📍 ${selectedVenue.nameHe}, ${selectedVenue.cityHe}` : 'אצטדיון ייקבע'}</span>
-              {selectedMatch.status === 'scheduled' && (
+              {featureMatch.status === 'scheduled' && (
                 <span className="flex items-center gap-1 rounded-full bg-white/8 px-2 py-0.5">
                   <Clock className="h-3 w-3" />
-                  {formatIsraelTimeShort(selectedMatch.kickoff)} IL
+                  {formatIsraelTimeShort(featureMatch.kickoff)} IL
                 </span>
               )}
             </div>
