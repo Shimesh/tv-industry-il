@@ -1680,30 +1680,58 @@ function ProductionsContent() {
     checkPending();
   }, [user, handleReloadLatest]);
 
-  // Auto-refresh calendar every hour so external sync changes (e.g. Herzliya) appear automatically
+  // Keep a ref to currentDate so the hourly interval can access it without restarting
+  const currentDateRef = useRef(currentDate);
+  useEffect(() => { currentDateRef.current = currentDate; }, [currentDate]);
+
+  // Auto-refresh calendar every hour so external sync changes (e.g. Herzliya) appear automatically.
+  // Evicts current week AND next week from all caches, then re-fetches both.
   useEffect(() => {
     if (!user) return;
     const HOUR_MS = 60 * 60 * 1000;
     const id = window.setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      // Evict in-memory and localStorage cache for current week so fetch goes to API
+
       const now = new Date();
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - now.getDay());
-      const weekId = getWeekId(toLocalDate(sunday));
-      productionsByWeekRef.current.delete(weekId);
+      const nextSunday = new Date(sunday);
+      nextSunday.setDate(sunday.getDate() + 7);
+
+      const thisWeekId = getWeekId(toLocalDate(sunday));
+      const nextWeekId = getWeekId(toLocalDate(nextSunday));
+
+      // Evict both weeks from in-memory cache
+      productionsByWeekRef.current.delete(thisWeekId);
+      productionsByWeekRef.current.delete(nextWeekId);
+
+      // Evict both from localStorage
       try {
         const raw = localStorage.getItem('productions_cache_v2');
         if (raw) {
           const cache = JSON.parse(raw) as Record<string, unknown>;
-          delete cache[weekId];
+          delete cache[thisWeekId];
+          delete cache[nextWeekId];
           localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
         }
       } catch { /* ignore */ }
+
+      // Re-fetch current real-world week (updates state if user is viewing it)
       await handleReloadLatest();
+
+      // Also pre-fetch next week so navigation to it is instant and fresh
+      const nextProds = await loadExistingWeek(nextWeekId);
+      if (nextProds.length > 0) {
+        productionsByWeekRef.current.set(nextWeekId, nextProds);
+        // If the user is currently viewing next week, update the displayed productions
+        const viewedWeekId = getWeekId(toLocalDate(getWeekStartDate(currentDateRef.current)));
+        if (viewedWeekId === nextWeekId) {
+          setProductions(nextProds);
+        }
+      }
     }, HOUR_MS);
     return () => window.clearInterval(id);
-  }, [user, handleReloadLatest]);
+  }, [user, handleReloadLatest, loadExistingWeek]);
 
   // ===== AI-Powered Parse =====
   const handleAIParse = useCallback(async (text: string): Promise<ParsedSchedule | null> => {
