@@ -116,13 +116,10 @@ function inferCrewBucket(role: string, roleDetail?: string | null): CrewBucket {
 
 function enrichCrewWithPhones(
   crew: CrewMember[],
-  contactList: { firstName: string; lastName: string; phone?: string }[],
-): CrewMember[] {
+  contactList: { firstName: string; lastName: string; phone?: string; is_consented?: boolean }[],
+): (CrewMember & { is_consented?: boolean })[] {
   return crew.map((member) => {
     const memberPhone = normalizePhone(member.phone);
-    if (memberPhone) {
-      return { ...member, phone: memberPhone };
-    }
 
     const normalized = normalizeContactName(member.name || '');
     const nameParts = normalized.split(/\s+/);
@@ -145,7 +142,8 @@ function enrichCrewWithPhones(
 
     return {
       ...member,
-      phone: normalizePhone(contact?.phone || '') || null,
+      phone: memberPhone || normalizePhone(contact?.phone || '') || null,
+      is_consented: contact?.is_consented,
     };
   });
 }
@@ -230,7 +228,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
   const { user } = useAuth();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
-  const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string } =>
+  const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string; is_consented?: boolean } =>
     Boolean(contact.firstName && contact.lastName),
   );
   const uniqueCrew = enrichCrewWithPhones(rawDeduped, normalizedContacts);
@@ -273,9 +271,12 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     const isCurrent =
       (normalizedCurrentName.length >= 2 && normalizeName(member.name) === normalizedCurrentName) ||
       (normalizedCurrentPhone.length >= 9 && normalizePhone(member.phone ?? '') === normalizedCurrentPhone);
-    const phone = member.phone || resolvedPhones[normalizeName(member.name)] || null;
+    const resolvedPhone = resolvedPhones[normalizeName(member.name)];
+    const phone = member.phone || resolvedPhone || null;
     const department = inferCrewBucket(member.role, member.roleDetail);
-    return { ...member, phone, isCurrentUser: isCurrent, department };
+    // resolvedPhones come from the users collection (registered accounts) — treat as consented
+    const is_consented = member.is_consented === true || !!resolvedPhone;
+    return { ...member, phone, isCurrentUser: isCurrent, department, is_consented };
   });
 
   const sortedCrew = useMemo(() => {
@@ -334,7 +335,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   const shareFullCrew = () => {
     const crewText = sortedCrew
-      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${member.phone ? ` | ${member.phone}` : ''}`)
+      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${(member.isCurrentUser || member.is_consented === true) && member.phone ? ` | ${member.phone}` : ''}`)
       .join('\n');
 
     const text = [
@@ -453,7 +454,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
               </div>
             </div>
 
-            {member.phone ? (
+            {member.phone && (member.isCurrentUser || member.is_consented === true) ? (
               <motion.a
                 href={`tel:${member.phone}`}
                 className="flex items-center gap-2 px-3 py-2 rounded-full text-xs font-semibold transition-all duration-200"
@@ -468,6 +469,17 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                 <Phone className="w-3.5 h-3.5" />
                 <span dir="ltr">{member.phone}</span>
               </motion.a>
+            ) : member.phone ? (
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.28)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <span>חסוי</span>
+              </div>
             ) : isPhonesLoading ? (
               <div
                 className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium animate-pulse"
@@ -697,7 +709,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                           <span className="text-[11px] text-white/40">{director.roleDetail}</span>
                         )}
                       </div>
-                      {director.phone ? (
+                      {director.phone && (director.isCurrentUser || director.is_consented === true) ? (
                         <a
                           href={`tel:${director.phone}`}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
@@ -710,6 +722,17 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                           <Phone className="w-3 h-3" />
                           <span dir="ltr">{director.phone}</span>
                         </a>
+                      ) : director.phone ? (
+                        <div
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium"
+                          style={{
+                            background: 'rgba(255,255,255,0.04)',
+                            color: 'rgba(255,255,255,0.28)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                          }}
+                        >
+                          <span>חסוי</span>
+                        </div>
                       ) : null}
                     </div>
                   ))}
