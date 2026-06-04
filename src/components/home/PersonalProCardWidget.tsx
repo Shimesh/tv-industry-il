@@ -248,7 +248,7 @@ export default function PersonalProCardWidget() {
           <ProCardModal
             contact={contact}
             isCurrentUser
-            canShowContactInfo={contact.is_consented === true}
+            userId={undefined}
             roles={roles}
             departments={departments}
             primaryDepartment={primaryDepartment}

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clapperboard, Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
-import { PHONES_VISIBLE } from '@/lib/featureFlags';
+import { Clapperboard, Clock, MapPin, MessageCircle, Star, Users, X } from 'lucide-react';
+import { useContactUserMap } from '@/hooks/useContactUserMap';
+import CallButtons from '@/components/CallButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { classifyContactRole, normalizeContactName } from '@/lib/contactsUtils';
@@ -227,6 +228,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
   );
   const { contacts } = useAppData();
   const { user } = useAuth();
+  const { contactIdToUserId, nameToUserId } = useContactUserMap();
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
   const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string; is_consented?: boolean } =>
@@ -275,9 +277,10 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     const resolvedPhone = resolvedPhones[normalizeName(member.name)];
     const phone = member.phone || resolvedPhone || null;
     const department = inferCrewBucket(member.role, member.roleDetail);
-    // resolvedPhones come from the users collection (registered accounts) — treat as consented
     const is_consented = member.is_consented === true || !!resolvedPhone;
-    return { ...member, phone, isCurrentUser: isCurrent, department, is_consented };
+    // Look up the registered userId by normalized name for call buttons
+    const userId = nameToUserId.get(normalizeName(member.name)) || undefined;
+    return { ...member, phone, isCurrentUser: isCurrent, department, is_consented, userId };
   });
 
   const sortedCrew = useMemo(() => {
@@ -336,7 +339,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   const shareFullCrew = () => {
     const crewText = sortedCrew
-      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${PHONES_VISIBLE && (member.isCurrentUser || member.is_consented === true) && member.phone ? ` | ${member.phone}` : ''}`)
+      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}`)
       .join('\n');
 
     const text = [
@@ -455,52 +458,11 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
               </div>
             </div>
 
-            {PHONES_VISIBLE && member.phone && (member.isCurrentUser || member.is_consented === true) ? (
-              <motion.a
-                href={`tel:${member.phone}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-full text-xs font-semibold transition-all duration-200"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%)',
-                  color: '#6ee7b7',
-                  border: '1px solid rgba(34, 197, 94, 0.2)',
-                }}
-                whileHover={{ scale: 1.05, background: 'rgba(34, 197, 94, 0.25)' }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Phone className="w-3.5 h-3.5" />
-                <span dir="ltr">{member.phone}</span>
-              </motion.a>
-            ) : member.phone ? (
-              <div
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  color: 'rgba(255,255,255,0.28)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                }}
-              >
-                <span>חסוי</span>
-              </div>
-            ) : isPhonesLoading ? (
-              <div
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium animate-pulse"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}
-              >
-                <span>טוען...</span>
-              </div>
-            ) : (
-              <div
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: 'rgba(252, 165, 165, 0.6)',
-                  border: '1px solid rgba(239, 68, 68, 0.1)',
-                }}
-              >
-                <PhoneOff className="w-3.5 h-3.5" />
-                <span>ללא טלפון</span>
-              </div>
-            )}
+            <CallButtons
+              userId={member.isCurrentUser ? undefined : member.userId}
+              displayName={member.name}
+              size="sm"
+            />
           </div>
         </motion.div>,
       );
@@ -710,31 +672,11 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                           <span className="text-[11px] text-white/40">{director.roleDetail}</span>
                         )}
                       </div>
-                      {PHONES_VISIBLE && director.phone && (director.isCurrentUser || director.is_consented === true) ? (
-                        <a
-                          href={`tel:${director.phone}`}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
-                          style={{
-                            background: 'rgba(34, 197, 94, 0.12)',
-                            color: '#6ee7b7',
-                            border: '1px solid rgba(34, 197, 94, 0.2)',
-                          }}
-                        >
-                          <Phone className="w-3 h-3" />
-                          <span dir="ltr">{director.phone}</span>
-                        </a>
-                      ) : director.phone ? (
-                        <div
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium"
-                          style={{
-                            background: 'rgba(255,255,255,0.04)',
-                            color: 'rgba(255,255,255,0.28)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                          }}
-                        >
-                          <span>חסוי</span>
-                        </div>
-                      ) : null}
+                      <CallButtons
+                        userId={director.isCurrentUser ? undefined : director.userId}
+                        displayName={director.name}
+                        size="sm"
+                      />
                     </div>
                   ))}
                 </div>

@@ -6,7 +6,7 @@ import type { UserProfile } from '@/contexts/AuthContext';
 import type { Contact } from '@/data/contacts';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
-import { PHONES_VISIBLE } from '@/lib/featureFlags';
+import CallButtons from '@/components/CallButtons';
 
 interface NewChatModalProps {
   users: UserProfile[];
@@ -373,19 +373,9 @@ export default function NewChatModal({
                       </div>
                     </button>
 
-                    {PHONES_VISIBLE && isExpanded && !canChat && person.phone && (
-                      <div className="flex items-center justify-between gap-2 bg-[#2A3942] px-4 pb-3" dir="ltr">
-                        <button
-                          onClick={() => handleCopyPhone(person.phone!, person.key)}
-                          className="flex items-center gap-2 rounded-lg bg-[#202C33] px-3 py-1.5 transition-colors hover:bg-[#111B21]"
-                        >
-                          {copiedKey === person.key ? (
-                            <Check className="h-4 w-4 text-[#00A884]" />
-                          ) : (
-                            <Copy className="h-4 w-4 text-[#8696a0]" />
-                          )}
-                          <span className="font-mono text-[13px] text-[#E9EDEF]">{person.phone}</span>
-                        </button>
+                    {isExpanded && !canChat && (
+                      <div className="flex items-center justify-between gap-2 bg-[#2A3942] px-4 pb-3" dir="rtl">
+                        <CallButtons userId={undefined} displayName={person.displayName} size="sm" />
                         <span className="text-[11px] text-[#8696a0]">לא רשום באפליקציה</span>
                       </div>
                     )}
