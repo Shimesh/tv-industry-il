@@ -761,6 +761,8 @@ function TeamsTab() {
         <AnimatePresence mode="popLayout">
           {filtered.map((team, i) => {
             const accent = confAccent[team.confederation] ?? '212,175,55';
+            const breathDuration = 3.0 + (i % 7) * 0.44;
+            const breathDelay   = (i * 0.41) % 3.0;
             return (
               <motion.button
                 key={team.id}
@@ -772,69 +774,73 @@ function TeamsTab() {
                 whileHover={{ y: -7, scale: 1.06, transition: { duration: 0.18, ease: 'easeOut' } }}
                 whileTap={{ scale: 0.93, transition: { duration: 0.08 } }}
                 onClick={() => setSelectedTeam(team)}
-                className="group relative overflow-hidden rounded-2xl border text-center"
+                className="group relative overflow-hidden rounded-2xl text-center"
                 style={{
                   aspectRatio: '3 / 4',
-                  borderColor: `rgba(${accent}, .32)`,
                   background: '#000',
-                  boxShadow: `0 4px 18px rgba(0,0,0,.5), 0 0 0 0 rgba(${accent},.0)`,
+                  boxShadow: `0 4px 20px rgba(0,0,0,.55), 0 0 0 1px rgba(${accent},.25)`,
                 }}
               >
-                {/* ── Breathing flag background ── */}
+                {/* ── Breathing flag — oversized to fill every pixel ── */}
                 <motion.div
                   className="absolute inset-0 flex items-center justify-center"
-                  animate={{ scale: [1, 1.1, 1], rotate: [0, 0.6, -0.6, 0] }}
-                  transition={{
-                    duration: 3.2 + (i % 7) * 0.42,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                    delay: (i * 0.38) % 3.2,
-                  }}
+                  animate={{ scale: [1, 1.12, 1], rotate: [0, 0.7, -0.7, 0] }}
+                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
                 >
                   <span
                     className="select-none leading-none"
-                    style={{
-                      fontSize: 'clamp(11rem, 30vw, 16rem)',
-                      filter: `blur(0px) drop-shadow(0 0 40px rgba(${accent},.5))`,
-                    }}
+                    style={{ fontSize: 'clamp(26rem, 72vw, 34rem)', lineHeight: 1 }}
                   >
                     {team.flag}
                   </span>
                 </motion.div>
 
-                {/* Vignette — dark edges, transparent centre */}
-                <div
+                {/* ── Pulsing golden glow — synced with flag breathing ── */}
+                <motion.div
                   className="pointer-events-none absolute inset-0"
-                  style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.15) 0%, rgba(0,0,0,.72) 100%)' }}
+                  animate={{ opacity: [0.18, 0.58, 0.18] }}
+                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
+                  style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(212,175,55,.6) 0%, transparent 60%)' }}
                 />
+
                 {/* Confederation colour bloom */}
                 <div
                   className="pointer-events-none absolute inset-0 opacity-20 transition-opacity duration-400 group-hover:opacity-40"
-                  style={{ background: `radial-gradient(circle at 50% 50%, rgba(${accent},.6) 0%, transparent 65%)` }}
+                  style={{ background: `radial-gradient(circle at 50% 50%, rgba(${accent},.55) 0%, transparent 58%)` }}
                 />
-                {/* Top & bottom fade strips for readability */}
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/50 to-transparent" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
+
+                {/* Vignette — edges only so centre flag stays vivid */}
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{ background: 'radial-gradient(ellipse at 50% 50%, transparent 32%, rgba(0,0,0,.65) 100%)' }}
+                />
+
+                {/* Readability strips */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/40 to-transparent" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
+
+                {/* ── Pulsing golden border ring ── */}
+                <motion.div
+                  className="pointer-events-none absolute inset-0 rounded-2xl"
+                  animate={{ opacity: [0.28, 0.9, 0.28] }}
+                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
+                  style={{ boxShadow: 'inset 0 0 0 1.5px rgba(212,175,55,.5)' }}
+                />
 
                 {/* ── Centred content ── */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-2">
-                  {/* Team name — large, centred, frosted pill */}
                   <div
-                    className="rounded-xl px-3 py-2 backdrop-blur-sm"
-                    style={{ background: 'rgba(0,0,0,.52)', border: '1px solid rgba(255,255,255,.12)' }}
+                    className="rounded-2xl px-3 py-2 backdrop-blur-md"
+                    style={{ background: 'rgba(0,0,0,.50)', border: '1px solid rgba(255,255,255,.15)' }}
                   >
                     <div
                       className="font-black text-white leading-tight"
-                      style={{
-                        fontSize: 'clamp(.9rem, 2.6vw, 1.15rem)',
-                        textShadow: '0 2px 10px rgba(0,0,0,1)',
-                      }}
+                      style={{ fontSize: 'clamp(.95rem, 2.8vw, 1.2rem)', textShadow: '0 2px 12px rgba(0,0,0,1)' }}
                     >
                       {team.nameHe}
                     </div>
                   </div>
 
-                  {/* Micro badges */}
                   {(team.worldCupTitles > 0 || team.group || team.fifaRanking) && (
                     <div className="flex flex-wrap items-center justify-center gap-1">
                       {team.worldCupTitles > 0 && (
@@ -844,8 +850,8 @@ function TeamsTab() {
                       )}
                       {team.group && (
                         <span
-                          className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white/80 backdrop-blur-sm"
-                          style={{ background: `rgba(${accent},.28)` }}
+                          className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white/85 backdrop-blur-sm"
+                          style={{ background: `rgba(${accent},.30)` }}
                         >
                           בית {team.group}
                         </span>
