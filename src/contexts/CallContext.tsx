@@ -54,6 +54,7 @@ interface CallContextType {
   toggleCamera: () => Promise<void>;
   signalingMode: 'firestore' | 'socket-ready';
   signalingDetail: string;
+  isAudioContextActive: boolean;
 }
 
 const initialCallState: CallState = {
@@ -85,6 +86,7 @@ const CallContext = createContext<CallContextType>({
   toggleCamera: async () => {},
   signalingMode: 'firestore',
   signalingDetail: 'Firestore signaling is active.',
+  isAudioContextActive: false,
 });
 
 function isTruthyFlag(value: string | undefined): boolean {
@@ -133,7 +135,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
   const [callState, setCallState] = useState<CallState>(initialCallState);
   const [socketCallReady, setSocketCallReady] = useState(false);
+  const [audioContextActive, setAudioContextActive] = useState(false);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bridge = useRef(getCallSignalingBridge()).current;
   const callStateRef = useRef<CallState>(initialCallState);
@@ -162,6 +167,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     callStateRef.current = callState;
   }, [callState]);
+
+  // Route remote audio through AudioContext (created during user gesture) to bypass
+  // mobile browser autoplay policy that blocks unmuted <audio> elements.
+  useEffect(() => {
+    const stream = callState.remoteStream;
+    const ctx = audioContextRef.current;
+    if (!stream || !ctx || ctx.state === 'closed') return;
+    try {
+      audioSourceNodeRef.current?.disconnect();
+      audioSourceNodeRef.current = ctx.createMediaStreamSource(stream);
+      audioSourceNodeRef.current.connect(ctx.destination);
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+    } catch {}
+  }, [callState.remoteStream]);
 
   useEffect(() => {
     profileRef.current = { displayName: profile?.displayName || '', photoURL: profile?.photoURL || null };
@@ -239,6 +258,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
     pendingRemoteCandidatesRef.current = [];
     appliedRemoteAnswerRef.current = false;
     seenCandidateKeysRef.current.clear();
+
+    try { audioSourceNodeRef.current?.disconnect(); } catch {}
+    audioSourceNodeRef.current = null;
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    setAudioContextActive(false);
+
     setCallState(initialCallState);
 
     cleanupRunningRef.current = false;
@@ -563,6 +591,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
       seenCandidateKeysRef.current.clear();
       pendingRemoteCandidatesRef.current = [];
 
+      // Create AudioContext synchronously (still within user gesture) so audio can
+      // play later without triggering the browser's autoplay policy block.
+      try {
+        audioContextRef.current = new AudioContext();
+        setAudioContextActive(true);
+      } catch {
+        audioContextRef.current = null;
+        setAudioContextActive(false);
+      }
+
       const localStream = await getLocalStream(type === 'video');
       localStreamRef.current = localStream;
 
@@ -701,6 +739,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
       seenCandidateKeysRef.current.clear();
       pendingRemoteCandidatesRef.current = [];
       appliedRemoteAnswerRef.current = false;
+
+      // Create AudioContext synchronously (still within user gesture) so audio can
+      // play later without triggering the browser's autoplay policy block.
+      try {
+        if (audioContextRef.current) void audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = new AudioContext();
+        setAudioContextActive(true);
+      } catch {
+        audioContextRef.current = null;
+        setAudioContextActive(false);
+      }
 
       const localStream = await getLocalStream(currentCall.type === 'video');
       localStreamRef.current = localStream;
@@ -925,6 +974,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       toggleCamera,
       signalingMode,
       signalingDetail,
+      isAudioContextActive: audioContextActive,
     }}>
       {children}
     </CallContext.Provider>

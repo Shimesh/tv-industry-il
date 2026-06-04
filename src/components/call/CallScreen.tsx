@@ -20,7 +20,7 @@ const canSelectSink =
   'setSinkId' in HTMLAudioElement.prototype;
 
 export default function CallScreen() {
-  const { callState, endCall, toggleMute, toggleVideo, toggleCamera } = useCall();
+  const { callState, endCall, toggleMute, toggleVideo, toggleCamera, isAudioContextActive } = useCall();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<ExtendedAudioElement>(null);
@@ -45,18 +45,19 @@ export default function CallScreen() {
     }
   }, [callState.isVideoOff, callState.localStream]);
 
-  // Attach remote stream — ontrack always creates a new MediaStream reference so this
-  // effect re-runs on every track arrival and re-calls .play() for iOS Safari autoplay.
+  // Attach remote stream to video element; audio is handled by AudioContext in
+  // CallContext (created during user gesture to bypass mobile autoplay policy).
+  // Fall back to the <audio> element only when AudioContext is unavailable.
   useEffect(() => {
     if (remoteVideoRef.current && callState.remoteStream) {
       remoteVideoRef.current.srcObject = callState.remoteStream;
       void remoteVideoRef.current.play().catch(() => {});
     }
-    if (remoteAudioRef.current && callState.remoteStream) {
+    if (!isAudioContextActive && remoteAudioRef.current && callState.remoteStream) {
       remoteAudioRef.current.srcObject = callState.remoteStream;
       void remoteAudioRef.current.play().catch(() => {});
     }
-  }, [callState.remoteStream]);
+  }, [callState.remoteStream, isAudioContextActive]);
 
   const loadAudioDevices = async () => {
     if (!canSelectSink) return;
