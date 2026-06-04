@@ -8,18 +8,46 @@ on:
 jobs:
   announce:
     runs-on: ubuntu-latest
+    # Allow up to 40 minutes for manual Vercel deploy to complete
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for Vercel deployment and trigger version announcement
+      - name: Poll until new Vercel deployment is live, then announce version
         run: |
-          echo "Waiting 150s for Vercel to finish deploying..."
-          sleep 150
-          for attempt in 1 2 3; do
-            echo "Announcement attempt $attempt..."
-            curl -sf --max-time 30 \
-              https://tv-industry-il.vercel.app/api/system/version-check \
-              && echo "Version announcement triggered" \
-              || echo "Attempt $attempt failed (non-fatal)"
-            if [ "$attempt" -lt 3 ]; then sleep 60; fi
+          EXPECTED=$(node -e "console.log(require('./package.json').version)")
+          echo "Target version: $EXPECTED"
+          echo "Will poll /api/system/version-check every 60s until it returns 'announced'..."
+
+          MAX_ATTEMPTS=38
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo ""
+            echo "Attempt $attempt/$MAX_ATTEMPTS — $(date -u '+%H:%M:%S UTC')"
+
+            RESPONSE=$(curl -sf --max-time 30 \
+              https://tv-industry-il.vercel.app/api/system/version-check 2>/dev/null || echo '{}')
+
+            STATUS=$(echo "$RESPONSE" | python3 -c \
+              "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
+
+            echo "Status: $STATUS  |  Response: $RESPONSE"
+
+            if [ "$STATUS" = "announced" ]; then
+              echo ""
+              echo "✓ Version $EXPECTED announced successfully!"
+              exit 0
+            fi
+
+            if [ "$STATUS" = "skipped" ]; then
+              echo "Old deployment still live — waiting for Vercel to deploy $EXPECTED..."
+            fi
+
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+              sleep 60
+            fi
           done
+
+          echo ""
+          echo "⚠️  Timed out after $MAX_ATTEMPTS attempts. Vercel may not have been deployed yet."
+          echo "    Run manually: curl https://tv-industry-il.vercel.app/api/system/version-check"
+          exit 0
