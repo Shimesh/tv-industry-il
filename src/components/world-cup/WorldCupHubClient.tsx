@@ -630,6 +630,7 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
 const positionLabel: Record<string, string> = { GK: 'שוער', DEF: 'הגנה', MID: 'קישור', FWD: 'תקיפה' };
 const positionColor: Record<string, string> = { GK: '#D4AF37', DEF: '#4ade80', MID: '#60a5fa', FWD: '#f87171' };
 const confederationLabel: Record<string, string> = { UEFA: 'אירופה', CONMEBOL: 'דרום אמריקה', CONCACAF: 'צפון/מרכז אמריקה', CAF: 'אפריקה', AFC: 'אסיה', OFC: 'אוקיאניה' };
+const confAccent: Record<string, string> = { UEFA: '59,130,246', CONMEBOL: '34,197,94', CONCACAF: '239,68,68', CAF: '249,115,22', AFC: '168,85,247', OFC: '20,184,166' };
 
 function TeamDetailPanel({ team, onClose }: { team: WorldCupTeamDetail; onClose: () => void }) {
   const [tab, setTab] = useState<'squad' | 'history'>('squad');
@@ -743,7 +744,8 @@ function TeamsTab() {
 
   return (
     <CollapsibleCard icon={Users} title="נבחרות מונדיאל 2026" badge={`${teamDetails.length} נבחרות`} className="overflow-hidden">
-      <div className="flex gap-1.5 overflow-x-auto px-4 py-2" style={{ scrollbarWidth: 'none' }}>
+      {/* Confederation filter */}
+      <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5" style={{ scrollbarWidth: 'none' }}>
         {confederations.map(c => (
           <button key={c} onClick={() => setConfFilter(c)}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
@@ -754,46 +756,100 @@ function TeamsTab() {
           </button>
         ))}
       </div>
-      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+      {/* 4-column flag grid */}
+      <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
         <AnimatePresence mode="popLayout">
-          {filtered.map((team, i) => (
-            <motion.button
-              key={team.id}
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.18, delay: i * 0.02 }}
-              whileHover={{ y: -3, transition: { duration: 0.15 } }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setSelectedTeam(team)}
-              className="flex items-center gap-3 rounded-xl border px-4 py-3 text-right"
-              style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}
-            >
-              <span className="shrink-0 text-3xl">{team.flag}</span>
-              <div className="min-w-0 flex-1">
-                <div className="font-black text-sm text-[var(--theme-text)]">{team.nameHe}</div>
-                <div className="text-[10px] text-[var(--theme-text-secondary)]">{confederationLabel[team.confederation]}{team.group ? ` · בית ${team.group}` : ''}</div>
-                <div className="mt-1 flex items-center gap-1.5">
-                  {team.worldCupTitles > 0 && (
-                    <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/15 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
-                      <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
-                    </span>
+          {filtered.map((team, i) => {
+            const accent = confAccent[team.confederation] ?? '212,175,55';
+            return (
+              <motion.button
+                key={team.id}
+                layout
+                initial={{ opacity: 0, scale: 0.8, y: 24 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: 16 }}
+                transition={{ duration: 0.24, delay: Math.min(i * 0.016, 0.5), ease: [0.22, 1, 0.36, 1] }}
+                whileHover={{ y: -6, scale: 1.05, transition: { duration: 0.18, ease: 'easeOut' } }}
+                whileTap={{ scale: 0.94, transition: { duration: 0.08 } }}
+                onClick={() => setSelectedTeam(team)}
+                className="group relative flex flex-col items-center justify-end overflow-hidden rounded-2xl border text-center"
+                style={{
+                  aspectRatio: '3 / 4',
+                  borderColor: `rgba(${accent}, .28)`,
+                  background: `linear-gradient(160deg, rgba(0,16,42,.97), rgba(0,7,16,1))`,
+                  boxShadow: `0 2px 12px rgba(0,0,0,.4)`,
+                }}
+              >
+                {/* Confederation ambient glow */}
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-15 transition-opacity duration-400 group-hover:opacity-35"
+                  style={{ background: `radial-gradient(ellipse at 50% 38%, rgba(${accent},.75) 0%, transparent 58%)` }}
+                />
+                {/* Flag — hero centrepiece */}
+                <div className="absolute inset-0 flex items-start justify-center pt-5">
+                  <span
+                    className="select-none leading-none transition-transform duration-300 ease-out group-hover:scale-[1.15]"
+                    style={{
+                      fontSize: 'clamp(3.4rem, 9.5vw, 5rem)',
+                      filter: `drop-shadow(0 5px 18px rgba(0,0,0,.75)) drop-shadow(0 0 32px rgba(${accent},.4))`,
+                    }}
+                  >
+                    {team.flag}
+                  </span>
+                </div>
+                {/* Scanline shimmer (static decorative) */}
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-[.04]"
+                  style={{ backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,.15) 0px, rgba(255,255,255,.15) 1px, transparent 1px, transparent 4px)' }}
+                />
+                {/* Bottom gradient */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/92 via-black/30 to-transparent" />
+                {/* Gold shimmer on hover */}
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-400 group-hover:opacity-100"
+                  style={{ background: 'linear-gradient(135deg, transparent 45%, rgba(212,175,55,.09) 100%)' }}
+                />
+                {/* Content */}
+                <div className="relative z-10 w-full px-2 pb-3">
+                  {(team.worldCupTitles > 0 || team.group) && (
+                    <div className="mb-1 flex flex-wrap items-center justify-center gap-1">
+                      {team.worldCupTitles > 0 && (
+                        <span className="flex items-center gap-0.5 rounded-full bg-[#D4AF37]/25 px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                          <Trophy className="h-2.5 w-2.5" />×{team.worldCupTitles}
+                        </span>
+                      )}
+                      {team.group && (
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white/75"
+                          style={{ background: `rgba(${accent},.18)` }}
+                        >
+                          בית {team.group}
+                        </span>
+                      )}
+                    </div>
                   )}
+                  <div
+                    className="font-black leading-tight text-white"
+                    style={{
+                      fontSize: 'clamp(.72rem, 2vw, .875rem)',
+                      textShadow: '0 2px 8px rgba(0,0,0,.95)',
+                    }}
+                  >
+                    {team.nameHe}
+                  </div>
                   {team.fifaRanking && (
-                    <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[9px] text-[var(--theme-text-secondary)]">#{team.fifaRanking}</span>
+                    <div className="mt-0.5 text-[10px] text-white/38">#{team.fifaRanking}</div>
                   )}
                 </div>
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-[var(--theme-text-secondary)]" />
-            </motion.button>
-          ))}
+              </motion.button>
+            );
+          })}
           {filtered.length === 0 && (
             <motion.div
               key="empty"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="col-span-full rounded-xl border p-6 text-center text-sm text-[var(--theme-text-secondary)]"
+              className="col-span-full rounded-xl border p-8 text-center text-sm text-[var(--theme-text-secondary)]"
               style={{ borderColor: 'var(--theme-border)' }}
             >
               אין נבחרות בקונפדרציה זו
