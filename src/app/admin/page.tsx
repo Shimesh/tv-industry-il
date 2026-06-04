@@ -727,6 +727,13 @@ export default function AdminPage() {
     }
   }, [showManualPaste]);
 
+  // Lock body scroll while any modal overlay is open (prevents iOS Safari page-scroll jank)
+  useEffect(() => {
+    const open = !!(editModal || contactEditModal || showAddContact);
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [editModal, contactEditModal, showAddContact]);
+
   const isAdmin = profile?.siteRole === 'admin';
 
   function toggleSection(key: string) {
@@ -1977,18 +1984,22 @@ export default function AdminPage() {
                       <td className="px-3 py-2.5 text-gray-500 text-xs">{c.departments?.join(', ') || c.department || '—'}</td>
                       <td className="px-3 py-2.5">
                         <button
-                          onClick={() => setContactEditModal({
-                            contactId: c.id,
-                            displayName: [c.firstName, c.lastName].filter(Boolean).join(' '),
-                            phone: c.phone || '',
-                            department: c.department || '',
-                            departments: c.departments || (c.department ? [c.department] : []),
-                            role: c.role || '',
-                            roles: c.roles || (c.role ? [c.role] : []),
-                            customRole: '',
-                          })}
-                          className="text-xs text-gray-500 hover:text-gray-200 underline underline-offset-1"
-                        >✏️</button>
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setContactEditModal({
+                              contactId: c.id,
+                              displayName: [c.firstName, c.lastName].filter(Boolean).join(' '),
+                              phone: c.phone || '',
+                              department: c.department || '',
+                              departments: c.departments || (c.department ? [c.department] : []),
+                              role: c.role || '',
+                              roles: c.roles || (c.role ? [c.role] : []),
+                              customRole: '',
+                            });
+                          }}
+                          className="rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+                        >✏️ עריכה</button>
                       </td>
                     </tr>
                   ))
