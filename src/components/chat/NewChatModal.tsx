@@ -6,6 +6,7 @@ import type { UserProfile } from '@/contexts/AuthContext';
 import type { Contact } from '@/data/contacts';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
+import { PHONES_VISIBLE } from '@/lib/featureFlags';
 
 interface NewChatModalProps {
   users: UserProfile[];
@@ -372,7 +373,7 @@ export default function NewChatModal({
                       </div>
                     </button>
 
-                    {isExpanded && !canChat && person.phone && (
+                    {PHONES_VISIBLE && isExpanded && !canChat && person.phone && (
                       <div className="flex items-center justify-between gap-2 bg-[#2A3942] px-4 pb-3" dir="ltr">
                         <button
                           onClick={() => handleCopyPhone(person.phone!, person.key)}

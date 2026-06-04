@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
+import { PHONES_VISIBLE } from '@/lib/featureFlags';
 
 const statusLabels: Record<string, { label: string; color: string; bgColor: string }> = {
   available: { label: 'פנוי', color: 'text-green-300', bgColor: 'bg-green-500/10' },
@@ -187,7 +188,7 @@ export default function UserProfilePage() {
               </h2>
               <div className="space-y-3">
                 <InfoRow icon={<Mail className="w-4 h-4" />} label="אימייל" value={profile.email} />
-                <InfoRow icon={<Phone className="w-4 h-4" />} label="טלפון" value={profile.phone || 'לא צוין'} />
+                <InfoRow icon={<Phone className="w-4 h-4" />} label="טלפון" value={PHONES_VISIBLE ? (profile.phone || 'לא צוין') : 'חסוי'} />
                 <InfoRow icon={<Briefcase className="w-4 h-4" />} label="תפקידים" value={professional.roles.join(', ') || 'לא צוין'} />
                 <InfoRow icon={<MapPin className="w-4 h-4" />} label="מחלקות" value={professional.departments.join(', ') || 'לא צוין'} />
                 {profile.bio && (
