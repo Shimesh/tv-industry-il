@@ -761,8 +761,10 @@ function TeamsTab() {
         <AnimatePresence mode="popLayout">
           {filtered.map((team, i) => {
             const accent = confAccent[team.confederation] ?? '212,175,55';
-            const breathDuration = 3.0 + (i % 7) * 0.44;
-            const breathDelay   = (i * 0.41) % 3.0;
+            /* Stagger the CSS animation start so cards breathe out of sync.
+               Negative delay = already in progress when mounted (no pause before start). */
+            const dur   = `${3.2 + (i % 7) * 0.44}s`;
+            const delay = `-${((i * 0.55) % 3.2).toFixed(2)}s`;
             return (
               <motion.button
                 key={team.id}
@@ -781,50 +783,57 @@ function TeamsTab() {
                   boxShadow: `0 4px 20px rgba(0,0,0,.55), 0 0 0 1px rgba(${accent},.25)`,
                 }}
               >
-                {/* ── Breathing flag — oversized to fill every pixel ── */}
-                <motion.div
+                {/* ── Flag — CSS-animated breathing (compositor-threaded, no JS loop) ── */}
+                <div
                   className="absolute inset-0 flex items-center justify-center"
-                  animate={{ scale: [1, 1.12, 1], rotate: [0, 0.7, -0.7, 0] }}
-                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
+                  style={{
+                    animation: `wc-flag-breathe ${dur} ease-in-out infinite`,
+                    animationDelay: delay,
+                    willChange: 'transform',
+                  }}
                 >
                   <span
                     className="select-none leading-none"
-                    style={{ fontSize: 'clamp(26rem, 72vw, 34rem)', lineHeight: 1 }}
+                    style={{ fontSize: 'clamp(18rem, 50vw, 26rem)', lineHeight: 1 }}
                   >
                     {team.flag}
                   </span>
-                </motion.div>
+                </div>
 
-                {/* ── Pulsing golden glow — synced with flag breathing ── */}
-                <motion.div
+                {/* ── Golden glow — CSS-animated, synced to flag ── */}
+                <div
                   className="pointer-events-none absolute inset-0"
-                  animate={{ opacity: [0.18, 0.58, 0.18] }}
-                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
-                  style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(212,175,55,.6) 0%, transparent 60%)' }}
+                  style={{
+                    background: 'radial-gradient(ellipse at 50% 50%, rgba(212,175,55,.6) 0%, transparent 60%)',
+                    animation: `wc-gold-pulse ${dur} ease-in-out infinite`,
+                    animationDelay: delay,
+                    willChange: 'opacity',
+                  }}
                 />
 
-                {/* Confederation colour bloom */}
+                {/* Confederation colour bloom (static, only intensifies on hover) */}
                 <div
-                  className="pointer-events-none absolute inset-0 opacity-20 transition-opacity duration-400 group-hover:opacity-40"
+                  className="pointer-events-none absolute inset-0 opacity-18 transition-opacity duration-300 group-hover:opacity-38"
                   style={{ background: `radial-gradient(circle at 50% 50%, rgba(${accent},.55) 0%, transparent 58%)` }}
                 />
 
-                {/* Vignette — edges only so centre flag stays vivid */}
+                {/* Vignette — dark edges keep text readable */}
                 <div
                   className="pointer-events-none absolute inset-0"
                   style={{ background: 'radial-gradient(ellipse at 50% 50%, transparent 32%, rgba(0,0,0,.65) 100%)' }}
                 />
-
-                {/* Readability strips */}
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/40 to-transparent" />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
 
-                {/* ── Pulsing golden border ring ── */}
-                <motion.div
+                {/* ── Pulsing golden border ring (CSS) ── */}
+                <div
                   className="pointer-events-none absolute inset-0 rounded-2xl"
-                  animate={{ opacity: [0.28, 0.9, 0.28] }}
-                  transition={{ duration: breathDuration, repeat: Infinity, ease: 'easeInOut', delay: breathDelay }}
-                  style={{ boxShadow: 'inset 0 0 0 1.5px rgba(212,175,55,.5)' }}
+                  style={{
+                    boxShadow: 'inset 0 0 0 1.5px rgba(212,175,55,.5)',
+                    animation: `wc-gold-pulse ${dur} ease-in-out infinite`,
+                    animationDelay: delay,
+                    willChange: 'opacity',
+                  }}
                 />
 
                 {/* ── Centred content ── */}

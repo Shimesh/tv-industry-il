@@ -687,3 +687,14 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
     0 4px 22px color-mix(in srgb, var(--theme-accent) 38%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 58%, transparent);
 }
+
+
+/* World Cup team-card breathing animations — CSS-only, compositor-threaded */
+@keyframes wc-flag-breathe {
+  0%, 100% { transform: scale(1)    rotate(0deg);   }
+  50%       { transform: scale(1.08) rotate(0.45deg); }
+}
+@keyframes wc-gold-pulse {
+  0%, 100% { opacity: 0.14; }
+  50%       { opacity: 0.50; }
+}
