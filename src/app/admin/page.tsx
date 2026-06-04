@@ -1841,7 +1841,10 @@ export default function AdminPage() {
                               </span>
                             ) : (
                               <>
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-xs text-orange-400">
+                                <span
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-xs text-orange-400"
+                                  title={getMissingItems(entry).join(' · ')}
+                                >
                                   {!entry.linkedContactId ? 'לא מקושר' : 'חסר'}
                                 </span>
                                 {reminderSent[entry.uid] ? (
