@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { X, UserPlus, Phone, MapPin, Briefcase, Search, Check, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import type { ChatRoom } from '@/hooks/useChat';
-import { PHONES_VISIBLE } from '@/lib/featureFlags';
+import CallButtons from '@/components/CallButtons';
 import type { UserProfile } from '@/contexts/AuthContext';
 
 function statusColor(isOnline?: boolean, status?: string): string {
@@ -329,13 +329,10 @@ export default function ChatInfoPanel({
                 <p className="text-[13px] text-[var(--theme-text)]">{otherUser.city}</p>
               </div>
             )}
-            {PHONES_VISIBLE && otherUser?.showPhone && otherUser.phone && (
+            {otherUser?.uid && (
               <div className="flex items-center gap-3">
                 <Phone className="h-4 w-4 shrink-0 text-[var(--theme-text-secondary)]" />
-                <a href={`tel:${otherUser.phone}`} className="text-[13px] hover:underline"
-                  style={{ color: 'var(--theme-accent)' }} dir="ltr">
-                  {otherUser.phone}
-                </a>
+                <CallButtons userId={otherUser.uid} displayName={otherUser.displayName || ''} size="sm" />
               </div>
             )}
             {otherUser?.bio && (

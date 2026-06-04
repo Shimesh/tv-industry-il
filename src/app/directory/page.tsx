@@ -9,12 +9,13 @@ import {
   normalizeDisplayRoleLabel,
 } from '@/lib/contactsUtils';
 import { normalizeProfessionalFields, professionalSearchText } from '@/lib/professionalFields';
-import { PHONES_VISIBLE } from '@/lib/featureFlags';
+import { useContactUserMap } from '@/hooks/useContactUserMap';
 import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench, CircleDot, Building2, Check } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
 import AuthGuard from '@/components/AuthGuard';
 import ProCardModal from '@/components/directory/ProCardModal';
+import CallButtons from '@/components/CallButtons';
 
 const deptColors: Record<string, string> = {
   'צילום': 'from-blue-500 to-blue-600',
@@ -154,6 +155,7 @@ function DirectoryContent() {
     contactsServerConfirmed,
     contactsError,
   } = useAppData();
+  const { contactIdToUserId, nameToUserId } = useContactUserMap();
   const [search, setSearch] = useState('');
   const [departmentFilters, setDepartmentFilters] = useState<string[]>([]);
   const [roleFilters, setRoleFilters] = useState<string[]>([]);
@@ -229,7 +231,7 @@ function DirectoryContent() {
     return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
   };
 
-  const canShowContactInfo = (contact: Contact) => PHONES_VISIBLE && contact.is_consented === true;
+  const hasConsented = (contact: Contact) => contact.is_consented === true;
 
   const getContactReference = (contact: Contact) => {
     const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
@@ -589,7 +591,7 @@ function DirectoryContent() {
               <AnimatePresence>
                 {displayedContacts.map((contact, i) => {
                   const isMeCard = isCurrentUser(contact);
-                  const showContactInfo = canShowContactInfo(contact);
+                  const contactUserId = contactIdToUserId.get(String(contact.id)) || nameToUserId.get(`${contact.firstName || ''} ${contact.lastName || ''}`.trim().toLowerCase()) || undefined;
                   const contactRoles = getContactRoles(contact);
                   const contactDepartments = getContactDepartments(contact);
                   const primaryDepartment = getPrimaryDepartment(contact);
@@ -691,17 +693,13 @@ function DirectoryContent() {
                             {contact.availability === 'available' ? 'פנוי' : contact.availability === 'unavailable' ? 'לא פנוי' : contact.availability === 'maybe' ? 'אולי פנוי' : 'לא צוין'}
                           </span>
                         </div>
-                        {showContactInfo && contact.phone ? (
-                          <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 text-xs hover:text-green-400 transition-colors group/phone" style={{ color: 'var(--theme-text-secondary)' }}>
-                            <PhoneCall className="w-3 h-3 group-hover/phone:animate-pulse" />
-                            <span dir="ltr">{contact.phone}</span>
-                          </a>
-                        ) : (
-                          <span className="text-xs font-medium" style={{ color: 'var(--theme-text-secondary)' }}>חסוי</span>
-                        )}
+                        <CallButtons
+                          userId={contactUserId}
+                          displayName={`${contact.firstName || ''} ${contact.lastName || ''}`.trim()}
+                          size="sm"
+                        />
                       </div>
-                      {!showContactInfo && (
+                      {!hasConsented(contact) && (
                         <a
                           href={getRemovalRequestMailto(contact)}
                           onClick={(e) => e.stopPropagation()}
@@ -731,7 +729,7 @@ function DirectoryContent() {
               <AnimatePresence>
                 {displayedContacts.map((contact, i) => {
                   const isMeRow = isCurrentUser(contact);
-                  const showContactInfo = canShowContactInfo(contact);
+                  const listContactUserId = contactIdToUserId.get(String(contact.id)) || nameToUserId.get(`${contact.firstName || ''} ${contact.lastName || ''}`.trim().toLowerCase()) || undefined;
                   const contactRoles = getContactRoles(contact);
                   const contactDepartments = getContactDepartments(contact);
                   const primaryDepartment = getPrimaryDepartment(contact);
@@ -785,13 +783,14 @@ function DirectoryContent() {
                         </span>
                       )}
                       <span className={`w-2 h-2 rounded-full ${contact.availability === 'available' ? 'bg-green-400' : contact.availability === 'unavailable' ? 'bg-red-400' : contact.availability === 'maybe' ? 'bg-yellow-400' : 'bg-gray-500'}`} />
-                      {showContactInfo && contact.phone ? (
-                        <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
-                          className="text-xs hover:text-green-400 hidden sm:block transition-colors" style={{ color: 'var(--theme-text-secondary)' }} dir="ltr">{contact.phone}</a>
-                      ) : (
-                        <span className="text-xs hidden sm:block" style={{ color: 'var(--theme-text-secondary)' }}>חסוי</span>
-                      )}
-                      {!showContactInfo && (
+                      <div className="hidden sm:flex">
+                        <CallButtons
+                          userId={listContactUserId}
+                          displayName={`${contact.firstName || ''} ${contact.lastName || ''}`.trim()}
+                          size="sm"
+                        />
+                      </div>
+                      {!hasConsented(contact) && (
                         <a
                           href={getRemovalRequestMailto(contact)}
                           onClick={(e) => e.stopPropagation()}
@@ -996,7 +995,7 @@ function DirectoryContent() {
           <ProCardModal
             contact={selectedContact}
             isCurrentUser={isCurrentUser(selectedContact)}
-            canShowContactInfo={canShowContactInfo(selectedContact)}
+            userId={contactIdToUserId.get(String(selectedContact.id)) || nameToUserId.get(`${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim().toLowerCase()) || undefined}
             roles={getContactRoles(selectedContact)}
             departments={getContactDepartments(selectedContact)}
             primaryDepartment={getPrimaryDepartment(selectedContact)}
@@ -1231,59 +1230,29 @@ function DirectoryContent() {
                   </motion.div>
                 )}
 
-                {/* Contact actions */}
-                {!canShowContactInfo(selectedContact) && (
-                  <div className="space-y-2">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4, duration: 0.3 }}
-                      className="rounded-xl border px-4 py-3 text-center text-sm font-medium"
-                      style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)', background: 'var(--theme-bg-secondary)' }}
-                    >
-                      חסוי
-                    </motion.div>
+                {/* Contact actions — call buttons */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.3 }}
+                  className="space-y-2.5"
+                >
+                  <CallButtons
+                    userId={contactIdToUserId.get(String(selectedContact.id)) || nameToUserId.get(`${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim().toLowerCase()) || undefined}
+                    displayName={`${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim()}
+                    size="lg"
+                  />
+                  {!hasConsented(selectedContact) && (
                     <a
                       href={getRemovalRequestMailto(selectedContact)}
                       className="block text-center text-xs font-medium text-[var(--theme-text-secondary)] opacity-75 transition-opacity hover:opacity-100 hover:underline"
                     >
                       דיווח או בקשת הסרה לפרופיל זה
                     </a>
-                  </div>
-                )}
+                  )}
+                </motion.div>
 
-                {canShowContactInfo(selectedContact) && selectedContact.phone && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4, duration: 0.3 }}
-                    className="space-y-2.5"
-                  >
-                    <motion.a
-                      whileHover={{ scale: 1.02, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      href={`tel:${selectedContact.phone}`}
-                      className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl bg-gradient-to-l from-green-600 to-emerald-600 text-white font-bold shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/30 transition-shadow"
-                    >
-                      <Phone className="w-4.5 h-4.5" />
-                      <span>התקשר</span>
-                      <span dir="ltr" className="opacity-80 text-sm">{selectedContact.phone}</span>
-                    </motion.a>
-                    <motion.a
-                      whileHover={{ scale: 1.02, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      href={formatWhatsApp(selectedContact.phone)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl bg-gradient-to-l from-green-700 to-green-800 text-white font-bold shadow-lg shadow-green-800/20 hover:shadow-xl hover:shadow-green-800/30 transition-shadow"
-                    >
-                      <MessageCircle className="w-4.5 h-4.5" />
-                      שלח הודעת WhatsApp
-                    </motion.a>
-                  </motion.div>
-                )}
-
-                {canShowContactInfo(selectedContact) && selectedContact.email && (
+                {hasConsented(selectedContact) && selectedContact.email && (
                   <motion.a
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

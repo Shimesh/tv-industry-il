@@ -32,11 +32,12 @@ import type { ProCardHistoryResponse, ProCardProductionCredit } from '@/lib/proC
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { findChannelByName, getChannelById } from '@/data/channels';
+import CallButtons from '@/components/CallButtons';
 
 type Props = {
   contact: Contact;
   isCurrentUser: boolean;
-  canShowContactInfo: boolean;
+  userId?: string;
   roles: string[];
   departments: string[];
   primaryDepartment: string;
@@ -192,7 +193,7 @@ function ProductionMark({ credit }: { credit: ProCardProductionCredit }) {
 export default function ProCardModal({
   contact,
   isCurrentUser,
-  canShowContactInfo,
+  userId,
   roles,
   departments,
   primaryDepartment,
@@ -859,51 +860,11 @@ export default function ProCardModal({
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {canShowContactInfo && contact.phone ? (
-                  <a
-                    href={`tel:${contact.phone}`}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-400/12 px-4 py-3 text-sm font-bold text-emerald-100 transition hover:bg-emerald-400/18"
-                  >
-                    <Phone className="h-4 w-4" />
-                    התקשר
-                  </a>
-                ) : (
-                  <a
-                    href={removalHref}
-                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-bold text-white/65 transition hover:bg-white/12"
-                  >
-                    חסוי
-                  </a>
-                )}
-
-                {canShowContactInfo && contact.phone ? (
-                  <a
-                    href={formatWhatsApp(contact.phone)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-green-300/25 bg-green-500/12 px-4 py-3 text-sm font-bold text-green-100 transition hover:bg-green-500/18"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp
-                  </a>
-                ) : contact.email && canShowContactInfo ? (
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-300/25 bg-sky-500/12 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/18"
-                  >
-                    <Mail className="h-4 w-4" />
-                    אימייל
-                  </a>
-                ) : (
-                  <a
-                    href={removalHref}
-                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-bold text-white/65 transition hover:bg-white/12"
-                  >
-                    דיווח
-                  </a>
-                )}
-              </div>
+              <CallButtons
+                userId={userId}
+                displayName={fullName(contact)}
+                size="lg"
+              />
             </div>
           </div>
         </motion.div>
