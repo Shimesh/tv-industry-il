@@ -1476,9 +1476,9 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
-            <CollapsibleCard icon={Tv} title="שידור ישיר · כאן 11" subtitle={`${selectedMatch.homeTeam.flag} ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe} ${selectedMatch.awayTeam.flag}`} className="overflow-hidden">
+            <CollapsibleCard icon={Tv} title="שידור ישיר · כאן 11" subtitle={`${featureMatch.homeTeam.flag} ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe} ${featureMatch.awayTeam.flag}`} defaultOpen className="overflow-hidden">
               <div className="p-3">
-                <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${selectedMatch.homeTeam.nameHe} - ${selectedMatch.awayTeam.nameHe}`} initialMuted />
+                <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe}`} initialMuted />
               </div>
             </CollapsibleCard>
             <div ref={sectionRefs.matches}>
@@ -1486,7 +1486,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             </div>
           </div>
           <div className="space-y-6">
-            <WorldCupChat match={selectedMatch} />
+            <WorldCupChat match={featureMatch} />
           </div>
         </div>
 
