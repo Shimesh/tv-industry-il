@@ -671,6 +671,7 @@ export default function AdminPage() {
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Record<string, boolean>>({});
   const [autoLinkPending, setAutoLinkPending] = useState<Record<string, boolean>>({});
+  const [expandedMissing, setExpandedMissing] = useState<Set<string>>(new Set());
   const [editModal, setEditModal] = useState<{
     uid: string;
     displayName: string;
@@ -1841,12 +1842,25 @@ export default function AdminPage() {
                               </span>
                             ) : (
                               <>
-                                <span
-                                  className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-xs text-orange-400"
-                                  title={getMissingItems(entry).join(' · ')}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedMissing(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(entry.uid)) next.delete(entry.uid);
+                                    else next.add(entry.uid);
+                                    return next;
+                                  })}
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-orange-900/40 px-1 py-0.5 text-xs text-orange-400 hover:bg-orange-900/70 transition-colors"
                                 >
-                                  {!entry.linkedContactId ? 'לא מקושר' : 'חסר'}
-                                </span>
+                                  {!entry.linkedContactId ? 'לא מקושר' : 'חסר'} {expandedMissing.has(entry.uid) ? '▲' : '▼'}
+                                </button>
+                                {expandedMissing.has(entry.uid) && (
+                                  <div className="w-full mt-0.5 flex flex-wrap gap-1">
+                                    {getMissingItems(entry).map(item => (
+                                      <span key={item} className="rounded-full bg-orange-900/30 px-1.5 py-0.5 text-[10px] text-orange-300">{item}</span>
+                                    ))}
+                                  </div>
+                                )}
                                 {reminderSent[entry.uid] ? (
                                   <span className="text-xs text-green-400">✓</span>
                                 ) : (
