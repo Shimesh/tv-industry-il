@@ -686,7 +686,7 @@ export default function AdminPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [insightDrilldown, setInsightDrilldown] = useState<'tour' | 'profile' | 'consent' | 'push' | null>(null);
   const [availableContacts, setAvailableContacts] = useState<
-    { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[]
+    { id: string; firstName: string; lastName: string; phone: string; is_consented: boolean; department: string; departments?: string[]; role?: string; roles?: string[] }[]
   >([]);
   const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [showContactSearch, setShowContactSearch] = useState(false);
@@ -961,7 +961,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!user || !isAdmin) return;
-    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; department: string; departments?: string[]; role?: string; roles?: string[] }[] }>(
+    fetchWithAuth<{ contacts: { id: string; firstName: string; lastName: string; phone: string; is_consented: boolean; department: string; departments?: string[]; role?: string; roles?: string[] }[] }>(
       '/api/admin/contacts-list',
     )
       .then((data) => { if (Array.isArray(data.contacts)) setAvailableContacts(data.contacts); })
@@ -1979,7 +1979,11 @@ export default function AdminPage() {
                           <span className="text-sm text-white">{[c.firstName, c.lastName].filter(Boolean).join(' ') || '—'}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-gray-400 text-xs dir-ltr">{c.phone || '—'}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {c.is_consented
+                          ? <span className="text-gray-400 dir-ltr">{c.phone || '—'}</span>
+                          : <span className="text-gray-600 italic">חסוי</span>}
+                      </td>
                       <td className="px-3 py-2.5 text-gray-300 text-xs">{c.roles?.join(', ') || c.role || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-500 text-xs">{c.departments?.join(', ') || c.department || '—'}</td>
                       <td className="px-3 py-2.5">
@@ -3093,7 +3097,9 @@ export default function AdminPage() {
                       >
                         {c.department ? <span className="ml-1 text-gray-400">[{c.department}]</span> : null}
                         {`${c.firstName} ${c.lastName}`.trim()}
-                        {c.phone ? <span className="mr-2 text-gray-400 text-[10px]"> - {c.phone}</span> : null}
+                        {c.phone
+                          ? <span className="mr-2 text-[10px] text-gray-400"> - {c.is_consented ? c.phone : 'חסוי'}</span>
+                          : null}
                       </button>
                     ));
                   })()}
