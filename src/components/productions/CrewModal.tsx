@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clapperboard, Clock, MapPin, MessageCircle, Phone, PhoneOff, Star, Users, X } from 'lucide-react';
+import { PHONES_VISIBLE } from '@/lib/featureFlags';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { classifyContactRole, normalizeContactName } from '@/lib/contactsUtils';
@@ -335,7 +336,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   const shareFullCrew = () => {
     const crewText = sortedCrew
-      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${(member.isCurrentUser || member.is_consented === true) && member.phone ? ` | ${member.phone}` : ''}`)
+      .map((member) => `- ${member.name} - ${member.roleDetail || member.role}${PHONES_VISIBLE && (member.isCurrentUser || member.is_consented === true) && member.phone ? ` | ${member.phone}` : ''}`)
       .join('\n');
 
     const text = [
@@ -454,7 +455,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
               </div>
             </div>
 
-            {member.phone && (member.isCurrentUser || member.is_consented === true) ? (
+            {PHONES_VISIBLE && member.phone && (member.isCurrentUser || member.is_consented === true) ? (
               <motion.a
                 href={`tel:${member.phone}`}
                 className="flex items-center gap-2 px-3 py-2 rounded-full text-xs font-semibold transition-all duration-200"
@@ -709,7 +710,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                           <span className="text-[11px] text-white/40">{director.roleDetail}</span>
                         )}
                       </div>
-                      {director.phone && (director.isCurrentUser || director.is_consented === true) ? (
+                      {PHONES_VISIBLE && director.phone && (director.isCurrentUser || director.is_consented === true) ? (
                         <a
                           href={`tel:${director.phone}`}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"

@@ -9,6 +9,7 @@ import {
   normalizeDisplayRoleLabel,
 } from '@/lib/contactsUtils';
 import { normalizeProfessionalFields, professionalSearchText } from '@/lib/professionalFields';
+import { PHONES_VISIBLE } from '@/lib/featureFlags';
 import { useAppData } from '@/contexts/AppDataContext';
 import { Search, Phone, X, Briefcase, Users, LayoutGrid, List, MessageCircle, Star, Mail, PhoneCall, MapPin, Clock, Film, Wrench, CircleDot, Building2, Check } from 'lucide-react';
 import { DirectorySkeleton } from '@/components/SkeletonLoader';
@@ -228,7 +229,7 @@ function DirectoryContent() {
     return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
   };
 
-  const canShowContactInfo = (contact: Contact) => contact.is_consented === true;
+  const canShowContactInfo = (contact: Contact) => PHONES_VISIBLE && contact.is_consented === true;
 
   const getContactReference = (contact: Contact) => {
     const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
