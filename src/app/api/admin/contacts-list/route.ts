@@ -12,6 +12,7 @@ type ContactMin = {
   departments?: unknown;
   role?: string | null;
   roles?: unknown;
+  is_consented?: boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
         firstName: c.firstName ?? '',
         lastName: c.lastName ?? '',
         phone: c.phone ?? '',
+        is_consented: c.is_consented === true,
         department: professional.department,
         departments: professional.departments,
         role: professional.role,
