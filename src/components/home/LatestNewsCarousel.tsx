@@ -48,7 +48,7 @@ function getSourceBadgeColor(source: string): string {
   return 'bg-white/20 text-white';
 }
 
-export default function LatestNewsCarousel({ news, directLinks = false }: { news: RssNewsItem[]; directLinks?: boolean }) {
+export default function LatestNewsCarousel({ news, directLinks = false, onCardClick }: { news: RssNewsItem[]; directLinks?: boolean; onCardClick?: (item: RssNewsItem) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -110,7 +110,54 @@ export default function LatestNewsCarousel({ news, directLinks = false }: { news
         className="flex gap-3 overflow-x-auto px-1 pb-2"
         style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory', msOverflowStyle: 'none' }}
       >
-        {news.map((item, index) => (
+        {news.map((item, index) => onCardClick ? (
+          <button
+            key={`${item.link}-${index}`}
+            type="button"
+            onClick={() => onCardClick(item)}
+            className="group relative h-52 w-72 shrink-0 overflow-hidden rounded-xl text-right"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            {item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-6 text-center text-lg font-black text-white/80">
+                {item.source}
+              </div>
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+            {item.videoUrl && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-white/25 shadow backdrop-blur-sm">
+                  <Play className="h-4 w-4 translate-x-0.5 fill-white text-white" />
+                </div>
+              </div>
+            )}
+
+            {isRatingsArticle(item.title) && (
+              <div className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-black shadow">
+                ⭐ רייטינג
+              </div>
+            )}
+
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-right">
+              <div className="mb-1.5 flex flex-row-reverse items-center justify-end gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${getSourceBadgeColor(item.source)}`}>
+                  {item.source}
+                </span>
+                <span className="text-[10px] text-white/55">{formatTimeAgo(item.pubDate)}</span>
+              </div>
+              <h3 className="line-clamp-3 text-sm font-bold leading-snug text-white drop-shadow">{item.title}</h3>
+            </div>
+          </button>
+        ) : (
           <Link
             key={`${item.link}-${index}`}
             href={directLinks ? item.link : `/news?article=${encodeURIComponent(item.link)}`}

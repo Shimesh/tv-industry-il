@@ -14,6 +14,16 @@ import { VideoPlayer } from '@/components/schedule/VideoPlayer';
 import type { WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
 import { teamDetails } from '@/lib/world-cup/static-data';
 
+type WcArticleContent = {
+  title: string;
+  content: string;
+  date: string;
+  source: string;
+  coverImageUrl?: string;
+  smartSummary?: string;
+  fallbackGradient?: string;
+};
+
 type HubProps = {
   matches: WorldCupMatch[];
   standings: WorldCupStanding[];
@@ -1290,6 +1300,119 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   );
 }
 
+function WcArticleModal({
+  item,
+  content,
+  isLoading,
+  error,
+  onClose,
+}: {
+  item: WorldCupNewsItem;
+  content: WcArticleContent | null;
+  isLoading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const coverImage = content?.coverImageUrl || item.imageUrl;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.72)', backdropFilter: 'blur(6px)' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 48 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 48 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        className="relative w-full max-w-lg overflow-hidden rounded-t-3xl sm:rounded-3xl"
+        style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)', maxHeight: '90dvh' }}
+      >
+        {/* Cover image */}
+        <div className="relative h-48 w-full shrink-0 overflow-hidden sm:h-56">
+          {coverImage ? (
+            <img src={coverImage} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="h-full w-full" style={{ background: content?.fallbackGradient || 'linear-gradient(135deg, #002046, #064523)' }} />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+          <button
+            onClick={onClose}
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/70"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="absolute bottom-3 right-3 left-3">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <span className="rounded bg-[#D4AF37]/90 px-1.5 py-0.5 text-[10px] font-bold text-[#002046]">{item.source}</span>
+              <span className="text-[10px] text-white/55">
+                {(() => {
+                  try {
+                    const diffMin = Math.floor((Date.now() - new Date(item.pubDate).getTime()) / 60000);
+                    const diffHours = Math.floor(diffMin / 60);
+                    if (diffMin < 1) return 'עכשיו';
+                    if (diffMin < 60) return `לפני ${diffMin} דק׳`;
+                    if (diffHours < 24) return `לפני ${diffHours} שעות`;
+                    return `לפני ${Math.floor(diffHours / 24)} ימים`;
+                  } catch { return ''; }
+                })()}
+              </span>
+            </div>
+            <h2 className="text-base font-black leading-snug text-white drop-shadow">{content?.title || item.title}</h2>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(90dvh - 224px)' }}>
+          {isLoading && (
+            <div className="space-y-2">
+              {[100, 85, 92, 78].map((w, i) => (
+                <div key={i} className="h-3 animate-pulse rounded-full bg-white/10" style={{ width: `${w}%` }} />
+              ))}
+            </div>
+          )}
+
+          {error && !isLoading && (
+            <p className="text-center text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{error}</p>
+          )}
+
+          {!isLoading && !error && content && (
+            <>
+              {content.smartSummary ? (
+                <div className="rounded-xl border p-3 text-sm leading-7 text-right" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)', color: 'var(--theme-text)' }}>
+                  <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold text-[#D4AF37]">
+                    <Zap className="h-3 w-3" /> סיכום חכם
+                  </div>
+                  {content.smartSummary}
+                </div>
+              ) : (
+                <p className="text-sm leading-7 text-right line-clamp-6" style={{ color: 'var(--theme-text)' }}>
+                  {content.content.slice(0, 500)}
+                </p>
+              )}
+            </>
+          )}
+
+          {!isLoading && !content && !error && (
+            <p className="text-center text-sm" style={{ color: 'var(--theme-text-secondary)' }}>{item.description}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t p-3" style={{ borderColor: 'var(--theme-border)' }}>
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-[#002046] transition hover:opacity-90"
+            style={{ background: '#D4AF37' }}
+          >
+            <Newspaper className="h-4 w-4" />
+            קרא את הכתבה המלאה
+          </a>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -1374,6 +1497,10 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   const [matchDetail, setMatchDetail] = useState<WorldCupMatch | null>(null);
   const [news, setNews] = useState<WorldCupNewsItem[]>([]);
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
+  const [wcSelectedItem, setWcSelectedItem] = useState<WorldCupNewsItem | null>(null);
+  const [wcArticleContent, setWcArticleContent] = useState<WcArticleContent | null>(null);
+  const [wcArticleLoading, setWcArticleLoading] = useState(false);
+  const [wcArticleError, setWcArticleError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -1408,6 +1535,36 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       .then((payload) => setNews(Array.isArray(payload.items) ? payload.items : []))
       .catch(() => {});
   }, []);
+
+  const openWcArticle = async (item: WorldCupNewsItem) => {
+    setWcSelectedItem(item);
+    setWcArticleContent(null);
+    setWcArticleLoading(true);
+    setWcArticleError(null);
+    try {
+      const res = await fetch(`/api/news/article?url=${encodeURIComponent(item.link)}`);
+      const data = await res.json();
+      if (data.success && data.content) {
+        setWcArticleContent({
+          title: data.title,
+          content: data.content,
+          date: data.date,
+          source: data.source,
+          coverImageUrl: data.coverImageUrl,
+          smartSummary: data.smartSummary,
+          fallbackGradient: data.fallbackGradient
+            ? `linear-gradient(135deg, ${data.fallbackGradient.from}, ${data.fallbackGradient.to})`
+            : undefined,
+        });
+      } else {
+        setWcArticleError(data.error || 'לא ניתן לטעון את הכתבה');
+      }
+    } catch {
+      setWcArticleError('שגיאה בטעינת הכתבה');
+    } finally {
+      setWcArticleLoading(false);
+    }
+  };
 
   const sectionRefs = {
     matches: useRef<HTMLDivElement>(null),
@@ -1489,7 +1646,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <CollapsibleCard icon={Newspaper} title="חדשות מונדיאל 2026" badge={news.length > 0 ? `${news.length}` : undefined} defaultOpen className="overflow-hidden">
               {news.length > 0 ? (
                 <div className="p-4">
-                  <LatestNewsCarousel news={news} directLinks />
+                  <LatestNewsCarousel news={news} onCardClick={openWcArticle} />
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 p-6 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
@@ -1524,6 +1681,18 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       <AnimatePresence>
         {matchDetail && (
           <MatchDetailModal match={matchDetail} venues={venues} onClose={() => setMatchDetail(null)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {wcSelectedItem && (
+          <WcArticleModal
+            item={wcSelectedItem}
+            content={wcArticleContent}
+            isLoading={wcArticleLoading}
+            error={wcArticleError}
+            onClose={() => { setWcSelectedItem(null); setWcArticleContent(null); setWcArticleError(null); }}
+          />
         )}
       </AnimatePresence>
     </div>
