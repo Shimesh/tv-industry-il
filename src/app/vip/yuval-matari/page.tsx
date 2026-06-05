@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, type ElementType, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AlertCircle, AlertTriangle, BarChart3, Bell, Calendar,
-  CheckCircle, Clock, Download, FileText, Layers,
+  CheckCircle, Clock, ChevronRight, Download, FileText, Layers,
   Monitor, Package, Server, Sparkles, TrendingUp, Truck, Wifi,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -202,6 +203,7 @@ const fadeUp = {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VipYuvalMatari() {
+  const router = useRouter();
   const [now, setNow]                 = useState(() => new Date());
   const [activeTab, setActiveTab]     = useState('overview');
   const [reportFrom, setReportFrom]   = useState('');
@@ -244,6 +246,14 @@ export default function VipYuvalMatari() {
       {/* ══════════════ HERO ══════════════ */}
       <header className="app-hero">
         <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 py-12 sm:py-16">
+          {/* Back button */}
+          <button
+            onClick={() => router.back()}
+            className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-bold text-white/70 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+            חזרה
+          </button>
           <motion.div
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
