@@ -330,7 +330,7 @@ function ArticleModal({ article, newsItem, onClose, isLoading, error }: {
               <div className="space-y-3 text-sm leading-relaxed" style={{ color: 'var(--theme-text-secondary)' }}>
                 {article.smartSummary
                   ? article.smartSummary.split('\n\n').map((p, i) => <p key={i}>{p}</p>)
-                  : article.content.slice(0, 500).split('\n\n').map((p, i) => <p key={i}>{p}</p>)
+                  : <p>{newsItem.description}</p>
                 }
               </div>
             )}
