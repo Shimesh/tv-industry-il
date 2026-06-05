@@ -1630,8 +1630,6 @@ export default function AdminPage() {
             {/* VIP Demo */}
             <Link
               href="/vip/yuval-matari"
-              target="_blank"
-              rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all hover:scale-[1.03] hover:shadow-lg"
               style={{
                 background: 'linear-gradient(135deg, #92400e, #b45309, #d97706)',
