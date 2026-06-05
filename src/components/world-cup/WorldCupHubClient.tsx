@@ -1403,9 +1403,17 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   const selectedVenue = venues.find((venue) => venue.id === featureMatch.venueId);
 
   useEffect(() => {
-    fetch('/api/world-cup/news')
+    const WC_KEYWORDS = ['מונדיאל', 'world cup', 'גביע העולם', 'fifa', 'מוקדמות'];
+    fetch('/api/news')
       .then((res) => res.json())
-      .then((payload) => setNews(Array.isArray(payload.items) ? payload.items : []))
+      .then((payload) => {
+        const all = Array.isArray(payload.items) ? payload.items : [];
+        const wc = all.filter((item: { title?: string; description?: string }) => {
+          const text = `${item.title ?? ''} ${item.description ?? ''}`.toLowerCase();
+          return WC_KEYWORDS.some((kw) => text.includes(kw));
+        });
+        setNews(wc);
+      })
       .catch(() => {});
   }, []);
 
