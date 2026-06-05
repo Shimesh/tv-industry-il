@@ -1383,8 +1383,8 @@ function WcArticleModal({
                   {content.smartSummary}
                 </div>
               ) : (
-                <p className="text-sm leading-7 text-right line-clamp-6" style={{ color: 'var(--theme-text)' }}>
-                  {content.content.slice(0, 500)}
+                <p className="text-sm leading-7 text-right" style={{ color: 'var(--theme-text)' }}>
+                  {item.description}
                 </p>
               )}
             </>
