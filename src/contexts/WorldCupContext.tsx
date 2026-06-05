@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldCupMatch } from '@/lib/world-cup/types';
 
 type WorldCupContextValue = {
@@ -62,8 +62,24 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(interval);
   }, [refresh]);
 
-  const activeMatch = useMemo(() => matches.find((match) => match.status === 'live') ?? null, [matches]);
-  const nextMatch = useMemo(() => getNextMatch(matches), [matches]);
+  // Stabilise references — only update when the match ID actually changes,
+  // so context consumers don't re-render on every 60-second poll.
+  const prevActiveRef = useRef<WorldCupMatch | null>(null);
+  const activeMatch = useMemo(() => {
+    const found = matches.find((m) => m.status === 'live') ?? null;
+    if (found?.id === prevActiveRef.current?.id) return prevActiveRef.current;
+    prevActiveRef.current = found;
+    return found;
+  }, [matches]);
+
+  const prevNextRef = useRef<WorldCupMatch | null>(null);
+  const nextMatch = useMemo(() => {
+    const found = getNextMatch(matches);
+    if (found?.id === prevNextRef.current?.id) return prevNextRef.current;
+    prevNextRef.current = found;
+    return found;
+  }, [matches]);
+
   const isWorldCupMode = Boolean(activeMatch);
 
   useEffect(() => {

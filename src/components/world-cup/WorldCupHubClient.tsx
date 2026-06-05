@@ -570,7 +570,7 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const isInitialLoad = useRef(true);
 
@@ -583,7 +583,10 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
         isInitialLoad.current = false;
         return;
       }
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setTimeout(() => {
+        const c = containerRef.current;
+        if (c) c.scrollTop = c.scrollHeight;
+      }, 100);
     });
   }, [match.id]);
 
@@ -610,7 +613,7 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
 
   return (
     <CollapsibleCard icon={MessageCircle} title="צ׳אט משחק" subtitle={subtitle} className="flex flex-col overflow-hidden">
-      <div className="min-h-[380px] flex-1 space-y-2 overflow-y-auto p-3">
+      <div ref={containerRef} className="min-h-[380px] flex-1 space-y-2 overflow-y-auto p-3">
         {messages.length === 0 ? (
           <p className="rounded-xl border p-4 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
             עוד אין הודעות למשחק הזה. היו הראשונים!
@@ -633,7 +636,6 @@ function WorldCupChat({ match }: { match: WorldCupMatch }) {
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
       <div className="border-t p-3" style={{ borderColor: 'var(--theme-border)' }}>
         {user ? (
@@ -1288,6 +1290,47 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   );
 }
 
+function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const cd = useMemo(() => getNextCountdown(matches, now), [matches, now]);
+  if (!cd) return null;
+  return (
+    <div className="mt-4 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-3 backdrop-blur-sm">
+      <div className="mb-1.5 flex items-center justify-center gap-2">
+        <Timer className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+        <span className="text-xs font-bold text-white/55">המשחק הבא</span>
+      </div>
+      <div className="mb-3 text-center text-sm font-black text-white">
+        {cd.match.homeTeam.flag} {cd.match.homeTeam.nameHe} <span className="text-white/40">vs</span> {cd.match.awayTeam.nameHe} {cd.match.awayTeam.flag}
+      </div>
+      <div className="flex gap-1.5 text-center" dir="ltr">
+        {cd.days > 0 && (
+          <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+            <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.days).padStart(2, '0')}</div>
+            <div className="text-[9px] font-bold text-white/55">ימים</div>
+          </div>
+        )}
+        <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.hours).padStart(2, '0')}</div>
+          <div className="text-[9px] font-bold text-white/55">שעות</div>
+        </div>
+        <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.minutes).padStart(2, '00')}</div>
+          <div className="text-[9px] font-bold text-white/55">דקות</div>
+        </div>
+        <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
+          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.seconds).padStart(2, '00')}</div>
+          <div className="text-[9px] font-bold text-white/55">שניות</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (v: SectionTab) => void }) {
   const tabs: { key: SectionTab; label: string; icon: typeof Trophy }[] = [
     { key: 'matches', label: 'משחקים', icon: CalendarDays },
@@ -1333,8 +1376,6 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
 
   useEffect(() => {
-    const hasLive = () => matches.some((m) => m.status === 'live');
-    const interval = hasLive() ? 30_000 : 60_000;
     const id = window.setInterval(() => {
       fetch('/api/world-cup/matches')
         .then((res) => res.ok ? res.json() : null)
@@ -1346,9 +1387,9 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           if (payload.updatedAt) setUpdatedAt(payload.updatedAt);
         })
         .catch(() => {});
-    }, interval);
+    }, 60_000);
     return () => window.clearInterval(id);
-  }, [matches]);
+  }, []);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
   const featureMatch = useMemo(() => {
     const live = matches.find((m) => m.status === 'live');
@@ -1360,12 +1401,6 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
     );
   }, [matches]);
   const selectedVenue = venues.find((venue) => venue.id === featureMatch.venueId);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const nextCountdown = useMemo(() => getNextCountdown(matches, now), [matches, now]);
 
   useEffect(() => {
     fetch('/api/world-cup/news')
@@ -1402,37 +1437,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <h1 className="text-3xl font-black leading-tight text-white sm:text-4xl lg:text-5xl">כל המשחקים, השידור והדופק של הטורניר</h1>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-white/72 sm:text-base">לוח משחקים, כאן 11, חדשות, טבלאות, אצטדיונים, מזג אוויר וצ׳אט משחקים חי.</p>
 
-            {nextCountdown && (
-              <div className="mt-4 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-3 backdrop-blur-sm">
-                <div className="mb-1.5 flex items-center justify-center gap-2">
-                  <Timer className="h-4 w-4 shrink-0 text-[#D4AF37]" />
-                  <span className="text-xs font-bold text-white/55">המשחק הבא</span>
-                </div>
-                <div className="mb-3 text-center text-sm font-black text-white">
-                  {nextCountdown.match.homeTeam.flag} {nextCountdown.match.homeTeam.nameHe} <span className="text-white/40">vs</span> {nextCountdown.match.awayTeam.nameHe} {nextCountdown.match.awayTeam.flag}
-                </div>
-                <div className="flex gap-1.5 text-center" dir="ltr">
-                  {nextCountdown.days > 0 && (
-                    <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-                      <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.days).padStart(2, '0')}</div>
-                      <div className="text-[9px] font-bold text-white/55">ימים</div>
-                    </div>
-                  )}
-                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.hours).padStart(2, '0')}</div>
-                    <div className="text-[9px] font-bold text-white/55">שעות</div>
-                  </div>
-                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.minutes).padStart(2, '0')}</div>
-                    <div className="text-[9px] font-bold text-white/55">דקות</div>
-                  </div>
-                  <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-                    <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(nextCountdown.seconds).padStart(2, '0')}</div>
-                    <div className="text-[9px] font-bold text-white/55">שניות</div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <CountdownBox matches={matches} />
 
             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto text-[11px] text-white/55" style={{ scrollbarWidth: 'none' }}>
               <span className="shrink-0 rounded-full px-2.5 py-1" style={{ background: source === 'football-data' ? 'rgba(212,175,55,.18)' : 'rgba(255,255,255,.08)', color: source === 'football-data' ? '#D4AF37' : undefined }}>
