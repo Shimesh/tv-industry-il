@@ -48,7 +48,7 @@ function getSourceBadgeColor(source: string): string {
   return 'bg-white/20 text-white';
 }
 
-export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
+export default function LatestNewsCarousel({ news, directLinks = false }: { news: RssNewsItem[]; directLinks?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -113,7 +113,9 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
         {news.map((item, index) => (
           <Link
             key={`${item.link}-${index}`}
-            href={`/news?article=${encodeURIComponent(item.link)}`}
+            href={directLinks ? item.link : `/news?article=${encodeURIComponent(item.link)}`}
+            target={directLinks ? '_blank' : undefined}
+            rel={directLinks ? 'noopener noreferrer' : undefined}
             className="group relative h-52 w-72 shrink-0 overflow-hidden rounded-xl"
             style={{ scrollSnapAlign: 'start' }}
           >

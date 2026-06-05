@@ -142,13 +142,13 @@ const HEBREW_MONTHS_FULL = ['ינואר','פברואר','מרץ','אפריל','�
 /* Source badge colors */
 function getSourceColor(source: string): string {
   if (source.includes('Ynet') || source.includes('ynet')) return 'bg-red-500/15 text-red-400 border-red-500/20';
+  if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+  if (source.includes('Sport5') || source.includes('sport5')) return 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20';
+  if (source.includes('ONE') || source.includes('One')) return 'bg-blue-700/15 text-blue-400 border-blue-700/20';
   if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/15 text-orange-400 border-orange-500/20';
   if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/15 text-blue-400 border-blue-500/20';
-  if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
   if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20';
   if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20';
-  if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/15 text-orange-400 border-orange-500/20';
-  if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/15 text-blue-400 border-blue-500/20';
   return 'bg-purple-500/15 text-purple-400 border-purple-500/20';
 }
 
@@ -490,6 +490,8 @@ function NewsPageContent() {
     () => [
       { name: 'Ynet', desc: 'חדשות, ספורט, כלכלה ותרבות', url: 'https://www.ynet.co.il', color: 'from-red-500 to-red-600' },
       { name: 'Walla', desc: 'חדשות ותרבות', url: 'https://www.walla.co.il', color: 'from-purple-500 to-fuchsia-600' },
+      { name: 'Sport5', desc: 'ספורט, כדורגל ומונדיאל', url: 'https://www.sport5.co.il', color: 'from-yellow-400 to-yellow-600' },
+      { name: 'ONE', desc: 'ערוץ הספורט — כדורגל וכדורסל', url: 'https://www.one.co.il', color: 'from-blue-700 to-blue-900' },
       { name: 'ICE', desc: 'מדיה, טלוויזיה ותקשורת', url: 'https://www.ice.co.il/media', color: 'from-cyan-500 to-teal-600' },
       { name: 'Scopt', desc: 'ידיעות תקשורת ומדיה', url: 'https://scopt.co.il', color: 'from-emerald-500 to-green-600' },
       { name: 'Mako', desc: 'טלוויזיה, תרבות ומוזיקה', url: 'https://www.mako.co.il/rss', color: 'from-orange-500 to-red-600' },

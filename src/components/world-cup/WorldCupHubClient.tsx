@@ -1489,7 +1489,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <CollapsibleCard icon={Newspaper} title="חדשות מונדיאל 2026" badge={news.length > 0 ? `${news.length}` : undefined} defaultOpen className="overflow-hidden">
               {news.length > 0 ? (
                 <div className="p-4">
-                  <LatestNewsCarousel news={news} />
+                  <LatestNewsCarousel news={news} directLinks />
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 p-6 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>

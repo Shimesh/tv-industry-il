@@ -3,10 +3,23 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Google News RSS — globally accessible, no IP blocking, returns IL sources
-const GOOGLE_NEWS_QUERIES = [
-  'https://news.google.com/rss/search?q=%D7%9E%D7%95%D7%A0%D7%93%D7%99%D7%90%D7%9C+2026&hl=iw&gl=IL&ceid=IL:iw',
-  'https://news.google.com/rss/search?q=world+cup+2026+%D7%9B%D7%93%D7%95%D7%A8%D7%92%D7%9C&hl=iw&gl=IL&ceid=IL:iw',
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
+const USER_AGENT = `Mozilla/5.0 (compatible; TVIndustryIL/2.0; +${APP_URL})`;
+
+const SPORT_SOURCES = [
+  { name: 'Ynet ספורט', url: 'https://www.ynet.co.il/Integration/StoryRss3.xml', sourceUrl: 'https://www.ynet.co.il/sport' },
+  { name: 'Walla ספורט', url: 'https://rss.walla.co.il/feed/3', sourceUrl: 'https://sports.walla.co.il' },
+  { name: 'Ynet', url: 'https://www.ynet.co.il/Integration/StoryRss2.xml', sourceUrl: 'https://www.ynet.co.il' },
+  { name: 'Walla', url: 'https://rss.walla.co.il/feed/1', sourceUrl: 'https://www.walla.co.il' },
+];
+
+// Broad WC filter — catches direct WC terms + major teams + knockout stages + stars
+const WC_KEYWORDS = [
+  'מונדיאל', 'world cup', 'גביע העולם', 'fifa', 'מוקדמות',
+  'נבחרת', 'גמר', 'רבע גמר', 'חצי גמר', 'שמינית גמר',
+  'ארגנטינה', 'ברזיל', 'צרפת', 'ספרד', 'גרמניה', 'פורטוגל', 'אנגליה',
+  'מרוקו', 'ארה"ב', 'קנדה', 'מקסיקו', 'יפן', 'אורוגוואי',
+  'מסי', 'רונאלדו', 'אמבאפה', 'הארלנד',
 ];
 
 let cache: { items: unknown[]; at: number } | null = null;
@@ -20,15 +33,21 @@ function decodeHtml(text: string): string {
     .replace(/<[^>]+>/g, '').trim();
 }
 
-function tagValue(block: string, name: string): string {
-  const cdata = block.match(new RegExp(`<${name}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>`, 'i'));
+function extractCdata(block: string, tag: string): string {
+  const cdata = block.match(new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*<\\/${tag}>`, 'i'));
   if (cdata?.[1]) return cdata[1];
-  return block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1] ?? '';
+  return block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'))?.[1] ?? '';
 }
 
-function sourceName(block: string): string {
-  // Google News wraps source in <source url="...">NAME</source>
-  return block.match(/<source[^>]*>([^<]+)<\/source>/i)?.[1]?.trim() ?? 'חדשות';
+function normalizeUrl(url: string, base: string): string | undefined {
+  const trimmed = decodeHtml(url).trim();
+  if (!trimmed) return undefined;
+  try { return new URL(trimmed, base).toString(); } catch { return undefined; }
+}
+
+function isWcArticle(title: string, description: string): boolean {
+  const text = `${title} ${description}`.toLowerCase();
+  return WC_KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
 }
 
 function extractMeta(html: string, prop: string): string | undefined {
@@ -44,48 +63,48 @@ function extractMeta(html: string, prop: string): string | undefined {
   }
 }
 
-async function fetchOgImage(url: string): Promise<string | undefined> {
+async function enrichImage(link: string): Promise<string | undefined> {
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.0)' },
-      signal: AbortSignal.timeout(5000),
+    const res = await fetch(link, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,*/*' },
+      signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return undefined;
     const html = await res.text();
     return extractMeta(html, 'og:image') ?? extractMeta(html, 'twitter:image');
-  } catch {
-    return undefined;
+  } catch { return undefined; }
+}
+
+async function fetchSource(source: typeof SPORT_SOURCES[0]) {
+  try {
+    const res = await fetch(source.url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, text/xml, */*' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? [];
+    return blocks.slice(0, 15).flatMap((block) => {
+      const title = decodeHtml(extractCdata(block, 'title'));
+      const description = decodeHtml(extractCdata(block, 'description')).slice(0, 240);
+      if (!title || !isWcArticle(title, description)) return [];
+      const link = normalizeUrl(extractCdata(block, 'link'), source.sourceUrl) ?? source.sourceUrl;
+      const pubDate = decodeHtml(extractCdata(block, 'pubDate')) || new Date().toISOString();
+      const enclosure = block.match(/<enclosure[^>]*url=["']([^"']+)["']/i)?.[1];
+      const media = block.match(/<media:content[^>]*url=["']([^"']+)["']/i)?.[1]
+        || block.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i)?.[1];
+      return [{ title, link, pubDate, source: source.name, description, rssImage: enclosure || media || null }];
+    });
+  } catch { return []; }
+}
+
+export async function GET() {
+  if (cache && Date.now() - cache.at < CACHE_TTL) {
+    return NextResponse.json({ success: true, items: cache.items },
+      { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
   }
-}
 
-async function parseGoogleNews(url: string) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TVIndustryIL/2.0)' },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) return [];
-  const xml = await res.text();
-  const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? [];
-  return blocks.slice(0, 12).map((block) => {
-    const rawLink = decodeHtml(tagValue(block, 'link'));
-    // Google News wraps real URL — extract from redirect or use as-is
-    const realLink = rawLink.replace(/^https:\/\/news\.google\.com\/rss\/articles\/.*?url=([^&]+).*$/, (_, u) => decodeURIComponent(u));
-    return {
-      title: decodeHtml(tagValue(block, 'title')),
-      link: realLink || rawLink,
-      pubDate: decodeHtml(tagValue(block, 'pubDate')) || new Date().toISOString(),
-      source: sourceName(block),
-      description: decodeHtml(tagValue(block, 'description')).slice(0, 220),
-      imageUrl: undefined as string | undefined,
-      isSourceLogoFallback: false,
-    };
-  }).filter((i) => i.title.length > 4);
-}
-
-async function fetchAllWcNews() {
-  if (cache && Date.now() - cache.at < CACHE_TTL) return cache.items;
-
-  const results = await Promise.allSettled(GOOGLE_NEWS_QUERIES.map(parseGoogleNews));
+  const results = await Promise.allSettled(SPORT_SOURCES.map(fetchSource));
   const seen = new Set<string>();
   const raw = results
     .flatMap((r) => r.status === 'fulfilled' ? r.value : [])
@@ -96,27 +115,18 @@ async function fetchAllWcNews() {
       return true;
     })
     .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
-    .slice(0, 15);
+    .slice(0, 20);
 
-  // Enrich with OG images (parallel, 5s timeout each)
-  const enriched = await Promise.all(
-    raw.map(async (item) => {
-      const img = await fetchOgImage(item.link);
-      return { ...item, imageUrl: img, isSourceLogoFallback: !img };
-    })
+  // Enrich images — prefer RSS enclosure/media, fallback to OG scrape
+  const items = await Promise.all(
+    raw.map(async ({ rssImage, ...item }) => {
+      const imageUrl = rssImage ?? await enrichImage(item.link);
+      return { ...item, imageUrl, isSourceLogoFallback: !imageUrl };
+    }),
   );
 
-  if (enriched.length > 0) cache = { items: enriched, at: Date.now() };
-  return enriched;
-}
+  if (items.length > 0) cache = { items, at: Date.now() };
 
-export async function GET() {
-  try {
-    const items = await fetchAllWcNews();
-    return NextResponse.json({ success: true, items }, {
-      headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' },
-    });
-  } catch {
-    return NextResponse.json({ success: false, items: [] }, { status: 500 });
-  }
+  return NextResponse.json({ success: true, items },
+    { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
 }
