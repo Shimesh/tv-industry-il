@@ -46,6 +46,10 @@ const RSS_SOURCES: RssSource[] = [
   { name: 'Walla ספורט', url: 'https://rss.walla.co.il/feed/3', sourceUrl: 'https://sports.walla.co.il', newsType: 'ספורט', highValueOnly: true },
   { name: 'Walla כלכלה', url: 'https://rss.walla.co.il/feed/2', sourceUrl: 'https://finance.walla.co.il', newsType: 'כלכלה', highValueOnly: true },
   { name: 'Walla טכנולוגיה', url: 'https://rss.walla.co.il/feed/6', sourceUrl: 'https://tech.walla.co.il', newsType: 'טכנולוגיה', highValueOnly: true },
+  { name: 'Sport5', url: 'https://www.sport5.co.il/rss.aspx?FolderID=64', sourceUrl: 'https://www.sport5.co.il', newsType: 'ספורט', highValueOnly: true },
+  { name: 'Sport5', url: 'https://www.sport5.co.il/rss.aspx?FolderID=110', sourceUrl: 'https://www.sport5.co.il', newsType: 'ספורט', highValueOnly: true },
+  { name: 'Sport5', url: 'https://www.sport5.co.il/rss.aspx', sourceUrl: 'https://www.sport5.co.il', newsType: 'ספורט', highValueOnly: true },
+  { name: 'ONE', url: 'https://www.one.co.il/cat/coop/xml/rss/newsfeed.aspx?id=1', sourceUrl: 'https://www.one.co.il', newsType: 'ספורט', highValueOnly: true },
   {
     name: 'ICE',
     url: 'https://www.ice.co.il/rss/media',
@@ -88,18 +92,31 @@ const HIGH_VALUE_KEYWORDS = [
   'הפקה',
   'תוכן',
   'אולפן',
+  // ספורט גדול
   'מונדיאל',
+  'world cup',
+  'גביע העולם',
   'יורו',
   'ליגת האלופות',
+  'champions league',
   'יורוליג',
   'אולימפיאדה',
+  'נבחרת',
+  'כדורגל',
+  'כדורסל',
+  'גביע',
+  'ליגה',
+  'פלייאוף',
+  'גמר',
+  'FIFA',
+  'UEFA',
+  // פלטפורמות וטק
   'נטפליקס',
   'דיסני',
   'פרטנר',
   'סלקום',
   'yes',
   'hot',
-  'טלוויזיה',
   'רדיו',
   'פודקאסט',
   'סדרה',
@@ -110,7 +127,6 @@ const HIGH_VALUE_KEYWORDS = [
   'כנס',
   'ועידה',
   'פרסים',
-  'פרסום',
   'שיווק',
 ];
 
@@ -121,6 +137,8 @@ const SOURCE_COLORS: Record<string, { bg: string; fg: string }> = {
   scopt: { bg: '#059669', fg: '#ffffff' },
   mako: { bg: '#ea580c', fg: '#ffffff' },
   globes: { bg: '#2563eb', fg: '#ffffff' },
+  sport5: { bg: '#0f172a', fg: '#facc15' },
+  one: { bg: '#1e3a8a', fg: '#ffffff' },
 };
 
 function decodeHtmlEntities(text: string): string {
@@ -199,6 +217,8 @@ function sourceKey(source: string): string {
   if (lower.includes('scopt')) return 'scopt';
   if (lower.includes('mako')) return 'mako';
   if (lower.includes('globes')) return 'globes';
+  if (lower.includes('sport5')) return 'sport5';
+  if (lower.includes('one')) return 'one';
   return 'default';
 }
 

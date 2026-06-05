@@ -37,12 +37,14 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 function getSourceBadgeColor(source: string): string {
-  if (source.includes('Ynet') || source.includes('ynet')) return 'bg-red-500/70 text-white';
-  if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-500/70 text-white';
-  if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-500/70 text-white';
-  if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-500/70 text-white';
-  if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/70 text-white';
-  if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-500/70 text-white';
+  if (source.includes('Ynet') || source.includes('ynet')) return 'bg-red-600/80 text-white';
+  if (source.includes('Walla') || source.includes('walla')) return 'bg-violet-600/80 text-white';
+  if (source.includes('ICE') || source.includes('ice')) return 'bg-cyan-600/80 text-white';
+  if (source.includes('Scopt') || source.includes('scopt')) return 'bg-emerald-600/80 text-white';
+  if (source.includes('Mako') || source.includes('mako')) return 'bg-orange-500/80 text-white';
+  if (source.includes('Globes') || source.includes('globes')) return 'bg-blue-600/80 text-white';
+  if (source.includes('Sport5') || source.includes('sport5')) return 'bg-yellow-400/90 text-black';
+  if (source.includes('ONE') || source.includes('One') || source.includes('one')) return 'bg-blue-800/90 text-white';
   return 'bg-white/20 text-white';
 }
 
