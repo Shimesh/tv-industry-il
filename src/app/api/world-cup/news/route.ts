@@ -13,10 +13,7 @@ const RSS_SOURCES = [
   { name: 'Walla', url: 'https://rss.walla.co.il/feed/25', sourceUrl: 'https://sports.walla.co.il' },
 ];
 
-// Require at least one of these strong WC terms — "2026" alone is NOT enough
 const WC_REQUIRED = ['מונדיאל', 'world cup', 'גביע העולם', 'גביע-העולם', 'fifa', 'מוקדמות'];
-// Additional supporting terms (only count if combined with a required term OR another strong context)
-const WC_CONTEXT = ['ארגנטינה', 'ברזיל', 'צרפת', 'גרמניה', 'ספרד', 'פורטוגל', 'אנגליה', 'מרוקו', 'יפן', 'ארה"ב', 'קנדה', 'מקסיקו'];
 
 function isWorldCupArticle(title: string, description: string): boolean {
   const text = `${title} ${description}`.toLowerCase();
@@ -41,9 +38,7 @@ function tag(block: string, name: string): string {
 }
 
 function wcThumbnail(title: string, source: string): string {
-  // Truncate title for SVG
   const short = title.length > 60 ? title.slice(0, 57) + '...' : title;
-  // Split into up to 3 lines of ~20 chars each for readability
   const words = short.split(' ');
   const lines: string[] = [];
   let line = '';
@@ -58,25 +53,24 @@ function wcThumbnail(title: string, source: string): string {
   }
   if (line) lines.push(line.trim());
 
-  const lineEls = lines
-    .slice(0, 3)
-    .map((l, i) => `<text x="480" y="${260 + i * 44}" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">${l.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c] ?? c))}</text>`)
+  const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c] ?? c));
+  const lineEls = lines.slice(0, 3)
+    .map((l, i) => `<text x="480" y="${260 + i * 44}" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">${esc(l)}</text>`)
     .join('');
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
-    <defs>
-      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#002046"/>
-        <stop offset="100%" stop-color="#138a36"/>
-      </linearGradient>
-    </defs>
-    <rect width="960" height="540" fill="url(#g)"/>
-    <text x="480" y="140" text-anchor="middle" font-family="Arial,sans-serif" font-size="52" font-weight="900" fill="#D4AF37">🏆 מונדיאל 2026</text>
-    ${lineEls}
-    <text x="480" y="460" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" font-weight="600" fill="rgba(255,255,255,.6)">${source}</text>
-  </svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#002046"/><stop offset="100%" stop-color="#138a36"/></linearGradient></defs><rect width="960" height="540" fill="url(#g)"/><text x="480" y="140" text-anchor="middle" font-family="Arial,sans-serif" font-size="52" font-weight="900" fill="#D4AF37">🏆 מונדיאל 2026</text>${lineEls}<text x="480" y="460" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" font-weight="600" fill="rgba(255,255,255,.6)">${esc(source)}</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
+
+// Static fallback — shown when all RSS sources fail (Vercel IPs often blocked by IL news sites)
+const FALLBACK_ITEMS: WorldCupNewsItem[] = [
+  { title: 'כל הכתבות על מונדיאל 2026 — Sport5', link: 'https://www.sport5.co.il/articles.aspx?FolderID=64', pubDate: new Date().toISOString(), source: 'Sport5', description: 'כיסוי מלא של מונדיאל 2026 בסיפורט 5 — תוצאות, ניתוחים וכתבות', imageUrl: '', isSourceLogoFallback: false },
+  { title: 'מונדיאל 2026 — כל הידיעות ב-Ynet ספורט', link: 'https://www.ynet.co.il/sport/worldcup', pubDate: new Date().toISOString(), source: 'Ynet', description: 'עדכונים שוטפים מגביע העולם 2026 בארה"ב, מקסיקו וקנדה', imageUrl: '', isSourceLogoFallback: false },
+  { title: 'מונדיאל 2026 — וואלה ספורט', link: 'https://sports.walla.co.il', pubDate: new Date().toISOString(), source: 'Walla', description: 'חדשות ספורט ומונדיאל 2026 בוואלה', imageUrl: '', isSourceLogoFallback: false },
+  { title: 'גביע העולם 2026 — ONE', link: 'https://www.one.co.il/cat/148', pubDate: new Date().toISOString(), source: 'ONE', description: 'סיקור מלא של מונדיאל 2026 בערוץ הספורט ONE', imageUrl: '', isSourceLogoFallback: false },
+  { title: 'מונדיאל 2026 — מאקו ספורט', link: 'https://www.mako.co.il/sport/soccer', pubDate: new Date().toISOString(), source: 'Mako', description: 'כדורגל מונדיאל 2026 — כל הידיעות והניתוחים', imageUrl: '', isSourceLogoFallback: false },
+  { title: 'לוח משחקים מלא — מונדיאל 2026', link: 'https://www.sport5.co.il/articles.aspx?FolderID=64', pubDate: new Date().toISOString(), source: 'Sport5', description: '48 נבחרות, 104 משחקים — לוח המשחקים המלא של גביע העולם', imageUrl: '', isSourceLogoFallback: false },
+].map((item) => ({ ...item, imageUrl: wcThumbnail(item.title, item.source) }));
 
 function parseItems(xml: string, source: (typeof RSS_SOURCES)[number]): WorldCupNewsItem[] {
   const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? [];
@@ -93,8 +87,9 @@ function parseItems(xml: string, source: (typeof RSS_SOURCES)[number]): WorldCup
       pubDate: decodeHtml(tag(block, 'pubDate')) || new Date().toISOString(),
       source: source.name,
       description,
+      // wcThumbnail is a full-bleed gradient card — treat same as a real image (isSourceLogoFallback: false)
       imageUrl: realImage ?? wcThumbnail(title, source.name),
-      isSourceLogoFallback: !realImage,
+      isSourceLogoFallback: false,
     };
   }).filter((item) => item.title && isWorldCupArticle(item.title, item.description));
 }
@@ -119,7 +114,7 @@ async function fetchSource(source: (typeof RSS_SOURCES)[number]) {
 export async function GET() {
   const results = await Promise.allSettled(RSS_SOURCES.map(fetchSource));
   const seen = new Set<string>();
-  const items = results
+  const liveItems = results
     .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
     .filter((item) => {
       const key = item.title.slice(0, 40);
@@ -129,6 +124,9 @@ export async function GET() {
     })
     .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
     .slice(0, 20);
+
+  // If live RSS returned nothing (all sources blocked/failed), use fallback
+  const items = liveItems.length >= 3 ? liveItems : FALLBACK_ITEMS;
 
   return NextResponse.json({ success: true, items }, {
     headers: {
