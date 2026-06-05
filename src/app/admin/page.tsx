@@ -1627,6 +1627,22 @@ export default function AdminPage() {
                 <Settings className="h-3.5 w-3.5" /> כלי סנכרון
               </Link>
             </div>
+            {/* VIP Demo */}
+            <Link
+              href="/vip/yuval-matari"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all hover:scale-[1.03] hover:shadow-lg"
+              style={{
+                background: 'linear-gradient(135deg, #92400e, #b45309, #d97706)',
+                color: '#fef3c7',
+                boxShadow: '0 4px 14px rgba(180,83,9,0.45)',
+                border: '1px solid rgba(251,191,36,0.35)',
+              }}
+            >
+              <Crown className="h-3.5 w-3.5 text-yellow-300" />
+              דמו VIP — יובל מטרי · אולפני הרצליה
+            </Link>
           </div>
           </div>
         </div>
