@@ -6,21 +6,18 @@ export const dynamic = 'force-dynamic';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
 const USER_AGENT = `Mozilla/5.0 (compatible; TVIndustryIL/2.0; +${APP_URL})`;
 
+// Only sports-specific feeds — no general news
 const SPORT_SOURCES = [
   { name: 'Ynet ספורט', url: 'https://www.ynet.co.il/Integration/StoryRss3.xml', sourceUrl: 'https://www.ynet.co.il/sport' },
   { name: 'Walla ספורט', url: 'https://rss.walla.co.il/feed/3', sourceUrl: 'https://sports.walla.co.il' },
-  { name: 'Ynet', url: 'https://www.ynet.co.il/Integration/StoryRss2.xml', sourceUrl: 'https://www.ynet.co.il' },
-  { name: 'Walla', url: 'https://rss.walla.co.il/feed/1', sourceUrl: 'https://www.walla.co.il' },
 ];
 
-// Broad WC filter — catches direct WC terms + major teams + knockout stages + stars
-const WC_KEYWORDS = [
-  'מונדיאל', 'world cup', 'גביע העולם', 'fifa', 'מוקדמות',
-  'נבחרת', 'גמר', 'רבע גמר', 'חצי גמר', 'שמינית גמר',
-  'ארגנטינה', 'ברזיל', 'צרפת', 'ספרד', 'גרמניה', 'פורטוגל', 'אנגליה',
-  'מרוקו', 'ארה"ב', 'קנדה', 'מקסיקו', 'יפן', 'אורוגוואי',
-  'מסי', 'רונאלדו', 'אמבאפה', 'הארלנד',
-];
+// Must contain at least one STRONG WC term — no broad country/player names alone
+const WC_REQUIRED = ['מונדיאל', 'world cup', 'גביע העולם', 'גביע-העולם', 'fifa', 'מוקדמות'];
+
+function isWcRequired(text: string): boolean {
+  return WC_REQUIRED.some((kw) => text.includes(kw.toLowerCase()));
+}
 
 let cache: { items: unknown[]; at: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000;
@@ -47,7 +44,7 @@ function normalizeUrl(url: string, base: string): string | undefined {
 
 function isWcArticle(title: string, description: string): boolean {
   const text = `${title} ${description}`.toLowerCase();
-  return WC_KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
+  return isWcRequired(text);
 }
 
 function extractMeta(html: string, prop: string): string | undefined {
