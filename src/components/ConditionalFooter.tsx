@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Footer from '@/components/Footer';
 
 // Pages where the footer should be hidden (full-screen app-like layouts)
-const NO_FOOTER_PATHS = ['/chat'];
+const NO_FOOTER_PATHS = ['/chat', '/vip'];
 
 export default function ConditionalFooter() {
   const pathname = usePathname();
