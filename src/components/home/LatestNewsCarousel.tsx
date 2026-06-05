@@ -121,7 +121,7 @@ export default function LatestNewsCarousel({ news }: { news: RssNewsItem[] }) {
               <img
                 src={item.imageUrl}
                 alt=""
-                className={`absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-105 ${item.isSourceLogoFallback ? 'bg-slate-950 object-contain p-8' : 'object-cover'}`}
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 loading="lazy"
               />
             ) : (
