@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { CalendarDays, ChevronDown, ChevronRight, Clock, CloudSun, Filter, Landmark, MessageCircle, Send, ShieldCheck, Timer, Trophy, Tv, Users, X, Zap } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronRight, Clock, CloudSun, Filter, Landmark, MessageCircle, Newspaper, Send, ShieldCheck, Timer, Trophy, Tv, Users, X, Zap } from 'lucide-react';
 import { channels } from '@/data/channels';
 import { streamConfigs } from '@/data/streams';
 import { db } from '@/lib/firebase';
@@ -1486,6 +1486,18 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
                 <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe}`} initialMuted />
               </div>
             </CollapsibleCard>
+            <CollapsibleCard icon={Newspaper} title="חדשות מונדיאל 2026" badge={news.length > 0 ? `${news.length}` : undefined} defaultOpen className="overflow-hidden">
+              {news.length > 0 ? (
+                <div className="p-4">
+                  <LatestNewsCarousel news={news} />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 p-6 text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  טוען כתבות...
+                </div>
+              )}
+            </CollapsibleCard>
             <div ref={sectionRefs.matches}>
               <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
             </div>
@@ -1494,14 +1506,6 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <WorldCupChat match={featureMatch} />
           </div>
         </div>
-
-        {news.length > 0 && (
-          <CollapsibleCard icon={Trophy} title="חדשות מונדיאל" badge={`${news.length}`} className="overflow-hidden">
-            <div className="p-4">
-              <LatestNewsCarousel news={news} />
-            </div>
-          </CollapsibleCard>
-        )}
 
         <div ref={sectionRefs.teams}>
           <TeamsTab />
