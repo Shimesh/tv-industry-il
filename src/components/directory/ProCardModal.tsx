@@ -481,51 +481,91 @@ export default function ProCardModal({
           <div className="relative z-10 min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <div
               ref={shareCardRef}
-              className="overflow-hidden rounded-3xl border border-white/12 bg-slate-950/88 p-5 text-white shadow-2xl backdrop-blur-xl sm:p-7"
+              className="overflow-hidden rounded-3xl border border-white/12 text-white shadow-2xl"
             >
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                <div className="flex justify-center sm:justify-start">
-                  <div className="relative">
-                    <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-amber-300 via-sky-400 to-blue-700 opacity-80 blur-md" />
-                    <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-2 border-amber-200/70 bg-slate-800 text-4xl font-black text-white shadow-2xl sm:h-32 sm:w-32">
-                      <img
-                        src={avatarUrl || fallbackAvatarUrl}
-                        alt={name}
-                        className={`h-full w-full object-cover ${avatarUrl ? '' : 'animate-[pulse_4s_ease-in-out_infinite]'}`}
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          event.currentTarget.style.display = 'none';
-                        }}
-                      />
-                      <div className={`absolute inset-0 -z-10 flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientClass}`}>
-                        {initials(contact)}
-                      </div>
+              {/* ── HERO ── */}
+              <div className="relative overflow-hidden" style={{ background: 'linear-gradient(170deg, #05080f 0%, #0e0720 45%, #060e0a 100%)' }}>
+                <style>{`
+                  @keyframes pc-orb1{0%,100%{opacity:.4}50%{opacity:.72}}
+                  @keyframes pc-orb2{0%,100%{opacity:.25}50%{opacity:.52}}
+                  @keyframes pc-orb3{0%,100%{opacity:.22}50%{opacity:.45}}
+                  @keyframes pc-spin{to{transform:rotate(360deg)}}
+                  @keyframes pc-scan{0%{transform:translateY(-4px)}62%{transform:translateY(110vh)}62.001%,100%{transform:translateY(-4px)}}
+                `}</style>
+                <div className="pointer-events-none absolute inset-0"
+                  style={{ background: 'radial-gradient(ellipse 80% 70% at 50% 120%, rgba(224,122,95,0.38), transparent)', animation: 'pc-orb1 8s ease-in-out infinite' }} />
+                <div className="pointer-events-none absolute inset-0"
+                  style={{ background: 'radial-gradient(ellipse 60% 55% at 8% 15%, rgba(96,165,250,0.24), transparent)', animation: 'pc-orb2 9s ease-in-out infinite 2.5s' }} />
+                <div className="pointer-events-none absolute inset-0"
+                  style={{ background: 'radial-gradient(ellipse 55% 50% at 92% 12%, rgba(167,139,250,0.22), transparent)', animation: 'pc-orb3 10s ease-in-out infinite 5s' }} />
+                <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
+                  style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
+                <div className="pointer-events-none absolute top-0 left-0 right-0 h-[2px]"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.30), rgba(224,122,95,0.30), rgba(96,165,250,0.30), transparent)', animation: 'pc-scan 8s linear infinite', willChange: 'transform' }} />
+                <div className="absolute bottom-0 left-0 right-0 h-px"
+                  style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(224,122,95,0.5) 30%, rgba(96,165,250,0.5) 70%, transparent 100%)' }} />
+
+                <div className="relative z-10 flex flex-col items-center text-center px-6 pt-8 pb-7">
+                  {/* Status badge */}
+                  <div
+                    className={`mb-5 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-[11px] font-black tracking-widest uppercase backdrop-blur-sm ${
+                      contact.openToWork
+                        ? 'border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-300'
+                        : 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
+                    }`}
+                    style={{ boxShadow: contact.openToWork
+                      ? '0 0 32px rgba(52,211,153,0.18), inset 0 1px 0 rgba(255,255,255,0.08)'
+                      : '0 0 32px rgba(251,191,36,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 ${contact.openToWork ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span className={`relative inline-flex h-2 w-2 rounded-full ${contact.openToWork ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    </span>
+                    <Sparkles className={`h-3 w-3 ${contact.openToWork ? 'text-emerald-400' : 'text-amber-400'}`} />
+                    {contact.openToWork ? 'פתוח להצעות' : 'כרטיס מקצועי · TV Industry IL'}
+                  </div>
+
+                  {/* Avatar with spinning conic ring */}
+                  <div className="relative mb-5 h-24 w-24 shrink-0">
+                    <div className="absolute -inset-[3px] rounded-full"
+                      style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)', animation: 'pc-spin 7s linear infinite', willChange: 'transform' }} />
+                    <div className="absolute inset-0 rounded-full m-[3px]" style={{ background: '#080c1a' }} />
+                    <div className={`absolute inset-0 m-[3px] rounded-full flex items-center justify-center text-2xl font-black text-white bg-gradient-to-br ${gradientClass}`}>
+                      {initials(contact)}
                     </div>
+                    <img
+                      src={avatarUrl || fallbackAvatarUrl}
+                      alt={name}
+                      className="absolute inset-0 m-[3px] rounded-full object-cover w-[calc(100%-6px)] h-[calc(100%-6px)]"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <div className="absolute -inset-2 rounded-full pointer-events-none"
+                      style={{ boxShadow: '0 0 60px rgba(224,122,95,0.35), 0 0 120px rgba(96,165,250,0.18)' }} />
                     {isCurrentUser ? (
                       <ProfilePhotoUploadButton
-                        className="absolute bottom-1 right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-white shadow-lg transition hover:bg-slate-600"
-                        onSuccess={() => {
-                          setPhotoToast({ message: 'התמונה עודכנה בהצלחה', type: 'success' });
-                          setTimeout(() => setPhotoToast(null), 3000);
-                        }}
-                        onError={(msg) => {
-                          setPhotoToast({ message: msg, type: 'error' });
-                          setTimeout(() => setPhotoToast(null), 4000);
-                        }}
+                        className="absolute bottom-0 right-0 z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-white shadow-lg transition hover:bg-slate-600"
+                        onSuccess={() => { setPhotoToast({ message: 'התמונה עודכנה בהצלחה', type: 'success' }); setTimeout(() => setPhotoToast(null), 3000); }}
+                        onError={(msg) => { setPhotoToast({ message: msg, type: 'error' }); setTimeout(() => setPhotoToast(null), 4000); }}
                       >
                         <Camera className="h-4 w-4" />
                       </ProfilePhotoUploadButton>
-                    ) : verified && (
-                      <div className="absolute bottom-1 right-1 rounded-full border-2 border-slate-950 bg-sky-400 p-1 text-white">
-                        <CheckCircle2 className="h-5 w-5" />
+                    ) : verified ? (
+                      <div className="absolute bottom-0 right-0 rounded-full border-2 border-slate-950 bg-sky-400 p-1 text-white">
+                        <CheckCircle2 className="h-4 w-4" />
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                </div>
 
-                <div className="min-w-0 flex-1 text-center sm:text-right">
-                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                    <h2 className="text-3xl font-black tracking-normal text-white sm:text-4xl">{name}</h2>
+                  {/* Name */}
+                  <div className="flex flex-wrap items-center justify-center gap-2 mb-1.5">
+                    <h2
+                      className="font-black leading-none tracking-tight gradient-text"
+                      style={{ fontSize: 'clamp(2rem, 8vw, 3.5rem)', textShadow: '0 0 80px rgba(224,122,95,0.40), 0 0 160px rgba(96,165,250,0.20)' }}
+                    >
+                      {name}
+                    </h2>
                     {isCurrentUser && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-300/12 px-2.5 py-1 text-xs font-bold text-amber-200">
                         <Star className="h-3.5 w-3.5" />
@@ -534,42 +574,46 @@ export default function ProCardModal({
                     )}
                   </div>
 
-                  <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
-                    {roles.map((role) => (
-                      <span key={role} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/88">
-                        <Briefcase className="h-3.5 w-3.5 text-sky-300" />
-                        {role}
-                      </span>
-                    ))}
-                    {departments.map((department) => (
-                      <span key={department} className={`rounded-full px-3 py-1.5 text-sm ${deptBadgeColors[department] || 'bg-slate-700 text-slate-200'}`}>
-                        {department}
-                      </span>
-                    ))}
+                  {/* Roles */}
+                  {roles.length > 0 && (
+                    <p className="text-sm font-semibold text-white/45 tracking-wide mb-4">
+                      {roles.join(' · ')}
+                    </p>
+                  )}
+
+                  {/* Decorative rule */}
+                  <div className="flex items-center gap-4 mb-5 w-full max-w-xs">
+                    <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, rgba(224,122,95,0.55), transparent)' }} />
+                    <span className="shrink-0 text-[9px] font-black tracking-[0.25em] uppercase text-white/25">{primaryDepartment || 'TV Industry IL'}</span>
+                    <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(96,165,250,0.55), transparent)' }} />
                   </div>
 
-                  <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-white/70 sm:justify-start">
+                  {/* Stat pills */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {departments.map((dept, i) => (
+                      <div key={dept}
+                        className="flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.06] px-3 py-1.5 text-[11px] font-black backdrop-blur-sm"
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ background: (['#60a5fa','#34d399','#a78bfa','#fbbf24','#f97316','#e07a5f'] as string[])[i % 6] }} />
+                        <span style={{ color: (['#60a5fa','#34d399','#a78bfa','#fbbf24','#f97316','#e07a5f'] as string[])[i % 6] }}>{dept}</span>
+                      </div>
+                    ))}
                     {contact.city && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {String(contact.city)}
-                      </span>
+                      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold backdrop-blur-sm text-white/55">
+                        <MapPin className="h-3 w-3 shrink-0" />{String(contact.city)}
+                      </div>
                     )}
                     {contact.yearsOfExperience && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        {String(contact.yearsOfExperience)} שנות ניסיון
-                      </span>
-                    )}
-                    {contact.openToWork && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-2.5 py-1 font-bold text-emerald-200">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        פתוח להצעות
-                      </span>
+                      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold backdrop-blur-sm text-white/55">
+                        <Clock className="h-3 w-3 shrink-0" />{String(contact.yearsOfExperience)} שנות ניסיון
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
+
+              {/* ── CONTENT ── */}
+              <div className="bg-slate-950 p-5 sm:p-7">
 
               {(contact.skills?.length || contact.gear?.length) && (
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -826,6 +870,7 @@ export default function ProCardModal({
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
                 TV Industry IL · Pro Card v2.3.1
               </div>
+              </div>{/* end content */}
             </div>
           </div>
 
