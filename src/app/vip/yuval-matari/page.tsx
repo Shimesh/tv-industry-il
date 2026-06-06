@@ -299,79 +299,106 @@ export default function VipYuvalMatari() {
     <div dir="rtl">
 
       {/* ══════════════ HERO ══════════════ */}
-      <header className="relative overflow-hidden border-b" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(160deg, #080c18 0%, #12092a 40%, #091a12 100%)' }}>
-        {/* Animated breathing orbs — centered for symmetry */}
-        <motion.div animate={{ opacity: [0.30, 0.60, 0.30], scale: [1, 1.08, 1] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 110%, rgba(224,122,95,0.28), transparent)' }} />
-        <motion.div animate={{ opacity: [0.20, 0.48, 0.20] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 55% 50% at 15% 20%, rgba(96,165,250,0.20), transparent)' }} />
-        <motion.div animate={{ opacity: [0.18, 0.40, 0.18] }} transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 4 }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 50% 45% at 85% 15%, rgba(167,139,250,0.18), transparent)' }} />
+      <header className="relative overflow-hidden" style={{ background: 'linear-gradient(170deg, #05080f 0%, #0e0720 45%, #060e0a 100%)' }}>
 
-        {/* Fine grid */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.035]"
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
+        {/* ── Atmosphere orbs ── */}
+        <motion.div animate={{ opacity: [0.4, 0.75, 0.4], scale: [1, 1.1, 1] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 80% 70% at 50% 120%, rgba(224,122,95,0.38), transparent)' }} />
+        <motion.div animate={{ opacity: [0.25, 0.55, 0.25] }} transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 2.5 }}
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 60% 55% at 8% 15%, rgba(96,165,250,0.24), transparent)' }} />
+        <motion.div animate={{ opacity: [0.22, 0.48, 0.22] }} transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 55% 50% at 92% 12%, rgba(167,139,250,0.22), transparent)' }} />
 
-        {/* Back button — top right (RTL) */}
+        {/* ── Grid ── */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
+
+        {/* ── Scan line ── */}
+        <motion.div
+          animate={{ top: ['-8%', '108%'] }}
+          transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
+          className="pointer-events-none absolute left-0 right-0 h-[2px]"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.35), rgba(224,122,95,0.35), rgba(96,165,250,0.35), transparent)' }}
+        />
+
+        {/* ── Bottom border glow ── */}
+        <div className="absolute bottom-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(224,122,95,0.5) 30%, rgba(96,165,250,0.5) 70%, transparent 100%)' }} />
+
+        {/* ── Back button ── */}
         <div className="relative z-10 max-w-5xl mx-auto px-6 pt-6">
           <button onClick={() => router.back()}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.07] px-3 py-1.5 text-xs font-bold text-white/55 backdrop-blur-sm transition-all hover:bg-white/14 hover:text-white/90">
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-bold text-white/50 backdrop-blur-sm transition-all hover:bg-white/12 hover:text-white/85 hover:border-white/20">
             <ChevronRight className="h-3.5 w-3.5" />חזרה
           </button>
         </div>
 
-        {/* Centered content */}
-        <div className="relative z-10 flex flex-col items-center text-center max-w-3xl mx-auto px-6 pt-8 pb-14 sm:pb-20">
+        {/* ── Main centered content ── */}
+        <div className="relative z-10 flex flex-col items-center text-center px-6 pt-6 pb-10 sm:pb-16">
 
-          {/* Avatar ring */}
-          <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="mb-7 relative">
-            <div className="h-24 w-24 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-2xl"
-              style={{ background: 'linear-gradient(135deg, rgba(224,122,95,0.55) 0%, rgba(96,165,250,0.45) 100%)', border: '2px solid rgba(255,255,255,0.18)', boxShadow: '0 0 48px rgba(224,122,95,0.30), 0 0 96px rgba(96,165,250,0.15)' }}>
+          {/* Live badge */}
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+            className="mb-8 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-4 py-1.5 text-[11px] font-black tracking-widest uppercase text-amber-300 backdrop-blur-sm"
+            style={{ boxShadow: '0 0 32px rgba(251,191,36,0.18), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+            </span>
+            <Sparkles className="h-3 w-3 text-amber-400" />
+            מרכז שליטה · אולפני הרצליה · LIVE
+          </motion.div>
+
+          {/* Avatar with spinning gradient ring */}
+          <motion.div initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.34,1.56,0.64,1] }}
+            className="relative mb-7 h-32 w-32 shrink-0">
+            {/* Spinning conic border */}
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
+              className="absolute -inset-[3px] rounded-full"
+              style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)' }} />
+            {/* Inner dark fill */}
+            <div className="absolute inset-0 rounded-full m-[3px]" style={{ background: '#080c1a' }} />
+            {/* Avatar content */}
+            <div className="absolute inset-0 m-[3px] rounded-full flex items-center justify-center text-4xl font-black text-white select-none"
+              style={{ background: 'linear-gradient(145deg, rgba(224,122,95,0.35) 0%, rgba(96,165,250,0.30) 100%)' }}>
               י״מ
             </div>
-            {/* Live pulse ring */}
-            <span className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 border-2 border-slate-950 shadow">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+            {/* Outer glow */}
+            <div className="absolute -inset-2 rounded-full pointer-events-none"
+              style={{ boxShadow: '0 0 60px rgba(224,122,95,0.35), 0 0 120px rgba(96,165,250,0.18)' }} />
+            {/* Online dot */}
+            <span className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full border-2 bg-emerald-500" style={{ borderColor: '#080c1a' }}>
+              <span className="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-55" />
+              <span className="relative h-2 w-2 rounded-full bg-emerald-300" />
             </span>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.1, ease: 'easeOut' }} className="flex flex-col items-center">
-            {/* Live badge */}
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/[0.09] px-4 py-1.5 text-xs font-black tracking-widest uppercase text-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.15)] backdrop-blur-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-              </span>
-              <Sparkles className="h-3 w-3 text-amber-400" />
-              מרכז שליטה · אולפני הרצליה
-            </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
+            className="flex flex-col items-center w-full">
 
             {/* Greeting */}
-            <p className="text-base sm:text-lg font-semibold text-white/50 mb-2 tracking-wide">ברוך שובך,</p>
+            <p className="text-base font-semibold tracking-widest text-white/40 mb-1.5 uppercase">ברוך שובך</p>
 
-            {/* Name */}
-            <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black leading-none mb-4 gradient-text tracking-tight">
+            {/* Name — the hero moment */}
+            <h1 className="font-black leading-none tracking-tight mb-3 gradient-text"
+              style={{ fontSize: 'clamp(3.5rem, 10vw, 7rem)', textShadow: '0 0 80px rgba(224,122,95,0.40), 0 0 160px rgba(96,165,250,0.20)' }}>
               יובל מטרי
             </h1>
 
             {/* Title */}
-            <p className="text-sm sm:text-base font-semibold text-white/40 mb-2 tracking-wide">
+            <p className="text-sm sm:text-base font-semibold text-white/38 tracking-wide mb-1">
               סמנכ״ל תפעול ושירותים
             </p>
 
-            {/* Decorative divider */}
-            <div className="flex items-center gap-3 mb-8 mt-1 w-full max-w-xs">
-              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, rgba(224,122,95,0.5), transparent)' }} />
-              <span className="text-[10px] font-black tracking-widest uppercase text-white/30">Herzliya Studios</span>
-              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(96,165,250,0.5), transparent)' }} />
+            {/* Decorative rule */}
+            <div className="flex items-center gap-4 my-6 w-full max-w-sm">
+              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, rgba(224,122,95,0.55), transparent)' }} />
+              <span className="shrink-0 text-[9px] font-black tracking-[0.25em] uppercase text-white/25">Herzliya Studios</span>
+              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(96,165,250,0.55), transparent)' }} />
             </div>
 
-            {/* Stat pills — centered */}
+            {/* Stat pills */}
             <div className="flex flex-wrap justify-center gap-2 mb-8">
               {[
                 { label: '6/8 אולפנים פעילים', color: '#4ade80', dot: true  },
@@ -379,26 +406,46 @@ export default function VipYuvalMatari() {
                 { label: '43 עובדים מחוברים',  color: '#a78bfa', dot: false },
                 { label: 'SLA 98.7%',           color: '#fbbf24', dot: false },
               ].map(p => (
-                <div key={p.label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3.5 py-1.5 text-xs font-black backdrop-blur-sm">
-                  {p.dot && (
+                <div key={p.label} className="flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.06] px-4 py-2 text-[11px] font-black backdrop-blur-sm"
+                  style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+                  {p.dot ? (
                     <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-65" style={{ background: p.color }} />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
+                      <span className="absolute h-full w-full animate-ping rounded-full opacity-60" style={{ background: p.color }} />
+                      <span className="relative h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
                     </span>
-                  )}
+                  ) : <span className="h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />}
                   <span style={{ color: p.color }}>{p.label}</span>
                 </div>
               ))}
             </div>
 
-            {/* Clock + date — centered */}
-            <div className="flex flex-col items-center gap-2">
-              <span className="font-mono font-black text-4xl tabular-nums text-white tracking-widest" style={{ textShadow: '0 0 32px rgba(224,122,95,0.35)' }}>
+            {/* Clock */}
+            <div className="flex flex-col items-center gap-2 mb-8">
+              <span className="font-mono font-black tabular-nums text-white"
+                style={{ fontSize: 'clamp(2.5rem, 7vw, 4.5rem)', letterSpacing: '0.08em', textShadow: '0 0 40px rgba(224,122,95,0.45), 0 0 80px rgba(224,122,95,0.20)' }}>
                 {timeStr}
               </span>
-              <span className="flex items-center gap-2 text-xs text-white/40">
+              <span className="flex items-center gap-2 text-xs text-white/35 tracking-wide">
                 <Calendar className="w-3.5 h-3.5 shrink-0" />{dateStr}
               </span>
+            </div>
+
+            {/* System status bar */}
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+              {[
+                { label: 'מערכות שידור', ok: true  },
+                { label: 'שרתי אחסון',  ok: true  },
+                { label: 'רשת IP',       ok: true  },
+                { label: 'גיבוי אוטו׳', ok: true  },
+                { label: 'אינטרקום',     ok: false },
+              ].map(s => (
+                <div key={s.label} className="flex items-center gap-1.5 text-[10px] font-bold" style={{ color: s.ok ? 'rgba(74,222,128,0.7)' : 'rgba(251,191,36,0.7)' }}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${s.ok ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                  {s.label}
+                  <span className="text-white/20 font-normal">·</span>
+                  <span>{s.ok ? 'OK' : 'אזהרה'}</span>
+                </div>
+              ))}
             </div>
           </motion.div>
         </div>
