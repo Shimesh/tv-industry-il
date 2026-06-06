@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ElementType, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useMemo, type ElementType, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle, AlertTriangle, BarChart3, Bell, Building2, Calendar,
@@ -254,25 +254,51 @@ function UsageBar({ value, max, color }: { value: number; max: number; color: st
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } } as const;
 const fadeUp  = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: 'easeOut' as const } } } as const;
 
+// ─── LiveClock — DOM-ref approach, zero parent re-renders ─────────────────────
+
+function LiveClock() {
+  const timeRef = useRef<HTMLSpanElement>(null);
+  const dateRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    function tick() {
+      const n = new Date();
+      if (timeRef.current)
+        timeRef.current.textContent = n.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (dateRef.current)
+        dateRef.current.textContent = n.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const init = new Date();
+  return (
+    <div className="flex flex-col items-center gap-2 mb-8">
+      <span ref={timeRef} className="font-mono font-black tabular-nums text-white"
+        style={{ fontSize: 'clamp(2.5rem, 7vw, 4.5rem)', letterSpacing: '0.08em', textShadow: '0 0 40px rgba(224,122,95,0.45), 0 0 80px rgba(224,122,95,0.20)' }}>
+        {init.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </span>
+      <span className="flex items-center gap-2 text-xs text-white/35 tracking-wide">
+        <Calendar className="w-3.5 h-3.5 shrink-0" />
+        <span ref={dateRef}>{init.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+      </span>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VipYuvalMatari() {
   const router = useRouter();
-  const [now, setNow]                 = useState(() => new Date());
   const [activeTab, setActiveTab]     = useState('overview');
   const [reportFrom, setReportFrom]   = useState('');
   const [reportTo, setReportTo]       = useState('');
   const [generating, setGenerating]   = useState(false);
   const [reportReady, setReportReady] = useState(false);
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const timeStr = now.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const dateStr = now.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const nowH    = now.getHours() + now.getMinutes() / 60;
+  const nowH = useMemo(() => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; }, []);
 
   function handleGenerate() {
     if (generating) return;
@@ -421,16 +447,8 @@ export default function VipYuvalMatari() {
               ))}
             </div>
 
-            {/* Clock */}
-            <div className="flex flex-col items-center gap-2 mb-8">
-              <span className="font-mono font-black tabular-nums text-white"
-                style={{ fontSize: 'clamp(2.5rem, 7vw, 4.5rem)', letterSpacing: '0.08em', textShadow: '0 0 40px rgba(224,122,95,0.45), 0 0 80px rgba(224,122,95,0.20)' }}>
-                {timeStr}
-              </span>
-              <span className="flex items-center gap-2 text-xs text-white/35 tracking-wide">
-                <Calendar className="w-3.5 h-3.5 shrink-0" />{dateStr}
-              </span>
-            </div>
+            {/* Clock — isolated component, no parent re-renders */}
+            <LiveClock />
 
             {/* System status bar */}
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
