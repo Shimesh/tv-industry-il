@@ -299,73 +299,90 @@ export default function VipYuvalMatari() {
     <div dir="rtl">
 
       {/* ══════════════ HERO ══════════════ */}
-      <header className="relative overflow-hidden border-b" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(155deg, #0c0f1a 0%, #161026 45%, #0c1a12 100%)' }}>
-        {/* Animated breathing orbs */}
-        <motion.div
-          animate={{ opacity: [0.35, 0.65, 0.35] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+      <header className="relative overflow-hidden border-b" style={{ borderColor: 'var(--theme-border)', background: 'linear-gradient(160deg, #080c18 0%, #12092a 40%, #091a12 100%)' }}>
+        {/* Animated breathing orbs — centered for symmetry */}
+        <motion.div animate={{ opacity: [0.30, 0.60, 0.30], scale: [1, 1.08, 1] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
           className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 55% 55% at 12% 60%, rgba(224,122,95,0.30), transparent)' }}
-        />
-        <motion.div
-          animate={{ opacity: [0.25, 0.55, 0.25] }}
-          transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 110%, rgba(224,122,95,0.28), transparent)' }} />
+        <motion.div animate={{ opacity: [0.20, 0.48, 0.20] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
           className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 45% 50% at 88% 30%, rgba(96,165,250,0.22), transparent)' }}
-        />
-        <motion.div
-          animate={{ opacity: [0.20, 0.45, 0.20] }}
-          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+          style={{ background: 'radial-gradient(ellipse 55% 50% at 15% 20%, rgba(96,165,250,0.20), transparent)' }} />
+        <motion.div animate={{ opacity: [0.18, 0.40, 0.18] }} transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 4 }}
           className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 40% 40% at 50% 85%, rgba(52,211,153,0.18), transparent)' }}
-        />
+          style={{ background: 'radial-gradient(ellipse 50% 45% at 85% 15%, rgba(167,139,250,0.18), transparent)' }} />
 
-        {/* Grid overlay */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+        {/* Fine grid */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.035]"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
 
-        <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 py-12 sm:py-16">
-          {/* Back button */}
-          <button
-            onClick={() => router.back()}
-            className="mb-7 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-bold text-white/60 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-            חזרה
+        {/* Back button — top right (RTL) */}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 pt-6">
+          <button onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.07] px-3 py-1.5 text-xs font-bold text-white/55 backdrop-blur-sm transition-all hover:bg-white/14 hover:text-white/90">
+            <ChevronRight className="h-3.5 w-3.5" />חזרה
           </button>
+        </div>
 
-          <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, ease: 'easeOut' }}>
+        {/* Centered content */}
+        <div className="relative z-10 flex flex-col items-center text-center max-w-3xl mx-auto px-6 pt-8 pb-14 sm:pb-20">
+
+          {/* Avatar ring */}
+          <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="mb-7 relative">
+            <div className="h-24 w-24 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-2xl"
+              style={{ background: 'linear-gradient(135deg, rgba(224,122,95,0.55) 0%, rgba(96,165,250,0.45) 100%)', border: '2px solid rgba(255,255,255,0.18)', boxShadow: '0 0 48px rgba(224,122,95,0.30), 0 0 96px rgba(96,165,250,0.15)' }}>
+              י״מ
+            </div>
+            {/* Live pulse ring */}
+            <span className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 border-2 border-slate-950 shadow">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.1, ease: 'easeOut' }} className="flex flex-col items-center">
             {/* Live badge */}
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.14)]">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/[0.09] px-4 py-1.5 text-xs font-black tracking-widest uppercase text-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.15)] backdrop-blur-sm">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
               </span>
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              LIVE · מרכז שליטה · אולפני הרצליה
+              <Sparkles className="h-3 w-3 text-amber-400" />
+              מרכז שליטה · אולפני הרצליה
             </div>
 
-            {/* Greeting + name */}
-            <p className="text-sm font-semibold mb-1 text-white/55">ברוך שובך,</p>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black leading-none mb-3">
-              <span className="gradient-text">יובל מטרי</span>
+            {/* Greeting */}
+            <p className="text-base sm:text-lg font-semibold text-white/50 mb-2 tracking-wide">ברוך שובך,</p>
+
+            {/* Name */}
+            <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black leading-none mb-4 gradient-text tracking-tight">
+              יובל מטרי
             </h1>
-            <p className="text-base sm:text-lg font-semibold mb-8 text-white/50">
-              סמנכ״ל תפעול ושירותים · אולפני הרצליה
+
+            {/* Title */}
+            <p className="text-sm sm:text-base font-semibold text-white/40 mb-2 tracking-wide">
+              סמנכ״ל תפעול ושירותים
             </p>
 
-            {/* Stat pills */}
-            <div className="flex flex-wrap gap-2.5 mb-8">
+            {/* Decorative divider */}
+            <div className="flex items-center gap-3 mb-8 mt-1 w-full max-w-xs">
+              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to left, rgba(224,122,95,0.5), transparent)' }} />
+              <span className="text-[10px] font-black tracking-widest uppercase text-white/30">Herzliya Studios</span>
+              <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(96,165,250,0.5), transparent)' }} />
+            </div>
+
+            {/* Stat pills — centered */}
+            <div className="flex flex-wrap justify-center gap-2 mb-8">
               {[
-                { label: '6/8 אולפנים פעילים', color: '#4ade80', dot: true },
-                { label: '2/2 ניידות בשטח',    color: '#38bdf8', dot: true },
+                { label: '6/8 אולפנים פעילים', color: '#4ade80', dot: true  },
+                { label: '2/2 ניידות בשטח',    color: '#38bdf8', dot: true  },
                 { label: '43 עובדים מחוברים',  color: '#a78bfa', dot: false },
                 { label: 'SLA 98.7%',           color: '#fbbf24', dot: false },
               ].map(p => (
-                <div key={p.label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-black text-white/80 backdrop-blur-sm">
+                <div key={p.label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3.5 py-1.5 text-xs font-black backdrop-blur-sm">
                   {p.dot && (
                     <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: p.color }} />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-65" style={{ background: p.color }} />
                       <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
                     </span>
                   )}
@@ -374,18 +391,14 @@ export default function VipYuvalMatari() {
               ))}
             </div>
 
-            {/* Date & clock */}
-            <div className="flex flex-wrap items-center gap-6">
-              <span className="flex items-center gap-2 text-sm text-white/45">
-                <Calendar className="w-4 h-4 shrink-0" />
-                {dateStr}
+            {/* Clock + date — centered */}
+            <div className="flex flex-col items-center gap-2">
+              <span className="font-mono font-black text-4xl tabular-nums text-white tracking-widest" style={{ textShadow: '0 0 32px rgba(224,122,95,0.35)' }}>
+                {timeStr}
               </span>
-              <span className="flex items-center gap-2.5">
-                <Clock className="w-4 h-4 shrink-0 text-white/45" />
-                <span className="font-mono font-black text-2xl tabular-nums text-white">{timeStr}</span>
+              <span className="flex items-center gap-2 text-xs text-white/40">
+                <Calendar className="w-3.5 h-3.5 shrink-0" />{dateStr}
               </span>
-              <LiveDot />
-              <span className="text-xs font-bold text-white/40">שידור חי</span>
             </div>
           </motion.div>
         </div>
