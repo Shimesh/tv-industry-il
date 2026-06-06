@@ -326,29 +326,29 @@ export default function VipYuvalMatari() {
 
       {/* ══════════════ HERO ══════════════ */}
       <header className="relative overflow-hidden" style={{ background: 'linear-gradient(170deg, #05080f 0%, #0e0720 45%, #060e0a 100%)' }}>
+        <style>{`
+          @keyframes vip-orb1{0%,100%{opacity:.4}50%{opacity:.72}}
+          @keyframes vip-orb2{0%,100%{opacity:.25}50%{opacity:.52}}
+          @keyframes vip-orb3{0%,100%{opacity:.22}50%{opacity:.45}}
+          @keyframes vip-spin{to{transform:rotate(360deg)}}
+          @keyframes vip-scan{0%{transform:translateY(-4px)}62%{transform:translateY(110vh)}62.001%,100%{transform:translateY(-4px)}}
+        `}</style>
 
-        {/* ── Atmosphere orbs ── */}
-        <motion.div animate={{ opacity: [0.4, 0.75, 0.4], scale: [1, 1.1, 1] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 80% 70% at 50% 120%, rgba(224,122,95,0.38), transparent)' }} />
-        <motion.div animate={{ opacity: [0.25, 0.55, 0.25] }} transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 2.5 }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 60% 55% at 8% 15%, rgba(96,165,250,0.24), transparent)' }} />
-        <motion.div animate={{ opacity: [0.22, 0.48, 0.22] }} transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 55% 50% at 92% 12%, rgba(167,139,250,0.22), transparent)' }} />
+        {/* ── Atmosphere orbs — pure CSS, zero JS per frame ── */}
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 80% 70% at 50% 120%, rgba(224,122,95,0.38), transparent)', animation: 'vip-orb1 8s ease-in-out infinite' }} />
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 60% 55% at 8% 15%, rgba(96,165,250,0.24), transparent)', animation: 'vip-orb2 9s ease-in-out infinite 2.5s' }} />
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 55% 50% at 92% 12%, rgba(167,139,250,0.22), transparent)', animation: 'vip-orb3 10s ease-in-out infinite 5s' }} />
 
         {/* ── Grid ── */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
           style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
 
-        {/* ── Scan line — uses translateY (GPU, no flicker) ── */}
-        <motion.div
-          initial={{ y: '-100%' }}
-          animate={{ y: ['0%', '2000%'] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
-          className="pointer-events-none absolute top-0 left-0 right-0 h-[2px]"
-          style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.30), rgba(224,122,95,0.30), rgba(96,165,250,0.30), transparent)', willChange: 'transform' }}
+        {/* ── Scan line — pure CSS ── */}
+        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[2px]"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.30), rgba(224,122,95,0.30), rgba(96,165,250,0.30), transparent)', animation: 'vip-scan 8s linear infinite', willChange: 'transform' }}
         />
 
         {/* ── Bottom border glow ── */}
@@ -380,10 +380,9 @@ export default function VipYuvalMatari() {
           {/* Avatar with spinning gradient ring */}
           <motion.div initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.34,1.56,0.64,1] }}
             className="relative mb-7 h-32 w-32 shrink-0">
-            {/* Spinning conic border */}
-            <motion.div animate={{ rotate: 360 }} transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[3px] rounded-full"
-              style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)', willChange: 'transform' }} />
+            {/* Spinning conic border — pure CSS */}
+            <div className="absolute -inset-[3px] rounded-full"
+              style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)', animation: 'vip-spin 7s linear infinite', willChange: 'transform' }} />
             {/* Inner dark fill */}
             <div className="absolute inset-0 rounded-full m-[3px]" style={{ background: '#080c1a' }} />
             {/* Avatar photo */}
