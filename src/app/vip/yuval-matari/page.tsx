@@ -187,11 +187,13 @@ function Badge({ children, color, bg }: { children: ReactNode; color: string; bg
 function KpiCard({ icon: Icon, label, value, sub, color, live = false }: { icon: ElementType; label: string; value: ReactNode; sub?: ReactNode; color: string; live?: boolean }) {
   return (
     <div className="card-glow relative overflow-hidden rounded-2xl p-5 flex flex-col gap-3"
-      style={{ background: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}>
+      style={{ background: 'var(--theme-bg-card)', border: `1px solid ${color}22` }}>
       <div className="absolute inset-x-0 top-0 h-[2px] rounded-t-2xl"
-        style={{ background: `linear-gradient(to left, transparent, ${color}aa, transparent)` }} />
+        style={{ background: `linear-gradient(to left, transparent, ${color}cc, transparent)` }} />
+      <div className="absolute inset-x-0 bottom-0 h-16 rounded-b-2xl pointer-events-none"
+        style={{ background: `radial-gradient(ellipse 70% 50% at 50% 100%, ${color}12, transparent)` }} />
       <div className="flex items-start justify-between">
-        <div className="rounded-xl p-2.5" style={{ background: `${color}15`, border: `1px solid ${color}25` }}>
+        <div className="rounded-xl p-2.5" style={{ background: `${color}15`, border: `1px solid ${color}28`, boxShadow: `0 0 14px ${color}18` }}>
           <Icon className="w-4 h-4" style={{ color }} />
         </div>
         {live && (
@@ -213,7 +215,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, live = false }: { icon:
 function SectionTitle({ icon: Icon, title, badge, color = 'var(--theme-accent)' }: { icon: ElementType; title: string; badge?: ReactNode; color?: string }) {
   return (
     <div className="flex items-center gap-3 mb-5">
-      <div className="rounded-xl p-2 shrink-0" style={{ background: `${color}1a`, border: `1px solid ${color}30` }}>
+      <div className="rounded-xl p-2.5 shrink-0" style={{ background: `${color}18`, border: `1px solid ${color}32`, boxShadow: `0 0 16px ${color}18` }}>
         <Icon className="w-4 h-4" style={{ color }} />
       </div>
       <h2 className="text-[15px] font-black" style={{ color: 'var(--theme-text)' }}>{title}</h2>
@@ -248,6 +250,17 @@ function UsageBar({ value, max, color }: { value: number; max: number; color: st
     </div>
   );
 }
+
+// ─── Report types ─────────────────────────────────────────────────────────────
+
+const REPORT_TYPES = [
+  { id: 'operational', label: 'תפעולי',        icon: Monitor,    color: '#60a5fa', includes: ['לוח תפוסה','ניצולת אולפנים','ניידות','התרעות','Floor Price'] },
+  { id: 'financial',   label: 'פיננסי',         icon: TrendingUp, color: '#34d399', includes: ['הכנסות','P&L','ספקים','גביה','תחזית'] },
+  { id: 'crew',        label: 'כח אדם',         icon: Users,      color: '#a78bfa', includes: ['שעות עבודה','חריגות','שביעות רצון','עלות שכר'] },
+  { id: 'clients',     label: 'לקוחות',         icon: Sparkles,   color: '#fbbf24', includes: ['פעילות לקוחות','הכנסות','SLA','בוקינגים'] },
+  { id: 'equipment',   label: 'ציוד ומלאי',     icon: Wrench,     color: '#f97316', includes: ['מלאי','תחזוקה','שווי','זמינות'] },
+  { id: 'executive',   label: 'סיכום מנהלים',   icon: BarChart3,  color: '#e07a5f', includes: ['KPIs','מגמות','יעדים','סיכום הנהלה'] },
+] as const;
 
 // ─── Framer motion variants ───────────────────────────────────────────────────
 
@@ -297,6 +310,8 @@ export default function VipYuvalMatari() {
   const [reportTo, setReportTo]       = useState('');
   const [generating, setGenerating]   = useState(false);
   const [reportReady, setReportReady] = useState(false);
+  const [reportType, setReportType]     = useState('operational');
+  const [reportFormat, setReportFormat] = useState('PDF');
 
   const nowH = useMemo(() => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; }, []);
 
@@ -473,37 +488,105 @@ export default function VipYuvalMatari() {
       {/* ══════════════ BODY ══════════════ */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-16 space-y-5 mt-6">
 
-        {/* Report generator bar */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, duration: 0.38 }} className="app-panel p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex items-center gap-2 shrink-0">
-              <FileText className="w-4 h-4 shrink-0" style={{ color: 'var(--theme-accent)' }} />
-              <span className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>הפקת דוח פעילות</span>
+        {/* ── Report Generator — advanced ── */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, duration: 0.38 }}
+          className="relative overflow-hidden rounded-2xl border"
+          style={{ background: 'linear-gradient(135deg, rgba(14,7,32,0.98), rgba(5,8,15,0.98))', borderColor: 'rgba(224,122,95,0.22)' }}>
+          <div className="absolute top-0 left-0 right-0 h-[2px]"
+            style={{ background: 'linear-gradient(90deg, transparent, #e07a5f, #60a5fa, #a78bfa, transparent)' }} />
+          <div className="p-5">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="rounded-xl p-2.5 shrink-0" style={{ background: 'rgba(224,122,95,0.12)', border: '1px solid rgba(224,122,95,0.28)' }}>
+                <FileText className="w-4 h-4" style={{ color: '#e07a5f' }} />
+              </div>
+              <div>
+                <h3 className="font-black text-sm" style={{ color: 'var(--theme-text)' }}>מערכת הפקת דוחות מתקדמת</h3>
+                <p className="text-[11px]" style={{ color: 'var(--theme-text-secondary)' }}>הפקת דוחות מותאמים אישית לכל צורך תפעולי</p>
+              </div>
+              {reportReady && (
+                <div className="mr-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black" style={{ background: 'rgba(34,197,94,0.14)', color: '#86efac', border: '1px solid rgba(34,197,94,0.28)' }}>
+                  <CheckCircle className="w-3 h-3" />מוכן להורדה
+                </div>
+              )}
             </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="flex flex-col gap-0.5">
+
+            {/* Report type selector */}
+            <div className="mb-4">
+              <label className="text-[10px] font-black uppercase tracking-widest mb-2.5 block" style={{ color: 'var(--theme-text-secondary)' }}>סוג דוח</label>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {REPORT_TYPES.map(rt => {
+                  const RtIcon = rt.icon;
+                  const active = reportType === rt.id;
+                  return (
+                    <button key={rt.id} type="button" onClick={() => { setReportType(rt.id); setReportReady(false); }}
+                      className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl text-[10px] font-black transition-all duration-200"
+                      style={{
+                        background: active ? `${rt.color}18` : 'rgba(255,255,255,0.03)',
+                        color: active ? rt.color : 'var(--theme-text-secondary)',
+                        border: `1px solid ${active ? rt.color + '45' : 'var(--theme-border)'}`,
+                        boxShadow: active ? `0 0 18px ${rt.color}22` : 'none',
+                      }}>
+                      <RtIcon className="w-4 h-4 shrink-0" />
+                      {rt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Report preview */}
+            {(() => {
+              const rt = REPORT_TYPES.find(r => r.id === reportType)!;
+              return (
+                <div className="mb-4 rounded-xl p-3.5" style={{ background: `${rt.color}08`, border: `1px solid ${rt.color}22` }}>
+                  <div className="text-[11px] font-black mb-2" style={{ color: rt.color }}>הדוח יכלול:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rt.includes.map(item => (
+                      <span key={item} className="text-[10px] font-semibold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Date range + format + button */}
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
                 <label className="text-[10px] font-bold" style={{ color: 'var(--theme-text-secondary)' }}>מתאריך</label>
                 <input type="date" value={reportFrom} onChange={e => { setReportFrom(e.target.value); setReportReady(false); }}
                   className="rounded-lg px-3 py-1.5 text-sm border outline-none"
-                  style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                  style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
               </div>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
                 <label className="text-[10px] font-bold" style={{ color: 'var(--theme-text-secondary)' }}>עד תאריך</label>
                 <input type="date" value={reportTo} onChange={e => { setReportTo(e.target.value); setReportReady(false); }}
                   className="rounded-lg px-3 py-1.5 text-sm border outline-none"
-                  style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                  style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] font-bold mb-0.5" style={{ color: 'var(--theme-text-secondary)' }}>פורמט</label>
+                <div className="flex gap-1">
+                  {(['PDF', 'Excel', 'CSV'] as const).map(f => (
+                    <button key={f} type="button" onClick={() => setReportFormat(f)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-black transition-all"
+                      style={{ background: reportFormat === f ? 'rgba(96,165,250,0.16)' : 'rgba(255,255,255,0.04)', color: reportFormat === f ? '#60a5fa' : 'var(--theme-text-secondary)', border: `1px solid ${reportFormat === f ? 'rgba(96,165,250,0.38)' : 'var(--theme-border)'}` }}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button type="button" onClick={handleGenerate} disabled={generating}
-                className="h-[34px] px-5 rounded-xl font-black text-sm flex items-center gap-2 transition-all disabled:opacity-70"
+                className="h-[38px] px-6 rounded-xl font-black text-sm flex items-center gap-2 transition-all disabled:opacity-70 shrink-0"
                 style={{
-                  background: reportReady ? 'rgba(34,197,94,0.18)' : 'linear-gradient(135deg, var(--brand-grad-start), var(--brand-grad-mid))',
+                  background: reportReady ? 'rgba(34,197,94,0.18)' : 'linear-gradient(135deg, #e07a5f, #60a5fa)',
                   color: reportReady ? '#86efac' : '#fff',
-                  boxShadow: reportReady ? 'none' : '0 4px 14px rgba(200,78,62,0.28)',
+                  boxShadow: reportReady ? 'none' : '0 4px 18px rgba(96,165,250,0.32)',
                 }}>
                 {generating
                   ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />מחשב...</>
                   : reportReady
-                    ? <><CheckCircle className="w-3.5 h-3.5" />מוכן להורדה</>
+                    ? <><Download className="w-3.5 h-3.5" />הורדה</>
                     : <><Download className="w-3.5 h-3.5" />הפק דוח</>}
               </button>
             </div>
@@ -539,7 +622,7 @@ export default function VipYuvalMatari() {
           {/* ── OVERVIEW ── */}
           {activeTab === 'overview' && (
             <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Monitor} label="אולפנים פעילים" value={<>6<span className="text-2xl font-normal opacity-35">/8</span></>} sub="2 אולפנים פתוחים ל-Yield" color="#22c55e" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Truck}   label="ניידות שידור"   value={<>2<span className="text-2xl font-normal opacity-35">/2</span></>} sub={<><div>ניידת 1: נווה אילן</div><div>ניידת 2: בלומפילד</div></>} color="#38bdf8" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={AlertCircle} label="התרעות כח אדם" value="2" sub="חריגת שעות — צוות תאורה אולפן 4" color="#f59e0b" live /></motion.div>
@@ -704,7 +787,7 @@ export default function VipYuvalMatari() {
           {/* ── ACCOUNTING ── */}
           {activeTab === 'accounting' && (
             <motion.div key="accounting" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={TrendingUp} label="הכנסות חודש שוטף" value={`₪${money(revenueTotal)}`} sub="↑ 14% לעומת חודש קודם" color="#34d399" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={BarChart3}  label="הכנסות YTD"        value={`₪${(revenueYTD / 1_000_000).toFixed(1)}M`} sub="יעד שנתי: ₪4.2M" color="#60a5fa" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Package}    label="הוצאות ספקים"      value={`₪${money(supplierTotal)}`} sub="מתוך תקציב ₪180K" color="#f97316" /></motion.div>
@@ -773,7 +856,7 @@ export default function VipYuvalMatari() {
           {/* ── CREW ── */}
           {activeTab === 'crew' && (
             <motion.div key="crew" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Users}    label="עובדים מחוברים" value={CREW_DATA.filter(c => c.status !== 'off').length} sub={`מתוך ${CREW_DATA.length} משמרת`} color="#34d399" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Clock}    label="ממוצע שעות/שבוע" value={Math.round(CREW_DATA.reduce((s, c) => s + c.hoursWeek, 0) / CREW_DATA.length)} sub="יעד: 42 שעות" color="#60a5fa" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={AlertCircle} label="חריגות שעות"   value="1" sub="מיכאל ברגר — תאורה" color="#f59e0b" live /></motion.div>
@@ -821,7 +904,7 @@ export default function VipYuvalMatari() {
           {/* ── STUDIOS ── */}
           {activeTab === 'studios' && (
             <motion.div key="studios" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Building2} label="אולפנים פעילים" value={STUDIOS_DETAIL.filter(s => s.status === 'active').length} sub={`מתוך ${STUDIOS_DETAIL.length} אולפנים`} color="#34d399" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Camera}    label="מצלמות בשימוש"  value={STUDIOS_DETAIL.filter(s => s.status === 'active').reduce((a, s) => a + s.cameras, 0)} sub="מתוך 28 כלל" color="#60a5fa" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={TrendingUp} label="הכנסות היום"   value="₪84K" sub="6 אולפנים × ממוצע ₪14K" color="#a78bfa" /></motion.div>
@@ -882,7 +965,7 @@ export default function VipYuvalMatari() {
           {/* ── VANS ── */}
           {activeTab === 'vans' && (
             <motion.div key="vans" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Truck}     label="ניידות פרוסות"  value={VANS_DETAIL.filter(v => v.status === 'deployed').length} sub={`מתוך ${VANS_DETAIL.length} ניידות`} color="#34d399" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Users}     label="צוותים בשטח"   value={VANS_DETAIL.filter(v => v.status === 'deployed').reduce((a, v) => a + v.crew, 0)} sub="בפריסה פעילה" color="#60a5fa" live /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Wrench}    label="תחזוקה שוטפת"  value={VANS_DETAIL.filter(v => v.status === 'maintenance').length} sub="ניידת במוסך" color="#f59e0b" /></motion.div>
@@ -938,7 +1021,7 @@ export default function VipYuvalMatari() {
           {/* ── SUPPLIERS ── */}
           {activeTab === 'suppliers' && (
             <motion.div key="suppliers" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Package}    label="ספקים פעילים"  value={SUPPLIERS.length} sub="7 קטגוריות" color="#a78bfa" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={TrendingUp} label="הוצאות חודשי"  value={`₪${money(supplierTotal)}`} sub="בגדר תקציב" color="#34d399" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={AlertCircle} label="חשבוניות לטיפול" value={SUPPLIERS.filter(s => s.paymentStatus !== 'שולם').length} sub="1 באיחור" color="#f59e0b" live /></motion.div>
@@ -984,7 +1067,7 @@ export default function VipYuvalMatari() {
           {/* ── EQUIPMENT ── */}
           {activeTab === 'equipment' && (
             <motion.div key="equipment" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} className="space-y-5">
-              <motion.div className="grid grid-cols-2 xl:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
+              <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-4" variants={stagger} initial="hidden" animate="show">
                 <motion.div variants={fadeUp}><KpiCard icon={Package}   label="פריטי ציוד"    value={EQUIP_CATS.reduce((a, e) => a + e.total, 0)} sub={`${EQUIP_CATS.reduce((a, e) => a + e.inUse, 0)} בשימוש`} color="#60a5fa" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={Wrench}    label="ציוד בתחזוקה"  value={EQUIP_CATS.reduce((a, e) => a + e.maintenance, 0)} sub="7 קטגוריות" color="#f59e0b" /></motion.div>
                 <motion.div variants={fadeUp}><KpiCard icon={TrendingUp} label="שווי מלאי"    value={`₪${(equipValue / 1_000_000).toFixed(1)}M`} sub="ערך תחלופתי" color="#a78bfa" /></motion.div>
