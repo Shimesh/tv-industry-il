@@ -316,12 +316,13 @@ export default function VipYuvalMatari() {
         <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
           style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
 
-        {/* ── Scan line ── */}
+        {/* ── Scan line — uses translateY (GPU, no flicker) ── */}
         <motion.div
-          animate={{ top: ['-8%', '108%'] }}
+          initial={{ y: '-100%' }}
+          animate={{ y: ['0%', '2000%'] }}
           transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
-          className="pointer-events-none absolute left-0 right-0 h-[2px]"
-          style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.35), rgba(224,122,95,0.35), rgba(96,165,250,0.35), transparent)' }}
+          className="pointer-events-none absolute top-0 left-0 right-0 h-[2px]"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.30), rgba(224,122,95,0.30), rgba(96,165,250,0.30), transparent)', willChange: 'transform' }}
         />
 
         {/* ── Bottom border glow ── */}
@@ -356,14 +357,15 @@ export default function VipYuvalMatari() {
             {/* Spinning conic border */}
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
               className="absolute -inset-[3px] rounded-full"
-              style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)' }} />
+              style={{ background: 'conic-gradient(from 0deg, #e07a5f, #60a5fa, #a78bfa, #34d399, #fbbf24, #e07a5f)', willChange: 'transform' }} />
             {/* Inner dark fill */}
             <div className="absolute inset-0 rounded-full m-[3px]" style={{ background: '#080c1a' }} />
-            {/* Avatar content */}
-            <div className="absolute inset-0 m-[3px] rounded-full flex items-center justify-center text-4xl font-black text-white select-none"
-              style={{ background: 'linear-gradient(145deg, rgba(224,122,95,0.35) 0%, rgba(96,165,250,0.30) 100%)' }}>
-              י״מ
-            </div>
+            {/* Avatar photo */}
+            <img
+              src="/vip/yuval-matari.jpg"
+              alt="יובל מטרי"
+              className="absolute inset-0 m-[3px] rounded-full object-cover object-top w-[calc(100%-6px)] h-[calc(100%-6px)]"
+            />
             {/* Outer glow */}
             <div className="absolute -inset-2 rounded-full pointer-events-none"
               style={{ boxShadow: '0 0 60px rgba(224,122,95,0.35), 0 0 120px rgba(96,165,250,0.18)' }} />
