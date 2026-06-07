@@ -328,21 +328,9 @@ async function fetchSchedule(browser, url) {
       throw new Error('Failed to evaluate in context');
     };
 
-    const checkboxClicked = await evaluateWithContext(() => {
-      const checkbox = document.getElementById('allDep') || document.querySelector('input[type="checkbox"]');
-      if (!checkbox) return false;
-      if (!checkbox.checked) checkbox.click();
-      return true;
-    });
-
-    if (checkboxClicked) {
-      await page
-        .waitForNavigation({ waitUntil: 'networkidle0', timeout: 12000 })
-        .catch(() => new Promise((r) => setTimeout(r, 1200)));
-      const refreshed = await findCalendarContext(page);
-      if (refreshed) context = refreshed;
-      console.log('Calendar context after refresh:', context === page ? 'page' : 'iframe');
-    }
+    // Keep ShowEmp3: ShowEmp6 no longer exposes the production IDs needed
+    // to load crew details through openmd2.
+    console.log('Keeping personal calendar view for stable production IDs');
 
     const workerName = await evaluateWithContext(() => {
       const text = document.body.textContent || '';
@@ -385,14 +373,24 @@ async function fetchSchedule(browser, url) {
 
           const isCurrentUserShift = eventDiv.classList.contains('sat');
           const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
-          const rawProductionName = nameFont ? (nameFont.textContent || '').trim() : '';
+          const eventText = (eventDiv.textContent || '').replace(/\s+/g, ' ').trim();
+          const eventTimeMatch = eventText.match(
+            /(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/,
+          );
+          const rawProductionName = nameFont
+            ? (nameFont.textContent || '').trim()
+            : eventText
+                .replace(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/, ' ')
+                .replace(/\s+CCU\s*$/i, '')
+                .replace(/\s+/g, ' ')
+                .trim();
           if (!rawProductionName) return;
 
           const innerHTML = eventDiv.innerHTML || '';
           const parts = innerHTML.split(/<br\s*\/?>/i);
           const crew = [];
-          let startTime = '';
-          let endTime = '';
+          let startTime = eventTimeMatch ? eventTimeMatch[1] : '';
+          let endTime = eventTimeMatch ? eventTimeMatch[2] : '';
 
           for (let i = 1; i < parts.length; i++) {
             const tempDiv = document.createElement('div');
@@ -1194,7 +1192,7 @@ async function main() {
 
       const schedule = await fetchSchedule(browser, request.url);
       if (!schedule || !schedule.productions.length) {
-        throw new Error('No productions found');
+        throw new Error('לא נמצאו הפקות בלוח האישי של הרצליה');
       }
 
       await saveSchedule(schedule, request.userId, request.workerName);

@@ -99,11 +99,43 @@ export function extractHerzliyaEventIds(html: string): Array<{ herzliyaId: numbe
     const idMatch = chunks[i].match(/^(\d+)\)/);
     if (!idMatch) continue;
     const herzliyaId = parseInt(idMatch[1]);
-    const nameMatch = chunks[i].match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
-    const name = nameMatch ? nameMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+    const { name } = parseHerzliyaEventSummary(chunks[i]);
     if (herzliyaId && name) results.push({ herzliyaId, name });
   }
   return results;
+}
+
+function parseHerzliyaEventSummary(chunk: string): {
+  name: string;
+  startTime: string;
+  endTime: string;
+} {
+  const eventHtml = chunk.split(/<\/div>/i)[0];
+  const nameMatch = eventHtml.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
+  const eventText = eventHtml
+    .slice(Math.max(0, eventHtml.indexOf('>') + 1))
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const timeMatch = eventText.match(
+    /(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/
+  );
+  const name = nameMatch
+    ? nameMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim()
+    : eventText
+        .replace(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/, ' ')
+        .replace(/\s+CCU\s*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+  return {
+    name,
+    startTime: timeMatch?.[1] || '',
+    endTime: timeMatch?.[2] || '',
+  };
 }
 
 /** Shared HTML stripper for popup header parsing */
@@ -344,7 +376,17 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
 
       // Get production name from red font
       const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
-      const rawProductionName = nameFont?.textContent?.trim() || '';
+      const eventText = (eventDiv.textContent || '').replace(/\s+/g, ' ').trim();
+      const eventTimeMatch = eventText.match(
+        /(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/
+      );
+      const rawProductionName =
+        nameFont?.textContent?.trim() ||
+        eventText
+          .replace(/(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})/, ' ')
+          .replace(/\s+CCU\s*$/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
       if (!rawProductionName) return;
 
       // Parse crew from innerHTML (split by <br>)
@@ -352,8 +394,8 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
       const parts = innerHTML.split(/<br\s*\/?>/i);
 
       const crew: CrewMember[] = [];
-      let productionStartTime = '';
-      let productionEndTime = '';
+      let productionStartTime = eventTimeMatch?.[1] || '';
+      let productionEndTime = eventTimeMatch?.[2] || '';
       let studioFromParts = '';
 
       // Skip first part (production name in <font> tag)
@@ -694,7 +736,13 @@ function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime:
   let endTime = '';
   let studio = '';
   const afterFontIdx = chunk.search(/<\/font>/i);
-  const afterFont = afterFontIdx !== -1 ? chunk.slice(afterFontIdx + 7) : chunk;
+  const eventBody = chunk.slice(Math.max(0, chunk.indexOf('>') + 1));
+  const firstBreakIdx = eventBody.search(/<br\s*\/?>/i);
+  const afterFont = afterFontIdx !== -1
+    ? chunk.slice(afterFontIdx + 7)
+    : firstBreakIdx !== -1
+      ? eventBody.slice(firstBreakIdx)
+      : '';
 
   for (const part of afterFont.split(/<br\s*\/?>/i)) {
     const text = part.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
@@ -764,13 +812,17 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         const idM = chunk.match(/^(\d+)\)/);
         if (!idM) continue;
         const herzliyaId = parseInt(idM[1]);
-        const nameM2 = chunk.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
-        const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
+        const summary = parseHerzliyaEventSummary(chunk);
+        const rawName = summary.name;
         if (!rawName) continue;
         const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studioFromName = studioM ? studioM[0].trim() : '';
         const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
-        const { crew, startTime, endTime, studio: studioFromParts } = parseEventCrewFromHtml(chunk);
+        const parsedCrew = parseEventCrewFromHtml(chunk);
+        const crew = parsedCrew.crew;
+        const startTime = parsedCrew.startTime || summary.startTime;
+        const endTime = parsedCrew.endTime || summary.endTime;
+        const studioFromParts = parsedCrew.studio;
         const studio = studioFromParts || studioFromName;
         productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
       }
@@ -790,14 +842,18 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
       const idM = chunk.match(/^(\d+)\)/);
       if (!idM) continue;
       const herzliyaId = parseInt(idM[1]);
-      const nameM2 = chunk.match(/<font[^>]*color=["']?red["']?[^>]*>(.*?)<\/font>/i);
-      const rawName = nameM2 ? nameM2[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '';
+      const summary = parseHerzliyaEventSummary(chunk);
+      const rawName = summary.name;
       if (!rawName) continue;
       const isoDate = weekDays[dayIdx]?.isoDate || weekDays[0].isoDate;
       const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
       const studioFromName = studioM ? studioM[0].trim() : '';
       const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
-      const { crew, startTime, endTime, studio: studioFromParts } = parseEventCrewFromHtml(chunk);
+      const parsedCrew = parseEventCrewFromHtml(chunk);
+      const crew = parsedCrew.crew;
+      const startTime = parsedCrew.startTime || summary.startTime;
+      const endTime = parsedCrew.endTime || summary.endTime;
+      const studioFromParts = parsedCrew.studio;
       const studio = studioFromParts || studioFromName;
       productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
     }
