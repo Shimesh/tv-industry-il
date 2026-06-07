@@ -38,6 +38,12 @@ export function getCurrentWeekStartIsrael(): string {
   return d.toISOString().split('T')[0];
 }
 
+export function getPreviousWeekStart(weekStart: string): string {
+  const date = new Date(`${weekStart}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 7);
+  return date.toISOString().split('T')[0];
+}
+
 const BASE_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

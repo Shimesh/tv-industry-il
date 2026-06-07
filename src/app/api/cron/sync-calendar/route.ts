@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
-import { syncHerzliyaUrl, getCurrentWeekStartIsrael, type UserCalendarSyncDoc } from '@/lib/server/herzliyaSync';
+import {
+  syncHerzliyaUrl,
+  getCurrentWeekStartIsrael,
+  getPreviousWeekStart,
+  type UserCalendarSyncDoc,
+} from '@/lib/server/herzliyaSync';
 import { recordJobMetric } from '@/lib/server/adminTelemetry';
 import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import type { Production } from '@/lib/productionDiff';
@@ -76,19 +81,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const currentWeekStart = getCurrentWeekStartIsrael();
+  const previousWeekStart = getPreviousWeekStart(currentWeekStart);
   const allUsers = await listDocuments<UserCalendarSyncDoc>('user_calendar_sync').catch(() => []);
 
-  // Only sync users whose saved URL belongs to the current week
-  const activeUsers = allUsers.filter(u => u.url?.trim() && u.weekStart === currentWeekStart);
-  const skippedUsers = allUsers.filter(u => u.url?.trim() && u.weekStart !== currentWeekStart);
+  // A schedule pasted on Saturday can describe the week beginning the next day.
+  // Keep the previous week's saved URL eligible through the current week rollover.
+  const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
+  const activeUsers = allUsers.filter(u => u.url?.trim() && eligibleWeekStarts.has(u.weekStart));
+  const skippedUsers = allUsers.filter(u => u.url?.trim() && !eligibleWeekStarts.has(u.weekStart));
 
   if (skippedUsers.length > 0) {
-    console.log(`[sync-calendar] skipping ${skippedUsers.length} users with stale weekStart (not ${currentWeekStart})`);
+    console.log(
+      `[sync-calendar] skipping ${skippedUsers.length} users with stale weekStart `
+      + `(eligible: ${previousWeekStart}, ${currentWeekStart})`,
+    );
   }
 
   if (activeUsers.length === 0) {
     await recordJobMetric({ job: 'cron-sync-calendar', ok: false, message: `אין משתמשים לסינכרון השבוע (${currentWeekStart})` });
-    return NextResponse.json({ ok: false, reason: 'no_active_users_this_week', currentWeekStart, skipped: skippedUsers.length });
+    return NextResponse.json({
+      ok: false,
+      reason: 'no_active_users_this_week',
+      currentWeekStart,
+      previousWeekStart,
+      skipped: skippedUsers.length,
+    });
   }
 
   const startedAt = Date.now();
