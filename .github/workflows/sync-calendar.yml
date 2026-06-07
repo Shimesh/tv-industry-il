@@ -8,18 +8,23 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
 
     steps:
-      - name: Trigger calendar sync
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X GET \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://tv-industry-il.vercel.app/api/cron/sync-calendar")
-          echo "Response status: $STATUS"
-          if [ "$STATUS" -ge 500 ]; then
-            echo "Sync failed with status $STATUS"
-            exit 1
-          fi
-          echo "Sync completed"
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install browser sync dependencies
+        run: npm install firebase-admin puppeteer-core @sparticuz/chromium
+
+      - name: Sync saved calendars with browser
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          SYNC_SAVED_CALENDARS: '1'
+        run: node scripts/fetch-schedules.js

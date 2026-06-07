@@ -17,6 +17,25 @@ initializeApp({
 const db = getFirestore();
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid) => `productions/${uid}/weeks`;
+const AUTO_SYNC_SAVED_CALENDARS = process.env.SYNC_SAVED_CALENDARS === '1';
+
+function getCurrentWeekStartIsrael() {
+  const israelDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const date = new Date(`${israelDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return date.toISOString().split('T')[0];
+}
+
+function getPreviousWeekStart(weekStart) {
+  const date = new Date(`${weekStart}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 7);
+  return date.toISOString().split('T')[0];
+}
 
 function normalizeName(name) {
   if (!name) return '';
@@ -856,6 +875,41 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       parseQuality: schedule.parseStats,
       crew: cleanCrew,
     });
+
+    const crewList = cleanCrew.map((member) => {
+      const normalizedPhone = normalizePhone(member.phone);
+      const normalizedCrewName = normalizeName(member.name || '');
+      const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || '');
+      return {
+        name: member.name || '',
+        profession: member.role || member.roleDetail || '',
+        phone_number: normalizedPhone,
+        startTime: member.startTime || '',
+        endTime: member.endTime || '',
+        normalizedPhone,
+        shadowKey: !normalizedPhone && normalizedCrewName
+          ? `${normalizedCrewName}::${normalizedCrewRole}`
+          : null,
+      };
+    });
+    const globalRef = db.doc(`global_productions/${prodId}`);
+    batch.set(globalRef, {
+      id: prodId,
+      name: prod.name || '',
+      studio: prod.studio || '',
+      date: prod.date || '',
+      day: prod.day || getHebrewDay(prod.date),
+      startTime: prod.startTime || '',
+      endTime: prod.endTime || '',
+      status: prod.status || 'scheduled',
+      herzliyaId: prod.herzliyaId,
+      crew_list: crewList,
+      crew_phones: [...new Set(crewList.map((member) => member.normalizedPhone).filter(Boolean))],
+      crew_shadow_keys: [...new Set(crewList.map((member) => member.shadowKey).filter(Boolean))],
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: userId,
+      sourceWeekPath: `${userProductionsRoot}/${weekId}`,
+    });
   }
 
   const myProductionIds = schedule.productions
@@ -1155,6 +1209,91 @@ function parsePopupSnapshot(production, snapshot) {
 }
 
 async function main() {
+  if (AUTO_SYNC_SAVED_CALENDARS) {
+    console.log('Checking saved calendar URLs for hourly sync...');
+    const currentWeekStart = getCurrentWeekStartIsrael();
+    const previousWeekStart = getPreviousWeekStart(currentWeekStart);
+    const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
+    const savedSnap = await db.collection('user_calendar_sync').get();
+    const savedCalendars = savedSnap.docs
+      .map((doc) => ({ uid: doc.id, ...doc.data() }))
+      .filter((entry) => entry.url && eligibleWeekStarts.has(entry.weekStart));
+
+    console.log(
+      `Found ${savedCalendars.length} eligible saved calendars `
+      + `(${previousWeekStart}, ${currentWeekStart})`,
+    );
+    if (!savedCalendars.length) {
+      throw new Error('No eligible saved calendars found for hourly sync');
+    }
+
+    const browser = await puppeteer.launch({
+      args: [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--no-first-run',
+        '--disable-extensions',
+      ],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+
+    let successCount = 0;
+    let productionCount = 0;
+    try {
+      for (const saved of savedCalendars) {
+        const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
+        try {
+          const schedule = await fetchSchedule(browser, saved.url);
+          if (!schedule || !schedule.productions.length) {
+            throw new Error('No productions found in saved Herzliya calendar');
+          }
+
+          await saveSchedule(schedule, saved.uid, saved.workerName || '');
+          successCount++;
+          productionCount += schedule.productions.length;
+          await syncRef.set({
+            weekStart: schedule.weekStart || currentWeekStart,
+            lastSyncAt: Date.now(),
+            lastSyncStatus: 'success',
+            lastSyncCount: schedule.productions.length,
+            lastSyncError: null,
+          }, { merge: true });
+          console.log(`Hourly sync saved ${schedule.productions.length} productions for ${saved.uid}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Hourly sync failed for ${saved.uid}:`, message);
+          await syncRef.set({
+            lastSyncAt: Date.now(),
+            lastSyncStatus: 'error',
+            lastSyncCount: 0,
+            lastSyncError: message.slice(0, 300),
+          }, { merge: true });
+        }
+      }
+    } finally {
+      await browser.close();
+    }
+
+    await db.doc('system/calendarSync').set({
+      lastSyncAt: Date.now(),
+      lastSyncStatus: successCount === savedCalendars.length ? 'success' : 'partial',
+      lastSyncCount: productionCount,
+    }, { merge: true });
+
+    console.log(
+      `Hourly saved-calendar sync completed: ${successCount}/${savedCalendars.length} users, `
+      + `${productionCount} productions`,
+    );
+    if (successCount === 0) {
+      throw new Error('Hourly saved-calendar sync did not update any calendars');
+    }
+    return;
+  }
+
   console.log('Checking for pending schedule requests...');
 
   const requestsSnap = await db
