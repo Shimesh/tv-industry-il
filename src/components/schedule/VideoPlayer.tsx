@@ -274,7 +274,10 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
             }
           });
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
-            logStreamError('HLS error', data);
+            logStreamError(
+              `HLS error (${data.type}/${data.details}, fatal=${data.fatal})`,
+              data.error instanceof Error ? data.error.message : data.error,
+            );
             if (data.fatal) {
               if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoverAttempts < 2) {
                 mediaRecoverAttempts += 1;

@@ -18,6 +18,8 @@ const KESHET_PLAYER_VERSION = '7.15.0';
 const KESHET_PLAYLIST_KEY = Buffer.from('LTf7r/zM2VndHwP+4So6bw==', 'utf8');
 const KESHET_TOKEN_KEY = Buffer.from('YhnUaXMmltB6gd8p9SWleQ==', 'utf8');
 const KESHET_CRYPTO_IV = Buffer.from('theExact16Chars=', 'utf8');
+const KESHET_STREAM_HOST = 'd2249b6f08tjt0.cloudfront.net';
+const KESHET_STREAM_PATH_PREFIX = '/k12dvr/';
 
 type BrightcovePlaybackResponse = {
   sources?: Array<{
@@ -106,14 +108,11 @@ function encryptKeshetPayload(payload: object, key: Buffer): string {
   ]).toString('base64');
 }
 
-async function resolveKeshet12Stream(userAgent: string | null): Promise<string | null> {
+async function resolveKeshet12Stream(): Promise<string | null> {
   try {
     const headers = {
-      'User-Agent': userAgent || DESKTOP_USER_AGENT,
+      'User-Agent': DESKTOP_USER_AGENT,
       Accept: 'text/plain,*/*',
-      Referer: KESHET_LIVE_PAGE,
-      Origin: 'https://www.mako.co.il',
-      'Cache-Control': 'no-cache',
     };
     const playlistResponse = await fetch(KESHET_PLAYLIST_URL, {
       headers,
@@ -155,6 +154,55 @@ async function resolveKeshet12Stream(userAgent: string | null): Promise<string |
     if (!ticket) return null;
 
     return `${source.url}${source.url.includes('?') ? '&' : '?'}${ticket}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveKeshet12Ticket(
+  rawSourceUrl: string,
+  sourceCdn: string,
+): Promise<string | null> {
+  try {
+    const sourceUrl = new URL(rawSourceUrl);
+    if (
+      sourceUrl.protocol !== 'https:'
+      || sourceUrl.hostname !== KESHET_STREAM_HOST
+      || !sourceUrl.pathname.startsWith(KESHET_STREAM_PATH_PREFIX)
+      || sourceCdn !== 'AWS'
+    ) {
+      return null;
+    }
+
+    const entitlementPayload = encryptKeshetPayload({
+      lp: `${sourceUrl.pathname}${sourceUrl.search}`,
+      rv: sourceCdn,
+      du: 'null',
+      dv: KESHET_VCM_ID,
+      na: KESHET_PLAYER_VERSION,
+    }, KESHET_TOKEN_KEY);
+    const entitlementResponse = await fetch(KESHET_ENTITLEMENT_URL, {
+      method: 'POST',
+      headers: {
+        'User-Agent': DESKTOP_USER_AGENT,
+        Accept: 'text/plain,*/*',
+        'Content-Type': 'text/plain;charset=UTF-8',
+      },
+      body: entitlementPayload,
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!entitlementResponse.ok) return null;
+
+    const entitlement = decryptKeshetPayload<KeshetEntitlement>(
+      await entitlementResponse.text(),
+      KESHET_TOKEN_KEY,
+    );
+    const ticket = entitlement?.caseId === '1' ? entitlement.tickets?.[0]?.ticket : null;
+    if (!ticket) return null;
+
+    const signedUrl = `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}${ticket}`;
+    return `/api/stream-proxy/keshet12?url=${encodeURIComponent(signedUrl)}`;
   } catch {
     return null;
   }
@@ -291,7 +339,7 @@ export async function GET(
 
     // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
     if (channel === 'keshet12') {
-      const resolvedUrl = await resolveKeshet12Stream(requestUserAgent);
+      const resolvedUrl = await resolveKeshet12Stream();
       const upstreamUrl = resolvedUrl && await isPlayableHlsManifest(resolvedUrl, requestUserAgent)
         ? resolvedUrl
         : null;
@@ -319,5 +367,30 @@ export async function GET(
     return NextResponse.json({ url: null }, { status: 404 });
   } catch {
     return NextResponse.json({ url: null, error: 'Failed to fetch stream' }, { status: 500 });
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ channel: string }> },
+) {
+  const { channel } = await params;
+  if (channel !== 'keshet12') {
+    return NextResponse.json({ url: null }, { status: 404 });
+  }
+
+  try {
+    const body = (await request.json()) as { sourceUrl?: string; sourceCdn?: string };
+    if (!body.sourceUrl || !body.sourceCdn) {
+      return NextResponse.json({ url: null }, { status: 400 });
+    }
+
+    const url = await resolveKeshet12Ticket(
+      body.sourceUrl,
+      body.sourceCdn,
+    );
+    return NextResponse.json({ url, expires: Date.now() + (url ? 1800000 : 300000) });
+  } catch {
+    return NextResponse.json({ url: null }, { status: 500 });
   }
 }
