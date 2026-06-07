@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ChannelLogo from '@/components/ChannelLogo';
 import type { Channel } from '@/data/channels';
 import type { StreamConfig } from '@/data/streams';
+import { resolveKeshet12BrowserStream } from '@/lib/keshetStream';
 
 interface VideoPlayerProps {
   channel: Channel;
@@ -105,12 +106,22 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
   useEffect(() => {
     if (!stream?.dynamicStream) return;
 
+    let cancelled = false;
     setDynamicLoading(true);
     setError(null);
 
-    fetch(`/api/stream-token/${channel.id}`)
-      .then(res => res.ok ? res.json() : null)
+    const resolveStream = async () => {
+      if (channel.id === 'keshet12') {
+        const url = await resolveKeshet12BrowserStream();
+        return url ? { url } : null;
+      }
+      const response = await fetch(`/api/stream-token/${channel.id}`);
+      return response.ok ? response.json() : null;
+    };
+
+    resolveStream()
       .then(data => {
+        if (cancelled) return;
         if (data?.type === 'kaltura' && data.embedUrl) {
           setDynamicEmbedUrl(data.embedUrl);
         } else if (data?.url) {
@@ -119,8 +130,13 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
         // No URL found → fall through to placeholder (no error overlay)
       })
       .catch(() => { /* network error → fall through to placeholder */ })
-      .finally(() => setDynamicLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .finally(() => {
+        if (!cancelled) setDynamicLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [channel.id, stream?.dynamicStream, retryKey]);
 
   // Load HLS stream (either static streamUrl or dynamic URL fetched from API)
@@ -326,7 +342,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
       video.removeEventListener('waiting', handleWaiting);
       hlsInstance?.destroy();
     };
-  }, [channel.id, channel.name, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile, shouldStartMuted]);
+  }, [channel.id, channel.name, stream?.embedUrl, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile, shouldStartMuted]);
 
   // Sync volume and muted state to the video element
   // Note: React's `muted` JSX prop is broken (known React bug) — must use ref imperatively

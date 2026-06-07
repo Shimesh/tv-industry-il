@@ -11,6 +11,7 @@ import { streamConfigs } from '@/data/streams';
 import type { BroadcastChannelState } from '@/lib/broadcasts';
 import { formatBroadcastTime } from '@/lib/broadcasts';
 import { getChannelDisplayName } from '@/lib/channelLabels';
+import { resolveKeshet12BrowserStream } from '@/lib/keshetStream';
 
 const CARD_WIDTH = 320;
 const CARD_GAP = 12;
@@ -85,18 +86,25 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     if (!needsDynamicResolution) return;
 
     let cancelled = false;
-    fetch(`/api/stream-token/${channelId}`)
-      .then(res => {
-        if (!res.ok) {
-          console.error('[OnAirNowCarousel] Failed to resolve dynamic stream', {
-            channelId,
-            status: res.status,
-            statusText: res.statusText,
-          });
-          return null;
-        }
-        return res.json();
-      })
+
+    const resolveStream = async () => {
+      if (channelId === 'keshet12') {
+        const url = await resolveKeshet12BrowserStream();
+        return url ? { url } : null;
+      }
+      const response = await fetch(`/api/stream-token/${channelId}`);
+      if (!response.ok) {
+        console.error('[OnAirNowCarousel] Failed to resolve dynamic stream', {
+          channelId,
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return null;
+      }
+      return response.json();
+    };
+
+    resolveStream()
       .then(data => {
         if (cancelled) return;
         if (data?.url) {
@@ -116,7 +124,6 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, needsDynamicResolution, retryKey]);
 
   const rawHlsUrl = channelId === 'now14' ? NOW14_PREVIEW_HLS_URL : (stream?.streamUrl ?? dynamicHlsUrl);
@@ -242,7 +249,6 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       video.removeEventListener('waiting', handleWaiting);
       hls?.destroy();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, hlsUrl, isKeshetMobile, retryKey]);
 
   const keepMuted = useCallback(() => {
