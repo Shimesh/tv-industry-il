@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createCipheriv, createDecipheriv } from 'node:crypto';
 
 const DESKTOP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const MOBILE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const I24_ACCOUNT_ID = '5377161796001';
 const I24_VIDEO_ID = '6352464366112';
 const I24_POLICY_KEY = 'BCpkADawqM1UIU4favtR1Jj4rqM0ZAkYwMEbgN9bsEpJ2150CdxJmRIG8jK-Up_9w4w37x3tP1AsoO_MZhD_XoAGkdKWxymaaw4OHuhPn_lEJczODTm3AO7S08gLFPnLnb-FcKJwXhbxCQ10';
@@ -10,6 +10,14 @@ const NOW14_API_BASE = 'https://insight-api-channel14.univtec.com/';
 const NOW14_TENANT_ID = 'channel14';
 const NOW14_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/ch14/live/ch14/live.livx/playlist.m3u8';
 const KAN11_STABLE_HLS = 'https://r.il.cdn-redge.media/livehls/oil/kancdn-live/live/kan11/live.livx/playlist.m3u8';
+const KESHET_LIVE_PAGE = 'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm';
+const KESHET_PLAYLIST_URL = 'https://www.mako.co.il/AjaxPage?jspName=playlist12.jsp&videoChannelId=5d28d21b4580e310VgnVCM2000002a0c10acRCRD&galleryChannelId=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&vcmid=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD';
+const KESHET_ENTITLEMENT_URL = 'https://mass.mako.co.il/ClicksStatistics/entitlementsServicesV2.jsp?et=egt';
+const KESHET_VCM_ID = '6540b8dcb64fd310VgnVCM2000002a0c10acRCRD';
+const KESHET_PLAYER_VERSION = '7.15.0';
+const KESHET_PLAYLIST_KEY = Buffer.from('LTf7r/zM2VndHwP+4So6bw==', 'utf8');
+const KESHET_TOKEN_KEY = Buffer.from('YhnUaXMmltB6gd8p9SWleQ==', 'utf8');
+const KESHET_CRYPTO_IV = Buffer.from('theExact16Chars=', 'utf8');
 
 type BrightcovePlaybackResponse = {
   sources?: Array<{
@@ -23,6 +31,21 @@ type UnivtecPlayResponse = {
     hlsMaster?: string;
     hlsStream?: string;
   };
+};
+
+type KeshetPlaylist = {
+  media?: Array<{
+    url?: string;
+    cdn?: string;
+    ssai?: boolean;
+  }>;
+};
+
+type KeshetEntitlement = {
+  caseId?: string;
+  tickets?: Array<{
+    ticket?: string;
+  }>;
 };
 
 function isMobileUserAgent(userAgent: string | null): boolean {
@@ -62,36 +85,79 @@ function extractM3u8(html: string): string | null {
   return null;
 }
 
-async function resolveKeshet12Stream(userAgent: string | null): Promise<string | null> {
-  const candidateUrls = [
-    'https://www.mako.co.il/mako-vod-live-tv/VOD-6540b8dcb64fd31006.htm',
-    'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&videoChannelId=5d28d21b4580e310VgnVCM2000002a0c10acRCRD&vcmid=6540b8dcb64fd310VgnVCM2000002a0c10acRCRD&autoPlay=true',
-    'https://www.mako.co.il/AjaxPage?jspName=embedHTML5video.jsp&galleryChannelId=7c5076a9b8757810VgnVCM100000700a10acRCRD&videoChannelId=d1d6f5dfc8517810VgnVCM100000700a10acRCRD&vcmid=1e2258089b67f510VgnVCM2000002a0c10acRCRD&autoPlay=true',
-    'https://www.mako.co.il/live-news?partner=NavBar',
-  ];
-
-  const userAgents = isMobileUserAgent(userAgent)
-    ? [MOBILE_USER_AGENT, userAgent || MOBILE_USER_AGENT, DESKTOP_USER_AGENT]
-    : [DESKTOP_USER_AGENT, MOBILE_USER_AGENT];
-
-  for (const fetchUserAgent of userAgents) {
-    for (const url of candidateUrls) {
-      const html = await fetchPage(url, fetchUserAgent);
-      if (!html) continue;
-
-      const directHlsMatches = html.match(/https:\/\/[^"'\s<>]+(?:cloudfront|akamaized|mako|keshet)[^"'\s<>]+\.m3u8[^"'\s<>]*/gi)
-        ?? html.match(/https:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/gi);
-      const directHls = directHlsMatches?.find(match => !match.includes('/iframe/') && !match.includes('/embed/'));
-      if (directHls) {
-        return directHls.replace(/\\\//g, '/').replace(/\\\\/g, '');
-      }
-
-      const extracted = extractM3u8(html);
-      if (extracted) return extracted;
-    }
+function decryptKeshetPayload<T>(encrypted: string, key: Buffer): T | null {
+  try {
+    const decipher = createDecipheriv('aes-192-cbc', key, KESHET_CRYPTO_IV);
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encrypted.trim(), 'base64')),
+      decipher.final(),
+    ]);
+    return JSON.parse(decrypted.toString('utf8')) as T;
+  } catch {
+    return null;
   }
+}
 
-  return null;
+function encryptKeshetPayload(payload: object, key: Buffer): string {
+  const cipher = createCipheriv('aes-192-cbc', key, KESHET_CRYPTO_IV);
+  return Buffer.concat([
+    cipher.update(JSON.stringify(payload), 'utf8'),
+    cipher.final(),
+  ]).toString('base64');
+}
+
+async function resolveKeshet12Stream(userAgent: string | null): Promise<string | null> {
+  try {
+    const headers = {
+      'User-Agent': userAgent || DESKTOP_USER_AGENT,
+      Accept: 'text/plain,*/*',
+      Referer: KESHET_LIVE_PAGE,
+      Origin: 'https://www.mako.co.il',
+      'Cache-Control': 'no-cache',
+    };
+    const playlistResponse = await fetch(KESHET_PLAYLIST_URL, {
+      headers,
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!playlistResponse.ok) return null;
+
+    const encryptedPlaylist = await playlistResponse.text();
+    const playlist = decryptKeshetPayload<KeshetPlaylist>(encryptedPlaylist, KESHET_PLAYLIST_KEY);
+    const source = playlist?.media?.find(item => item.cdn === 'AWS' && item.ssai === false)
+      ?? playlist?.media?.find(item => item.cdn === 'AWS')
+      ?? playlist?.media?.[0];
+    if (!source?.url || !source.cdn) return null;
+
+    const sourceUrl = new URL(source.url);
+    const entitlementPayload = encryptKeshetPayload({
+      lp: `${sourceUrl.pathname}${sourceUrl.search}`,
+      rv: source.cdn,
+      du: 'null',
+      dv: KESHET_VCM_ID,
+      na: KESHET_PLAYER_VERSION,
+    }, KESHET_TOKEN_KEY);
+    const entitlementResponse = await fetch(KESHET_ENTITLEMENT_URL, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'text/plain;charset=UTF-8',
+      },
+      body: entitlementPayload,
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!entitlementResponse.ok) return null;
+
+    const encryptedEntitlement = await entitlementResponse.text();
+    const entitlement = decryptKeshetPayload<KeshetEntitlement>(encryptedEntitlement, KESHET_TOKEN_KEY);
+    const ticket = entitlement?.caseId === '1' ? entitlement.tickets?.[0]?.ticket : null;
+    if (!ticket) return null;
+
+    return `${source.url}${source.url.includes('?') ? '&' : '?'}${ticket}`;
+  } catch {
+    return null;
+  }
 }
 
 async function isPlayableHlsManifest(url: string, userAgent: string | null): Promise<boolean> {
@@ -100,7 +166,8 @@ async function isPlayableHlsManifest(url: string, userAgent: string | null): Pro
       headers: {
         'User-Agent': userAgent || DESKTOP_USER_AGENT,
         Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*',
-        Referer: 'https://www.mako.co.il/',
+        Referer: KESHET_LIVE_PAGE,
+        Origin: 'https://www.mako.co.il',
       },
       signal: AbortSignal.timeout(8000),
       cache: 'no-store',
@@ -225,13 +292,16 @@ export async function GET(
     // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
     if (channel === 'keshet12') {
       const resolvedUrl = await resolveKeshet12Stream(requestUserAgent);
-      const url = resolvedUrl && await isPlayableHlsManifest(resolvedUrl, requestUserAgent)
+      const upstreamUrl = resolvedUrl && await isPlayableHlsManifest(resolvedUrl, requestUserAgent)
         ? resolvedUrl
+        : null;
+      const url = upstreamUrl
+        ? `/api/stream-proxy/keshet12?url=${encodeURIComponent(upstreamUrl)}`
         : null;
       return NextResponse.json({
         url,
         type: url ? 'hls' : null,
-        source: url ? 'direct-hls' : 'mako-embed-fallback',
+        source: url ? 'signed-hls-proxy' : 'mako-embed-fallback',
         mobileRequest: isMobileUserAgent(requestUserAgent),
         expires: Date.now() + (url ? 1800000 : 300000),
       });
