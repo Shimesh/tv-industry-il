@@ -94,6 +94,26 @@ async function resolveKeshet12Stream(userAgent: string | null): Promise<string |
   return null;
 }
 
+async function isPlayableHlsManifest(url: string, userAgent: string | null): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': userAgent || DESKTOP_USER_AGENT,
+        Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*',
+        Referer: 'https://www.mako.co.il/',
+      },
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store',
+    });
+    if (!response.ok) return false;
+
+    const manifest = await response.text();
+    return manifest.trimStart().startsWith('#EXTM3U');
+  } catch {
+    return false;
+  }
+}
+
 async function resolveI24Stream(): Promise<string | null> {
   try {
     const response = await fetch(`https://edge.api.brightcove.com/playback/v1/accounts/${I24_ACCOUNT_ID}/videos/${I24_VIDEO_ID}`, {
@@ -204,11 +224,14 @@ export async function GET(
 
     // === קשת 12 — try to resolve direct HLS, otherwise client falls back to iframe ===
     if (channel === 'keshet12') {
-      const url = await resolveKeshet12Stream(requestUserAgent);
+      const resolvedUrl = await resolveKeshet12Stream(requestUserAgent);
+      const url = resolvedUrl && await isPlayableHlsManifest(resolvedUrl, requestUserAgent)
+        ? resolvedUrl
+        : null;
       return NextResponse.json({
         url,
         type: url ? 'hls' : null,
-        source: url ? 'direct-hls' : null,
+        source: url ? 'direct-hls' : 'mako-embed-fallback',
         mobileRequest: isMobileUserAgent(requestUserAgent),
         expires: Date.now() + (url ? 1800000 : 300000),
       });
