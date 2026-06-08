@@ -67,7 +67,7 @@ function encryptPayload(payload: object, keyValue: string): string {
   return encrypted.ciphertext.toString(CryptoJS.enc.Base64);
 }
 
-async function resolveKeshet12BrowserStreamOnce(): Promise<string | null> {
+async function resolveKeshet12BrowserStreamOnce(sourceOffset: number): Promise<string | null> {
   let stage = 'playlist-request';
   try {
     const playlistResponse = await fetch(KESHET_PLAYLIST_URL, {
@@ -82,9 +82,15 @@ async function resolveKeshet12BrowserStreamOnce(): Promise<string | null> {
       encryptedPlaylist,
       KESHET_PLAYLIST_KEY,
     );
-    const source = playlist.media?.find(item => item.cdn === 'AWS' && item.ssai === false)
-      ?? playlist.media?.find(item => item.cdn === 'AWS')
-      ?? playlist.media?.[0];
+    const orderedSources = [
+      ...(playlist.media?.filter(item => item.cdn === 'AWS' && item.ssai === false) ?? []),
+      ...(playlist.media?.filter(item => item.cdn === 'AWS' && item.ssai === true) ?? []),
+      ...(playlist.media?.filter(item => item.cdn === 'AWS') ?? []),
+    ].filter((item, index, items) =>
+      Boolean(item.url && item.cdn)
+      && items.findIndex(candidate => candidate.url === item.url) === index
+    );
+    const source = orderedSources[sourceOffset % orderedSources.length];
     if (!source?.url || !source.cdn) return resolveKeshet12ServerStream();
 
     stage = 'server-entitlement-request';
@@ -145,9 +151,9 @@ async function resolveKeshet12BrowserStreamOnce(): Promise<string | null> {
   }
 }
 
-export async function resolveKeshet12BrowserStream(): Promise<string | null> {
+export async function resolveKeshet12BrowserStream(sourceOffset = 0): Promise<string | null> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const url = await resolveKeshet12BrowserStreamOnce();
+    const url = await resolveKeshet12BrowserStreamOnce(sourceOffset + attempt);
     if (url) return url;
     await new Promise(resolve => window.setTimeout(resolve, 500));
   }

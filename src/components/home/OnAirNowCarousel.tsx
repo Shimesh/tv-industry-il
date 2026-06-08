@@ -89,7 +89,7 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
     const resolveStream = async () => {
       if (channelId === 'keshet12') {
-        const url = await resolveKeshet12BrowserStream();
+        const url = await resolveKeshet12BrowserStream(retryKey);
         return url ? { url } : null;
       }
       const response = await fetch(`/api/stream-token/${channelId}`);

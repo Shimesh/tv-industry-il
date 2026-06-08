@@ -112,7 +112,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
 
     const resolveStream = async () => {
       if (channel.id === 'keshet12') {
-        const url = await resolveKeshet12BrowserStream();
+        const url = await resolveKeshet12BrowserStream(retryKey);
         return url ? { url } : null;
       }
       const response = await fetch(`/api/stream-token/${channel.id}`);
