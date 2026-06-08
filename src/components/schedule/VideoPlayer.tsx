@@ -151,6 +151,8 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
     let activeSourceIndex = 0;
     let mediaRecoverAttempts = 0;
     let networkRecoverAttempts = 0;
+    let playbackStarted = false;
+    let playbackWatchdog: number | null = null;
 
     const getVideoErrorDetails = () => {
       const videoError = video.error;
@@ -207,10 +209,26 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
 
     const handleStalled = () => logNativeState('stalled');
     const handleWaiting = () => logNativeState('waiting');
+    const markPlaybackReady = () => {
+      playbackStarted = true;
+      if (playbackWatchdog) {
+        window.clearTimeout(playbackWatchdog);
+        playbackWatchdog = null;
+      }
+    };
 
     video.addEventListener('error', handleNativeVideoError);
     video.addEventListener('stalled', handleStalled);
     video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', markPlaybackReady);
+    video.addEventListener('playing', markPlaybackReady);
+    playbackWatchdog = window.setTimeout(() => {
+      if (!playbackStarted && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        logStreamError('Playback watchdog timed out');
+        setDynamicStreamUrl(null);
+        setRetryKey(key => key + 1);
+      }
+    }, 8000);
     setLoading(true);
     setError(null);
     setNeedsUserGesture(false);
@@ -343,6 +361,9 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
       video.removeEventListener('error', handleNativeVideoError);
       video.removeEventListener('stalled', handleStalled);
       video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', markPlaybackReady);
+      video.removeEventListener('playing', markPlaybackReady);
+      if (playbackWatchdog) window.clearTimeout(playbackWatchdog);
       hlsInstance?.destroy();
     };
   }, [channel.id, channel.name, stream?.embedUrl, stream?.streamUrl, dynamicStreamUrl, isKeshetMobile, shouldStartMuted]);

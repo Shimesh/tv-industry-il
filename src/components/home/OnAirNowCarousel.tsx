@@ -146,6 +146,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     if (!video || !hlsUrl) return;
 
     let hls: Hls | null = null;
+    let playbackStarted = false;
+    let watchdogId: number | null = null;
 
     const logPlaybackError = (message: string, details?: unknown) => {
       console.error(`[OnAirNowCarousel] ${message}`, {
@@ -167,6 +169,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         setFailedHlsUrl(null);
         setRetryKey(k => k + 1);
       }, 15000);
+    };
+
+    const markPlaybackReady = () => {
+      playbackStarted = true;
+      if (watchdogId) {
+        window.clearTimeout(watchdogId);
+        watchdogId = null;
+      }
     };
 
     const playMutedPreview = (context: string) => {
@@ -201,6 +211,13 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     video.addEventListener('error', handleNativeVideoError);
     video.addEventListener('stalled', handleStalled);
     video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', markPlaybackReady);
+    video.addEventListener('playing', markPlaybackReady);
+    watchdogId = window.setTimeout(() => {
+      if (!playbackStarted && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        failPreview('Playback watchdog timed out');
+      }
+    }, 8000);
 
     configureAutoplayVideo(video);
 
@@ -212,6 +229,9 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         video.removeEventListener('error', handleNativeVideoError);
         video.removeEventListener('stalled', handleStalled);
         video.removeEventListener('waiting', handleWaiting);
+        video.removeEventListener('canplay', markPlaybackReady);
+        video.removeEventListener('playing', markPlaybackReady);
+        if (watchdogId) window.clearTimeout(watchdogId);
       };
     }
 
@@ -221,6 +241,9 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
         video.removeEventListener('error', handleNativeVideoError);
         video.removeEventListener('stalled', handleStalled);
         video.removeEventListener('waiting', handleWaiting);
+        video.removeEventListener('canplay', markPlaybackReady);
+        video.removeEventListener('playing', markPlaybackReady);
+        if (watchdogId) window.clearTimeout(watchdogId);
       };
     }
 
@@ -249,6 +272,9 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       video.removeEventListener('error', handleNativeVideoError);
       video.removeEventListener('stalled', handleStalled);
       video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', markPlaybackReady);
+      video.removeEventListener('playing', markPlaybackReady);
+      if (watchdogId) window.clearTimeout(watchdogId);
       hls?.destroy();
     };
   }, [channelId, hlsUrl, isKeshetMobile, retryKey]);
