@@ -172,13 +172,15 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
     const playMutedPreview = (context: string) => {
       configureAutoplayVideo(video);
       void video.play().catch(error => {
-        failPreview(`Autoplay failed during ${context}`, error);
+        // Browsers may reject play() briefly before native HLS has buffered.
+        // Keep the valid stream URL and retry on loaded metadata/canplay.
+        logPlaybackError(`Autoplay deferred during ${context}`, error);
       });
       if (isKeshetMobile) {
         window.setTimeout(() => {
           configureAutoplayVideo(video);
           void video.play().catch(error => {
-            failPreview(`Delayed mobile autoplay failed during ${context}`, error);
+            logPlaybackError(`Delayed mobile autoplay deferred during ${context}`, error);
           });
         }, 200);
       }

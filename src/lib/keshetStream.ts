@@ -7,6 +7,8 @@ const KESHET_PLAYER_VERSION = '7.15.0';
 const KESHET_PLAYLIST_KEY = 'LTf7r/zM2VndHwP+4So6bw==';
 const KESHET_TOKEN_KEY = 'YhnUaXMmltB6gd8p9SWleQ==';
 const KESHET_CRYPTO_IV = 'theExact16Chars=';
+const KESHET_STREAM_CACHE_KEY = 'keshet12_signed_stream_v1';
+const KESHET_STREAM_CACHE_MS = 8 * 60 * 1000;
 
 type KeshetPlaylist = {
   media?: Array<{
@@ -32,6 +34,30 @@ async function resolveKeshet12ServerStream(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+function readCachedStream(): string | null {
+  try {
+    const cached = JSON.parse(localStorage.getItem(KESHET_STREAM_CACHE_KEY) || '') as {
+      url?: string;
+      expiresAt?: number;
+    };
+    return cached.url && Number(cached.expiresAt) > Date.now() ? cached.url : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheStream(url: string): string {
+  try {
+    localStorage.setItem(KESHET_STREAM_CACHE_KEY, JSON.stringify({
+      url,
+      expiresAt: Date.now() + KESHET_STREAM_CACHE_MS,
+    }));
+  } catch {
+    // Storage can be unavailable in private browsing; playback still works without caching.
+  }
+  return url;
 }
 
 function decryptPayload<T>(encrypted: string, keyValue: string): T {
@@ -68,6 +94,9 @@ function encryptPayload(payload: object, keyValue: string): string {
 }
 
 export async function resolveKeshet12BrowserStream(): Promise<string | null> {
+  const cachedStream = readCachedStream();
+  if (cachedStream) return cachedStream;
+
   let stage = 'playlist-request';
   try {
     const playlistResponse = await fetch(KESHET_PLAYLIST_URL, {
@@ -96,7 +125,7 @@ export async function resolveKeshet12BrowserStream(): Promise<string | null> {
     });
     if (serverEntitlementResponse.ok) {
       const serverEntitlement = (await serverEntitlementResponse.json()) as { url?: string | null };
-      if (serverEntitlement.url) return serverEntitlement.url;
+      if (serverEntitlement.url) return cacheStream(serverEntitlement.url);
     }
 
     const sourceUrl = new URL(source.url);
@@ -133,10 +162,10 @@ export async function resolveKeshet12BrowserStream(): Promise<string | null> {
     if (!ticket) return resolveKeshet12ServerStream();
 
     const signedUrl = `${source.url}${source.url.includes('?') ? '&' : '?'}${ticket}`;
-    return `/api/stream-proxy/keshet12?url=${encodeURIComponent(signedUrl)}`;
+    return cacheStream(`/api/stream-proxy/keshet12?url=${encodeURIComponent(signedUrl)}`);
   } catch (error) {
     const serverStream = await resolveKeshet12ServerStream();
-    if (serverStream) return serverStream;
+    if (serverStream) return cacheStream(serverStream);
 
     const name = error instanceof Error ? error.name : 'UnknownError';
     const message = error instanceof Error ? error.message : String(error);

@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid stream URL' }, { status: 400 });
   }
 
-  const range = request.headers.get('range');
+  const requestedManifest = upstreamUrl.pathname.endsWith('.m3u8');
+  const range = requestedManifest ? null : request.headers.get('range');
   const upstreamResponse = await fetch(upstreamUrl, {
     headers: {
       Accept: request.headers.get('accept') || '*/*',
@@ -93,17 +94,19 @@ export async function GET(request: NextRequest) {
   }
 
   const contentType = upstreamResponse.headers.get('content-type') || 'application/octet-stream';
-  const isManifest = upstreamUrl.pathname.endsWith('.m3u8')
+  const isManifest = requestedManifest
     || contentType.includes('mpegurl');
   const headers = new Headers({
     'Content-Type': contentType,
     'Cache-Control': isManifest ? 'no-store' : 'public, max-age=30',
   });
 
-  const contentRange = upstreamResponse.headers.get('content-range');
-  const acceptRanges = upstreamResponse.headers.get('accept-ranges');
-  if (contentRange) headers.set('Content-Range', contentRange);
-  if (acceptRanges) headers.set('Accept-Ranges', acceptRanges);
+  if (!isManifest) {
+    const contentRange = upstreamResponse.headers.get('content-range');
+    const acceptRanges = upstreamResponse.headers.get('accept-ranges');
+    if (contentRange) headers.set('Content-Range', contentRange);
+    if (acceptRanges) headers.set('Accept-Ranges', acceptRanges);
+  }
 
   if (isManifest) {
     const manifest = await upstreamResponse.text();
