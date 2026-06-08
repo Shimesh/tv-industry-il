@@ -221,22 +221,14 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
 
     configureAutoplayVideo(video);
 
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = hlsUrl;
-      video.load();
-      playMutedPreview('native HLS setup');
-      return () => {
-        video.removeEventListener('error', handleNativeVideoError);
-        video.removeEventListener('stalled', handleStalled);
-        video.removeEventListener('waiting', handleWaiting);
-        video.removeEventListener('canplay', markPlaybackReady);
-        video.removeEventListener('playing', markPlaybackReady);
-        if (watchdogId) window.clearTimeout(watchdogId);
-      };
-    }
-
     if (!Hls.isSupported()) {
-      failPreview('Browser does not support HLS playback');
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        video.load();
+        playMutedPreview('native HLS setup');
+      } else {
+        failPreview('Browser does not support HLS playback');
+      }
       return () => {
         video.removeEventListener('error', handleNativeVideoError);
         video.removeEventListener('stalled', handleStalled);
@@ -247,6 +239,8 @@ function MutedLivePreview({ channelId }: { channelId: string }) {
       };
     }
 
+    // Prefer hls.js on Android and desktop. Some Android browsers report native
+    // HLS support but stall at 0:00; iOS falls back to the native branch above.
     hls = new Hls({
       lowLatencyMode: false,
       maxBufferLength: 30,
