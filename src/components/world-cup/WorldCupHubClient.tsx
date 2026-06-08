@@ -528,48 +528,132 @@ function VenueImage({ venue }: { venue: WorldCupVenue }) {
   );
 }
 
-function VenuesGrid({ venues }: { venues: WorldCupVenue[] }) {
+function VenueLocalClock({ timezone }: { timezone: string }) {
+  const timeRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    function tick() {
+      if (timeRef.current) {
+        timeRef.current.textContent = new Date().toLocaleTimeString('he-IL', {
+          timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+      }
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [timezone]);
+  return <span ref={timeRef} className="font-mono tabular-nums text-[#D4AF37]" dir="ltr" />;
+}
+
+const COUNTRY_COLORS: Record<string, { bg: string; border: string; flag: string }> = {
+  'מקסיקו':        { bg: 'from-green-900/60 to-green-950/80', border: 'border-green-700/40', flag: '🇲🇽' },
+  'קנדה':          { bg: 'from-red-900/60 to-red-950/80',   border: 'border-red-700/40',   flag: '🇨🇦' },
+  'ארצות הברית':   { bg: 'from-blue-900/60 to-blue-950/80',  border: 'border-blue-700/40',  flag: '🇺🇸' },
+};
+
+function VenuesGrid({ venues, matches }: { venues: WorldCupVenue[]; matches: WorldCupMatch[] }) {
   const grouped = useMemo(() => {
     const map: Record<string, WorldCupVenue[]> = {};
     for (const v of venues) {
-      const country = v.countryHe;
-      map[country] = [...(map[country] ?? []), v];
+      map[v.countryHe] = [...(map[v.countryHe] ?? []), v];
     }
     return Object.entries(map);
   }, [venues]);
 
+  const matchCountByVenue = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of matches) {
+      counts[m.venueId] = (counts[m.venueId] ?? 0) + 1;
+    }
+    return counts;
+  }, [matches]);
+
   return (
     <CollapsibleCard icon={Landmark} title="16 אצטדיונים" badge="3 מדינות" className="overflow-hidden">
-      <div className="space-y-4 p-3">
-        {grouped.map(([country, countryVenues]) => (
-          <div key={country}>
-            <div className="mb-2 flex items-center gap-2 text-sm font-black text-[var(--theme-text)]">
-              <span className="h-px flex-1" style={{ background: 'var(--theme-border)' }} />
-              <span>{country === 'ארצות הברית' ? '🇺🇸' : country === 'קנדה' ? '🇨🇦' : '🇲🇽'} {country}</span>
-              <span className="rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] text-[#D4AF37]">{countryVenues.length}</span>
-              <span className="h-px flex-1" style={{ background: 'var(--theme-border)' }} />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {countryVenues.map((venue) => (
-                <article key={venue.id} className="group overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
-                  <div className="relative h-36 overflow-hidden">
-                    <VenueImage venue={venue} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                    <div className="absolute bottom-2 right-2 left-2 flex items-center justify-between gap-2">
-                      <WeatherPill venueId={venue.id} />
-                      <span className="rounded-full bg-[#D4AF37] px-2 py-1 text-[11px] font-black text-[#002046]" dir="ltr">{venue.capacity.toLocaleString()}</span>
-                    </div>
+      <div className="space-y-6 p-3">
+        {grouped.map(([country, countryVenues]) => {
+          const cc = COUNTRY_COLORS[country] ?? { bg: 'from-slate-800/60 to-slate-900/80', border: 'border-slate-600/40', flag: '🏳️' };
+          return (
+            <div key={country}>
+              {/* Country header */}
+              <div className={`mb-3 rounded-xl border bg-gradient-to-l p-3 ${cc.bg} ${cc.border}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl leading-none">{cc.flag}</span>
+                  <div className="flex-1">
+                    <h3 className="text-base font-black text-white">{country}</h3>
+                    <p className="text-xs text-white/60">{countryVenues.length} אצטדיונים</p>
                   </div>
-                  <div className="p-3">
-                    <h3 className="font-black text-[var(--theme-text)]">{venue.nameHe}</h3>
-                    <p className="text-xs text-[var(--theme-text-secondary)]">{venue.cityHe}</p>
-                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--theme-text-secondary)]">{venue.factHe}</p>
-                  </div>
-                </article>
-              ))}
+                  <span className="rounded-full bg-[#D4AF37]/20 px-3 py-1 text-xs font-black text-[#D4AF37]">
+                    {countryVenues.reduce((s, v) => s + v.capacity, 0).toLocaleString()} מקומות
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {countryVenues.map((venue) => {
+                  const gameCount = matchCountByVenue[venue.id] ?? 0;
+                  const isFinal = venue.id === 'new-york-new-jersey';
+                  return (
+                    <article key={venue.id} className="group overflow-hidden rounded-xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl" style={{ borderColor: isFinal ? '#D4AF37' : 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
+                      {/* Image */}
+                      <div className="relative h-44 overflow-hidden">
+                        <VenueImage venue={venue} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                        {/* Final badge */}
+                        {isFinal && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-[#D4AF37] px-2 py-0.5 text-[10px] font-black text-[#002046]">
+                            🏆 גמר
+                          </div>
+                        )}
+                        {/* Weather + capacity row */}
+                        <div className="absolute bottom-2 right-2 left-2 flex items-center justify-between gap-2">
+                          <WeatherPill venueId={venue.id} />
+                          <span className="rounded-full bg-[#D4AF37] px-2 py-1 text-[11px] font-black text-[#002046]" dir="ltr">
+                            {venue.capacity.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-3 space-y-2">
+                        {/* Name + city */}
+                        <div>
+                          <h3 className="font-black leading-tight text-[var(--theme-text)]">{venue.nameHe}</h3>
+                          <p className="text-xs text-[var(--theme-text-secondary)]">{venue.cityHe}</p>
+                        </div>
+
+                        {/* Info pills row */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {gameCount > 0 && (
+                            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold text-blue-400">
+                              {gameCount} משחקים
+                            </span>
+                          )}
+                          <span className="rounded-full bg-white/8 px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)]">
+                            {venue.roofHe}
+                          </span>
+                          <span className="rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] text-emerald-400">
+                            דשא טבעי
+                          </span>
+                        </div>
+
+                        {/* Local time */}
+                        <div className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px]" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg)' }}>
+                          <Clock className="h-3 w-3 shrink-0 text-[#D4AF37]" />
+                          <span className="text-[var(--theme-text-secondary)]">שעה מקומית:</span>
+                          <VenueLocalClock timezone={venue.timezone} />
+                        </div>
+
+                        {/* Fact */}
+                        <p className="line-clamp-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">{venue.factHe}</p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </CollapsibleCard>
   );
@@ -1674,7 +1758,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           <PlayerStatsTable stats={playerStats} />
         </div>
         <div ref={sectionRefs.venues}>
-          <VenuesGrid venues={venues} />
+          <VenuesGrid venues={venues} matches={matches} />
         </div>
       </main>
 

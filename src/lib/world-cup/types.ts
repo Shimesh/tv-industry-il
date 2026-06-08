@@ -57,6 +57,8 @@ export type WorldCupVenue = {
   longitude: number;
   imageUrl: string;
   factHe: string;
+  timezone: string;
+  roofHe: string;
 };
 
 export type WorldCupWeather = {
