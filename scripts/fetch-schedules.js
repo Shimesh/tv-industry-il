@@ -870,7 +870,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   // Save to per-user path: productions/{userId}/weeks/{weekId}
   const userProductionsRoot = getUserProductionsRoot(userId);
 
-  // The calendar grid is authoritative for existence; popup parsing only enriches crew.
+  // Only clean up when we have productions to replace — never wipe without data to restore.
+  if (!schedule.productions || schedule.productions.length === 0) {
+    console.log(`Skipping cleanup for week ${weekId} — schedule returned 0 productions`);
+    return;
+  }
   await cleanupWeek(userProductionsRoot, weekId);
 
   const batch = db.batch();
@@ -1283,6 +1287,9 @@ async function main() {
           const calendarUrl = normalizeSavedCalendarUrl(saved.url);
           const schedule = await fetchSchedule(browser, calendarUrl);
           if (!schedule?.weekStart) throw new Error('Calendar week could not be parsed');
+          if (!schedule.productions || schedule.productions.length === 0) {
+            throw new Error('No productions found in saved Herzliya calendar — skipping to preserve existing data');
+          }
 
           await saveSchedule(schedule, saved.uid, saved.workerName || '');
           successCount++;
