@@ -1084,8 +1084,15 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           return parsedAsNameRole !== normalizedProductionName;
         })
       : [];
+    const hasAuthoritativeDepartmentCrew =
+      !prod.departmentEnriched
+      && existingGlobal.crewSource === 'department'
+      && existingCrewList.length > 0;
+    const globalCrewCandidates = hasAuthoritativeDepartmentCrew
+      ? existingCrewList
+      : [...existingCrewList, ...crewList];
     const mergedCrewByName = new Map();
-    for (const member of [...existingCrewList, ...crewList]) {
+    for (const member of globalCrewCandidates) {
       const key = normalizeName(member.name || '');
       if (key) mergedCrewByName.set(key, member);
     }
@@ -1100,6 +1107,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       endTime: prod.endTime || '',
       status: prod.status || 'scheduled',
       herzliyaId: prod.herzliyaId,
+      crewSource: prod.departmentEnriched
+        ? 'department'
+        : existingGlobal.crewSource || (prod.popupParsed ? 'popup' : 'fallback'),
       crew_list: mergedCrewList,
       crew_phones: [...new Set(mergedCrewList.map((member) => member.normalizedPhone).filter(Boolean))],
       crew_shadow_keys: [...new Set(mergedCrewList.map((member) => member.shadowKey).filter(Boolean))],
