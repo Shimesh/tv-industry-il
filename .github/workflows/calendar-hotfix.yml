@@ -1,8 +1,10 @@
 name: Apply Calendar Reliability Hotfix
 
 on:
-  pull_request:
+  push:
     branches: [master]
+    paths:
+      - '.github/workflows/calendar-hotfix.yml'
   workflow_dispatch:
 
 permissions:
@@ -11,6 +13,7 @@ permissions:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,7 +25,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Apply calendar reliability changes
+      - name: Apply calendar client refresh and version sync
         run: |
           node <<'NODE'
           const fs = require('fs');
@@ -45,13 +48,6 @@ jobs:
           let footer = fs.readFileSync(footerPath, 'utf8');
           footer = footer.replace(/v\d+\.\d+\.\d+/, `v${version}`);
           fs.writeFileSync(footerPath, footer);
-
-          const vercelPath = 'vercel.json';
-          const vercel = JSON.parse(fs.readFileSync(vercelPath, 'utf8'));
-          const calendarCron = vercel.crons.find((cron) => cron.path === '/api/cron/sync-calendar');
-          if (!calendarCron) throw new Error('Calendar cron not found in vercel.json');
-          calendarCron.schedule = '47 * * * *';
-          fs.writeFileSync(vercelPath, JSON.stringify(vercel, null, 2) + '\n');
 
           const widgetPath = 'src/components/WeeklyCalendarWidget.tsx';
           let widget = fs.readFileSync(widgetPath, 'utf8');
@@ -92,7 +88,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json realtime-server/package.json src/components/Footer.tsx src/components/WeeklyCalendarWidget.tsx vercel.json
-          git commit -m "fix: add hourly calendar fallback and live refresh in v2.8.86"
+          git add package.json package-lock.json realtime-server/package.json src/components/Footer.tsx src/components/WeeklyCalendarWidget.tsx
+          git commit -m "fix: refresh calendar client automatically in v2.8.86"
           git pull --rebase origin master
           git push origin master
