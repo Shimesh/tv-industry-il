@@ -1,7 +1,8 @@
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
+const chromiumModule = require('@sparticuz/chromium');
+const chromium = chromiumModule.default || chromiumModule;
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -405,7 +406,6 @@ async function fetchSchedule(browser, url) {
           const onclickAttr = eventDiv.getAttribute('onclick') || '';
           const idMatch = onclickAttr.match(/openmd2\((\d+)\)/);
           const herzliyaId = idMatch ? parseInt(idMatch[1], 10) : 0;
-          if (!herzliyaId) return;
 
           const isCurrentUserShift = eventDiv.classList.contains('sat');
           const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
@@ -842,6 +842,15 @@ async function fetchSchedule(browser, url) {
   }
 }
 
+function createVisibleProductionId(production) {
+  const key = [production.name || '', production.date || '', production.studio || '', production.startTime || ''].join('::').toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash) + key.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'visible-' + Math.abs(hash).toString(36);
+}
 async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
@@ -851,7 +860,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   const userProductionsRoot = getUserProductionsRoot(userId);
 
   if (cleanupAllowed) {
-    await cleanupWeek(userProductionsRoot, weekId);
+    console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');
   } else {
     console.log(
       `Skipping cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
@@ -869,8 +878,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   });
 
   for (const prod of schedule.productions) {
-    const prodId = String(prod.herzliyaId);
-    if (!prodId || prodId === '0') continue;
+    const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));
 
     const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);
     const cleanCrew = sanitizeCrewForFirestore(prod.crew);
@@ -1373,4 +1381,4 @@ async function main() {
   await browser.close();
 }
 
-main().catch(console.error);
+main().catch((error) => { console.error(error); process.exitCode = 1; });
