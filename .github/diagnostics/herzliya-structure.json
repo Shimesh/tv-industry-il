@@ -1,0 +1,259 @@
+{
+  "generatedAt": "2026-06-09T19:03:10.115Z",
+  "calendarHash": "3697c5ebb8ba",
+  "report": {
+    "href": "https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N<uuid>,-A13062026",
+    "title": "",
+    "events": [
+      {
+        "index": 0,
+        "tag": "DIV",
+        "classes": [
+          "sat"
+        ],
+        "attributes": {
+          "class": "sat"
+        },
+        "dataset": {},
+        "text": "05:30-14:00 חדשות הבוקר צילום",
+        "parentAttributes": {
+          "class": "day-cell"
+        },
+        "ancestors": [
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "day-cell"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar-body"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar"
+            }
+          },
+          {
+            "tag": "BODY",
+            "attributes": {}
+          },
+          {
+            "tag": "HTML",
+            "attributes": {
+              "lang": "he",
+              "dir": "rtl"
+            }
+          }
+        ],
+        "html": "<div class=\"sat\">05:30-14:00<br> חדשות הבוקר  צילום<br></div>"
+      },
+      {
+        "index": 1,
+        "tag": "DIV",
+        "classes": [
+          "sat"
+        ],
+        "attributes": {
+          "class": "sat"
+        },
+        "dataset": {},
+        "text": "13:00-23:00 רצועת ערב- כמעט שבת שלום+ פינס צילום",
+        "parentAttributes": {
+          "class": "day-cell"
+        },
+        "ancestors": [
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "day-cell"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar-body"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar"
+            }
+          },
+          {
+            "tag": "BODY",
+            "attributes": {}
+          },
+          {
+            "tag": "HTML",
+            "attributes": {
+              "lang": "he",
+              "dir": "rtl"
+            }
+          }
+        ],
+        "html": "<div class=\"sat\">13:00-23:00<br> רצועת ערב- כמעט שבת שלום+ פינס  צילום<br></div>"
+      },
+      {
+        "index": 2,
+        "tag": "DIV",
+        "classes": [
+          "sat"
+        ],
+        "attributes": {
+          "class": "sat"
+        },
+        "dataset": {},
+        "text": "14:00-18:00 חיים ומעיין צילום",
+        "parentAttributes": {
+          "class": "day-cell"
+        },
+        "ancestors": [
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "day-cell"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar-body"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar"
+            }
+          },
+          {
+            "tag": "BODY",
+            "attributes": {}
+          },
+          {
+            "tag": "HTML",
+            "attributes": {
+              "lang": "he",
+              "dir": "rtl"
+            }
+          }
+        ],
+        "html": "<div class=\"sat\">14:00-18:00<br> חיים ומעיין  צילום<br></div>"
+      },
+      {
+        "index": 3,
+        "tag": "DIV",
+        "classes": [
+          "sat"
+        ],
+        "attributes": {
+          "class": "sat"
+        },
+        "dataset": {},
+        "text": "16:00-20:00 אופירה אוחנה סרי צילום",
+        "parentAttributes": {
+          "class": "day-cell"
+        },
+        "ancestors": [
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "day-cell"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar-body"
+            }
+          },
+          {
+            "tag": "DIV",
+            "attributes": {
+              "class": "calendar"
+            }
+          },
+          {
+            "tag": "BODY",
+            "attributes": {}
+          },
+          {
+            "tag": "HTML",
+            "attributes": {
+              "lang": "he",
+              "dir": "rtl"
+            }
+          }
+        ],
+        "html": "<div class=\"sat\">16:00-20:00<br> אופירה אוחנה סרי  צילום<br></div>"
+      }
+    ],
+    "forms": [],
+    "relevantGlobals": [
+      "captureEvents",
+      "event",
+      "getScreenDetails",
+      "onemptied",
+      "onpageshow",
+      "open",
+      "opener",
+      "openmd2",
+      "queueMicrotask",
+      "releaseEvents",
+      "showDirectoryPicker",
+      "showOpenFilePicker",
+      "showSaveFilePicker",
+      "updateCalendar"
+    ],
+    "relevantScripts": [
+      "\n\tfunction updateCalendar() {\n\t\n    //let inputValue = document.getElementById('monthSelector').value;\n\t  let inputValue2 = document.getElementById('allDep').checked;\n\t  \n\t \nif (document.getElementById('allDep').checked){\n let url = `mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N<uuid>,-A13062026,-A${inputValue2}`;\n    window.open(url, '_TOP');\n\n}\n\nelse\n{\n let url = `mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp3&arguments=-N<uuid>,-A13062026,-A${inputValue2}`;\n window.open(url, '_TOP');\n}\n\n\n\n\n\n\t \n   // let url = `mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N<uuid>,-A010125,-A${inputValue2}`;\n    //window.open(url, '_TOP');\n}\n\nfunction openmd2(prodId){\n//alert(prodId);\n   jQuery('.modal-body').load('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N'+prodId, function(){\n      jQuery('#myModal').modal({ show: true });\n   });\n}\n\n\n"
+    ],
+    "resources": [
+      "https://hsil.acc.co.il:5443/hsil_logo.png"
+    ]
+  },
+  "traffic": [
+    {
+      "kind": "request",
+      "method": "GET",
+      "url": "https://hsil.acc.co.il:5443/sendwa.html?A=<token>",
+      "postData": ""
+    },
+    {
+      "kind": "response",
+      "status": 200,
+      "url": "https://hsil.acc.co.il:5443/sendwa.html?A=<token>",
+      "contentType": "text/html"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "url": "https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N<uuid>,-A13062026",
+      "postData": ""
+    },
+    {
+      "kind": "response",
+      "status": 200,
+      "url": "https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N<uuid>,-A13062026",
+      "contentType": "text/html"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "url": "https://hsil.acc.co.il:5443/hsil_logo.png",
+      "postData": ""
+    },
+    {
+      "kind": "response",
+      "status": 200,
+      "url": "https://hsil.acc.co.il:5443/hsil_logo.png",
+      "contentType": "image/png"
+    }
+  ]
+}
