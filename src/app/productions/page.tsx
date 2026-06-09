@@ -2144,12 +2144,22 @@ function ProductionsContent() {
 
       // Raw HTML from clipboard (Herzliya page Ctrl+A Ctrl+C)
       if (rawHtml) {
-        if (url || isHerzliyaHTML(rawHtml) || rawHtmlHasHerzliyaUrl) {
+        if (url || rawHtmlHasHerzliyaUrl) {
           setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
           setLoading(false);
           const sourceText = manualText || rawHtml || url || '';
           await submitScheduleRequest(sourceText);
           return;
+        }
+        if (isHerzliyaHTML(rawHtml)) {
+          // Full Herzliya page HTML pasted without URL — parse directly
+          setFetchProgress({ step: 'parsing', message: 'מנתח לוח הרצליה...' });
+          const herzliyaParsed = parseHerzliyaHTML(rawHtml);
+          if (herzliyaParsed.productions.length > 0) {
+            setFetchProgress({ step: 'done', message: `נמצאו ${herzliyaParsed.productions.length} הפקות` });
+            await processSchedule(herzliyaParsed);
+            return;
+          }
         }
       }
 
@@ -2246,8 +2256,16 @@ function ProductionsContent() {
           await submitScheduleRequest(html);
           return;
         }
-        setStatusMessage('הדבקת HTML של הרציליה בלי לינק. כדי לשמור צוות מלא, הדבק את הודעת ה־WhatsApp עם הקישור.');
-        setFetchProgress({ step: 'error', message: 'חסר קישור של הרציליה' });
+        // HTML of Herzliya without a URL — parse directly in the browser
+        setFetchProgress({ step: 'parsing', message: 'מנתח לוח הרצליה...' });
+        const herzliyaParsed = parseHerzliyaHTML(html);
+        if (herzliyaParsed.productions.length > 0) {
+          setFetchProgress({ step: 'done', message: `נמצאו ${herzliyaParsed.productions.length} הפקות` });
+          await processSchedule(herzliyaParsed);
+          return;
+        }
+        setStatusMessage('לא הצלחתי לחלץ הפקות מה-HTML. נסה ללחוץ Ctrl+A ו-Ctrl+C על דף הרצליה ולהדביק שוב.');
+        setFetchProgress({ step: 'error', message: 'לא נמצאו הפקות' });
         return;
       }
 
