@@ -393,7 +393,7 @@ export async function getUsageSnapshot(): Promise<{
   const topPages = metrics
     .filter((metric) => metric.metricType === 'page')
     .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
-    .slice(0, 8)
+    .slice(0, 50)
     .map((metric) => ({
       key: metric.key || '',
       label: metric.label || metric.key || '',

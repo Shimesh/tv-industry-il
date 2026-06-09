@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -641,7 +641,7 @@ const KNOWN_PAGES: Array<{ key: string; label: string }> = [
   { key: '/login', label: 'כניסה' },
   { key: '/ratings', label: 'דירוגים' },
   { key: '/settings', label: 'הגדרות' },
-  { key: '/studios', label: 'סטודיות' },
+  { key: '/studios', label: 'אולפנים' },
   { key: '/teams', label: 'צוותים' },
   { key: '/toolbox', label: 'ארגז כלים' },
   { key: '/tools', label: 'כלים' },
@@ -743,12 +743,16 @@ export default function AdminPage() {
   const [pushLogs, setPushLogs] = useState<PushLogEntry[]>([]);
   const [pushLogsLoading, setPushLogsLoading] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    users: false,
-    discoveries: false,
-    ratings: false,
-    systemControl: false,
-    health: false,
-    analytics: false,
+    users: true,
+    discoveries: true,
+    ratings: true,
+    systemControl: true,
+    health: true,
+    analytics: true,
+    contactsByDept: true,
+    contactsByArea: true,
+    presence: true,
+    systemHealthRoutes: true,
   });
   const [usageDrawers, setUsageDrawers] = useState({ pages: false, events: false });
   const draftDirtyRef = useRef(false);
@@ -2454,12 +2458,14 @@ export default function AdminPage() {
 
         {/* === CONTACTS & PRESENCE ROW === */}
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-purple-400" />
-              <h3 className="font-bold">אנשי קשר לפי מקצוע</h3>
-            </div>
-            <div className="space-y-3">
+          <CollapsibleSection
+            title="אנשי קשר לפי מקצוע"
+            icon={<BarChart3 className="h-5 w-5" />}
+            accentColor="text-purple-400"
+            collapsed={collapsedSections.contactsByDept ?? true}
+            onToggle={() => toggleSection('contactsByDept')}
+          >
+            <div className="p-4 space-y-3">
               {overview.contactsByDepartment.map((entry) => (
                 <div key={entry.key}>
                   <div className="mb-1 flex items-center justify-between text-xs">
@@ -2467,22 +2473,21 @@ export default function AdminPage() {
                     <span className="text-gray-500">{entry.count}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
-                    <div
-                      className="h-full rounded-full bg-purple-500"
-                      style={{ width: `${Math.max(6, Math.round((entry.count / Math.max(overview.stats.totalContacts, 1)) * 100))}%` }}
-                    />
+                    <div className="h-full rounded-full bg-purple-500" style={{ width: `${Math.max(6, Math.round((entry.count / Math.max(overview.stats.totalContacts, 1)) * 100))}%` }} />
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <Contact2 className="h-5 w-5 text-blue-400" />
-              <h3 className="font-bold">פילוח אולפן / קונטרול</h3>
-            </div>
-            <div className="space-y-2">
+          <CollapsibleSection
+            title="פילוח אולפן / קונטרול"
+            icon={<Contact2 className="h-5 w-5" />}
+            accentColor="text-blue-400"
+            collapsed={collapsedSections.contactsByArea ?? true}
+            onToggle={() => toggleSection('contactsByArea')}
+          >
+            <div className="p-4 space-y-2">
               {overview.contactsByWorkArea.map((entry) => (
                 <div key={entry.key} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2 text-sm">
                   <span className="text-gray-200">{entry.label}</span>
@@ -2490,14 +2495,17 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <Wifi className="h-5 w-5 text-green-400" />
-              <h3 className="font-bold">נוכחות בזמן אמת</h3>
-            </div>
-            <div className="space-y-3">
+          <CollapsibleSection
+            title="נוכחות בזמן אמת"
+            icon={<Wifi className="h-5 w-5" />}
+            accentColor="text-green-400"
+            badge={overview.onlineUsers.length > 0 ? <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-300">{overview.onlineUsers.length} פעיל</span> : undefined}
+            collapsed={collapsedSections.presence ?? true}
+            onToggle={() => toggleSection('presence')}
+          >
+            <div className="p-4 space-y-3">
               {overview.onlineUsers.slice(0, 6).map((entry) => (
                 <div key={entry.uid} className="flex items-center justify-between rounded-xl bg-gray-800 px-3 py-2">
                   <div>
@@ -2507,25 +2515,27 @@ export default function AdminPage() {
                   <span className="text-xs text-green-300">פעיל</span>
                 </div>
               ))}
-              {overview.onlineUsers.length === 0 ? (
-                <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>
-              ) : null}
-              {overview.staleUsers.length > 0 ? (
+              {overview.onlineUsers.length === 0 && <p className="text-sm text-gray-500">אין כרגע מחוברים בטווח הנוכחות שנקבע.</p>}
+              {overview.staleUsers.length > 0 && (
                 <div className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   {overview.staleUsers.length} משתמשים עם נוכחות מיושנת
                 </div>
-              ) : null}
+              )}
             </div>
-          </div>
+          </CollapsibleSection>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5 lg:col-span-1">
-            <div className="mb-4 flex items-center gap-2">
-              <Settings className="h-5 w-5 text-purple-400" />
-              <h2 className="text-lg font-bold">בקרת מערכת</h2>
-            </div>
+          <CollapsibleSection
+            title="בקרת מערכת"
+            icon={<Settings className="h-5 w-5" />}
+            accentColor="text-purple-400"
+            className="lg:col-span-1"
+            collapsed={collapsedSections.systemControl ?? true}
+            onToggle={() => toggleSection('systemControl')}
+          >
+            <div className="p-4 sm:p-5">
             <div className="space-y-5">
               <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
                 <div className="mb-3 flex items-center justify-between">
@@ -2752,12 +2762,17 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
-          </div>
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5 lg:col-span-1">
-            <div className="mb-4 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-green-400" />
-              <h2 className="text-lg font-bold">בריאות מערכת ונתיבים</h2>
             </div>
+          </CollapsibleSection>
+          <CollapsibleSection
+            title="בריאות מערכת ונתיבים"
+            icon={<Activity className="h-5 w-5" />}
+            accentColor="text-green-400"
+            className="lg:col-span-1"
+            collapsed={collapsedSections.systemHealthRoutes ?? true}
+            onToggle={() => toggleSection('systemHealthRoutes')}
+          >
+            <div className="p-4 sm:p-5">
             <div className="space-y-3">
               {overview.usage.routeHealth.map((route) => (
                 <div key={route.key} className="rounded-xl border border-gray-800 bg-gray-950/70 p-3">
@@ -2821,7 +2836,8 @@ export default function AdminPage() {
                 ) : null}
               </div>
             </div>
-          </div>
+            </div>
+          </CollapsibleSection>
 
           <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 lg:col-span-1">
             {/* Header */}
@@ -2849,64 +2865,62 @@ export default function AdminPage() {
               {usageDrawers.pages && (
                 <div className="border-t border-gray-800/60 px-4 pb-4 pt-3 space-y-2">
                   {allKnownPages.map((page) => (
-                    <button
-                      key={page.key}
-                      type="button"
-                      onClick={() => void loadPageViewEvents({ key: page.key, label: page.label })}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right transition-colors ${
-                        pageViewPanel.page?.key === page.key
-                          ? 'border-blue-500/40 bg-blue-500/10'
-                          : 'border-transparent bg-gray-950/70 hover:border-gray-700 hover:bg-gray-900'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 text-right">
-                        <p className="truncate text-sm text-white">{page.label}</p>
-                        <p className="text-xs text-gray-500" dir="ltr">{page.key}</p>
-                        {page.lastSeenAt && (
-                          <p className="text-xs text-gray-600">{formatRelativeTime(page.lastSeenAt)}</p>
-                        )}
-                      </div>
-                      <span className={`mr-3 flex shrink-0 items-center gap-1.5 text-sm font-semibold ${page.count > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
-                        <MousePointerClick className="h-3.5 w-3.5" />
-                        {page.count}
-                      </span>
-                    </button>
-                  ))}
-
-                  {pageViewPanel.page && (
-                    <div className="mt-3 rounded-2xl border border-gray-800 bg-gray-950/80 p-3" dir="rtl">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div>
-                          <h4 className="text-sm font-bold text-white">צפיות בדף {pageViewPanel.page.label}</h4>
-                          <p className="text-xs text-gray-500">משתמשים רשומים ואורחים, לפי הפעולות האחרונות שנקלטו</p>
+                    <Fragment key={page.key}>
+                      <button
+                        type="button"
+                        onClick={() => void loadPageViewEvents({ key: page.key, label: page.label })}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right transition-colors ${
+                          pageViewPanel.page?.key === page.key
+                            ? 'border-blue-500/40 bg-blue-500/10'
+                            : 'border-transparent bg-gray-950/70 hover:border-gray-700 hover:bg-gray-900'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1 text-right">
+                          <p className="truncate text-sm text-white">{page.label}</p>
+                          <p className="text-xs text-gray-500" dir="ltr">{page.key}</p>
+                          {page.lastSeenAt && (
+                            <p className="text-xs text-gray-600">{formatRelativeTime(page.lastSeenAt)}</p>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setPageViewPanel({ page: null, events: [], loading: false, error: null })}
-                          className="rounded-lg p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-white"
-                          aria-label="סגירת פרטי צפיות"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      {pageViewPanel.loading ? (
-                        <p className="py-3 text-sm text-gray-400">טוען צפיות אחרונות…</p>
-                      ) : pageViewPanel.error ? (
-                        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{pageViewPanel.error}</p>
-                      ) : pageViewPanel.events.length === 0 ? (
-                        <p className="py-3 text-sm text-gray-500">עדיין אין פירוט צפיות לדף הזה.</p>
-                      ) : (
-                        <div className="max-h-[420px] overflow-auto">
-                          <table className="w-full min-w-[720px] text-right text-xs">
-                            <thead className="sticky top-0 bg-gray-950 text-gray-400">
-                              <tr>
-                                <th className="px-2 py-2 font-medium">מי לחץ</th>
-                                <th className="px-2 py-2 font-medium">מתי</th>
-                                <th className="px-2 py-2 font-medium">IP</th>
-                                <th className="px-2 py-2 font-medium">מיקום</th>
-                                <th className="px-2 py-2 font-medium">מכשיר</th>
-                                <th className="px-2 py-2 font-medium">מקור</th>
-                              </tr>
+                        <span className={`mr-3 flex shrink-0 items-center gap-1.5 text-sm font-semibold ${page.count > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
+                          <MousePointerClick className="h-3.5 w-3.5" />
+                          {page.count}
+                        </span>
+                      </button>
+                      {pageViewPanel.page?.key === page.key && (
+                        <div className="mb-1 rounded-2xl border border-gray-800 bg-gray-950/80 p-3" dir="rtl">
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-bold text-white">צפיות בדף {pageViewPanel.page.label}</h4>
+                              <p className="text-xs text-gray-500">משתמשים רשומים ואורחים, לפי הפעולות האחרונות שנקלטו</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPageViewPanel({ page: null, events: [], loading: false, error: null })}
+                              className="rounded-lg p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-white"
+                              aria-label="סגירת פרטי צפיות"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {pageViewPanel.loading ? (
+                            <p className="py-3 text-sm text-gray-400">טוען צפיות אחרונות…</p>
+                          ) : pageViewPanel.error ? (
+                            <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{pageViewPanel.error}</p>
+                          ) : pageViewPanel.events.length === 0 ? (
+                            <p className="py-3 text-sm text-gray-500">עדיין אין פירוט צפיות לדף הזה.</p>
+                          ) : (
+                            <div className="max-h-[420px] overflow-auto">
+                              <table className="w-full min-w-[720px] text-right text-xs">
+                                <thead className="sticky top-0 bg-gray-950 text-gray-400">
+                                  <tr>
+                                    <th className="px-2 py-2 font-medium">מי לחץ</th>
+                                    <th className="px-2 py-2 font-medium">מתי</th>
+                                    <th className="px-2 py-2 font-medium">IP</th>
+                                    <th className="px-2 py-2 font-medium">מיקום</th>
+                                    <th className="px-2 py-2 font-medium">מכשיר</th>
+                                    <th className="px-2 py-2 font-medium">מקור</th>
+                                  </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-800">
                               {pageViewPanel.events.map((event) => (
@@ -2927,9 +2941,11 @@ export default function AdminPage() {
                             </tbody>
                           </table>
                         </div>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
+                    </Fragment>
+                  ))}
                 </div>
               )}
             </div>
