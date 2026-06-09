@@ -1,6 +1,10 @@
 name: Sync Calendar (Hourly)
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/sync-calendar.yml'
   schedule:
     # Avoid minute 0, when GitHub documents that scheduled jobs are most likely
     # to be delayed or dropped because of Actions load.
