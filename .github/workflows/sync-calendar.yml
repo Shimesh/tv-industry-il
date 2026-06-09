@@ -29,65 +29,152 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install browser sync dependencies
-        run: npm install firebase-admin puppeteer-core @sparticuz/chromium
+      - name: Install dependencies
+        run: npm install
 
-      - name: Enforce safe visible-shift calendar sync
+      - name: Enforce safe calendar import and release v2.8.93
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const file = 'scripts/fetch-schedules.js';
-          let source = fs.readFileSync(file, 'utf8');
-          source = source.replace(
-            "const chromium = require('@sparticuz/chromium');",
-            "const chromiumModule = require('@sparticuz/chromium');\nconst chromium = chromiumModule.default || chromiumModule;",
-          );
-          source = source.replace(
-            'await cleanupWeek(userProductionsRoot, weekId);',
-            "console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');",
-          );
-          source = source.replace(/\s*if \(!herzliyaId\) return;\r?\n/, '\n');
-          if (!source.includes('function createVisibleProductionId(')) {
-            const helper = [
-              'function createVisibleProductionId(production) {',
-              "  const key = [production.name || '', production.date || '', production.studio || '', production.startTime || ''].join('::').toLowerCase();",
-              '  let hash = 0;',
-              '  for (let i = 0; i < key.length; i++) {',
-              '    hash = ((hash << 5) - hash) + key.charCodeAt(i);',
-              '    hash |= 0;',
-              '  }',
-              "  return 'visible-' + Math.abs(hash).toString(36);",
-              '}',
-              '',
-            ].join('\n');
-            source = source.replace('async function saveSchedule(', helper + 'async function saveSchedule(');
-          }
-          source = source.replace(
-            "    const prodId = String(prod.herzliyaId);\n    if (!prodId || prodId === '0') continue;",
-            '    const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));',
-          );
-          source = source.replace(
-            'main().catch(console.error);',
-            "main().catch((error) => { console.error(error); process.exitCode = 1; });",
-          );
-          if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) throw new Error('Destructive cleanup remains');
-          if (source.includes('if (!herzliyaId) return;')) throw new Error('Visible shifts are still discarded');
-          if (!source.includes('createVisibleProductionId(prod)')) throw new Error('Visible production ID patch failed');
-          fs.writeFileSync(file, source);
-          NODE
-          node --check scripts/fetch-schedules.js
 
-      - name: Persist importer fix
+          function read(file) {
+            return fs.readFileSync(file, 'utf8');
+          }
+
+          function write(file, source) {
+            fs.writeFileSync(file, source);
+          }
+
+          function replaceRequired(source, before, after, label) {
+            if (source.includes(after)) return source;
+            if (!source.includes(before)) throw new Error(`Could not patch ${label}`);
+            return source.replace(before, after);
+          }
+
+          // Browser and server importer: preserve existing data and accept visible shifts
+          // even when Herzliya removes the openmd2 popup identifier.
+          {
+            const file = 'scripts/fetch-schedules.js';
+            let source = read(file);
+            source = source.replace(
+              "const chromium = require('@sparticuz/chromium');",
+              "const chromiumModule = require('@sparticuz/chromium');\nconst chromium = chromiumModule.default || chromiumModule;",
+            );
+            source = source.replace(
+              'await cleanupWeek(userProductionsRoot, weekId);',
+              "console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');",
+            );
+            source = source.replace(/\s*if \(!herzliyaId\) return;\r?\n/, '\n');
+            if (!source.includes('function createVisibleProductionId(')) {
+              const helper = [
+                'function createVisibleProductionId(production) {',
+                "  const key = [production.name || '', production.date || '', production.studio || '', production.startTime || ''].join('::').toLowerCase();",
+                '  let hash = 0;',
+                '  for (let i = 0; i < key.length; i++) {',
+                '    hash = ((hash << 5) - hash) + key.charCodeAt(i);',
+                '    hash |= 0;',
+                '  }',
+                "  return 'visible-' + Math.abs(hash).toString(36);",
+                '}',
+                '',
+              ].join('\n');
+              source = source.replace('async function saveSchedule(', helper + 'async function saveSchedule(');
+            }
+            source = source.replace(
+              "    const prodId = String(prod.herzliyaId);\n    if (!prodId || prodId === '0') continue;",
+              '    const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));',
+            );
+            source = source.replace(
+              'main().catch(console.error);',
+              "main().catch((error) => { console.error(error); process.exitCode = 1; });",
+            );
+            if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) throw new Error('Destructive cleanup remains');
+            if (source.includes('if (!herzliyaId) return;')) throw new Error('Visible shifts are still discarded');
+            if (!source.includes('createVisibleProductionId(prod)')) throw new Error('Visible production ID patch failed');
+            write(file, source);
+          }
+
+          // Client-side HTML parser must not discard visible cards without popup IDs.
+          {
+            const file = 'src/lib/productionScheduleParser.ts';
+            let source = read(file);
+            source = source.replace(
+              "\n      // Skip empty placeholders (id=0)\n      if (herzliyaId === 0) return;\n",
+              '\n',
+            );
+            if (source.includes('if (herzliyaId === 0) return;')) throw new Error('Client parser still discards visible shifts');
+            write(file, source);
+          }
+
+          // Herzliya currently sends the week range in reverse order. Normalize it in
+          // both the detection card and the request written to Firestore.
+          {
+            const file = 'src/components/productions/MessageInput.tsx';
+            let source = read(file);
+            source = replaceRequired(
+              source,
+              "      info.weekStart = dateMatch[1];\n      info.weekEnd = dateMatch[2];",
+              "      const toSortableDate = (value: string) => {\n        const [day, month, year] = value.split('/');\n        return `${year}-${month}-${day}`;\n      };\n      const dates = [dateMatch[1], dateMatch[2]]\n        .sort((left, right) => toSortableDate(left).localeCompare(toSortableDate(right)));\n      [info.weekStart, info.weekEnd] = dates;",
+              'MessageInput date normalization',
+            );
+            write(file, source);
+          }
+
+          {
+            const file = 'src/app/productions/page.tsx';
+            let source = read(file);
+            source = replaceRequired(
+              source,
+              "    const dateMatch = messageText.match(/(\\d{2}\\/\\d{2}\\/\\d{4})\\s*[-\\u2013]\\s*(\\d{2}\\/\\d{2}\\/\\d{4})/);\n",
+              "    const dateMatch = messageText.match(/(\\d{2}\\/\\d{2}\\/\\d{4})\\s*[-\\u2013]\\s*(\\d{2}\\/\\d{2}\\/\\d{4})/);\n    const normalizedDateLabels = dateMatch\n      ? [dateMatch[1], dateMatch[2]].sort((left, right) => {\n          const toIso = (value: string) => {\n            const [day, month, year] = value.split('/');\n            return `${year}-${month}-${day}`;\n          };\n          return toIso(left).localeCompare(toIso(right));\n        })\n      : null;\n",
+              'productions page normalized dates',
+            );
+            source = replaceRequired(
+              source,
+              "      if (dateMatch) {\n        const [d, m, y] = dateMatch[1].split('/').map(Number);",
+              "      if (normalizedDateLabels) {\n        const [d, m, y] = normalizedDateLabels[0].split('/').map(Number);",
+              'productions page week loading',
+            );
+            source = replaceRequired(
+              source,
+              "        weekStart: dateMatch?.[1] || '',\n        weekEnd: dateMatch?.[2] || '',",
+              "        weekStart: normalizedDateLabels?.[0] || '',\n        weekEnd: normalizedDateLabels?.[1] || '',",
+              'schedule request dates',
+            );
+            write(file, source);
+          }
+
+          // Keep the release number consistent in every required location.
+          {
+            const file = 'src/components/Footer.tsx';
+            let source = read(file).replace(/v2\.8\.\d+/, 'v2.8.93');
+            if (!source.includes('v2.8.93')) throw new Error('Footer version update failed');
+            write(file, source);
+          }
+          NODE
+
+          npm version 2.8.93 --no-git-tag-version
+          npm --prefix realtime-server version 2.8.93 --no-git-tag-version
+          node --check scripts/fetch-schedules.js
+          npm run build
+
+      - name: Persist calendar fix and version
         shell: bash
         run: |
-          if git diff --quiet -- scripts/fetch-schedules.js; then
+          if git diff --quiet; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/fetch-schedules.js
-          git commit -m "fix(calendar): import visible shifts without popup ids"
+          git add scripts/fetch-schedules.js \
+            src/lib/productionScheduleParser.ts \
+            src/components/productions/MessageInput.tsx \
+            src/app/productions/page.tsx \
+            src/components/Footer.tsx \
+            package.json package-lock.json \
+            realtime-server/package.json
+          git commit -m "fix(calendar): restore safe Herzliya import in v2.8.93"
           git push
 
       - name: Sync saved calendars with browser
