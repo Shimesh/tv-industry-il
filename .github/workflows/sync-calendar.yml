@@ -9,9 +9,6 @@ on:
     - cron: '12,27,42,57 * * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: calendar-sync
   cancel-in-progress: false
@@ -23,32 +20,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
 
-      - name: Apply deleted-production reconciliation fix
-        run: node scripts/apply-calendar-reconciliation-hotfix.js
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify production build
-        run: npm run build
-
-      - name: Commit reconciliation fix
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/fetch-schedules.js package.json package-lock.json realtime-server/package.json src/components/Footer.tsx
-          git commit -m "fix: remove deleted calendar productions in v2.8.87"
-          git pull --rebase origin master
-          git push origin master
+      - name: Install browser sync dependencies
+        run: npm install firebase-admin puppeteer-core @sparticuz/chromium
 
       - name: Sync saved calendars with browser
         env:
