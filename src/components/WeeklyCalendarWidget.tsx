@@ -470,8 +470,20 @@ export default function WeeklyCalendarWidget() {
       // Keep cached data if the network fails.
     });
 
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchGlobalWeek().catch(() => {
+          // Keep cached data if the network fails.
+        });
+      }
+    };
+    const refreshInterval = window.setInterval(refreshIfVisible, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+
     return () => {
       cancelled = true;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
     };
   // displayName/phone/profileIdentityId are in refs — no need in dep array; avoids a double fetch
   // when profile loads after initial user auth

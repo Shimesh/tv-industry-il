@@ -1898,48 +1898,68 @@ function ProductionsContent() {
   useEffect(() => {
     if (!user) return;
     const HOUR_MS = 60 * 60 * 1000;
-    const id = window.setInterval(async () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    const CHECK_INTERVAL_MS = 60 * 1000;
+    let lastRefreshAt = Date.now();
+    let refreshInProgress = false;
 
-      const now = new Date();
-      const sunday = new Date(now);
-      sunday.setDate(now.getDate() - now.getDay());
-      const nextSunday = new Date(sunday);
-      nextSunday.setDate(sunday.getDate() + 7);
+    const refreshCalendar = async () => {
+      if (document.visibilityState === 'hidden' || refreshInProgress) return;
+      if (Date.now() - lastRefreshAt < HOUR_MS) return;
+      refreshInProgress = true;
 
-      const thisWeekId = getWeekId(toLocalDate(sunday));
-      const nextWeekId = getWeekId(toLocalDate(nextSunday));
-
-      // Evict both weeks from in-memory cache
-      productionsByWeekRef.current.delete(thisWeekId);
-      productionsByWeekRef.current.delete(nextWeekId);
-
-      // Evict both from localStorage
       try {
-        const raw = localStorage.getItem('productions_cache_v2');
-        if (raw) {
-          const cache = JSON.parse(raw) as Record<string, unknown>;
-          delete cache[thisWeekId];
-          delete cache[nextWeekId];
-          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
-        }
-      } catch { /* ignore */ }
+        const now = new Date();
+        const sunday = new Date(now);
+        sunday.setDate(now.getDate() - now.getDay());
+        const nextSunday = new Date(sunday);
+        nextSunday.setDate(sunday.getDate() + 7);
 
-      // Re-fetch current real-world week (updates state if user is viewing it)
-      await handleReloadLatest();
+        const thisWeekId = getWeekId(toLocalDate(sunday));
+        const nextWeekId = getWeekId(toLocalDate(nextSunday));
 
-      // Also pre-fetch next week so navigation to it is instant and fresh
-      const nextProds = await loadExistingWeek(nextWeekId);
-      if (nextProds.length > 0) {
-        productionsByWeekRef.current.set(nextWeekId, nextProds);
-        // If the user is currently viewing next week, update the displayed productions
-        const viewedWeekId = getWeekId(toLocalDate(getWeekStartDate(currentDateRef.current)));
-        if (viewedWeekId === nextWeekId) {
-          setProductions(nextProds);
+        // Evict both weeks from in-memory cache
+        productionsByWeekRef.current.delete(thisWeekId);
+        productionsByWeekRef.current.delete(nextWeekId);
+
+        // Evict both from localStorage
+        try {
+          const raw = localStorage.getItem('productions_cache_v2');
+          if (raw) {
+            const cache = JSON.parse(raw) as Record<string, unknown>;
+            delete cache[thisWeekId];
+            delete cache[nextWeekId];
+            localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+          }
+        } catch { /* ignore */ }
+
+        // Re-fetch current real-world week (updates state if user is viewing it)
+        await handleReloadLatest();
+
+        // Also pre-fetch next week so navigation to it is instant and fresh
+        const nextProds = await loadExistingWeek(nextWeekId);
+        if (nextProds.length > 0) {
+          productionsByWeekRef.current.set(nextWeekId, nextProds);
+          // If the user is currently viewing next week, update the displayed productions
+          const viewedWeekId = getWeekId(toLocalDate(getWeekStartDate(currentDateRef.current)));
+          if (viewedWeekId === nextWeekId) {
+            setProductions(nextProds);
+          }
         }
+        lastRefreshAt = Date.now();
+      } finally {
+        refreshInProgress = false;
       }
-    }, HOUR_MS);
-    return () => window.clearInterval(id);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshCalendar();
+    };
+    const id = window.setInterval(() => void refreshCalendar(), CHECK_INTERVAL_MS);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user, handleReloadLatest, loadExistingWeek]);
 
   // ===== AI-Powered Parse =====
