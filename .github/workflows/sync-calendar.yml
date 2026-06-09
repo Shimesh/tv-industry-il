@@ -37,98 +37,47 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const read = (file) => fs.readFileSync(file, 'utf8');
-          const write = (file, source) => fs.writeFileSync(file, source);
-          const replaceRequired = (source, before, after, label) => {
-            if (source.includes(after)) return source;
+          const file = 'scripts/fetch-schedules.js';
+          let source = fs.readFileSync(file, 'utf8');
+          const replaceRequired = (before, after, label) => {
+            if (source.includes(after)) return;
             if (!source.includes(before)) throw new Error(`Could not patch ${label}`);
-            return source.replace(before, after);
+            source = source.replace(before, after);
           };
 
-          // The personal calendar now exposes visible cards without crew popups.
-          // Keep the card owner as a real crew member and reject a false crew row
-          // produced when a dash inside the production name was parsed as name-role.
-          {
-            const file = 'scripts/fetch-schedules.js';
-            let source = read(file);
-            source = replaceRequired(
-              source,
-              "    const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);\n    const cleanCrew = sanitizeCrewForFirestore(prod.crew);",
-              "    const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);\n    const currentWorkerName = String(schedule.workerName || requestedWorkerName || '').trim();\n    const normalizedProductionName = String(prod.name || '').replace(/\\s+/g, ' ').replace(/\\s*-\\s*/g, '-').trim().toLowerCase();\n    const sourceCrew = (prod.crew || []).filter((member) => {\n      const parsedAsNameRole = `${member.name || ''}-${member.role || member.roleDetail || ''}`\n        .replace(/\\s+/g, ' ')\n        .replace(/\\s*-\\s*/g, '-')\n        .trim()\n        .toLowerCase();\n      return parsedAsNameRole !== normalizedProductionName;\n    });\n    if (prod.isCurrentUserShift && currentWorkerName && !sourceCrew.some((member) => normalizeName(member.name) === normalizeName(currentWorkerName))) {\n      sourceCrew.push({\n        name: currentWorkerName,\n        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',\n        roleDetail: '',\n        phone: null,\n        startTime: prod.startTime || '',\n        endTime: prod.endTime || '',\n        isCurrentUser: true,\n        userId,\n      });\n    }\n    const cleanCrew = sanitizeCrewForFirestore(sourceCrew);",
-              'visible shift owner crew',
-            );
-            source = replaceRequired(
-              source,
-              "    const globalRef = db.doc(`global_productions/${prodId}`);\n    batch.set(globalRef, {",
-              "    const globalRef = db.doc(`global_productions/${prodId}`);\n    const existingGlobal = (await globalRef.get()).data() || {};\n    const existingCrewList = Array.isArray(existingGlobal.crew_list)\n      ? existingGlobal.crew_list.filter((member) => {\n          const parsedAsNameRole = `${member.name || ''}-${member.profession || ''}`\n            .replace(/\\s+/g, ' ')\n            .replace(/\\s*-\\s*/g, '-')\n            .trim()\n            .toLowerCase();\n          return parsedAsNameRole !== normalizedProductionName;\n        })\n      : [];\n    const mergedCrewByName = new Map();\n    for (const member of [...existingCrewList, ...crewList]) {\n      const key = normalizeName(member.name || '');\n      if (key) mergedCrewByName.set(key, member);\n    }\n    const mergedCrewList = Array.from(mergedCrewByName.values());\n    batch.set(globalRef, {",
-              'global crew merge',
-            );
-            source = source.replace('      crew_list: crewList,', '      crew_list: mergedCrewList,');
-            source = source.replace(
-              "      crew_phones: [...new Set(crewList.map((member) => member.normalizedPhone).filter(Boolean))],\n      crew_shadow_keys: [...new Set(crewList.map((member) => member.shadowKey).filter(Boolean))],",
-              "      crew_phones: [...new Set(mergedCrewList.map((member) => member.normalizedPhone).filter(Boolean))],\n      crew_shadow_keys: [...new Set(mergedCrewList.map((member) => member.shadowKey).filter(Boolean))],",
-            );
-            source = replaceRequired(
-              source,
-              "  const myProductionIds = schedule.productions\n    .filter((p) => p.isCurrentUserShift)\n    .map((p) => p.herzliyaId);",
-              "  const myProductionIds = schedule.productions\n    .filter((p) => p.isCurrentUserShift)\n    .map((p) => String(p.herzliyaId || createVisibleProductionId(p)));",
-              'visible personal production IDs',
-            );
-            if (!source.includes('currentWorkerName') || !source.includes('mergedCrewList')) throw new Error('Crew preservation patch failed');
-            write(file, source);
-          }
+          replaceRequired(
+            "    const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);\n    const cleanCrew = sanitizeCrewForFirestore(prod.crew);",
+            "    const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);\n    const currentWorkerName = String(schedule.workerName || requestedWorkerName || '').trim();\n    const normalizedProductionName = String(prod.name || '').replace(/\\s+/g, ' ').replace(/\\s*-\\s*/g, '-').trim().toLowerCase();\n    const sourceCrew = (prod.crew || []).filter((member) => {\n      const parsedAsNameRole = `${member.name || ''}-${member.role || member.roleDetail || ''}`\n        .replace(/\\s+/g, ' ')\n        .replace(/\\s*-\\s*/g, '-')\n        .trim()\n        .toLowerCase();\n      return parsedAsNameRole !== normalizedProductionName;\n    });\n    if (prod.isCurrentUserShift && currentWorkerName && !sourceCrew.some((member) => normalizeName(member.name) === normalizeName(currentWorkerName))) {\n      sourceCrew.push({\n        name: currentWorkerName,\n        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',\n        roleDetail: '',\n        phone: null,\n        startTime: prod.startTime || '',\n        endTime: prod.endTime || '',\n        isCurrentUser: true,\n        userId,\n      });\n    }\n    const cleanCrew = sanitizeCrewForFirestore(sourceCrew);",
+            'visible shift owner crew',
+          );
 
-          // Mark visible .sat cards as personal shifts in the server-side parser too.
-          {
-            const file = 'src/lib/productionScheduleParser.ts';
-            let source = read(file);
-            source = replaceRequired(
-              source,
-              "          crew,\n          herzliyaId: event.herzliyaId || undefined,",
-              "          crew,\n          herzliyaId: event.herzliyaId || undefined,\n          isCurrentUserShift: /class=[\\\"'][^\\\"']*\\bsat\\b/i.test(event.html),",
-              'server parser personal shift flag',
-            );
-            write(file, source);
-          }
+          replaceRequired(
+            "    const globalRef = db.doc(`global_productions/${prodId}`);\n    batch.set(globalRef, {",
+            "    const globalRef = db.doc(`global_productions/${prodId}`);\n    const existingGlobal = (await globalRef.get()).data() || {};\n    const existingCrewList = Array.isArray(existingGlobal.crew_list)\n      ? existingGlobal.crew_list.filter((member) => {\n          const parsedAsNameRole = `${member.name || ''}-${member.profession || ''}`\n            .replace(/\\s+/g, ' ')\n            .replace(/\\s*-\\s*/g, '-')\n            .trim()\n            .toLowerCase();\n          return parsedAsNameRole !== normalizedProductionName;\n        })\n      : [];\n    const mergedCrewByName = new Map();\n    for (const member of [...existingCrewList, ...crewList]) {\n      const key = normalizeName(member.name || '');\n      if (key) mergedCrewByName.set(key, member);\n    }\n    const mergedCrewList = Array.from(mergedCrewByName.values());\n    batch.set(globalRef, {",
+            'global crew merge',
+          );
 
-          // The immediate API path receives the worker name from the pasted message.
-          // Add that owner to personal visible shifts before writing global_productions.
-          {
-            const file = 'src/lib/server/herzliyaSync.ts';
-            let source = read(file);
-            source = replaceRequired(
-              source,
-              'export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncResult> {',
-              "export async function syncHerzliyaUrl(uid: string, url: string, workerName = ''): Promise<SyncResult> {",
-              'sync worker name parameter',
-            );
-            source = replaceRequired(
-              source,
-              "  const productions = parsed.productions.map(prod => ({\n    ...prod,\n    id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio)),\n    day: prod.day || getHebrewDay(prod.date),\n  }));",
-              "  const productions = parsed.productions.map(prod => {\n    const normalizedProductionName = String(prod.name || '').replace(/\\s+/g, ' ').replace(/\\s*-\\s*/g, '-').trim().toLowerCase();\n    const crew = (prod.crew || []).filter(member =>\n      `${member.name || ''}-${member.role || member.roleDetail || ''}`\n        .replace(/\\s+/g, ' ')\n        .replace(/\\s*-\\s*/g, '-')\n        .trim()\n        .toLowerCase() !== normalizedProductionName\n    );\n    const ownerName = workerName.trim();\n    if (prod.isCurrentUserShift && ownerName && !crew.some(member => member.name.trim() === ownerName)) {\n      crew.push({\n        name: ownerName,\n        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',\n        roleDetail: '',\n        phone: '',\n        startTime: prod.startTime || '',\n        endTime: prod.endTime || '',\n        isCurrentUser: true,\n      });\n    }\n    return {\n      ...prod,\n      crew,\n      id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio)),\n      day: prod.day || getHebrewDay(prod.date),\n    };\n  });",
-              'immediate sync owner crew',
-            );
-            write(file, source);
-          }
+          source = source.replace('      crew_list: crewList,', '      crew_list: mergedCrewList,');
+          source = source.replace(
+            "      crew_phones: [...new Set(crewList.map((member) => member.normalizedPhone).filter(Boolean))],\n      crew_shadow_keys: [...new Set(crewList.map((member) => member.shadowKey).filter(Boolean))],",
+            "      crew_phones: [...new Set(mergedCrewList.map((member) => member.normalizedPhone).filter(Boolean))],\n      crew_shadow_keys: [...new Set(mergedCrewList.map((member) => member.shadowKey).filter(Boolean))],",
+          );
 
-          {
-            const file = 'src/app/api/calendar/save-sync-url/route.ts';
-            let source = read(file);
-            source = replaceRequired(
-              source,
-              '    const result = await syncHerzliyaUrl(authUser.uid, url);',
-              '    const result = await syncHerzliyaUrl(authUser.uid, url, workerName);',
-              'pass worker name to immediate sync',
-            );
-            write(file, source);
-          }
+          replaceRequired(
+            "  const myProductionIds = schedule.productions\n    .filter((p) => p.isCurrentUserShift)\n    .map((p) => p.herzliyaId);",
+            "  const myProductionIds = schedule.productions\n    .filter((p) => p.isCurrentUserShift)\n    .map((p) => String(p.herzliyaId || createVisibleProductionId(p)));",
+            'visible personal production IDs',
+          );
 
-          {
-            const file = 'src/components/Footer.tsx';
-            let source = read(file).replace(/v2\.8\.\d+/, 'v2.8.94');
-            if (!source.includes('v2.8.94')) throw new Error('Footer version update failed');
-            write(file, source);
+          if (!source.includes('currentWorkerName') || !source.includes('mergedCrewList')) {
+            throw new Error('Crew preservation patch failed');
           }
+          fs.writeFileSync(file, source);
+
+          const footer = 'src/components/Footer.tsx';
+          const footerSource = fs.readFileSync(footer, 'utf8').replace(/v2\.8\.\d+/, 'v2.8.94');
+          if (!footerSource.includes('v2.8.94')) throw new Error('Footer version update failed');
+          fs.writeFileSync(footer, footerSource);
           NODE
 
           npm version 2.8.94 --no-git-tag-version
@@ -145,9 +94,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add scripts/fetch-schedules.js \
-            src/lib/productionScheduleParser.ts \
-            src/lib/server/herzliyaSync.ts \
-            src/app/api/calendar/save-sync-url/route.ts \
             src/components/Footer.tsx \
             package.json package-lock.json \
             realtime-server/package.json
