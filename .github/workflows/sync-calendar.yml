@@ -29,7 +29,7 @@ jobs:
       - name: Install browser sync dependencies
         run: npm install firebase-admin puppeteer-core @sparticuz/chromium
 
-      - name: Enforce non-destructive calendar sync
+      - name: Enforce safe visible-shift calendar sync
         shell: bash
         run: |
           node <<'NODE'
@@ -44,12 +44,30 @@ jobs:
             'await cleanupWeek(userProductionsRoot, weekId);',
             "console.log(`Preserving existing productions for week ${weekId}; sync is merge-only`);",
           );
+          source = source.replace('          if (!herzliyaId) return;\n', '');
+          source = source.replace(
+            '    const prodId = String(prod.herzliyaId);\n    if (!prodId || prodId === \'0\') continue;',
+            `    const prodId = prod.herzliyaId
+      ? String(prod.herzliyaId)
+      : (() => {
+          const key = [prod.name || '', prod.date || '', prod.studio || '', prod.startTime || ''].join('::').toLowerCase();
+          let hash = 0;
+          for (let i = 0; i < key.length; i++) {
+            hash = ((hash << 5) - hash) + key.charCodeAt(i);
+            hash |= 0;
+          }
+          return \`visible-\${Math.abs(hash).toString(36)}\`;
+        })();`,
+          );
           source = source.replace(
             'main().catch(console.error);',
             "main().catch((error) => { console.error(error); process.exitCode = 1; });",
           );
           if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) {
             throw new Error('Destructive cleanup call is still present');
+          }
+          if (source.includes('if (!herzliyaId) return;')) {
+            throw new Error('Visible shifts are still being discarded');
           }
           fs.writeFileSync(file, source);
           NODE
