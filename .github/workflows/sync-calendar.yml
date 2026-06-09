@@ -6,10 +6,14 @@ on:
     paths:
       - '.github/workflows/sync-calendar.yml'
   schedule:
-    # Avoid minute 0, when GitHub documents that scheduled jobs are most likely
-    # to be delayed or dropped because of Actions load.
-    - cron: '17 * * * *'  # Every hour at minute 17 UTC
+    # Four staggered windows make the hourly sync resilient to delayed or dropped
+    # GitHub Actions schedules. Each successful run writes the same current snapshot.
+    - cron: '12,27,42,57 * * * *'
   workflow_dispatch:       # Manual recovery trigger
+
+concurrency:
+  group: calendar-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
