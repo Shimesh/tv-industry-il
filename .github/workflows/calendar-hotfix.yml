@@ -5,6 +5,8 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/calendar-hotfix.yml'
+  schedule:
+    - cron: '37 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -56,10 +58,28 @@ jobs:
 
           const widgetPath = 'src/components/WeeklyCalendarWidget.tsx';
           let widget = fs.readFileSync(widgetPath, 'utf8');
-          if (!widget.includes('const refreshInterval')) {
-            const marker = '  useEffect(() => {\n    fetchWeekData();\n  }, [fetchWeekData]);';
-            const replacement = `  useEffect(() => {\n    fetchWeekData();\n\n    const refreshInterval = window.setInterval(fetchWeekData, 5 * 60 * 1000);\n    const refreshOnResume = () => {\n      if (document.visibilityState === 'visible') fetchWeekData();\n    };\n\n    document.addEventListener('visibilitychange', refreshOnResume);\n    window.addEventListener('focus', fetchWeekData);\n\n    return () => {\n      window.clearInterval(refreshInterval);\n      document.removeEventListener('visibilitychange', refreshOnResume);\n      window.removeEventListener('focus', fetchWeekData);\n    };\n  }, [fetchWeekData]);`;
-            if (!widget.includes(marker)) throw new Error('WeeklyCalendarWidget fetch effect marker not found');
+          if (!widget.includes('const refreshInterval = window.setInterval(refreshIfVisible')) {
+            const marker = `    return () => {
+      cancelled = true;
+    };`;
+            const replacement = `    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchGlobalWeek().catch(() => {
+          // Keep cached data if the network fails.
+        });
+      }
+    };
+    const refreshInterval = window.setInterval(refreshIfVisible, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('focus', refreshIfVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('focus', refreshIfVisible);
+    };`;
+            if (!widget.includes(marker)) throw new Error('WeeklyCalendarWidget cleanup marker not found');
             widget = widget.replace(marker, replacement);
             fs.writeFileSync(widgetPath, widget);
           }
