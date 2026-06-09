@@ -214,6 +214,38 @@ async function cleanupWeek(root, weekId) {
   console.log(`Deleted ${prodsSnap.size} old productions and their crew`);
 }
 
+async function reconcileGlobalWeek(weekId, expectedProductionIds) {
+  const [year, month, day] = weekId.split('-').map(Number);
+  const weekEndDate = new Date(Date.UTC(year, month - 1, day + 6));
+  const weekEnd = weekEndDate.toISOString().slice(0, 10);
+  const expectedIds = new Set([...expectedProductionIds].map(String));
+
+  const globalSnap = await db
+    .collection('global_productions')
+    .where('date', '>=', weekId)
+    .where('date', '<=', weekEnd)
+    .get();
+
+  const staleDocs = globalSnap.docs.filter((doc) => {
+    const data = doc.data();
+    return data.herzliyaId && !expectedIds.has(doc.id);
+  });
+
+  if (!staleDocs.length) {
+    console.log(`Global week ${weekId} is already reconciled`);
+    return 0;
+  }
+
+  for (let i = 0; i < staleDocs.length; i += 400) {
+    const batch = db.batch();
+    for (const staleDoc of staleDocs.slice(i, i + 400)) batch.delete(staleDoc.ref);
+    await batch.commit();
+  }
+
+  console.log(`Deleted ${staleDocs.length} stale global productions for week ${weekId}`);
+  return staleDocs.length;
+}
+
 async function findCalendarContext(page) {
   const selector = '.calendar-body, .calendar, #calendar, .calendar-body *';
   const deadline = Date.now() + 20000;
@@ -828,18 +860,11 @@ async function fetchSchedule(browser, url) {
 async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
 
-  const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
-  const cleanupAllowed = popupSuccessRate >= 0.5;
   // Save to per-user path: productions/{userId}/weeks/{weekId}
   const userProductionsRoot = getUserProductionsRoot(userId);
 
-  if (cleanupAllowed) {
-    await cleanupWeek(userProductionsRoot, weekId);
-  } else {
-    console.log(
-      `Skipping cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
-    );
-  }
+  // The calendar grid is authoritative for existence; popup parsing only enriches crew.
+  await cleanupWeek(userProductionsRoot, weekId);
 
   const batch = db.batch();
   const weekRef = db.doc(`${userProductionsRoot}/${weekId}`);
@@ -1243,6 +1268,7 @@ async function main() {
 
     let successCount = 0;
     let productionCount = 0;
+    const expectedGlobalIdsByWeek = new Map();
     try {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
@@ -1255,6 +1281,13 @@ async function main() {
           await saveSchedule(schedule, saved.uid, saved.workerName || '');
           successCount++;
           productionCount += schedule.productions.length;
+          const scheduleWeekId = getWeekId(schedule.weekStart);
+          const expectedIds = expectedGlobalIdsByWeek.get(scheduleWeekId) || new Set();
+          for (const production of schedule.productions) {
+            const productionId = String(production.herzliyaId || production.id || '');
+            if (productionId && productionId !== '0') expectedIds.add(productionId);
+          }
+          expectedGlobalIdsByWeek.set(scheduleWeekId, expectedIds);
           await syncRef.set({
             weekStart: schedule.weekStart || currentWeekStart,
             lastSyncAt: Date.now(),
@@ -1278,15 +1311,25 @@ async function main() {
       await browser.close();
     }
 
+    let deletedGlobalCount = 0;
+    if (successCount === savedCalendars.length) {
+      for (const [weekId, expectedIds] of expectedGlobalIdsByWeek) {
+        deletedGlobalCount += await reconcileGlobalWeek(weekId, expectedIds);
+      }
+    } else {
+      console.warn(`Skipping global reconciliation because only ${successCount}/${savedCalendars.length} calendars succeeded`);
+    }
+
     await db.doc('system/calendarSync').set({
       lastSyncAt: Date.now(),
       lastSyncStatus: successCount === savedCalendars.length ? 'success' : 'partial',
       lastSyncCount: productionCount,
+      lastSyncDeletedCount: deletedGlobalCount,
     }, { merge: true });
 
     console.log(
       `Hourly saved-calendar sync completed: ${successCount}/${savedCalendars.length} users, `
-      + `${productionCount} productions`,
+      + `${productionCount} productions, ${deletedGlobalCount} stale global productions deleted`,
     );
     if (successCount === 0) {
       throw new Error('Hourly saved-calendar sync did not update any calendars');
