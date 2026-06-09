@@ -1,10 +1,11 @@
-name: Apply Calendar Sync Hotfix
+name: Apply Calendar Reliability Hotfix
 
 on:
   push:
     branches: [master]
     paths:
       - '.github/workflows/calendar-hotfix.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,61 +13,63 @@ permissions:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: npm
 
-      - name: Apply calendar reliability fixes
-        shell: bash
+      - name: Apply calendar reliability changes
         run: |
           node <<'NODE'
           const fs = require('fs');
           const version = '2.8.86';
 
-          const updateJsonVersion = (path, updateLockRoot = false) => {
-            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
-            data.version = version;
-            if (updateLockRoot && data.packages?.['']) data.packages[''].version = version;
-            fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
-          };
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          packageJson.version = version;
+          fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
 
-          updateJsonVersion('package.json');
-          updateJsonVersion('package-lock.json', true);
-          updateJsonVersion('realtime-server/package.json');
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          lock.version = version;
+          if (lock.packages && lock.packages['']) lock.packages[''].version = version;
+          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+
+          const realtime = JSON.parse(fs.readFileSync('realtime-server/package.json', 'utf8'));
+          realtime.version = version;
+          fs.writeFileSync('realtime-server/package.json', JSON.stringify(realtime, null, 2) + '\n');
 
           const footerPath = 'src/components/Footer.tsx';
-          const footer = fs.readFileSync(footerPath, 'utf8').replace(/v2\.8\.\d+/, `v${version}`);
+          let footer = fs.readFileSync(footerPath, 'utf8');
+          footer = footer.replace(/v\d+\.\d+\.\d+/, `v${version}`);
           fs.writeFileSync(footerPath, footer);
 
           const vercelPath = 'vercel.json';
           const vercel = JSON.parse(fs.readFileSync(vercelPath, 'utf8'));
           const calendarCron = vercel.crons.find((cron) => cron.path === '/api/cron/sync-calendar');
-          if (!calendarCron) throw new Error('Calendar cron not found');
+          if (!calendarCron) throw new Error('Calendar cron not found in vercel.json');
           calendarCron.schedule = '47 * * * *';
           fs.writeFileSync(vercelPath, JSON.stringify(vercel, null, 2) + '\n');
 
           const widgetPath = 'src/components/WeeklyCalendarWidget.tsx';
           let widget = fs.readFileSync(widgetPath, 'utf8');
-          const oldCleanup = `    return () => {\n      cancelled = true;\n    };`;
-          const newCleanup = `    const refreshIfVisible = () => {\n      if (document.visibilityState === 'visible') {\n        void fetchGlobalWeek().catch(() => {\n          // Keep cached data if the network fails.\n        });\n      }\n    };\n    const refreshInterval = window.setInterval(refreshIfVisible, 5 * 60 * 1000);\n    document.addEventListener('visibilitychange', refreshIfVisible);\n\n    return () => {\n      cancelled = true;\n      window.clearInterval(refreshInterval);\n      document.removeEventListener('visibilitychange', refreshIfVisible);\n    };`;
-          if (!widget.includes('const refreshInterval = window.setInterval(refreshIfVisible')) {
-            if (!widget.includes(oldCleanup)) throw new Error('Widget refresh insertion point not found');
-            widget = widget.replace(oldCleanup, newCleanup);
+          if (!widget.includes('const refreshInterval')) {
+            const marker = '  useEffect(() => {\n    fetchWeekData();\n  }, [fetchWeekData]);';
+            const replacement = `  useEffect(() => {\n    fetchWeekData();\n\n    const refreshInterval = window.setInterval(fetchWeekData, 5 * 60 * 1000);\n    const refreshOnResume = () => {\n      if (document.visibilityState === 'visible') fetchWeekData();\n    };\n\n    document.addEventListener('visibilitychange', refreshOnResume);\n    window.addEventListener('focus', fetchWeekData);\n\n    return () => {\n      window.clearInterval(refreshInterval);\n      document.removeEventListener('visibilitychange', refreshOnResume);\n      window.removeEventListener('focus', fetchWeekData);\n    };\n  }, [fetchWeekData]);`;
+            if (!widget.includes(marker)) throw new Error('WeeklyCalendarWidget fetch effect marker not found');
+            widget = widget.replace(marker, replacement);
             fs.writeFileSync(widgetPath, widget);
           }
           NODE
 
-      - name: Install and build
-        run: |
-          npm ci
-          npm run build
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Commit and push
         run: |
@@ -74,4 +77,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json realtime-server/package.json src/components/Footer.tsx src/components/WeeklyCalendarWidget.tsx vercel.json
           git commit -m "fix: add hourly calendar fallback and live refresh in v2.8.86"
+          git pull --rebase origin master
           git push origin master
