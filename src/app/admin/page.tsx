@@ -1461,7 +1461,7 @@ export default function AdminPage() {
     const topMap = Object.fromEntries(overview.usage.topPages.map((p) => [p.key, p]));
     return KNOWN_PAGES.map((kp) => ({
       key: kp.key,
-      label: topMap[kp.key]?.label ?? kp.label,
+      label: kp.label,
       count: topMap[kp.key]?.count ?? 0,
       lastSeenAt: topMap[kp.key]?.lastSeenAt ?? null,
     })).sort((a, b) => b.count - a.count);
