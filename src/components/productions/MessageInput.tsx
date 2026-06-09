@@ -51,8 +51,13 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
     // Extract dates
     const dateMatch = input.match(/(\d{2}\/\d{2}\/\d{4})\s*[-–]\s*(\d{2}\/\d{2}\/\d{4})/);
     if (dateMatch) {
-      info.weekStart = dateMatch[1];
-      info.weekEnd = dateMatch[2];
+      const toSortableDate = (value: string) => {
+        const [day, month, year] = value.split('/');
+        return `${year}-${month}-${day}`;
+      };
+      const dates = [dateMatch[1], dateMatch[2]]
+        .sort((left, right) => toSortableDate(left).localeCompare(toSortableDate(right)));
+      [info.weekStart, info.weekEnd] = dates;
     }
 
     return info;

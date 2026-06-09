@@ -368,8 +368,6 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
       const idMatch = onclickAttr.match(/openmd2\((\d+)\)/);
       const herzliyaId = idMatch ? parseInt(idMatch[1]) : 0;
 
-      // Skip empty placeholders (id=0)
-      if (herzliyaId === 0) return;
 
       // Check if this is current user's highlighted shift (.sat class on the event)
       const isHighlightedShift = eventDiv.classList.contains('sat');

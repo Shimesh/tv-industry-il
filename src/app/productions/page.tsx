@@ -1129,6 +1129,15 @@ function ProductionsContent() {
     const nameMatch = messageText.match(/שלום\s+([^\n,]+)/);
     const extractedWorkerName = nameMatch?.[1]?.trim() || profile?.displayName || '';
     const dateMatch = messageText.match(/(\d{2}\/\d{2}\/\d{4})\s*[-\u2013]\s*(\d{2}\/\d{2}\/\d{4})/);
+    const normalizedDateLabels = dateMatch
+      ? [dateMatch[1], dateMatch[2]].sort((left, right) => {
+          const toIso = (value: string) => {
+            const [day, month, year] = value.split('/');
+            return `${year}-${month}-${day}`;
+          };
+          return toIso(left).localeCompare(toIso(right));
+        })
+      : null;
 
     setRequestStatus('pending');
     setRequestError(null);
@@ -1136,8 +1145,8 @@ function ProductionsContent() {
     setWorkerName(extractedWorkerName);
 
     const applyLoadedProductions = async () => {
-      if (dateMatch) {
-        const [d, m, y] = dateMatch[1].split('/').map(Number);
+      if (normalizedDateLabels) {
+        const [d, m, y] = normalizedDateLabels[0].split('/').map(Number);
         const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const weekId = getWeekId(isoDate);
         try {
@@ -1166,8 +1175,8 @@ function ProductionsContent() {
         userId: user.uid,
         workerName: extractedWorkerName,
         url: urlMatch[0],
-        weekStart: dateMatch?.[1] || '',
-        weekEnd: dateMatch?.[2] || '',
+        weekStart: normalizedDateLabels?.[0] || '',
+        weekEnd: normalizedDateLabels?.[1] || '',
         status: 'pending',
         createdAt: 'SERVER_TIMESTAMP',
       }).then(id => { docId = id; }).catch(() => {});
