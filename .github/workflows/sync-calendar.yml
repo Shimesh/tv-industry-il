@@ -29,6 +29,31 @@ jobs:
       - name: Install browser sync dependencies
         run: npm install firebase-admin puppeteer-core @sparticuz/chromium
 
+      - name: Enforce non-destructive calendar sync
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'scripts/fetch-schedules.js';
+          let source = fs.readFileSync(file, 'utf8');
+          source = source.replace(
+            "const chromium = require('@sparticuz/chromium');",
+            "const chromiumModule = require('@sparticuz/chromium');\nconst chromium = chromiumModule.default || chromiumModule;",
+          );
+          source = source.replace(
+            'await cleanupWeek(userProductionsRoot, weekId);',
+            "console.log(`Preserving existing productions for week ${weekId}; sync is merge-only`);",
+          );
+          source = source.replace(
+            'main().catch(console.error);',
+            "main().catch((error) => { console.error(error); process.exitCode = 1; });",
+          );
+          if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) {
+            throw new Error('Destructive cleanup call is still present');
+          }
+          fs.writeFileSync(file, source);
+          NODE
+
       - name: Sync saved calendars with browser
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
