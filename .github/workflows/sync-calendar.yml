@@ -42,35 +42,36 @@ jobs:
           );
           source = source.replace(
             'await cleanupWeek(userProductionsRoot, weekId);',
-            "console.log(`Preserving existing productions for week ${weekId}; sync is merge-only`);",
+            "console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');",
           );
-          source = source.replace('          if (!herzliyaId) return;\n', '');
+          source = source.replace(/\s*if \(!herzliyaId\) return;\r?\n/, '\n');
+          const helper = [
+            'function createVisibleProductionId(production) {',
+            "  const key = [production.name || '', production.date || '', production.studio || '', production.startTime || ''].join('::').toLowerCase();",
+            '  let hash = 0;',
+            '  for (let i = 0; i < key.length; i++) {',
+            '    hash = ((hash << 5) - hash) + key.charCodeAt(i);',
+            '    hash |= 0;',
+            '  }',
+            "  return 'visible-' + Math.abs(hash).toString(36);",
+            '}',
+            '',
+          ].join('\n');
+          source = source.replace('async function saveSchedule(', helper + 'async function saveSchedule(');
           source = source.replace(
-            '    const prodId = String(prod.herzliyaId);\n    if (!prodId || prodId === \'0\') continue;',
-            `    const prodId = prod.herzliyaId
-      ? String(prod.herzliyaId)
-      : (() => {
-          const key = [prod.name || '', prod.date || '', prod.studio || '', prod.startTime || ''].join('::').toLowerCase();
-          let hash = 0;
-          for (let i = 0; i < key.length; i++) {
-            hash = ((hash << 5) - hash) + key.charCodeAt(i);
-            hash |= 0;
-          }
-          return \`visible-\${Math.abs(hash).toString(36)}\`;
-        })();`,
+            "    const prodId = String(prod.herzliyaId);\n    if (!prodId || prodId === '0') continue;",
+            '    const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));',
           );
           source = source.replace(
             'main().catch(console.error);',
             "main().catch((error) => { console.error(error); process.exitCode = 1; });",
           );
-          if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) {
-            throw new Error('Destructive cleanup call is still present');
-          }
-          if (source.includes('if (!herzliyaId) return;')) {
-            throw new Error('Visible shifts are still being discarded');
-          }
+          if (source.includes('await cleanupWeek(userProductionsRoot, weekId);')) throw new Error('Destructive cleanup remains');
+          if (source.includes('if (!herzliyaId) return;')) throw new Error('Visible shifts are still discarded');
+          if (!source.includes('createVisibleProductionId(prod)')) throw new Error('Visible production ID patch failed');
           fs.writeFileSync(file, source);
           NODE
+          node --check scripts/fetch-schedules.js
 
       - name: Sync saved calendars with browser
         env:
