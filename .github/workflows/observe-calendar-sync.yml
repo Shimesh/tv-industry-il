@@ -1,0 +1,26 @@
+name: Observe Calendar Sync
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  observe:
+    if: github.event.issue.title == 'observe-calendar-reconciliation-v2.8.87'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report latest calendar sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          RUN_ID=$(gh run list --repo "$REPO" --workflow sync-calendar.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+          DETAILS=$(gh run view "$RUN_ID" --repo "$REPO" --json databaseId,runNumber,event,status,conclusion,headSha,createdAt,updatedAt,url)
+          MATCHES=$(gh run view "$RUN_ID" --repo "$REPO" --log 2>/dev/null | grep -E 'stale global productions deleted|Hourly saved-calendar sync completed|Skipping global reconciliation|Global reconciliation' | tail -10 || true)
+          BODY=$(printf 'Latest calendar sync:\n```json\n%s\n```\nRelevant logs:\n```text\n%s\n```' "$DETAILS" "$MATCHES")
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY"
