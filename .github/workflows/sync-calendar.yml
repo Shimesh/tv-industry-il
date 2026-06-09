@@ -9,7 +9,7 @@ on:
     # Avoid minute 0, when GitHub documents that scheduled jobs are most likely
     # to be delayed or dropped because of Actions load.
     - cron: '17 * * * *'  # Every hour at minute 17 UTC
-  workflow_dispatch:       # Manual trigger
+  workflow_dispatch:       # Manual recovery trigger
 
 jobs:
   sync:
