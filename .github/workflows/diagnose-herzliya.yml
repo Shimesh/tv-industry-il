@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm install firebase-admin puppeteer-core @sparticuz/chromium
-      - name: Inspect rendered calendar structure
+      - name: Probe hidden department calendar
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
@@ -28,76 +28,49 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const crypto = require('crypto');
           const { initializeApp, cert } = require('firebase-admin/app');
           const { getFirestore } = require('firebase-admin/firestore');
           const puppeteer = require('puppeteer-core');
           const chromiumModule = require('@sparticuz/chromium');
           const chromium = chromiumModule.default || chromiumModule;
-
-          initializeApp({ credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-          }) });
+          initializeApp({ credential: cert({ projectId: process.env.FIREBASE_PROJECT_ID, clientEmail: process.env.FIREBASE_CLIENT_EMAIL, privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') }) });
           const db = getFirestore();
-          const redact = (value) => String(value || '')
-            .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '<uuid>')
-            .replace(/A=[^&"'\s]+/gi, 'A=<token>');
-          const hash = value => crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 12);
-
+          const redact = value => String(value || '').replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '<uuid>').replace(/A=[^&"'\s]+/gi, 'A=<token>');
           (async () => {
             const saved = (await db.collection('user_calendar_sync').get()).docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const target = saved.find(item => /ירון אורבך/.test(item.workerName || ''));
             if (!target?.url) throw new Error('Yaron saved calendar URL not found');
-
-            const browser = await puppeteer.launch({
-              args: [...chromium.args, '--ignore-certificate-errors'],
-              defaultViewport: { width: 1280, height: 900 },
-              executablePath: await chromium.executablePath(),
-              headless: chromium.headless,
-            });
+            const browser = await puppeteer.launch({ args: [...chromium.args, '--ignore-certificate-errors'], defaultViewport: { width: 1280, height: 900 }, executablePath: await chromium.executablePath(), headless: chromium.headless });
             const page = await browser.newPage();
-            const traffic = [];
-            page.on('request', request => {
-              if (request.url().includes('hsil.acc.co.il')) traffic.push({ kind: 'request', method: request.method(), url: redact(request.url()), postData: redact(request.postData()).slice(0, 1500) });
-            });
-            page.on('response', response => {
-              if (response.url().includes('hsil.acc.co.il')) traffic.push({ kind: 'response', status: response.status(), url: redact(response.url()), contentType: response.headers()['content-type'] || '' });
-            });
-
             await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const departmentUrl = new URL(page.url());
+            departmentUrl.searchParams.set('prgname', 'ShowEmp6');
+            const args = departmentUrl.searchParams.get('arguments') || '';
+            departmentUrl.searchParams.set('arguments', args.endsWith(',-Atrue') ? args : `${args},-Atrue`);
+            await page.goto(departmentUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 45000 });
             await new Promise(resolve => setTimeout(resolve, 8000));
-
-            const report = await page.evaluate(() => {
-              const attrs = element => Object.fromEntries([...element.attributes].map(attr => [attr.name, attr.value]));
-              return {
-                href: location.href,
-                title: document.title,
-                events: [...document.querySelectorAll('.event,.sat')].map((element, index) => ({
-                  index,
-                  tag: element.tagName,
-                  classes: [...element.classList],
-                  attributes: attrs(element),
-                  dataset: { ...element.dataset },
-                  text: (element.textContent || '').replace(/\s+/g, ' ').trim(),
-                  parentAttributes: element.parentElement ? attrs(element.parentElement) : {},
-                  ancestors: [...function* () { let node = element.parentElement; for (let i = 0; node && i < 5; i++, node = node.parentElement) yield { tag: node.tagName, attributes: attrs(node) }; }()],
-                  html: element.outerHTML,
-                })),
-                forms: [...document.forms].map(form => ({
-                  action: form.action,
-                  method: form.method,
-                  attributes: attrs(form),
-                  controls: [...form.elements].map(control => ({ tag: control.tagName, name: control.name, id: control.id, type: control.type, value: control.value, attributes: attrs(control) })),
-                })),
-                relevantGlobals: Object.keys(window).filter(key => /open|show|crew|emp|calendar|magic|task|event|detail/i.test(key)).sort(),
-                relevantScripts: [...document.scripts].map(script => script.src || script.textContent || '').filter(text => /openmd2|showcrew|showemp|crew|calendar|event|mgrqispi/i.test(text)).map(text => text.slice(0, 16000)),
-                resources: performance.getEntriesByType('resource').map(entry => entry.name).filter(url => /hsil\.acc\.co\.il|mgrqispi|magic/i.test(url)),
-              };
-            });
-
-            const sanitized = JSON.parse(redact(JSON.stringify({ generatedAt: new Date().toISOString(), calendarHash: hash(target.url), report, traffic })));
+            const department = await page.evaluate(() => ({
+              href: location.href,
+              bodyText: (document.body?.innerText || '').slice(0, 5000),
+              events: [...document.querySelectorAll('.event,.sat,[onclick*=openmd2]')].map((element, index) => ({ index, className: element.className, onclick: element.getAttribute('onclick'), text: (element.textContent || '').replace(/\s+/g, ' ').trim(), html: element.outerHTML })),
+              openmd2Count: document.querySelectorAll('[onclick*=openmd2]').length,
+            }));
+            const popupChecks = [];
+            for (const event of department.events) {
+              const match = String(event.onclick || '').match(/openmd2\((\d+)\)/);
+              if (!match) continue;
+              const popupUrl = new URL(departmentUrl);
+              popupUrl.searchParams.set('prgname', 'ShowCrew');
+              popupUrl.searchParams.set('arguments', `-N${match[1]}`);
+              const popupPage = await browser.newPage();
+              const response = await popupPage.goto(popupUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const popup = await popupPage.evaluate(() => ({ textLength: (document.body?.innerText || '').length, tableCount: document.querySelectorAll('table').length, rowCount: document.querySelectorAll('tr').length, phoneCount: ((document.body?.innerText || '').match(/0\d{1,2}[-\s]?\d{3}[-\s]?\d{4}/g) || []).length }));
+              popupChecks.push({ productionId: match[1], status: response?.status(), eventText: event.text, ...popup });
+              await popupPage.close();
+              if (popupChecks.length >= 30) break;
+            }
+            const sanitized = JSON.parse(redact(JSON.stringify({ generatedAt: new Date().toISOString(), department, popupChecks })));
             fs.mkdirSync('.github/diagnostics', { recursive: true });
             fs.writeFileSync('.github/diagnostics/herzliya-structure.json', JSON.stringify(sanitized, null, 2));
             await browser.close();
@@ -108,5 +81,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/diagnostics/herzliya-structure.json
-          git commit -m "chore(calendar): capture sanitized Herzliya structure"
+          git commit -m "chore(calendar): capture hidden department endpoint"
           git push
