@@ -881,7 +881,29 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));
 
     const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);
-    const cleanCrew = sanitizeCrewForFirestore(prod.crew);
+    const currentWorkerName = String(schedule.workerName || requestedWorkerName || '').trim();
+    const normalizedProductionName = String(prod.name || '').replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
+    const sourceCrew = (prod.crew || []).filter((member) => {
+      const parsedAsNameRole = `${member.name || ''}-${member.role || member.roleDetail || ''}`
+        .replace(/\s+/g, ' ')
+        .replace(/\s*-\s*/g, '-')
+        .trim()
+        .toLowerCase();
+      return parsedAsNameRole !== normalizedProductionName;
+    });
+    if (prod.isCurrentUserShift && currentWorkerName && !sourceCrew.some((member) => normalizeName(member.name) === normalizeName(currentWorkerName))) {
+      sourceCrew.push({
+        name: currentWorkerName,
+        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',
+        roleDetail: '',
+        phone: null,
+        startTime: prod.startTime || '',
+        endTime: prod.endTime || '',
+        isCurrentUser: true,
+        userId,
+      });
+    }
+    const cleanCrew = sanitizeCrewForFirestore(sourceCrew);
 
     batch.set(prodRef, {
       name: prod.name,
@@ -918,6 +940,23 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       };
     });
     const globalRef = db.doc(`global_productions/${prodId}`);
+    const existingGlobal = (await globalRef.get()).data() || {};
+    const existingCrewList = Array.isArray(existingGlobal.crew_list)
+      ? existingGlobal.crew_list.filter((member) => {
+          const parsedAsNameRole = `${member.name || ''}-${member.profession || ''}`
+            .replace(/\s+/g, ' ')
+            .replace(/\s*-\s*/g, '-')
+            .trim()
+            .toLowerCase();
+          return parsedAsNameRole !== normalizedProductionName;
+        })
+      : [];
+    const mergedCrewByName = new Map();
+    for (const member of [...existingCrewList, ...crewList]) {
+      const key = normalizeName(member.name || '');
+      if (key) mergedCrewByName.set(key, member);
+    }
+    const mergedCrewList = Array.from(mergedCrewByName.values());
     batch.set(globalRef, {
       id: prodId,
       name: prod.name || '',
@@ -928,9 +967,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       endTime: prod.endTime || '',
       status: prod.status || 'scheduled',
       herzliyaId: prod.herzliyaId,
-      crew_list: crewList,
-      crew_phones: [...new Set(crewList.map((member) => member.normalizedPhone).filter(Boolean))],
-      crew_shadow_keys: [...new Set(crewList.map((member) => member.shadowKey).filter(Boolean))],
+      crew_list: mergedCrewList,
+      crew_phones: [...new Set(mergedCrewList.map((member) => member.normalizedPhone).filter(Boolean))],
+      crew_shadow_keys: [...new Set(mergedCrewList.map((member) => member.shadowKey).filter(Boolean))],
       lastUpdatedAt: new Date().toISOString(),
       lastUpdatedBy: userId,
       sourceWeekPath: `${userProductionsRoot}/${weekId}`,
@@ -939,7 +978,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
 
   const myProductionIds = schedule.productions
     .filter((p) => p.isCurrentUserShift)
-    .map((p) => p.herzliyaId);
+    .map((p) => String(p.herzliyaId || createVisibleProductionId(p)));
 
   console.log('Saving userSchedule for userId:', userId);
   console.log('My productions:', myProductionIds.length);
