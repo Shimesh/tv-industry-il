@@ -37,6 +37,13 @@ function getPreviousWeekStart(weekStart) {
   return date.toISOString().split('T')[0];
 }
 
+function normalizeSavedCalendarUrl(rawUrl) {
+  const value = String(rawUrl || '').trim();
+  const firstUrl = value.match(/https?:\/\/[\s\S]*?(?=https?:\/\/|$)/i)?.[0]?.trim();
+  if (!firstUrl) throw new Error('Saved Herzliya calendar URL is invalid');
+  return firstUrl;
+}
+
 function normalizeName(name) {
   if (!name) return '';
 
@@ -1273,10 +1280,9 @@ async function main() {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
-          const schedule = await fetchSchedule(browser, saved.url);
-          if (!schedule || !schedule.productions.length) {
-            throw new Error('No productions found in saved Herzliya calendar');
-          }
+          const calendarUrl = normalizeSavedCalendarUrl(saved.url);
+          const schedule = await fetchSchedule(browser, calendarUrl);
+          if (!schedule?.weekStart) throw new Error('Calendar week could not be parsed');
 
           await saveSchedule(schedule, saved.uid, saved.workerName || '');
           successCount++;
