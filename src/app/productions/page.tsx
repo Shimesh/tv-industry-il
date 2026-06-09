@@ -2248,15 +2248,11 @@ function ProductionsContent() {
     setFetchProgress({ step: 'parsing', message: getStepMessage('parsing') });
 
     try {
-      const hasHerzliyaUrl = /https?:\/\/[^\s"']*hsil\.acc\.co\.il[^\s"']*/i.test(html);
-      if (isHerzliyaHTML(html) || hasHerzliyaUrl) {
-        if (hasHerzliyaUrl) {
-          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
-          setLoading(false);
-          await submitScheduleRequest(html);
-          return;
-        }
-        // HTML of Herzliya without a URL — parse directly in the browser
+      // If this looks like actual Herzliya page HTML — parse directly in the browser.
+      // Priority: HTML parse BEFORE URL detection, because the page HTML contains
+      // many hsil.acc.co.il links (in form actions, hrefs) that would otherwise
+      // trigger the Puppeteer path which cannot access the page from GitHub servers.
+      if (isHerzliyaHTML(html)) {
         setFetchProgress({ step: 'parsing', message: 'מנתח לוח הרצליה...' });
         const herzliyaParsed = parseHerzliyaHTML(html);
         if (herzliyaParsed.productions.length > 0) {
@@ -2266,6 +2262,15 @@ function ProductionsContent() {
         }
         setStatusMessage('לא הצלחתי לחלץ הפקות מה-HTML. נסה ללחוץ Ctrl+A ו-Ctrl+C על דף הרצליה ולהדביק שוב.');
         setFetchProgress({ step: 'error', message: 'לא נמצאו הפקות' });
+        return;
+      }
+
+      // Plain text with a Herzliya URL (WhatsApp message) — use Puppeteer via GitHub Action
+      const hasHerzliyaUrl = /https?:\/\/[^\s"']*hsil\.acc\.co\.il[^\s"']*/i.test(html);
+      if (hasHerzliyaUrl) {
+        setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+        setLoading(false);
+        await submitScheduleRequest(html);
         return;
       }
 
