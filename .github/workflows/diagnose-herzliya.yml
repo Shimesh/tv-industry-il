@@ -43,13 +43,11 @@ jobs:
           const db = getFirestore();
           const redact = (value) => String(value || '')
             .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '<uuid>')
-            .replace(/A=[^&"'\s]+/gi, 'A=<token>')
-            .replace(/B8A2047B-C268-4426-8276-FC80F3960DD0/gi, '<token>');
-          const hash = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 12);
+            .replace(/A=[^&"'\s]+/gi, 'A=<token>');
+          const hash = value => crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 12);
 
           (async () => {
-            const syncSnap = await db.collection('user_calendar_sync').get();
-            const saved = syncSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const saved = (await db.collection('user_calendar_sync').get()).docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const target = saved.find(item => /ירון אורבך/.test(item.workerName || ''));
             if (!target?.url) throw new Error('Yaron saved calendar URL not found');
 
@@ -62,14 +60,10 @@ jobs:
             const page = await browser.newPage();
             const traffic = [];
             page.on('request', request => {
-              const url = request.url();
-              if (!url.includes('hsil.acc.co.il')) return;
-              traffic.push({ kind: 'request', method: request.method(), url: redact(url), postData: redact(request.postData()).slice(0, 1200) });
+              if (request.url().includes('hsil.acc.co.il')) traffic.push({ kind: 'request', method: request.method(), url: redact(request.url()), postData: redact(request.postData()).slice(0, 1500) });
             });
             page.on('response', response => {
-              const url = response.url();
-              if (!url.includes('hsil.acc.co.il')) return;
-              traffic.push({ kind: 'response', status: response.status(), url: redact(url), contentType: response.headers()['content-type'] || '' });
+              if (response.url().includes('hsil.acc.co.il')) traffic.push({ kind: 'response', status: response.status(), url: redact(response.url()), contentType: response.headers()['content-type'] || '' });
             });
 
             await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -77,57 +71,33 @@ jobs:
 
             const report = await page.evaluate(() => {
               const attrs = element => Object.fromEntries([...element.attributes].map(attr => [attr.name, attr.value]));
-              const events = [...document.querySelectorAll('.event,.sat')].map((element, index) => ({
-                index,
-                tag: element.tagName,
-                classes: [...element.classList],
-                attributes: attrs(element),
-                dataset: { ...element.dataset },
-                text: (element.textContent || '').replace(/\s+/g, ' ').trim(),
-                parentAttributes: element.parentElement ? attrs(element.parentElement) : {},
-                ancestorAttributes: [...function* () { let node = element.parentElement; for (let i = 0; node && i < 4; i++, node = node.parentElement) yield attrs(node); }()],
-                html: element.outerHTML,
-              }));
-              const forms = [...document.forms].map(form => ({
-                action: form.action,
-                method: form.method,
-                attributes: attrs(form),
-                controls: [...form.elements].map(control => ({
-                  tag: control.tagName,
-                  name: control.name,
-                  id: control.id,
-                  type: control.type,
-                  value: control.value,
-                  attributes: attrs(control),
+              return {
+                href: location.href,
+                title: document.title,
+                events: [...document.querySelectorAll('.event,.sat')].map((element, index) => ({
+                  index,
+                  tag: element.tagName,
+                  classes: [...element.classList],
+                  attributes: attrs(element),
+                  dataset: { ...element.dataset },
+                  text: (element.textContent || '').replace(/\s+/g, ' ').trim(),
+                  parentAttributes: element.parentElement ? attrs(element.parentElement) : {},
+                  ancestors: [...function* () { let node = element.parentElement; for (let i = 0; node && i < 5; i++, node = node.parentElement) yield { tag: node.tagName, attributes: attrs(node) }; }()],
+                  html: element.outerHTML,
                 })),
-              }));
-              const relevantGlobals = Object.keys(window).filter(key => /open|show|crew|emp|calendar|magic|task|event|detail/i.test(key)).sort();
-              const relevantScripts = [...document.scripts].map(script => script.src || script.textContent || '').filter(text => /openmd2|showcrew|showemp|crew|calendar|event|mgrqispi/i.test(text)).map(text => text.slice(0, 12000));
-              const resources = performance.getEntriesByType('resource').map(entry => entry.name).filter(url => /hsil\.acc\.co\.il|mgrqispi|magic/i.test(url));
-              return { href: location.href, title: document.title, events, forms, relevantGlobals, relevantScripts, resources };
+                forms: [...document.forms].map(form => ({
+                  action: form.action,
+                  method: form.method,
+                  attributes: attrs(form),
+                  controls: [...form.elements].map(control => ({ tag: control.tagName, name: control.name, id: control.id, type: control.type, value: control.value, attributes: attrs(control) })),
+                })),
+                relevantGlobals: Object.keys(window).filter(key => /open|show|crew|emp|calendar|magic|task|event|detail/i.test(key)).sort(),
+                relevantScripts: [...document.scripts].map(script => script.src || script.textContent || '').filter(text => /openmd2|showcrew|showemp|crew|calendar|event|mgrqispi/i.test(text)).map(text => text.slice(0, 16000)),
+                resources: performance.getEntriesByType('resource').map(entry => entry.name).filter(url => /hsil\.acc\.co\.il|mgrqispi|magic/i.test(url)),
+              };
             });
 
-            // Try clicking each visible shift and capture any network/navigation delta.
-            const clickResults = [];
-            const count = await page.locator('.event,.sat').count();
-            for (let index = 0; index < count; index++) {
-              const before = traffic.length;
-              try {
-                await page.locator('.event,.sat').nth(index).click({ timeout: 2500 });
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                clickResults.push({ index, newTraffic: traffic.slice(before), url: redact(page.url()) });
-              } catch (error) {
-                clickResults.push({ index, error: String(error).slice(0, 180) });
-              }
-            }
-
-            const sanitized = JSON.parse(redact(JSON.stringify({
-              generatedAt: new Date().toISOString(),
-              calendarHash: hash(target.url),
-              report,
-              traffic,
-              clickResults,
-            })));
+            const sanitized = JSON.parse(redact(JSON.stringify({ generatedAt: new Date().toISOString(), calendarHash: hash(target.url), report, traffic })));
             fs.mkdirSync('.github/diagnostics', { recursive: true });
             fs.writeFileSync('.github/diagnostics/herzliya-structure.json', JSON.stringify(sanitized, null, 2));
             await browser.close();
