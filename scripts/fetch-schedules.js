@@ -522,16 +522,27 @@ async function fetchSchedule(browser, url) {
       console.log('Loading hidden department calendar for complete crew lists...');
       await departmentPage.goto(departmentUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 35000 });
 
-      const departmentContext = await findCalendarContext(departmentPage);
-      if (!departmentContext) throw new Error('Department calendar not found');
-      const departmentDeadline = Date.now() + 12000;
+      const departmentDeadline = Date.now() + 15000;
+      let departmentContext = null;
+      let departmentEventCount = 0;
       while (Date.now() < departmentDeadline) {
-        const count = await departmentContext.evaluate(() =>
-          document.querySelectorAll('.day-cell .event, .day-cell .sat, .sat-cell .event, .sat-cell .sat').length,
-        ).catch(() => 0);
-        if (count > 0) break;
+        const candidates = [departmentPage, ...departmentPage.frames()];
+        for (const candidate of candidates) {
+          const count = await candidate.evaluate(() =>
+            document.querySelectorAll('.event, .sat').length,
+          ).catch(() => 0);
+          if (count > departmentEventCount) {
+            departmentEventCount = count;
+            departmentContext = candidate;
+          }
+        }
+        if (departmentEventCount > 0) break;
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
+      if (!departmentContext || !departmentEventCount) {
+        throw new Error('Department calendar events not found');
+      }
+      console.log('Department calendar events found:', departmentEventCount);
 
       const departmentEvents = await departmentContext.evaluate(() => {
         const weekDays = Array.from(document.querySelectorAll('.calendar-header > div'))
@@ -545,8 +556,7 @@ async function fetchSchedule(browser, url) {
             };
           })
           .filter(Boolean);
-        const calendarBody = document.querySelector('.calendar-body');
-        if (!calendarBody) return [];
+        const calendarBody = document.querySelector('.calendar-body') || document;
         const events = [];
         Array.from(calendarBody.querySelectorAll('.day-cell, .sat-cell')).forEach((cell, dayIndex) => {
           const day = weekDays[dayIndex];
@@ -607,6 +617,7 @@ async function fetchSchedule(browser, url) {
         production.departmentEnriched = true;
         departmentEnrichedCount++;
       }
+      console.log('Department events parsed:', departmentEvents.length);
       console.log('Department crew enrichment:', departmentEnrichedCount + '/' + schedule.productions.length);
     } catch (error) {
       console.warn('Department crew enrichment unavailable:', error.message);
