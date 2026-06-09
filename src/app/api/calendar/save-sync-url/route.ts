@@ -52,6 +52,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await patchDocument(userSyncPath, statusPatch as unknown as Record<string, string>);
 
     if (result.status === 'success') {
+      // If redirect resolved to a different (stable) URL, update the saved URL so
+      // the hourly GitHub Action uses it instead of the expired sendwa.html GUID URL.
+      if (result.finalUrl) {
+        await patchDocument(userSyncPath, { url: result.finalUrl } as unknown as Record<string, string>).catch(() => {});
+      }
       return NextResponse.json({ ok: true, synced: true, count: result.count, studios: result.studios, debug: result.debug });
     }
     return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error', debug: (result as { debug?: string }).debug });

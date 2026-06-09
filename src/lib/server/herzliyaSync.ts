@@ -2,6 +2,8 @@ import {
   parseScheduleHTML,
   parseHerzliyaPopupHtml,
   extractHerzliyaEventIds,
+  extractHerzliyaBaseUrl,
+  buildHerzliyaPopupUrl,
   extractStudioFromPopup,
   extractDateFromPopup,
 } from '@/lib/productionScheduleParser';
@@ -12,7 +14,7 @@ import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
-  | { status: 'success'; count: number; studios?: Array<{ name: string; studio: string }>; debug?: string }
+  | { status: 'success'; count: number; studios?: Array<{ name: string; studio: string }>; debug?: string; finalUrl?: string }
   | { status: 'empty'; debug?: string }
   | { status: 'error'; error: string };
 
@@ -51,21 +53,6 @@ const BASE_HEADERS: Record<string, string> = {
 };
 
 /**
- * Build popup URL by cloning the original Herzliya URL and switching prgname to ShowCrew.
- * This preserves any session/auth query params embedded in the user's URL.
- */
-function buildPopupUrl(originalUrl: string, herzliyaId: number): string {
-  try {
-    const u = new URL(originalUrl);
-    u.searchParams.set('prgname', 'ShowCrew');
-    u.searchParams.set('arguments', `-N${herzliyaId}`);
-    return u.toString();
-  } catch {
-    return '';
-  }
-}
-
-/**
  * Extract cookies from a fetch response for passthrough to subsequent requests.
  * Magic XPA may set session cookies on the first request.
  */
@@ -95,13 +82,17 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   if (!personalResponse.ok) throw new Error(`HTTP ${personalResponse.status} from Herzliya`);
 
+  // Use the final URL after redirects (sendwa.html → mgrqispi.dll) for building popup URLs
+  const finalUrl: string = (personalResponse as Response & { url?: string }).url || url;
+  debugLines.push(`finalUrl:${finalUrl.slice(0, 80)}`);
+
   // Carry session cookies (if any) into popup requests
   const sessionCookie = extractCookies(personalResponse);
   const popupFetchOpts: RequestInit = {
     headers: {
       ...BASE_HEADERS,
       ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-      Referer: url,
+      Referer: finalUrl,
     },
     // @ts-expect-error - Node.js 20
     rejectUnauthorized: false,
@@ -109,6 +100,12 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   const personalHtml = await personalResponse.text();
   const deptHtml = deptResult?.ok ? await deptResult.text() : '';
+
+  // Extract the mgrqispi.dll base URL from the page HTML (most reliable method).
+  // Falls back to the post-redirect URL, which may still contain session params.
+  const htmlBaseUrl = extractHerzliyaBaseUrl(personalHtml);
+  const popupBaseUrl = htmlBaseUrl || finalUrl;
+  debugLines.push(`popupBaseUrl:${popupBaseUrl.slice(0, 80)}`);
   const deptSameAsPersonal = deptHtml === personalHtml;
 
   const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
@@ -144,7 +141,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     await Promise.allSettled(
       uniqueIds.map(async (id) => {
-        const popupUrl = buildPopupUrl(url, id);
+        const popupUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
         if (!popupUrl) return;
         try {
           const res = await fetch(popupUrl, popupFetchOpts);
@@ -276,5 +273,6 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     count: productions.length,
     studios: productions.map(p => ({ name: p.name, studio: p.studio })),
     debug,
+    finalUrl: finalUrl !== url ? finalUrl : undefined,
   };
 }

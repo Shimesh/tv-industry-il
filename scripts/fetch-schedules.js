@@ -326,6 +326,23 @@ async function fetchSchedule(browser, url) {
 
     console.log('Calendar context:', context === page ? 'page' : 'iframe');
 
+    // Magic XPA renders the calendar container first, then populates cells with JS.
+    // Wait up to 12 seconds for actual day-cells or openmd2 onclick handlers to appear.
+    {
+      const cellDeadline = Date.now() + 12000;
+      let cellsFound = false;
+      while (Date.now() < cellDeadline) {
+        try {
+          const hasCells = await context.evaluate(() =>
+            document.querySelectorAll('.day-cell, .sat-cell, [onclick*="openmd2"]').length > 0
+          );
+          if (hasCells) { cellsFound = true; break; }
+        } catch { /* context lost, will be caught on next evaluate */ }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      console.log('Calendar cells populated:', cellsFound);
+    }
+
     const evaluateWithContext = async (fn, ...args) => {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
