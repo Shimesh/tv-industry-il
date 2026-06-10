@@ -41,7 +41,12 @@ function buildPushMessage(changes: ChangeItem[]): { title: string; body: string 
   const title = `עדכון לוח עבודה (${changes.length} שינויים)`;
   const body = parts.length ? parts.join(' · ') : changes[0]?.description ?? 'הלוח עודכן';
 
-  return { title, body };
+  const detailedBody = changes
+    .map((change) => change.description?.trim())
+    .filter(Boolean)
+    .join(' • ');
+
+  return { title, body: detailedBody || body };
 }
 
 export async function POST(request: NextRequest) {

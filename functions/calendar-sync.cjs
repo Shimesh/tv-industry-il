@@ -1034,6 +1034,75 @@ function mergeCrewPreservingExisting(existingCrew, incomingCrew) {
   return Array.from(merged.values());
 }
 
+function stableNotificationHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function summarizeProductionChange(existing, incoming) {
+  if (!existing || !Object.keys(existing).length) {
+    return `נוספה הפקה חדשה בתאריך ${incoming.date || 'לא ידוע'} בשעות ${incoming.startTime || '--:--'}–${incoming.endTime || '--:--'}`;
+  }
+
+  const details = [];
+  const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const addScalarChange = (label, oldValue, newValue) => {
+    if (clean(oldValue) !== clean(newValue)) {
+      details.push(`${label}: ${clean(oldValue) || 'לא צוין'} ← ${clean(newValue) || 'לא צוין'}`);
+    }
+  };
+
+  addScalarChange('שם', existing.name, incoming.name);
+  addScalarChange('תאריך', existing.date, incoming.date);
+  addScalarChange('אולפן', existing.studio, incoming.studio);
+
+  if (
+    clean(existing.startTime) !== clean(incoming.startTime)
+    || clean(existing.endTime) !== clean(incoming.endTime)
+  ) {
+    details.push(
+      `שעות: ${clean(existing.startTime) || '--:--'}–${clean(existing.endTime) || '--:--'}`
+      + ` ← ${clean(incoming.startTime) || '--:--'}–${clean(incoming.endTime) || '--:--'}`,
+    );
+  }
+
+  addScalarChange('סטטוס', existing.status, incoming.status);
+  if ((existing.isCurrentUserShift === true) !== (incoming.isCurrentUserShift === true)) {
+    details.push(incoming.isCurrentUserShift ? 'נוספת למשמרת בהפקה' : 'הוסרת מהמשמרת בהפקה');
+  }
+
+  const canonicalCrew = (crew) => (crew || [])
+    .map((member) => ({
+      name: normalizeName(member.name || ''),
+      role: normalizeRole(member.role || member.roleDetail || member.profession || ''),
+      phone: normalizePhone(member.phone || member.phone_number) || '',
+      startTime: clean(member.startTime),
+      endTime: clean(member.endTime),
+    }))
+    .filter((member) => member.name)
+    .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  const oldCrew = canonicalCrew(existing.crew);
+  const newCrew = canonicalCrew(incoming.crew);
+  const oldByName = new Map(oldCrew.map((member) => [member.name, member]));
+  const newByName = new Map(newCrew.map((member) => [member.name, member]));
+  const addedCrew = newCrew.filter((member) => !oldByName.has(member.name));
+  const removedCrew = oldCrew.filter((member) => !newByName.has(member.name));
+  const updatedCrew = newCrew.filter((member) => {
+    const oldMember = oldByName.get(member.name);
+    return oldMember && JSON.stringify(oldMember) !== JSON.stringify(member);
+  });
+
+  if (addedCrew.length) details.push(`נוספו לצוות: ${addedCrew.map((member) => member.name).join(', ')}`);
+  if (removedCrew.length) details.push(`הוסרו מהצוות: ${removedCrew.map((member) => member.name).join(', ')}`);
+  if (updatedCrew.length) details.push(`עודכנו פרטי צוות: ${updatedCrew.map((member) => member.name).join(', ')}`);
+
+  return details.length ? details.join(' • ') : null;
+}
+
 async function captureCalendarSnapshot({
   userId,
   weekId,
@@ -1177,7 +1246,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         ? previousShiftRemovalObservations + 1
         : 0;
 
-    batch.set(prodRef, {
+    const nextPersonal = {
       name: prod.name || existingPersonal.name || '',
       studio: prod.studio || existingPersonal.studio || '',
       date: prod.date,
@@ -1198,7 +1267,26 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       parseQuality: schedule.parseStats,
       crew: cleanCrew,
       lastSyncSnapshotId: snapshot.runId,
-    }, { merge: true });
+    };
+    batch.set(prodRef, nextPersonal, { merge: true });
+
+    const changeMessage = summarizeProductionChange(existingPersonal, nextPersonal);
+    if (changeMessage) {
+      const notificationId = `production-change-${stableNotificationHash(`${userId}|${prodId}|${snapshot.runId}`)}`;
+      batch.set(db.doc(`notifications/${notificationId}`), {
+        userId,
+        recipientUid: userId,
+        type: 'status_change',
+        title: `הפקה עודכנה: ${nextPersonal.name}`,
+        message: changeMessage,
+        productionId: prodId,
+        productionName: nextPersonal.name,
+        linkUrl: '/productions',
+        source: 'system',
+        read: false,
+        createdAt: Date.now(),
+      });
+    }
 
     const crewList = cleanCrew.map((member) => {
       const normalizedPhone = normalizePhone(member.phone);
@@ -1733,6 +1821,7 @@ async function main() {
 module.exports = {
   main,
   mergeCrewPreservingExisting,
+  summarizeProductionChange,
   validateScheduleForWrite,
 };
 

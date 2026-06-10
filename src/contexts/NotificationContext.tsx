@@ -9,6 +9,11 @@ import {
 } from 'firebase/firestore';
 import { getWeekId } from '@/lib/productionDiff';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
+import {
+  stableNotificationHash,
+  summarizeProductionChange,
+  type ProductionChangeData,
+} from '@/lib/productionChangeSummary';
 
 type ProductionReminderData = {
   name?: string;
@@ -210,7 +215,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
   }, [user, realtimeFailed, refreshNotifications]);
 
-  // Production change listener - auto-generate notifications (per-user path)
+  // Production change listener - notify only when user-facing fields really changed.
   useEffect(() => {
     if (!user) return;
 
@@ -223,29 +228,59 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       orderBy('lastUpdatedAt', 'desc')
     );
     let isFirstLoad = true;
+    const previousById = new Map<string, ProductionChangeData>();
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (isFirstLoad) {
+        snapshot.docs.forEach((productionDoc) => {
+          previousById.set(productionDoc.id, productionDoc.data() as ProductionChangeData);
+        });
         isFirstLoad = false;
         return;
       }
 
       snapshot.docChanges().forEach(async (change) => {
-        const data = change.doc.data();
+        const productionId = change.doc.id;
+        const previous = previousById.get(productionId);
 
-        if (change.type === 'modified') {
-          await addDoc(collection(db, 'notifications'), {
-            userId: user.uid,
-            recipientUid: user.uid,
-            type: 'status_change',
-            title: 'הפקה עודכנה',
-            message: `ההפקה "${data.name}" עודכנה`,
-            productionId: change.doc.id,
-            productionName: data.name,
-            read: false,
-            createdAt: Date.now(),
-          });
+        if (change.type === 'removed') {
+          previousById.delete(productionId);
+          return;
         }
+
+        const data = change.doc.data() as ProductionChangeData & { lastUpdatedAt?: string };
+        previousById.set(productionId, data);
+
+        // Manual saves already produce a detailed notification through notify-change.
+        if (change.type !== 'modified' || change.doc.metadata.hasPendingWrites) return;
+        if (
+          !data.lastSyncSnapshotId
+          || data.lastSyncSnapshotId === previous?.lastSyncSnapshotId
+        ) return;
+
+        const summary = summarizeProductionChange(previous, data);
+        if (!summary) return;
+
+        const notificationKey = [
+          user.uid,
+          productionId,
+          data.lastSyncSnapshotId,
+        ].join('|');
+        const notificationId = `production-change-${stableNotificationHash(notificationKey)}`;
+
+        await setDoc(doc(db, 'notifications', notificationId), {
+          userId: user.uid,
+          recipientUid: user.uid,
+          type: 'status_change',
+          title: summary.title,
+          message: summary.message,
+          productionId,
+          productionName: data.name || '',
+          linkUrl: '/productions',
+          source: 'system',
+          read: false,
+          createdAt: Date.now(),
+        });
       });
     });
 
