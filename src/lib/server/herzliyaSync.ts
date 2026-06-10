@@ -7,9 +7,9 @@ import {
   extractStudioFromPopup,
   extractDateFromPopup,
 } from '@/lib/productionScheduleParser';
-import { toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
+import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
-import { patchDocument } from '@/lib/server/firestoreAdminRest';
+import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
@@ -255,12 +255,48 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     day: prod.day || getHebrewDay(prod.date),
   }));
 
-  await Promise.allSettled(
+  const snapshotRunId = `${Date.now()}-${uid.slice(0, 10)}-http`;
+  await patchDocument(`calendar_sync_snapshots/${snapshotRunId}`, {
+    runId: snapshotRunId,
+    userId: uid,
+    weekId: getCurrentWeekStartIsrael(),
+    source: 'herzliya-http-sync',
+    createdAt: new Date().toISOString(),
+    status: 'captured',
+    incomingCount: productions.length,
+  });
+
+  for (const production of productions) {
+    const existing = await getDocument<GlobalProductionDoc>(`global_productions/${production.id}`);
+    await patchDocument(
+      `calendar_sync_snapshots/${snapshotRunId}/entries/${`${uid}_${production.id}`.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1400)}`,
+      {
+        productionId: production.id,
+        restorePersonal: false,
+        beforeGlobal: existing,
+        incoming: production,
+      } as unknown as Record<string, string>,
+    );
+  }
+
+  const writeResults = await Promise.allSettled(
     productions.map(prod => {
       const doc: GlobalProductionDoc = toGlobalProduction(prod, uid, 'herzliyaSync');
-      return patchDocument(`global_productions/${doc.id}`, doc as unknown as Record<string, string>);
+      return getDocument<GlobalProductionDoc>(`global_productions/${doc.id}`)
+        .then((existing) => mergeGlobalProduction(existing, doc))
+        .then((merged) =>
+          patchDocument(`global_productions/${doc.id}`, merged as unknown as Record<string, string>),
+        );
     }),
   );
+  const failedWrites = writeResults.filter((result) => result.status === 'rejected');
+  if (failedWrites.length) {
+    throw new Error(`Failed to write ${failedWrites.length} global productions`);
+  }
+  await patchDocument(`calendar_sync_snapshots/${snapshotRunId}`, {
+    status: 'applied',
+    appliedAt: new Date().toISOString(),
+  });
 
   void syncContactsFromSavedProductions(true).catch(() => {});
 

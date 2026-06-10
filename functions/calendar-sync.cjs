@@ -198,29 +198,6 @@ function getWeekId(dateStr) {
   return `${yy}-${mm}-${dd}`;
 }
 
-async function cleanupWeek(root, weekId) {
-  console.log(`Cleaning up existing data for week ${weekId}...`);
-  const prodsSnap = await db.collection(`${root}/${weekId}/productions`).get();
-
-  if (prodsSnap.empty) {
-    console.log('No existing productions to clean up');
-    return;
-  }
-
-  for (const prodDoc of prodsSnap.docs) {
-    const crewSnap = await db
-      .collection(`${root}/${weekId}/productions/${prodDoc.id}/crew`)
-      .get();
-
-    const batch = db.batch();
-    for (const crewDoc of crewSnap.docs) batch.delete(crewDoc.ref);
-    batch.delete(prodDoc.ref);
-    await batch.commit();
-  }
-
-  console.log(`Deleted ${prodsSnap.size} old productions and their crew`);
-}
-
 async function findCalendarContext(page) {
   const selector = '.calendar-body, .calendar, #calendar, .calendar-body *';
   const deadline = Date.now() + 20000;
@@ -989,21 +966,162 @@ function createVisibleProductionId(production) {
   }
   return 'visible-' + Math.abs(hash).toString(36);
 }
+
+function validateScheduleForWrite(schedule) {
+  const errors = [];
+  const warnings = [];
+  const productions = Array.isArray(schedule?.productions) ? schedule.productions : [];
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(schedule?.weekStart || '')) errors.push('invalid_week_start');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(schedule?.weekEnd || '')) errors.push('invalid_week_end');
+  if (!productions.length) errors.push('empty_schedule');
+
+  const keys = new Set();
+  let duplicateCount = 0;
+  let invalidProductionCount = 0;
+  for (const production of productions) {
+    if (!production?.name || !/^\d{4}-\d{2}-\d{2}$/.test(production?.date || '')) {
+      invalidProductionCount++;
+      continue;
+    }
+    const key = String(production.herzliyaId || createVisibleProductionId(production));
+    if (keys.has(key)) duplicateCount++;
+    keys.add(key);
+  }
+
+  if (invalidProductionCount) errors.push(`invalid_productions:${invalidProductionCount}`);
+  if (duplicateCount) warnings.push(`duplicate_ids:${duplicateCount}`);
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    productionCount: productions.length,
+    validProductionCount: productions.length - invalidProductionCount,
+    popupSuccessRate: schedule?.parseStats?.popupSuccessRate ?? null,
+  };
+}
+
+function mergeCrewPreservingExisting(existingCrew, incomingCrew) {
+  const merged = new Map();
+  const byNameAndRole = new Map();
+  const put = (member, incoming) => {
+    if (!member || !member.name) return;
+    const normalizedPhone = normalizePhone(member.phone || member.phone_number);
+    const normalizedCrewName = normalizeName(member.name || '');
+    const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
+    const nameAndRoleKey = `${normalizedCrewName}::${normalizedCrewRole}`;
+    const existingKey = byNameAndRole.get(nameAndRoleKey);
+    const key = existingKey || normalizedPhone || nameAndRoleKey;
+    if (!key) return;
+    const previous = merged.get(key) || {};
+    merged.set(key, {
+      ...previous,
+      ...member,
+      name: member.name || previous.name || '',
+      role: member.role || member.roleDetail || member.profession || previous.role || previous.profession || '',
+      roleDetail: member.roleDetail || member.role || member.profession || previous.roleDetail || previous.profession || '',
+      phone: normalizedPhone || normalizePhone(previous.phone || previous.phone_number) || null,
+      startTime: member.startTime || previous.startTime || '',
+      endTime: member.endTime || previous.endTime || '',
+      ...(incoming ? { observedAt: new Date().toISOString() } : {}),
+    });
+    byNameAndRole.set(nameAndRoleKey, key);
+  };
+
+  for (const member of existingCrew || []) put(member, false);
+  for (const member of incomingCrew || []) put(member, true);
+  return Array.from(merged.values());
+}
+
+async function captureCalendarSnapshot({
+  userId,
+  weekId,
+  schedule,
+  quality,
+  source,
+}) {
+  const userProductionsRoot = getUserProductionsRoot(userId);
+  const personalSnap = await db.collection(`${userProductionsRoot}/${weekId}/productions`).get();
+  const existingPersonalById = new Map(personalSnap.docs.map((doc) => [doc.id, doc.data()]));
+  const incomingById = new Map(
+    schedule.productions.map((production) => [
+      String(production.herzliyaId || createVisibleProductionId(production)),
+      production,
+    ]),
+  );
+  const productionIds = new Set([...existingPersonalById.keys(), ...incomingById.keys()]);
+  const existingGlobalById = new Map();
+  for (const productionId of productionIds) {
+    const globalDoc = await db.doc(`global_productions/${productionId}`).get();
+    if (globalDoc.exists) existingGlobalById.set(productionId, globalDoc.data());
+  }
+
+  const runId = `${Date.now()}-${userId.slice(0, 10)}`;
+  const snapshotRef = db.doc(`calendar_sync_snapshots/${runId}`);
+  await snapshotRef.set({
+    runId,
+    userId,
+    weekId,
+    source,
+    createdAt: FieldValue.serverTimestamp(),
+    status: 'captured',
+    existingPersonalCount: existingPersonalById.size,
+    existingGlobalCount: existingGlobalById.size,
+    incomingCount: incomingById.size,
+    quality,
+  });
+
+  let batch = db.batch();
+  let batchCount = 0;
+  const commitBatch = async () => {
+    if (!batchCount) return;
+    await batch.commit();
+    batch = db.batch();
+    batchCount = 0;
+  };
+
+  for (const productionId of productionIds) {
+    const entryId = `${userId}_${productionId}`.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1400);
+    batch.set(snapshotRef.collection('entries').doc(entryId), {
+      productionId,
+      restorePersonal: true,
+      beforePersonal: existingPersonalById.get(productionId) || null,
+      beforeGlobal: existingGlobalById.get(productionId) || null,
+      incoming: incomingById.get(productionId) || null,
+    });
+    batchCount++;
+    if (batchCount >= 400) await commitBatch();
+  }
+  await commitBatch();
+
+  return {
+    runId,
+    snapshotRef,
+    existingPersonalById,
+    existingGlobalById,
+    incomingById,
+  };
+}
+
 async function saveSchedule(schedule, userId, requestedWorkerName) {
   const weekId = getWeekId(schedule.weekStart);
-
-  const popupSuccessRate = schedule.parseStats?.popupSuccessRate ?? 1;
-  const cleanupAllowed = popupSuccessRate >= 0.5;
+  const quality = validateScheduleForWrite(schedule);
+  if (!quality.ok) {
+    throw new Error(`Schedule quality gate failed: ${quality.errors.join(', ')}`);
+  }
   // Save to per-user path: productions/{userId}/weeks/{weekId}
   const userProductionsRoot = getUserProductionsRoot(userId);
+  console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');
 
-  if (cleanupAllowed) {
-    console.log('Preserving existing productions for week ' + weekId + '; sync is merge-only');
-  } else {
-    console.log(
-      `Skipping cleanup for week ${weekId} (popup success rate ${(popupSuccessRate * 100).toFixed(1)}%)`,
-    );
-  }
+  const snapshot = await captureCalendarSnapshot({
+    userId,
+    weekId,
+    schedule,
+    quality,
+    source: AUTO_SYNC_SAVED_CALENDARS ? 'scheduled-browser-sync' : 'browser-request-sync',
+  });
+  console.log(`Captured calendar snapshot ${snapshot.runId}`);
 
   const batch = db.batch();
   const weekRef = db.doc(`${userProductionsRoot}/${weekId}`);
@@ -1019,6 +1137,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));
 
     const prodRef = db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`);
+    const existingPersonal = snapshot.existingPersonalById.get(prodId) || {};
     const currentWorkerName = String(schedule.workerName || requestedWorkerName || '').trim();
     const normalizedProductionName = String(prod.name || '').replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
     const sourceCrew = (prod.crew || []).filter((member) => {
@@ -1041,18 +1160,36 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         userId,
       });
     }
-    const cleanCrew = sanitizeCrewForFirestore(sourceCrew);
+    const incomingCrew = sanitizeCrewForFirestore(sourceCrew);
+    const cleanCrew = sanitizeCrewForFirestore(
+      mergeCrewPreservingExisting(existingPersonal.crew || [], incomingCrew),
+    );
+    const previousShiftRemovalObservations = Number(existingPersonal.shiftRemovalObservations || 0);
+    const incomingIsCurrentUserShift = !!prod.isCurrentUserShift;
+    const preserveExistingShift =
+      existingPersonal.isCurrentUserShift === true
+      && !incomingIsCurrentUserShift
+      && previousShiftRemovalObservations < 1;
+    const isCurrentUserShift = incomingIsCurrentUserShift || preserveExistingShift;
+    const shiftRemovalObservations = incomingIsCurrentUserShift
+      ? 0
+      : existingPersonal.isCurrentUserShift === true
+        ? previousShiftRemovalObservations + 1
+        : 0;
 
     batch.set(prodRef, {
-      name: prod.name,
-      studio: prod.studio,
+      name: prod.name || existingPersonal.name || '',
+      studio: prod.studio || existingPersonal.studio || '',
       date: prod.date,
       day: prod.day || getHebrewDay(prod.date),
-      startTime: prod.startTime,
-      endTime: prod.endTime,
-      status: prod.status,
-      herzliyaId: prod.herzliyaId,
-      isCurrentUserShift: !!prod.isCurrentUserShift,
+      startTime: prod.startTime || existingPersonal.startTime || '',
+      endTime: prod.endTime || existingPersonal.endTime || '',
+      status: prod.status || existingPersonal.status || 'scheduled',
+      herzliyaId: prod.herzliyaId || existingPersonal.herzliyaId,
+      isCurrentUserShift,
+      shiftRemovalObservations,
+      missingObservationCount: 0,
+      missingSince: null,
       lastUpdatedBy: userId,
       lastUpdatedAt: new Date().toISOString(),
       popupParsed: !!prod.popupParsed,
@@ -1060,7 +1197,8 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       crewSource: prod.departmentEnriched ? 'department' : prod.popupParsed ? 'popup' : 'fallback',
       parseQuality: schedule.parseStats,
       crew: cleanCrew,
-    });
+      lastSyncSnapshotId: snapshot.runId,
+    }, { merge: true });
 
     const crewList = cleanCrew.map((member) => {
       const normalizedPhone = normalizePhone(member.phone);
@@ -1079,8 +1217,8 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       };
     });
     const globalRef = db.doc(`global_productions/${prodId}`);
-    const existingGlobal = (await globalRef.get()).data() || {};
-    const existingCrewList = !prod.departmentEnriched && Array.isArray(existingGlobal.crew_list)
+    const existingGlobal = snapshot.existingGlobalById.get(prodId) || {};
+    const existingCrewList = Array.isArray(existingGlobal.crew_list)
       ? existingGlobal.crew_list.filter((member) => {
           const parsedAsNameRole = `${member.name || ''}-${member.profession || ''}`
             .replace(/\s+/g, ' ')
@@ -1090,29 +1228,32 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           return parsedAsNameRole !== normalizedProductionName;
         })
       : [];
-    const hasAuthoritativeDepartmentCrew =
-      !prod.departmentEnriched
-      && existingGlobal.crewSource === 'department'
-      && existingCrewList.length > 0;
-    const globalCrewCandidates = hasAuthoritativeDepartmentCrew
-      ? existingCrewList
-      : [...existingCrewList, ...crewList];
-    const mergedCrewByName = new Map();
-    for (const member of globalCrewCandidates) {
-      const key = normalizeName(member.name || '');
-      if (key) mergedCrewByName.set(key, member);
-    }
-    const mergedCrewList = Array.from(mergedCrewByName.values());
+    const mergedCrewList = mergeCrewPreservingExisting(existingCrewList, crewList).map((member) => {
+      const normalizedPhone = normalizePhone(member.phone || member.phone_number);
+      const normalizedCrewName = normalizeName(member.name || '');
+      const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
+      return {
+        name: member.name || '',
+        profession: member.role || member.roleDetail || member.profession || '',
+        phone_number: normalizedPhone,
+        startTime: member.startTime || '',
+        endTime: member.endTime || '',
+        normalizedPhone,
+        shadowKey: !normalizedPhone && normalizedCrewName
+          ? `${normalizedCrewName}::${normalizedCrewRole}`
+          : null,
+      };
+    });
     batch.set(globalRef, {
       id: prodId,
-      name: prod.name || '',
-      studio: prod.studio || '',
+      name: prod.name || existingGlobal.name || '',
+      studio: prod.studio || existingGlobal.studio || '',
       date: prod.date || '',
       day: prod.day || getHebrewDay(prod.date),
-      startTime: prod.startTime || '',
-      endTime: prod.endTime || '',
-      status: prod.status || 'scheduled',
-      herzliyaId: prod.herzliyaId,
+      startTime: prod.startTime || existingGlobal.startTime || '',
+      endTime: prod.endTime || existingGlobal.endTime || '',
+      status: prod.status || existingGlobal.status || 'scheduled',
+      herzliyaId: prod.herzliyaId || existingGlobal.herzliyaId,
       crewSource: prod.departmentEnriched
         ? 'department'
         : existingGlobal.crewSource || (prod.popupParsed ? 'popup' : 'fallback'),
@@ -1122,7 +1263,23 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       lastUpdatedAt: new Date().toISOString(),
       lastUpdatedBy: userId,
       sourceWeekPath: `${userProductionsRoot}/${weekId}`,
-    });
+      lastSyncSnapshotId: snapshot.runId,
+    }, { merge: true });
+  }
+
+  for (const [prodId, existingPersonal] of snapshot.existingPersonalById) {
+    if (snapshot.incomingById.has(prodId)) continue;
+    const missingObservationCount = Number(existingPersonal.missingObservationCount || 0) + 1;
+    batch.set(
+      db.doc(`${userProductionsRoot}/${weekId}/productions/${prodId}`),
+      {
+        missingObservationCount,
+        missingSince: existingPersonal.missingSince || new Date().toISOString(),
+        missingCandidate: true,
+        lastSyncSnapshotId: snapshot.runId,
+      },
+      { merge: true },
+    );
   }
 
   const myProductionIds = schedule.productions
@@ -1144,6 +1301,10 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   });
 
   await batch.commit();
+  await snapshot.snapshotRef.set({
+    status: 'applied',
+    appliedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
   console.log(`Saved ${schedule.productions.length} productions to week ${weekId}`);
 
   if (schedule.snapshotPath) {
@@ -1569,7 +1730,11 @@ async function main() {
   await browser.close();
 }
 
-module.exports = { main };
+module.exports = {
+  main,
+  mergeCrewPreservingExisting,
+  validateScheduleForWrite,
+};
 
 if (require.main === module) {
   main().catch((error) => { console.error(error); process.exitCode = 1; });

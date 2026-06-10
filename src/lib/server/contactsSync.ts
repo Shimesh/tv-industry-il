@@ -555,6 +555,7 @@ export async function syncContactsFromProductions(
   productions: ProductionInput[],
   applyChanges: boolean,
   globalProductions: GlobalProductionInput[] = [],
+  options: { cleanupDuplicates?: boolean } = {},
 ): Promise<ContactsSyncStats> {
   const [contacts, users] = await Promise.all([
     listDocuments<ContactRecord>('contacts'),
@@ -695,7 +696,9 @@ export async function syncContactsFromProductions(
   }
 
   const contactsAfterSync = applyChanges ? contacts : contacts.map((contact) => ({ ...contact }));
-  const cleanup = await cleanupDuplicateContacts(contactsAfterSync, writer);
+  const cleanup = options.cleanupDuplicates
+    ? await cleanupDuplicateContacts(contactsAfterSync, writer)
+    : { deletedDuplicates: 0, remainingContacts: contactsAfterSync.length };
 
   let recategorized = 0;
   for (const contact of contactsAfterSync) {

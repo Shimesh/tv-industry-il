@@ -27,6 +27,75 @@ export interface GlobalProductionDoc {
   lastUpdatedAt: string;
   lastUpdatedBy: string;
   sourceWeekPath: string;
+  crewSource?: string;
+  lastSyncSnapshotId?: string;
+}
+
+function mergeCrewLists(
+  existing: GlobalProductionCrewEntry[] = [],
+  incoming: GlobalProductionCrewEntry[] = [],
+): GlobalProductionCrewEntry[] {
+  const byIdentity = new Map<string, GlobalProductionCrewEntry>();
+  const byNameAndRole = new Map<string, string>();
+
+  for (const entry of [...existing, ...incoming]) {
+    const normalizedPhone = normalizePhone(entry.normalizedPhone || entry.phone_number);
+    const normalizedName = normalizeName(entry.name || '');
+    const normalizedRole = normalizeRole(entry.profession || '');
+    const nameAndRoleIdentity = `${normalizedName}::${normalizedRole}`;
+    const identity = byNameAndRole.get(nameAndRoleIdentity) || normalizedPhone || nameAndRoleIdentity;
+    if (!identity) continue;
+    const previous = byIdentity.get(identity);
+    byIdentity.set(identity, {
+      name: entry.name || previous?.name || '',
+      profession: entry.profession || previous?.profession || '',
+      phone_number: normalizedPhone || previous?.phone_number || null,
+      startTime: entry.startTime || previous?.startTime || '',
+      endTime: entry.endTime || previous?.endTime || '',
+      normalizedPhone: normalizedPhone || previous?.normalizedPhone || null,
+      shadowKey: normalizedPhone
+        ? null
+        : entry.shadowKey || previous?.shadowKey || `${normalizedName}::${normalizedRole}`,
+    });
+    byNameAndRole.set(nameAndRoleIdentity, identity);
+  }
+
+  return Array.from(byIdentity.values());
+}
+
+export function mergeGlobalProduction(
+  existing: GlobalProductionDoc | null,
+  incoming: GlobalProductionDoc,
+): GlobalProductionDoc {
+  if (!existing) return incoming;
+
+  const crewList = mergeCrewLists(existing.crew_list, incoming.crew_list);
+  const crewPhones = new Set<string>();
+  const crewShadowKeys = new Set<string>();
+  for (const entry of crewList) {
+    const phone = normalizePhone(entry.normalizedPhone || entry.phone_number);
+    if (phone) crewPhones.add(phone);
+    else if (entry.shadowKey) crewShadowKeys.add(entry.shadowKey);
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    name: incoming.name || existing.name,
+    studio: incoming.studio || existing.studio,
+    date: incoming.date || existing.date,
+    day: incoming.day || existing.day,
+    startTime: incoming.startTime || existing.startTime,
+    endTime: incoming.endTime || existing.endTime,
+    status: incoming.status || existing.status,
+    crew_list: crewList,
+    crew_phones: Array.from(crewPhones),
+    crew_shadow_keys: Array.from(crewShadowKeys),
+    crewSource:
+      incoming.crewSource === 'department' || existing.crewSource !== 'department'
+        ? incoming.crewSource || existing.crewSource
+        : existing.crewSource,
+  };
 }
 
 export function toGlobalProduction(

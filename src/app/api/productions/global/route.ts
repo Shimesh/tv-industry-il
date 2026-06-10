@@ -6,7 +6,12 @@ import { patchDocument, runQuery, getDocument } from '@/lib/server/firestoreAdmi
 function writeDoc(path: string, data: Record<string, unknown>): Promise<void> {
   return patchDocument(path, data as unknown as Record<string, string>);
 }
-import { toGlobalProduction, fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
+import {
+  toGlobalProduction,
+  fromGlobalProduction,
+  mergeGlobalProduction,
+  type GlobalProductionDoc,
+} from '@/lib/globalProductions';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
@@ -35,13 +40,39 @@ export async function POST(request: NextRequest) {
 
   const errors: string[] = [];
   let count = 0;
+  const snapshotRunId = `${Date.now()}-${authUser.uid.slice(0, 10)}-global`;
+
+  await writeDoc(`calendar_sync_snapshots/${snapshotRunId}`, {
+    runId: snapshotRunId,
+    userId: authUser.uid,
+    source: 'global-api-write',
+    createdAt: new Date().toISOString(),
+    status: 'captured',
+    incomingCount: productions.length,
+  });
+
+  for (const prod of productions) {
+    if (!prod?.id) continue;
+    const existing = await getDocument<GlobalProductionDoc>(`global_productions/${prod.id}`);
+    await writeDoc(
+      `calendar_sync_snapshots/${snapshotRunId}/entries/${`${authUser.uid}_${prod.id}`.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1400)}`,
+      {
+        productionId: prod.id,
+        restorePersonal: false,
+        beforeGlobal: existing,
+        incoming: prod,
+      } as unknown as Record<string, unknown>,
+    );
+  }
 
   await Promise.allSettled(
     productions.map(async (prod) => {
       if (!prod?.id || !prod?.date || !prod?.name) return;
       try {
         const doc = toGlobalProduction(prod, authUser.uid, sourceWeekPath);
-        await writeDoc(`global_productions/${doc.id}`, doc as unknown as Record<string, unknown>);
+        const existing = await getDocument<GlobalProductionDoc>(`global_productions/${doc.id}`);
+        const merged = mergeGlobalProduction(existing, doc);
+        await writeDoc(`global_productions/${doc.id}`, merged as unknown as Record<string, unknown>);
         count++;
       } catch (err) {
         errors.push(`${prod.id}: ${err instanceof Error ? err.message : String(err)}`);
@@ -55,7 +86,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ success: true, count, errors });
+  await writeDoc(`calendar_sync_snapshots/${snapshotRunId}`, {
+    status: errors.length ? 'partial' : 'applied',
+    appliedAt: new Date().toISOString(),
+    writtenCount: count,
+    errorCount: errors.length,
+  });
+
+  return NextResponse.json({ success: true, count, errors, snapshotRunId });
 }
 
 /* ─── GET — query global_productions by phone or shadowKey + date range ───── */

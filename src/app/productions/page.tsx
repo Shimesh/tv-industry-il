@@ -750,6 +750,27 @@ function ProductionsContent() {
       const userSchedulePath = `userSchedules/${user.uid}/weeks/${weekId}`;
       const now = new Date().toISOString();
 
+      let snapshotRunId = '';
+      if (!selectedTeamId) {
+        const snapshotResponse = await fetch('/api/productions/snapshot', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            weekId,
+            productions: prods,
+            source: 'manual-client-save',
+          }),
+        });
+        if (!snapshotResponse.ok) {
+          throw new Error(`Calendar snapshot failed (${snapshotResponse.status})`);
+        }
+        const snapshotPayload = await snapshotResponse.json() as { runId?: string };
+        snapshotRunId = snapshotPayload.runId || '';
+      }
+
       // 2. Save metadata, all productions, and user schedule — all in parallel
       await Promise.all([
         restSet(metaPath, {
@@ -789,6 +810,17 @@ function ProductionsContent() {
           productionIds: prodIds,
         }),
       ]);
+
+      if (snapshotRunId) {
+        await fetch('/api/productions/snapshot', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'applied', runId: snapshotRunId }),
+        }).catch(() => {});
+      }
 
       console.warn('[saveToFirestore] SUCCESS - saved', prods.length, 'productions to weekId:', weekId, 'uid:', user.uid);
 

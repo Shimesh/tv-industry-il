@@ -172,7 +172,8 @@ export function getWeekRange(dateStr: string): { start: string; end: string } {
 // Main diff algorithm
 export function diffSchedules(
   existing: Production[],
-  incoming: Production[]
+  incoming: Production[],
+  options: { markMissingAsCancelled?: boolean } = {},
 ): ScheduleDiff {
   const changes: Change[] = [];
 
@@ -227,19 +228,21 @@ export function diffSchedules(
     }
   }
 
-  // Check for cancellations
-  for (const existingProd of existing) {
-    const stillExists = incoming.find(p =>
-      p.name === existingProd.name &&
-      p.date === existingProd.date
-    );
-    if (!stillExists && existingProd.status !== 'cancelled') {
-      changes.push({
-        type: 'CANCEL_PRODUCTION',
-        productionName: existingProd.name,
-        productionDate: existingProd.date,
-        description: `ביטול הפקה "${existingProd.name}" (${formatDateShort(existingProd.date)})`,
-      });
+  // Missing rows are not proof of cancellation. Only an explicitly trusted caller may opt in.
+  if (options.markMissingAsCancelled) {
+    for (const existingProd of existing) {
+      const stillExists = incoming.find(p =>
+        p.name === existingProd.name &&
+        p.date === existingProd.date
+      );
+      if (!stillExists && existingProd.status !== 'cancelled') {
+        changes.push({
+          type: 'CANCEL_PRODUCTION',
+          productionName: existingProd.name,
+          productionDate: existingProd.date,
+          description: `ביטול הפקה "${existingProd.name}" (${formatDateShort(existingProd.date)})`,
+        });
+      }
     }
   }
 
