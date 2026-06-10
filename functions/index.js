@@ -6,9 +6,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 import * as cheerio from 'cheerio';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest } from 'http';
+import { createRequire } from 'module';
 
 initializeApp();
 const db = getFirestore();
+const require = createRequire(import.meta.url);
 
 setGlobalOptions({ region: 'me-west1', timeoutSeconds: 120 });
 
@@ -268,4 +270,17 @@ export const scrapeRatingsScheduled = onSchedule('every day 07:15', async () => 
       lastMessage: 'Firebase Midrug scheduled run failed',
     }, { merge: true }).catch(() => {});
   }
+});
+
+export const syncCalendarsScheduled = onSchedule({
+  schedule: 'every 60 minutes',
+  timeZone: 'Asia/Jerusalem',
+  timeoutSeconds: 300,
+  memory: '1GiB',
+  maxInstances: 1,
+  retryCount: 1,
+}, async () => {
+  process.env.SYNC_SAVED_CALENDARS = '1';
+  const { main } = require('./calendar-sync.cjs');
+  await main();
 });
