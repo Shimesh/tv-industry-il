@@ -211,6 +211,8 @@ export default function WeeklyCalendarWidget() {
   const [mounted, setMounted] = useState(false);
   const [popupDate, setPopupDate] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const lastFetchStartedAt = useRef(0);
   // In-memory cache per session — mirrors the productions page's productionsByWeekRef pattern
   const sessionCache = useRef<Map<string, Production[]>>(new Map());
 
@@ -220,6 +222,25 @@ export default function WeeklyCalendarWidget() {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const requestRefresh = () => {
+      if (Date.now() - lastFetchStartedAt.current < 60 * 60 * 1000) return;
+      setRefreshNonce((value) => value + 1);
+    };
+    const intervalId = window.setInterval(requestRefresh, 60 * 60 * 1000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') requestRefresh();
+    };
+
+    window.addEventListener('focus', requestRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', requestRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -242,6 +263,7 @@ export default function WeeklyCalendarWidget() {
     const weekEnd = days[6];
 
     const fetchGlobalWeek = async () => {
+      lastFetchStartedAt.current = Date.now();
       const token = await user.getIdToken().catch(() => '');
       if (!token) return;
 
@@ -315,7 +337,7 @@ export default function WeeklyCalendarWidget() {
       cancelled = true;
     };
   // displayName, phone, and profileIdentityId are included so matching uses current profile data
-  }, [days, user, displayName, phone, profileIdentityId]);
+  }, [days, user, displayName, phone, profileIdentityId, refreshNonce]);
 
   const todayStr = mounted ? toDateStr(new Date()) : '';
   const byDate = useMemo(() => {
