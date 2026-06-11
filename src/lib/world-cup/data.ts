@@ -86,11 +86,85 @@ async function fetchFootballData<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>;
 }
 
+// openfootball open data — free, no API key required, updated by community after games finish
+type OpenFootballTeam = string | { name?: string; key?: string };
+type OpenFootballMatch = {
+  num?: number;
+  date?: string;
+  time?: string;
+  team1?: OpenFootballTeam;
+  team2?: OpenFootballTeam;
+  score1?: number | null;
+  score2?: number | null;
+  group?: string;
+  score?: { ft?: [number, number] };
+};
+type OpenFootballData = {
+  rounds?: Array<{ name?: string; matches?: OpenFootballMatch[] }>;
+  matches?: OpenFootballMatch[];
+};
+
+async function fetchOpenFootballData(): Promise<WorldCupMatch[] | null> {
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
+      { next: { revalidate: 300 } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as OpenFootballData;
+
+    const raw: OpenFootballMatch[] = [];
+    if (data.rounds) data.rounds.forEach(r => raw.push(...(r.matches ?? [])));
+    else if (data.matches) raw.push(...data.matches);
+    if (!raw.length) return null;
+
+    const staticByNum = new Map(fallbackMatches.map(m => [m.matchNumber, m]));
+
+    function resolveTeam(t?: OpenFootballTeam): WorldCupTeam {
+      const name = typeof t === 'string' ? t : (t?.name ?? '');
+      const found = Object.values(teams).find(
+        tm => tm.nameEn.toLowerCase() === name.toLowerCase() || tm.nameHe === name,
+      );
+      return found ?? teams.tbd;
+    }
+
+    return raw.map((m, i) => {
+      const matchNum = m.num ?? i + 1;
+      const base = staticByNum.get(matchNum);
+      const score1 = m.score1 ?? m.score?.ft?.[0] ?? null;
+      const score2 = m.score2 ?? m.score?.ft?.[1] ?? null;
+      const finished = typeof score1 === 'number' && typeof score2 === 'number';
+      return {
+        id: base?.id ?? `of-${matchNum}`,
+        matchNumber: matchNum,
+        stage: base?.stage ?? 'group',
+        group: base?.group,
+        homeTeam: resolveTeam(m.team1) ?? base?.homeTeam ?? teams.tbd,
+        awayTeam: resolveTeam(m.team2) ?? base?.awayTeam ?? teams.tbd,
+        homeScore: score1,
+        awayScore: score2,
+        status: finished ? 'finished' : (base?.status ?? 'scheduled'),
+        kickoff: base?.kickoff ?? '',
+        venueId: base?.venueId ?? '',
+        broadcaster: 'kan11' as const,
+        minute: base?.minute,
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; source: 'football-data' | 'fallback'; updatedAt: string }> {
   const payload = await fetchFootballData<{ matches?: FootballDataMatch[] }>('/competitions/WC/matches?season=2026');
   const fdMatches = payload?.matches;
 
   if (!fdMatches?.length) {
+    // Try openfootball as secondary free source (has scores after games finish)
+    const openMatches = await fetchOpenFootballData();
+    if (openMatches?.length) {
+      return { matches: openMatches, source: 'fallback', updatedAt: new Date().toISOString() };
+    }
     return { matches: fallbackMatches, source: 'fallback', updatedAt: new Date().toISOString() };
   }
 
