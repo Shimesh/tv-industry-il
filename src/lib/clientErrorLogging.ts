@@ -5,7 +5,7 @@ import { auth } from '@/lib/firebase';
 
 
 
-const APP_VERSION = '2.8.104';
+const APP_VERSION = '2.8.105';
 
 const RECENT_ERROR_TTL_MS = 60_000;
 const recentErrors = new Map<string, number>();
