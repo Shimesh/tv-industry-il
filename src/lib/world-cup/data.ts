@@ -225,8 +225,30 @@ export function getWorldCupVenues(): WorldCupVenue[] {
   return venues;
 }
 
-export function getWorldCupPlayerStats(): WorldCupPlayerStat[] {
-  return fallbackPlayerStats;
+export async function getWorldCupPlayerStats(): Promise<WorldCupPlayerStat[]> {
+  const payload = await fetchFootballData<{
+    scorers?: Array<{
+      player?: { name?: string };
+      team?: { tla?: string; name?: string; crest?: string };
+      goals?: number;
+      assists?: number;
+    }>;
+  }>('/competitions/WC/scorers?season=2026&limit=10');
+
+  if (!payload?.scorers?.length) return fallbackPlayerStats;
+
+  return payload.scorers.map((s, i) => {
+    const teamObj = normalizeTeam(s.team);
+    return {
+      rank: i + 1,
+      playerName: s.player?.name ?? '—',
+      team: teamObj,
+      goals: s.goals ?? 0,
+      assists: s.assists ?? 0,
+      shots: 0,
+      minutes: 0,
+    };
+  });
 }
 
 export function getActiveWorldCupMatch(matches: WorldCupMatch[]): WorldCupMatch | null {
