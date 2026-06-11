@@ -10,16 +10,17 @@ export const metadata: Metadata = {
 };
 
 export default async function WorldCupPage() {
-  const [{ matches, source, updatedAt }, { standings }] = await Promise.all([
+  const [{ matches, source, updatedAt }, { standings }, playerStats] = await Promise.all([
     getWorldCupMatches(),
     getWorldCupStandings(),
+    getWorldCupPlayerStats(),
   ]);
 
   return (
     <WorldCupHubClient
       matches={matches}
       standings={standings}
-      playerStats={getWorldCupPlayerStats()}
+      playerStats={playerStats}
       venues={getWorldCupVenues()}
       source={source}
       updatedAt={updatedAt}
