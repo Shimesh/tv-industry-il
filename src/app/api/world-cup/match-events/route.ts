@@ -59,26 +59,42 @@ function normalizeType(text?: string): string | null {
   return null;
 }
 
-async function findESPNEventId(homeTeamEn: string, awayTeamEn: string): Promise<string | null> {
-  try {
-    const res = await fetch(ESPN_SCOREBOARD, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return null;
-    const data = await res.json() as { events?: ESPNScoreboardEvent[] };
-    const events = data.events ?? [];
-    const word0 = (s: string) => s.split(' ')[0].toLowerCase();
-    const home = homeTeamEn.toLowerCase();
-    const away = awayTeamEn.toLowerCase();
+async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDate?: string): Promise<string | null> {
+  const word0 = (s: string) => s.split(' ')[0].toLowerCase();
+  const home = homeTeamEn.toLowerCase();
+  const away = awayTeamEn.toLowerCase();
+
+  function searchEvents(events: ESPNScoreboardEvent[]): string | null {
     const found = events.find(ev => {
       const comps = ev.competitions?.[0]?.competitors ?? [];
       const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
-      const hasHome = names.some(n => n === home || n.startsWith(word0(home)) || home.startsWith(word0(n)));
-      const hasAway = names.some(n => n === away || n.startsWith(word0(away)) || away.startsWith(word0(n)));
+      const hasHome = names.some(n => n && (n === home || n.startsWith(word0(home)) || home.startsWith(word0(n))));
+      const hasAway = names.some(n => n && (n === away || n.startsWith(word0(away)) || away.startsWith(word0(n))));
       return hasHome && hasAway;
     });
     return found?.id ?? null;
-  } catch {
-    return null;
   }
+
+  // Build list of scoreboard URLs to try: live + date-specific for kickoff date and today
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const dates = new Set([today]);
+  if (kickoffDate) dates.add(kickoffDate.replace(/-/g, '').slice(0, 8));
+
+  const urls = [
+    ESPN_SCOREBOARD,
+    ...[...dates].map(d => `${ESPN_SCOREBOARD}?dates=${d}`),
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      if (!res.ok) continue;
+      const data = await res.json() as { events?: ESPNScoreboardEvent[] };
+      const id = searchEvents(data.events ?? []);
+      if (id) return id;
+    } catch { /* try next */ }
+  }
+  return null;
 }
 
 async function fetchESPNSummary(espnId: string): Promise<ESPNSummary | null> {
@@ -152,11 +168,12 @@ export async function GET(req: NextRequest) {
   const espnIdParam = sp.get('espnId') ?? '';
   const homeTeam = sp.get('home') ?? '';
   const awayTeam = sp.get('away') ?? '';
+  const kickoffDate = sp.get('date') ?? '';
 
   // Resolve ESPN event ID: use explicit param, or look up from scoreboard by team names
   let espnId = espnIdParam;
   if (!espnId && homeTeam && awayTeam) {
-    espnId = await findESPNEventId(homeTeam, awayTeam) ?? '';
+    espnId = await findESPNEventId(homeTeam, awayTeam, kickoffDate) ?? '';
   }
 
   // Fallback to football-data.org if no ESPN ID and matchId is numeric

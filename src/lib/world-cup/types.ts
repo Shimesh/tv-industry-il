@@ -46,6 +46,13 @@ export type WorldCupPlayerStat = {
   minutes: number;
 };
 
+export type WorldCupCardStat = {
+  rank: number;
+  playerName: string;
+  team: WorldCupTeam;
+  count: number;
+};
+
 export type WorldCupVenue = {
   id: string;
   nameHe: string;

@@ -106,13 +106,29 @@ type ESPNEvent = {
 
 async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
   try {
-    const res = await fetch(
+    // Fetch live scoreboard + today's and yesterday's date scoreboards to capture completed matches
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10).replace(/-/g, '');
+    const urls = [
       'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard',
-      { cache: 'no-store', signal: AbortSignal.timeout(5000) },
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${today}`,
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${yesterday}`,
+    ];
+    const results = await Promise.all(
+      urls.map(url => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) })
+        .then(r => r.ok ? r.json() as Promise<{ events?: unknown[] }> : null)
+        .catch(() => null)),
     );
-    if (!res.ok) return null;
-    const data = await res.json() as { events?: unknown[] };
-    return Array.isArray(data.events) ? (data.events as ESPNEvent[]) : null;
+    const seen = new Set<string>();
+    const events: ESPNEvent[] = [];
+    for (const data of results) {
+      if (!Array.isArray(data?.events)) continue;
+      for (const ev of data.events as ESPNEvent[]) {
+        if (ev.id && !seen.has(ev.id)) { seen.add(ev.id); events.push(ev); }
+        else if (!ev.id) events.push(ev);
+      }
+    }
+    return events.length ? events : null;
   } catch {
     return null;
   }

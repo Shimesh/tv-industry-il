@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import ChannelLogo from '@/components/ChannelLogo';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
-import type { WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
+import type { WorldCupCardStat, WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
 import { teamDetails } from '@/lib/world-cup/static-data';
 
 type WcArticleContent = {
@@ -456,26 +456,118 @@ function StandingsTables({ standings }: { standings: WorldCupStanding[] }) {
   );
 }
 
-function PlayerStatsTable({ stats }: { stats: WorldCupPlayerStat[] }) {
+type TournamentStats = {
+  success: boolean;
+  goals: WorldCupCardStat[];
+  assists: WorldCupCardStat[];
+  yellowCards: WorldCupCardStat[];
+  redCards: WorldCupCardStat[];
+  playerStats: WorldCupPlayerStat[];
+};
+
+type StatTab = 'goals' | 'assists' | 'yellow' | 'red';
+
+function StatRow({ rank, name, teamFlag, teamName, value, label }: { rank: number; name: string; teamFlag: string; teamName: string; value: number; label: string }) {
   return (
-    <CollapsibleCard icon={Zap} title="מלכי שערים" className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] text-right text-sm">
-          <thead style={{ color: 'var(--theme-text-secondary)' }}>
-            <tr><th className="px-4 py-3">#</th><th>שחקן</th><th>נבחרת</th><th>שערים</th><th>בישולים</th><th>בעיטות</th><th className="px-4">דקות</th></tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: 'var(--theme-border)' }}>
-            {stats.map((stat) => (
-              <tr key={`${stat.rank}-${stat.playerName}`} className="text-[var(--theme-text)]">
-                <td className="px-4 py-3 font-black text-[#D4AF37]">{stat.rank}</td>
-                <td className="font-bold">{stat.playerName}</td>
-                <td><span className="ml-1">{stat.team.flag}</span>{stat.team.nameHe}</td>
-                <td className="font-black">{stat.goals}</td><td>{stat.assists}</td><td>{stat.shots}</td><td className="px-4">{stat.minutes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="flex items-center gap-3 px-4 py-2.5 border-b last:border-0" style={{ borderColor: 'var(--theme-border)' }}>
+      <span className="w-6 shrink-0 text-center text-xs font-black text-[#D4AF37]">{rank}</span>
+      <span className="text-lg leading-none">{teamFlag}</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-bold text-[var(--theme-text)] truncate">{name}</div>
+        <div className="text-[11px] text-[var(--theme-text-secondary)]">{teamName}</div>
       </div>
+      <div className="shrink-0 text-center">
+        <div className="text-lg font-black text-[var(--theme-text)]">{value}</div>
+        <div className="text-[9px] font-bold uppercase tracking-wide text-[var(--theme-text-secondary)]">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlayerStat[] }) {
+  const [activeTab, setActiveTab] = useState<StatTab>('goals');
+  const [stats, setStats] = useState<TournamentStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/world-cup/tournament-stats')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: TournamentStats | null) => { if (!cancelled && d?.success) setStats(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const tabs: { key: StatTab; label: string; icon: string }[] = [
+    { key: 'goals', label: 'שערים', icon: '⚽' },
+    { key: 'assists', label: 'בישולים', icon: '🅰️' },
+    { key: 'yellow', label: 'צהוב', icon: '🟨' },
+    { key: 'red', label: 'אדום', icon: '🟥' },
+  ];
+
+  const goalsData: WorldCupCardStat[] = stats?.goals?.length
+    ? stats.goals
+    : initialPlayerStats.map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals })).filter(s => s.count > 0);
+
+  const assistsData: WorldCupCardStat[] = stats?.assists?.length
+    ? stats.assists
+    : initialPlayerStats.map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists })).filter(s => s.count > 0);
+
+  const yellowData = stats?.yellowCards ?? [];
+  const redData = stats?.redCards ?? [];
+
+  const isEmpty = (tab: StatTab) => {
+    if (tab === 'goals') return goalsData.length === 0;
+    if (tab === 'assists') return assistsData.length === 0;
+    if (tab === 'yellow') return yellowData.length === 0;
+    return redData.length === 0;
+  };
+
+  return (
+    <CollapsibleCard icon={Zap} title="סטטיסטיקות" className="overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex border-b" style={{ borderColor: 'var(--theme-border)' }}>
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex-1 py-2.5 text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === t.key
+                ? 'text-[#D4AF37] border-b-2 border-[#D4AF37] -mb-px'
+                : 'text-[var(--theme-text-secondary)]'
+            }`}
+          >
+            <span>{t.icon}</span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {loading ? (
+        <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">טוען נתונים...</div>
+      ) : isEmpty(activeTab) ? (
+        <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
+          <div className="text-2xl mb-2">{activeTab === 'yellow' ? '🟨' : activeTab === 'red' ? '🟥' : '📊'}</div>
+          אין נתונים זמינים עדיין
+        </div>
+      ) : (
+        <div>
+          {activeTab === 'goals' && goalsData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="שערים" />
+          ))}
+          {activeTab === 'assists' && assistsData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="בישולים" />
+          ))}
+          {activeTab === 'yellow' && yellowData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כרטיסים" />
+          ))}
+          {activeTab === 'red' && redData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כרטיסים" />
+          ))}
+        </div>
+      )}
     </CollapsibleCard>
   );
 }
@@ -1260,6 +1352,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     if (match.espnEventId) params.set('espnId', match.espnEventId);
     if (match.homeTeam.nameEn) params.set('home', match.homeTeam.nameEn);
     if (match.awayTeam.nameEn) params.set('away', match.awayTeam.nameEn);
+    if (match.kickoff) params.set('date', match.kickoff.slice(0, 10).replace(/-/g, ''));
     const url = `/api/world-cup/match-events?${params}`;
 
     const load = () => {
@@ -1277,7 +1370,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     if (isFinished) return; // fetch once for finished matches, no polling
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
-  }, [match.id, match.espnEventId, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
+  }, [match.id, match.espnEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
   const eventIcon: Record<string, string> = {
     goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄',
@@ -1887,7 +1980,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           <StandingsTables standings={standings} />
         </div>
         <div ref={sectionRefs.stats}>
-          <PlayerStatsTable stats={playerStats} />
+          <StatsSection initialPlayerStats={playerStats} />
         </div>
         <div ref={sectionRefs.venues}>
           <VenuesGrid venues={venues} matches={matches} />
