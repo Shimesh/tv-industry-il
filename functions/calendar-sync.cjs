@@ -181,6 +181,22 @@ function sanitizeCrewForFirestore(crew) {
   }));
 }
 
+function sanitizeForFirestore(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, nested]) => nested !== undefined)
+        .map(([key, nested]) => [key, sanitizeForFirestore(nested)]),
+    );
+  }
+  return value;
+}
+
 function getHebrewDay(dateStr) {
   const days = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
   const date = new Date(dateStr);
@@ -1157,7 +1173,7 @@ async function captureCalendarSnapshot({
       restorePersonal: true,
       beforePersonal: existingPersonalById.get(productionId) || null,
       beforeGlobal: existingGlobalById.get(productionId) || null,
-      incoming: incomingById.get(productionId) || null,
+      incoming: sanitizeForFirestore(incomingById.get(productionId) || null),
     });
     batchCount++;
     if (batchCount >= 400) await commitBatch();
@@ -1246,6 +1262,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         ? previousShiftRemovalObservations + 1
         : 0;
 
+    const herzliyaId = prod.herzliyaId || existingPersonal.herzliyaId;
     const nextPersonal = {
       name: prod.name || existingPersonal.name || '',
       studio: prod.studio || existingPersonal.studio || '',
@@ -1254,7 +1271,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       startTime: prod.startTime || existingPersonal.startTime || '',
       endTime: prod.endTime || existingPersonal.endTime || '',
       status: prod.status || existingPersonal.status || 'scheduled',
-      herzliyaId: prod.herzliyaId || existingPersonal.herzliyaId,
+      ...(herzliyaId ? { herzliyaId } : {}),
       isCurrentUserShift,
       shiftRemovalObservations,
       missingObservationCount: 0,
@@ -1332,6 +1349,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           : null,
       };
     });
+    const globalHerzliyaId = prod.herzliyaId || existingGlobal.herzliyaId;
     batch.set(globalRef, {
       id: prodId,
       name: prod.name || existingGlobal.name || '',
@@ -1341,7 +1359,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       startTime: prod.startTime || existingGlobal.startTime || '',
       endTime: prod.endTime || existingGlobal.endTime || '',
       status: prod.status || existingGlobal.status || 'scheduled',
-      herzliyaId: prod.herzliyaId || existingGlobal.herzliyaId,
+      ...(globalHerzliyaId ? { herzliyaId: globalHerzliyaId } : {}),
       crewSource: prod.departmentEnriched
         ? 'department'
         : existingGlobal.crewSource || (prod.popupParsed ? 'popup' : 'fallback'),
@@ -1821,6 +1839,7 @@ async function main() {
 module.exports = {
   main,
   mergeCrewPreservingExisting,
+  sanitizeForFirestore,
   summarizeProductionChange,
   validateScheduleForWrite,
 };
