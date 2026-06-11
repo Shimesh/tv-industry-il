@@ -11,10 +11,9 @@ export async function GET() {
     getWorldCupPlayerStats(),
   ]);
 
-  // If all API standings show 0 played games, derive from finished match results instead
-  const allZero = apiStandings.every(s => s.played === 0);
+  // Always derive standings from actual finished match results — more reliable than any external API
   const finished = matches.filter(m => m.status === 'finished' && m.homeScore != null && m.awayScore != null);
-  const standings = (allZero && finished.length > 0) ? deriveStandingsFromMatches(finished) : apiStandings;
+  const standings = finished.length > 0 ? deriveStandingsFromMatches(finished) : apiStandings;
 
   const hasLive = matches.some(m => m.status === 'live');
   const ttl = hasLive ? 30 : 60;

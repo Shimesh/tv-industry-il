@@ -16,9 +16,9 @@ export default async function WorldCupPage() {
     getWorldCupPlayerStats(),
   ]);
 
-  const allZero = apiStandings.every(s => s.played === 0);
+  // Always derive standings from actual finished match results — more reliable than any external API
   const finished = matches.filter(m => m.status === 'finished' && m.homeScore != null && m.awayScore != null);
-  const standings = (allZero && finished.length > 0) ? deriveStandingsFromMatches(finished) : apiStandings;
+  const standings = finished.length > 0 ? deriveStandingsFromMatches(finished) : apiStandings;
 
   return (
     <WorldCupHubClient
