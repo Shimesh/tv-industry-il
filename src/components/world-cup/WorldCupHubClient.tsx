@@ -1355,6 +1355,8 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   const awayDetail = teamDetails.find(t => t.id === match.awayTeam.id);
   const broadcasterLabel = match.broadcaster === 'kan11' ? 'כאן 11' : match.broadcaster === 'sport5' ? 'ספורט 5' : 'ייקבע';
   const isLive = match.status === 'live';
+  const isFinished = match.status === 'finished';
+  const hasEvents = isLive || isFinished;
   const [tab, setTab] = useState<'lineup' | 'live'>(isLive ? 'live' : 'lineup');
 
   const homeStarters = (homeDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
@@ -1419,19 +1421,21 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
           >
             👥 הרכב &amp; חילופים
           </button>
-          {isLive && (
+          {hasEvents && (
             <button
               onClick={() => setTab('live')}
-              className={`flex-1 py-2.5 text-xs font-black transition-colors ${tab === 'live' ? 'text-red-400 border-b-2 border-red-500' : 'text-[var(--theme-text-secondary)]'}`}
+              className={`flex-1 py-2.5 text-xs font-black transition-colors ${tab === 'live' ? (isLive ? 'text-red-400 border-b-2 border-red-500' : 'text-[#D4AF37] border-b-2 border-[#D4AF37]') : 'text-[var(--theme-text-secondary)]'}`}
             >
-              <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }}>🔴</motion.span> שידור חי
+              {isLive ? (
+                <><motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }}>🔴</motion.span> שידור חי</>
+              ) : '📋 אירועי משחק'}
             </button>
           )}
         </div>
 
         {/* Body */}
         <div className="overflow-y-auto" style={{ maxHeight: 'calc(93dvh - 185px)' }}>
-          {tab === 'live' && isLive ? (
+          {tab === 'live' && hasEvents ? (
             <LiveEventsPanel match={match} />
           ) : (
             <div className="space-y-4 p-3">

@@ -9,8 +9,8 @@ import { useWorldCup } from '@/contexts/WorldCupContext';
 
 const TROPHY_IMG = '/wc2026-logo.png';
 
-function getDiff() {
-  const diffMs = Math.max(0, Date.parse(WORLD_CUP_START_ISO) - Date.now());
+function getDiff(targetIso: string) {
+  const diffMs = Math.max(0, Date.parse(targetIso) - Date.now());
   return {
     days: Math.floor(diffMs / 86_400_000),
     hours: Math.floor((diffMs % 86_400_000) / 3_600_000),
@@ -90,14 +90,17 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   const { activeMatch, nextMatch } = useWorldCup();
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
 
-  useEffect(() => {
-    setDiff(getDiff());
-    const interval = window.setInterval(() => setDiff(getDiff()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
   const label = useMemo(() => (activeMatch ? 'מונדיאל LIVE' : 'מונדיאל 2026'), [activeMatch]);
-  const previewMatch = nextMatch ?? fallbackMatches[0] ?? null;
+  const previewMatch = activeMatch ?? nextMatch ?? fallbackMatches[0] ?? null;
+
+  // Count down to next/active match kickoff, not to the fixed tournament start date
+  const targetIso = nextMatch?.kickoff ?? activeMatch?.kickoff ?? WORLD_CUP_START_ISO;
+
+  useEffect(() => {
+    setDiff(getDiff(targetIso));
+    const interval = window.setInterval(() => setDiff(getDiff(targetIso)), 1000);
+    return () => window.clearInterval(interval);
+  }, [targetIso]);
 
   return (
     <motion.button

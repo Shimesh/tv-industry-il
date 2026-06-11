@@ -277,8 +277,67 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
   return { matches, source, updatedAt: new Date().toISOString() };
 }
 
+type ESPNStandingEntry = {
+  team?: { displayName?: string; abbreviation?: string };
+  stats?: Array<{ name?: string; value?: number }>;
+  note?: { color?: string; description?: string };
+};
+type ESPNStandingGroup = {
+  header?: string;
+  standings?: { entries?: ESPNStandingEntry[] };
+  entries?: ESPNStandingEntry[];
+};
+
+async function fetchESPNStandings(): Promise<WorldCupStanding[] | null> {
+  try {
+    const res = await fetch(
+      'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/standings',
+      { cache: 'no-store', signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { groups?: ESPNStandingGroup[]; children?: ESPNStandingGroup[] };
+    const groups: ESPNStandingGroup[] = data.groups ?? data.children ?? [];
+    if (!groups.length) return null;
+
+    const result: WorldCupStanding[] = [];
+    for (const group of groups) {
+      const header = group.header ?? '';
+      // ESPN header format: "Group A" or "A"
+      const groupLetter = header.replace(/^Group\s*/i, '').trim().toUpperCase() || 'A';
+      const entries = group.standings?.entries ?? group.entries ?? [];
+      for (const entry of entries) {
+        const displayName = entry.team?.displayName ?? '';
+        const found = Object.values(teams).find(
+          t => t.nameEn.toLowerCase() === displayName.toLowerCase() ||
+               (entry.team?.abbreviation && t.id === entry.team.abbreviation.toLowerCase()),
+        );
+        if (!found) continue;
+        const stat = (name: string) => entry.stats?.find(s => s.name === name)?.value ?? 0;
+        result.push({
+          group: groupLetter,
+          team: found,
+          played: stat('gamesPlayed'),
+          won: stat('wins'),
+          drawn: stat('ties'),
+          lost: stat('losses'),
+          goalsFor: stat('pointsFor'),
+          goalsAgainst: stat('pointsAgainst'),
+          points: stat('points'),
+        });
+      }
+    }
+    return result.length ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getWorldCupStandings(): Promise<{ standings: WorldCupStanding[]; source: 'football-data' | 'fallback' }> {
-  const payload = await fetchFootballData<FootballDataStandings>('/competitions/WC/standings?season=2026');
+  const [payload, espnStandings] = await Promise.all([
+    fetchFootballData<FootballDataStandings>('/competitions/WC/standings?season=2026'),
+    fetchESPNStandings(),
+  ]);
+
   const raw = payload?.standings?.flatMap((group) =>
     (group.table ?? []).map((row) => {
       const teamObj = normalizeTeam(row.team);
@@ -297,10 +356,14 @@ export async function getWorldCupStandings(): Promise<{ standings: WorldCupStand
     }),
   ) ?? [];
 
-  if (!raw.length) return { standings: fallbackStandings, source: 'fallback' };
+  // Build a merged standings from all sources (ESPN takes priority for live data)
+  // Start with ESPN if available (most up-to-date), fall back to football-data.org, then static
+  const primaryData = espnStandings ?? (raw.length ? raw : null);
 
-  // Merge live scores from API into fallback group structure so groups are always correct
-  const liveMap = new Map(raw.map((s) => [s.team.id, s]));
+  if (!primaryData) return { standings: fallbackStandings, source: 'fallback' };
+
+  // Merge into fallback group structure so group letters are always correct
+  const liveMap = new Map(primaryData.map((s) => [s.team.id, s]));
   const merged = fallbackStandings.map((row) => {
     const live = liveMap.get(row.team.id);
     return live ? { ...row, played: live.played, won: live.won, drawn: live.drawn, lost: live.lost, goalsFor: live.goalsFor, goalsAgainst: live.goalsAgainst, points: live.points } : row;
