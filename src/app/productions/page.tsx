@@ -2045,7 +2045,7 @@ function ProductionsContent() {
           newMap[prod.id] = resultEventId;
         } else {
           errorCount++;
-          console.warn('[syncWeekToGoogle] failed for', prod.name, syncError);
+          console.warn('[syncWeekToGoogle] failed for', prod.name, '|', prod.date, prod.startTime, '-', prod.endTime, '|', syncError);
         }
 
         setGcalBulkProgress({ done: i + 1, total: myProds.length });

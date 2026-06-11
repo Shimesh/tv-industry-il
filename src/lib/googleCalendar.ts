@@ -186,7 +186,15 @@ export async function updateProductionInCalendar(
     });
 
     const data = (await res.json()) as CalendarSyncResult & { error?: string };
-    if (!res.ok) return { success: false, error: data.error ?? 'שגיאה בעדכון', notConnected: res.status === 401 };
+    if (res.status === 401) {
+      return {
+        success: false,
+        notConnected: data.error === 'not_connected',
+        tokenRevoked: data.error === 'token_revoked',
+        error: data.error ?? 'לא מחובר',
+      };
+    }
+    if (!res.ok) return { success: false, error: data.error ?? 'שגיאה בעדכון' };
     return { success: true, eventId: data.eventId, eventUrl: data.eventUrl };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'שגיאה לא ידועה' };
