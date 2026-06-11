@@ -1254,6 +1254,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   const [liveMinute, setLiveMinute] = useState<number | null>(match.minute ?? null);
   const [fetching, setFetching] = useState(true);
   const isApiMatch = /^\d+$/.test(match.id);
+  const isFinished = match.status === 'finished';
 
   useEffect(() => {
     if (!isApiMatch) { setFetching(false); return; }
@@ -1269,9 +1270,10 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
         .finally(() => setFetching(false));
     };
     load();
+    if (isFinished) return; // fetch once for finished matches, no polling
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
-  }, [match.id, isApiMatch]);
+  }, [match.id, isApiMatch, isFinished]);
 
   const eventIcon: Record<string, string> = {
     goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄',
@@ -1281,10 +1283,16 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     <div className="space-y-3 p-3">
       <div className="flex items-center justify-between rounded-xl border px-4 py-3" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg-secondary)' }}>
         <div className="flex items-center gap-2">
-          <motion.span animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1, repeat: Infinity }} className="h-2.5 w-2.5 rounded-full bg-red-500" />
-          <span className="font-black text-red-400 text-sm">שידור חי</span>
+          {isFinished ? (
+            <span className="font-black text-[#D4AF37] text-sm">📋 סיכום משחק</span>
+          ) : (
+            <>
+              <motion.span animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1, repeat: Infinity }} className="h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="font-black text-red-400 text-sm">🔴 שידור חי</span>
+            </>
+          )}
         </div>
-        {liveMinute != null && (
+        {!isFinished && liveMinute != null && (
           <span className="rounded-full bg-red-500/15 px-3 py-1 text-sm font-black text-red-400">דקה {liveMinute}׳</span>
         )}
       </div>
@@ -1296,14 +1304,14 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
       {!fetching && !isApiMatch && (
         <div className="rounded-xl border px-4 py-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="text-2xl mb-2">⚡</div>
-          אירועי משחק חי יופיעו כאן בזמן אמת
+          {isFinished ? 'אין נתוני אירועים זמינים' : 'אירועי משחק חי יופיעו כאן בזמן אמת'}
         </div>
       )}
 
       {!fetching && isApiMatch && events.length === 0 && (
         <div className="rounded-xl border px-4 py-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
-          <div className="text-2xl mb-2">⏱️</div>
-          אין אירועים עדיין · המשחק בתהליך
+          <div className="text-2xl mb-2">{isFinished ? '📊' : '⏱️'}</div>
+          {isFinished ? 'אין נתוני אירועים זמינים עבור משחק זה' : 'אין אירועים עדיין · המשחק בתהליך'}
         </div>
       )}
 

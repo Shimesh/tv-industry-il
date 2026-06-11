@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import WorldCupHubClient from '@/components/world-cup/WorldCupHubClient';
-import { getWorldCupMatches, getWorldCupPlayerStats, getWorldCupStandings, getWorldCupVenues } from '@/lib/world-cup/data';
+import { deriveStandingsFromMatches, getWorldCupMatches, getWorldCupPlayerStats, getWorldCupStandings, getWorldCupVenues } from '@/lib/world-cup/data';
 
 export const revalidate = 60;
 
@@ -10,11 +10,15 @@ export const metadata: Metadata = {
 };
 
 export default async function WorldCupPage() {
-  const [{ matches, source, updatedAt }, { standings }, playerStats] = await Promise.all([
+  const [{ matches, source, updatedAt }, { standings: apiStandings }, playerStats] = await Promise.all([
     getWorldCupMatches(),
     getWorldCupStandings(),
     getWorldCupPlayerStats(),
   ]);
+
+  const allZero = apiStandings.every(s => s.played === 0);
+  const finished = matches.filter(m => m.status === 'finished' && m.homeScore != null && m.awayScore != null);
+  const standings = (allZero && finished.length > 0) ? deriveStandingsFromMatches(finished) : apiStandings;
 
   return (
     <WorldCupHubClient

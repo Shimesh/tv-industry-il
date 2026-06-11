@@ -372,6 +372,26 @@ export async function getWorldCupStandings(): Promise<{ standings: WorldCupStand
   return { standings: merged, source: 'football-data' };
 }
 
+export function deriveStandingsFromMatches(finishedMatches: WorldCupMatch[]): WorldCupStanding[] {
+  const statsMap = new Map<string, WorldCupStanding>();
+  for (const row of fallbackStandings) {
+    statsMap.set(row.team.id, { ...row, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 });
+  }
+  for (const match of finishedMatches) {
+    if (match.homeScore == null || match.awayScore == null) continue;
+    const homeEntry = statsMap.get(match.homeTeam.id);
+    const awayEntry = statsMap.get(match.awayTeam.id);
+    if (!homeEntry || !awayEntry) continue;
+    homeEntry.played++; awayEntry.played++;
+    homeEntry.goalsFor += match.homeScore; homeEntry.goalsAgainst += match.awayScore;
+    awayEntry.goalsFor += match.awayScore; awayEntry.goalsAgainst += match.homeScore;
+    if (match.homeScore > match.awayScore) { homeEntry.won++; homeEntry.points += 3; awayEntry.lost++; }
+    else if (match.homeScore < match.awayScore) { awayEntry.won++; awayEntry.points += 3; homeEntry.lost++; }
+    else { homeEntry.drawn++; homeEntry.points++; awayEntry.drawn++; awayEntry.points++; }
+  }
+  return Array.from(statsMap.values());
+}
+
 export function getWorldCupVenues(): WorldCupVenue[] {
   return venues;
 }
