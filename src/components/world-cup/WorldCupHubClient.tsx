@@ -1094,7 +1094,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
         <span className="mr-auto text-[11px] text-white/35">מתעדכן כל 30 שניות</span>
       </div>
 
-      <div className={`grid gap-0 divide-y divide-white/8 ${liveMatches.length > 1 ? 'sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`} style={{ divideColor: 'rgba(255,255,255,.08)' }}>
+      <div className={`grid gap-0 divide-y divide-white/8 ${liveMatches.length > 1 ? 'sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`}>
         {liveMatches.map(match => {
           const events = eventsMap[match.id] ?? [];
           const minute = minuteMap[match.id] ?? match.minute;
