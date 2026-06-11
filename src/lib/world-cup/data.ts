@@ -97,6 +97,7 @@ type ESPNCompetitor = {
   score?: string;
 };
 type ESPNEvent = {
+  id?: string;
   status?: {
     type?: { name?: string; completed?: boolean; shortDetail?: string };
   };
@@ -160,6 +161,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
       homeScore: (homeScore != null && !isNaN(homeScore)) ? homeScore : match.homeScore,
       awayScore: (awayScore != null && !isNaN(awayScore)) ? awayScore : match.awayScore,
       minute: minute ?? match.minute,
+      espnEventId: espn.id ?? match.espnEventId,
     };
   });
 }

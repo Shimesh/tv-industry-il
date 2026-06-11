@@ -1253,13 +1253,17 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [liveMinute, setLiveMinute] = useState<number | null>(match.minute ?? null);
   const [fetching, setFetching] = useState(true);
-  const isApiMatch = /^\d+$/.test(match.id);
   const isFinished = match.status === 'finished';
 
   useEffect(() => {
-    if (!isApiMatch) { setFetching(false); return; }
+    const params = new URLSearchParams({ matchId: match.id });
+    if (match.espnEventId) params.set('espnId', match.espnEventId);
+    if (match.homeTeam.nameEn) params.set('home', match.homeTeam.nameEn);
+    if (match.awayTeam.nameEn) params.set('away', match.awayTeam.nameEn);
+    const url = `/api/world-cup/match-events?${params}`;
+
     const load = () => {
-      fetch(`/api/world-cup/match-events?matchId=${match.id}`)
+      fetch(url)
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           if (!d?.success) return;
@@ -1273,7 +1277,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     if (isFinished) return; // fetch once for finished matches, no polling
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
-  }, [match.id, isApiMatch, isFinished]);
+  }, [match.id, match.espnEventId, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
   const eventIcon: Record<string, string> = {
     goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄',
@@ -1301,14 +1305,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">טוען אירועי משחק...</div>
       )}
 
-      {!fetching && !isApiMatch && (
-        <div className="rounded-xl border px-4 py-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
-          <div className="text-2xl mb-2">⚡</div>
-          {isFinished ? 'אין נתוני אירועים זמינים' : 'אירועי משחק חי יופיעו כאן בזמן אמת'}
-        </div>
-      )}
-
-      {!fetching && isApiMatch && events.length === 0 && (
+      {!fetching && events.length === 0 && (
         <div className="rounded-xl border px-4 py-6 text-center text-sm text-[var(--theme-text-secondary)]" style={{ borderColor: 'var(--theme-border)' }}>
           <div className="text-2xl mb-2">{isFinished ? '📊' : '⏱️'}</div>
           {isFinished ? 'אין נתוני אירועים זמינים עבור משחק זה' : 'אין אירועים עדיין · המשחק בתהליך'}
