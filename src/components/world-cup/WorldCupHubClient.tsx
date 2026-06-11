@@ -506,14 +506,18 @@ function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlay
     { key: 'red', label: 'אדום', icon: '🟥' },
   ];
 
-  const goalsData: WorldCupCardStat[] = stats?.goals?.length
-    ? stats.goals
-    : initialPlayerStats.map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals })).filter(s => s.count > 0);
+  // Goals & assists: always from football-data.org (reliable, never empty after matches start)
+  const goalsData: WorldCupCardStat[] = initialPlayerStats
+    .filter(s => s.goals > 0)
+    .sort((a, b) => b.goals - a.goals)
+    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals }));
 
-  const assistsData: WorldCupCardStat[] = stats?.assists?.length
-    ? stats.assists
-    : initialPlayerStats.map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists })).filter(s => s.count > 0);
+  const assistsData: WorldCupCardStat[] = initialPlayerStats
+    .filter(s => s.assists > 0)
+    .sort((a, b) => b.assists - a.assists)
+    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists }));
 
+  // Cards: from ESPN summary aggregation via tournament-stats endpoint
   const yellowData = stats?.yellowCards ?? [];
   const redData = stats?.redCards ?? [];
 

@@ -292,6 +292,27 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     matches = applyESPNOverlay(matches, espnEvents);
   }
 
+  // Supplement with openfootball for matches whose kickoff has passed but still show 'scheduled'.
+  // This catches completed matches that ESPN scoreboard no longer includes (hours after game ends).
+  const now = Date.now();
+  const needsScore = matches.some(
+    m => m.status === 'scheduled' && m.kickoff && now - Date.parse(m.kickoff) > 105 * 60_000,
+  );
+  if (needsScore) {
+    const openMatches = await fetchOpenFootballData();
+    if (openMatches?.length) {
+      const openByNum = new Map(openMatches.filter(m => m.status === 'finished').map(m => [m.matchNumber, m]));
+      matches = matches.map(m => {
+        if (m.status !== 'scheduled') return m;
+        const open = openByNum.get(m.matchNumber);
+        if (open && open.homeScore != null && open.awayScore != null) {
+          return { ...m, status: 'finished' as const, homeScore: open.homeScore, awayScore: open.awayScore };
+        }
+        return m;
+      });
+    }
+  }
+
   return { matches, source, updatedAt: new Date().toISOString() };
 }
 
@@ -374,17 +395,21 @@ export async function getWorldCupStandings(): Promise<{ standings: WorldCupStand
     }),
   ) ?? [];
 
-  // Build a merged standings from all sources (ESPN takes priority for live data)
-  // Start with ESPN if available (most up-to-date), fall back to football-data.org, then static
-  const primaryData = espnStandings ?? (raw.length ? raw : null);
+  // Merge ALL sources — for each team, take the entry with the most played games.
+  // This handles partial API responses (e.g. ESPN updates only some teams).
+  const allEntries = [...(espnStandings ?? []), ...(raw.length ? raw : [])];
+  if (!allEntries.length) return { standings: fallbackStandings, source: 'fallback' };
 
-  if (!primaryData) return { standings: fallbackStandings, source: 'fallback' };
-
-  // Merge into fallback group structure so group letters are always correct
-  const liveMap = new Map(primaryData.map((s) => [s.team.id, s]));
+  const bestByTeam = new Map<string, WorldCupStanding>();
+  for (const s of allEntries) {
+    const existing = bestByTeam.get(s.team.id);
+    if (!existing || s.played > existing.played) bestByTeam.set(s.team.id, s);
+  }
   const merged = fallbackStandings.map((row) => {
-    const live = liveMap.get(row.team.id);
-    return live ? { ...row, played: live.played, won: live.won, drawn: live.drawn, lost: live.lost, goalsFor: live.goalsFor, goalsAgainst: live.goalsAgainst, points: live.points } : row;
+    const best = bestByTeam.get(row.team.id);
+    return best
+      ? { ...row, played: best.played, won: best.won, drawn: best.drawn, lost: best.lost, goalsFor: best.goalsFor, goalsAgainst: best.goalsAgainst, points: best.points }
+      : row;
   });
 
   return { standings: merged, source: 'football-data' };

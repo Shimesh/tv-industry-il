@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getWorldCupMatches, getWorldCupPlayerStats } from '@/lib/world-cup/data';
 import { teams } from '@/lib/world-cup/static-data';
 import type { WorldCupTeam } from '@/lib/world-cup/types';
 
@@ -14,23 +13,25 @@ type ESPNPlay = {
   athletesInvolved?: Array<{ displayName?: string; type?: string }>;
 };
 type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[] };
-type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string };
-type ESPNEvent = { id?: string; competitions?: Array<{ competitors?: ESPNCompetitor[] }> };
+type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string; score?: string };
+type ESPNStatus = { type?: { name?: string; completed?: boolean } };
+type ESPNEvent = {
+  id?: string;
+  competitions?: Array<{ competitors?: ESPNCompetitor[]; status?: ESPNStatus }>;
+  status?: ESPNStatus;
+};
 
 type StatEntry = { playerName: string; team: WorldCupTeam; count: number };
 
 function resolveTeam(displayName?: string): WorldCupTeam {
   if (!displayName) return teams.tbd;
   const name = displayName.toLowerCase();
+  const w0 = (s: string) => s.split(' ')[0];
   return Object.values(teams).find(t =>
-    t.nameEn.toLowerCase() === name || name.startsWith(t.nameEn.toLowerCase().split(' ')[0]),
+    t.nameEn.toLowerCase() === name ||
+    name.startsWith(w0(t.nameEn.toLowerCase())) ||
+    t.nameEn.toLowerCase().startsWith(w0(name)),
   ) ?? { id: 'tbd', nameHe: displayName, nameEn: displayName, flag: '🏳️' };
-}
-
-function parseMinute(play: ESPNPlay): number {
-  if (typeof play.clock?.value === 'number') return Math.round(play.clock.value / 60);
-  const m = (play.clock?.displayValue ?? '').match(/^(\d+)/);
-  return m ? parseInt(m[1], 10) : 0;
 }
 
 function inc(map: Map<string, StatEntry>, player: string, team: WorldCupTeam) {
@@ -74,6 +75,18 @@ function toRanked(map: Map<string, StatEntry>) {
     .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
 }
 
+async function fetchDateScoreboard(dateStr: string): Promise<ESPNEvent[]> {
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`,
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) },
+    );
+    if (!res.ok) return [];
+    const data = await res.json() as { events?: ESPNEvent[] };
+    return data.events ?? [];
+  } catch { return []; }
+}
+
 async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   try {
     const res = await fetch(
@@ -84,47 +97,33 @@ async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   } catch { return null; }
 }
 
-async function getESPNEventIdsForDate(dateStr: string): Promise<ESPNEvent[]> {
-  try {
-    const res = await fetch(
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) },
-    );
-    if (!res.ok) return [];
-    const data = await res.json() as { events?: ESPNEvent[] };
-    return data.events ?? [];
-  } catch { return []; }
+function isCompleted(ev: ESPNEvent): boolean {
+  const status = ev.competitions?.[0]?.status ?? ev.status;
+  return status?.type?.completed === true || status?.type?.name === 'STATUS_FINAL';
 }
 
 export async function GET() {
-  const [{ matches }, playerStats] = await Promise.all([getWorldCupMatches(), getWorldCupPlayerStats()]);
-
-  const finished = matches.filter(m => m.status === 'finished');
-
-  // Collect ESPN event IDs: prefer stored espnEventId, fall back to date scoreboard lookup
-  const eventIdsByDate = new Map<string, ESPNEvent[]>();
-  const uniqueDates = [...new Set(finished.map(m => m.kickoff.slice(0, 10).replace(/-/g, '')))];
-  const dateResults = await Promise.all(uniqueDates.map(d => getESPNEventIdsForDate(d)));
-  uniqueDates.forEach((d, i) => eventIdsByDate.set(d, dateResults[i]));
-
-  function word0(s: string) { return s.split(' ')[0].toLowerCase(); }
-  function findEspnId(homeEn: string, awayEn: string, date: string): string | null {
-    const events = eventIdsByDate.get(date) ?? [];
-    const found = events.find(ev => {
-      const names = (ev.competitions?.[0]?.competitors ?? []).map(c => (c.team?.displayName ?? '').toLowerCase());
-      return names.some(n => n === homeEn.toLowerCase() || n.startsWith(word0(homeEn)) || homeEn.toLowerCase().startsWith(word0(n)))
-          && names.some(n => n === awayEn.toLowerCase() || n.startsWith(word0(awayEn)) || awayEn.toLowerCase().startsWith(word0(n)));
-    });
-    return found?.id ?? null;
+  // Fetch ESPN scoreboards for each day from tournament start to today
+  const tourStart = new Date('2026-06-11');
+  const today = new Date();
+  const dates: string[] = [];
+  for (let d = new Date(tourStart); d <= today; d.setDate(d.getDate() + 1)) {
+    dates.push(d.toISOString().slice(0, 10).replace(/-/g, ''));
   }
 
-  const espnIds = finished.map(m => {
-    if (m.espnEventId) return m.espnEventId;
-    const date = m.kickoff.slice(0, 10).replace(/-/g, '');
-    return findEspnId(m.homeTeam.nameEn, m.awayTeam.nameEn, date);
-  }).filter(Boolean) as string[];
+  const allEventArrays = await Promise.all(dates.map(fetchDateScoreboard));
+  const seen = new Set<string>();
+  const completedIds: string[] = [];
+  for (const events of allEventArrays) {
+    for (const ev of events) {
+      if (ev.id && !seen.has(ev.id) && isCompleted(ev)) {
+        seen.add(ev.id);
+        completedIds.push(ev.id);
+      }
+    }
+  }
 
-  const summaries = await Promise.all([...new Set(espnIds)].map(fetchESPNSummary));
+  const summaries = await Promise.all(completedIds.map(fetchESPNSummary));
 
   const goals = new Map<string, StatEntry>();
   const assists = new Map<string, StatEntry>();
@@ -141,6 +140,5 @@ export async function GET() {
     assists: toRanked(assists),
     yellowCards: toRanked(yellow),
     redCards: toRanked(red),
-    playerStats,
   }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
 }
