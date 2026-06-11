@@ -1587,19 +1587,22 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   const [wcArticleError, setWcArticleError] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      fetch('/api/world-cup/matches')
+    let cancelled = false;
+    const poll = () => {
+      fetch('/api/world-cup/matches', { cache: 'no-store' })
         .then((res) => res.ok ? res.json() : null)
         .then((payload) => {
-          if (!payload) return;
+          if (cancelled || !payload) return;
           if (Array.isArray(payload.matches) && payload.matches.length > 0) setMatches(payload.matches);
           if (Array.isArray(payload.standings) && payload.standings.length > 0) setStandings(payload.standings);
           if (payload.source) setSource(payload.source);
           if (payload.updatedAt) setUpdatedAt(payload.updatedAt);
         })
         .catch(() => {});
-    }, 60_000);
-    return () => window.clearInterval(id);
+    };
+    poll();
+    const id = window.setInterval(poll, 30_000);
+    return () => { cancelled = true; window.clearInterval(id); };
   }, []);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
   const featureMatch = useMemo(() => {
