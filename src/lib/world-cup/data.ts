@@ -90,6 +90,80 @@ async function fetchFootballData<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>;
 }
 
+// ESPN unofficial scoreboard — free, no key needed, reliable live WC scores
+type ESPNCompetitor = {
+  homeAway?: string;
+  team?: { displayName?: string; abbreviation?: string };
+  score?: string;
+};
+type ESPNEvent = {
+  status?: {
+    type?: { name?: string; completed?: boolean; shortDetail?: string };
+  };
+  competitions?: Array<{ competitors?: ESPNCompetitor[] }>;
+};
+
+async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
+  try {
+    const res = await fetch(
+      'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard',
+      { cache: 'no-store', signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { events?: unknown[] };
+    return Array.isArray(data.events) ? (data.events as ESPNEvent[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): WorldCupMatch[] {
+  return matches.map(match => {
+    const homeEn = match.homeTeam.nameEn.toLowerCase();
+    const awayEn = match.awayTeam.nameEn.toLowerCase();
+
+    const espn = espnEvents.find(ev => {
+      const comps = ev.competitions?.[0]?.competitors ?? [];
+      const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
+      const word0 = (s: string) => s.split(' ')[0];
+      const hasHome = names.some(n => n && (n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n))));
+      const hasAway = names.some(n => n && (n === awayEn || n.startsWith(word0(awayEn)) || awayEn.startsWith(word0(n))));
+      return hasHome && hasAway;
+    });
+    if (!espn) return match;
+
+    const statusName = espn.status?.type?.name ?? '';
+    let status: WorldCupMatch['status'] = match.status;
+    if (statusName === 'STATUS_IN_PROGRESS' || statusName === 'STATUS_HALFTIME') status = 'live';
+    else if (statusName === 'STATUS_FINAL') status = 'finished';
+    else if (statusName === 'STATUS_SCHEDULED') status = 'scheduled';
+
+    const comps = espn.competitions?.[0]?.competitors ?? [];
+    const word0 = (s: string) => s.split(' ')[0];
+    const homeComp = comps.find(c => {
+      const n = (c.team?.displayName ?? '').toLowerCase();
+      return n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n));
+    });
+    const awayComp = comps.find(c => c !== homeComp);
+
+    const homeScore = homeComp?.score != null ? parseInt(homeComp.score, 10) : null;
+    const awayScore = awayComp?.score != null ? parseInt(awayComp.score, 10) : null;
+
+    // Parse minute from ESPN shortDetail, e.g. "87'" → 87, "HT" → null
+    const shortDetail = espn.status?.type?.shortDetail ?? '';
+    const minuteMatch = shortDetail.match(/^(\d+)/);
+    const minute = minuteMatch ? parseInt(minuteMatch[1], 10) : (status === 'live' ? match.minute : undefined);
+
+    return {
+      ...match,
+      status,
+      homeScore: (homeScore != null && !isNaN(homeScore)) ? homeScore : match.homeScore,
+      awayScore: (awayScore != null && !isNaN(awayScore)) ? awayScore : match.awayScore,
+      minute: minute ?? match.minute,
+    };
+  });
+}
+
 // openfootball open data — free, no API key required, updated by community after games finish
 type OpenFootballTeam = string | { name?: string; key?: string };
 type OpenFootballMatch = {
@@ -160,22 +234,24 @@ async function fetchOpenFootballData(): Promise<WorldCupMatch[] | null> {
 }
 
 export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; source: 'football-data' | 'fallback'; updatedAt: string }> {
-  const payload = await fetchFootballData<{ matches?: FootballDataMatch[] }>('/competitions/WC/matches?season=2026');
+  // Fetch football-data.org and ESPN scoreboard in parallel
+  const [payload, espnEvents] = await Promise.all([
+    fetchFootballData<{ matches?: FootballDataMatch[] }>('/competitions/WC/matches?season=2026'),
+    fetchESPNScoreboard(),
+  ]);
+
   const fdMatches = payload?.matches;
+  let matches: WorldCupMatch[];
+  let source: 'football-data' | 'fallback';
 
   if (!fdMatches?.length) {
     // Try openfootball as secondary free source (has scores after games finish)
     const openMatches = await fetchOpenFootballData();
-    if (openMatches?.length) {
-      return { matches: openMatches, source: 'fallback', updatedAt: new Date().toISOString() };
-    }
-    return { matches: fallbackMatches, source: 'fallback', updatedAt: new Date().toISOString() };
-  }
-
-  return {
-    source: 'football-data',
-    updatedAt: new Date().toISOString(),
-    matches: fdMatches.map((match, index) => ({
+    matches = openMatches?.length ? openMatches : fallbackMatches;
+    source = 'fallback';
+  } else {
+    source = 'football-data';
+    matches = fdMatches.map((match, index) => ({
       id: String(match.id),
       matchNumber: match.matchday ?? index + 1,
       stage: normalizeStage(match.stage),
@@ -189,8 +265,16 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
       venueId: fallbackMatches[index]?.venueId ?? venues[index % venues.length].id,
       broadcaster: 'kan11',
       minute: normalizeStatus(match.status) === 'live' ? null : undefined,
-    })),
-  };
+    }));
+  }
+
+  // Overlay live scores & status from ESPN (handles cases where football-data.org
+  // has stale status/scores — ESPN free scoreboard is real-time for WC matches)
+  if (espnEvents?.length) {
+    matches = applyESPNOverlay(matches, espnEvents);
+  }
+
+  return { matches, source, updatedAt: new Date().toISOString() };
 }
 
 export async function getWorldCupStandings(): Promise<{ standings: WorldCupStanding[]; source: 'football-data' | 'fallback' }> {

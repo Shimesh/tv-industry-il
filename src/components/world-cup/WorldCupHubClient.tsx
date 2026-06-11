@@ -1041,6 +1041,114 @@ type MatchEvent = {
   detail: string;
 };
 
+const EVENT_ICONS: Record<string, string> = { goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄' };
+
+function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; onClickMatch: (m: WorldCupMatch) => void }) {
+  const liveMatches = matches.filter(m => m.status === 'live');
+  const [eventsMap, setEventsMap] = useState<Record<string, MatchEvent[]>>({});
+  const [minuteMap, setMinuteMap] = useState<Record<string, number | null>>({});
+  const liveIds = liveMatches.map(m => m.id).join(',');
+
+  useEffect(() => {
+    if (!liveIds) return;
+    let cancelled = false;
+
+    const fetchAll = async () => {
+      for (const match of liveMatches) {
+        if (!/^\d+$/.test(match.id)) continue; // events API only works with numeric football-data IDs
+        try {
+          const r = await fetch(`/api/world-cup/match-events?matchId=${match.id}`, { cache: 'no-store' });
+          if (!r.ok || cancelled) continue;
+          const d = await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null };
+          if (d.success && !cancelled) {
+            setEventsMap(prev => ({ ...prev, [match.id]: d.events ?? [] }));
+            setMinuteMap(prev => ({ ...prev, [match.id]: d.minute ?? null }));
+          }
+        } catch { /* ignore */ }
+      }
+    };
+
+    void fetchAll();
+    const id = setInterval(() => void fetchAll(), 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveIds]);
+
+  if (!liveMatches.length) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      className="overflow-hidden rounded-2xl border border-red-500/35"
+      style={{ background: 'linear-gradient(135deg, rgba(30,4,4,.97), rgba(0,32,70,.97))' }}
+    >
+      {/* Header bar */}
+      <div className="flex items-center gap-2 border-b border-red-500/20 px-4 py-2" style={{ background: 'rgba(239,68,68,.14)' }}>
+        <motion.div animate={{ opacity: [1, 0.15, 1] }} transition={{ duration: 0.9, repeat: Infinity }} className="h-2.5 w-2.5 rounded-full bg-red-500" />
+        <span className="text-sm font-black text-red-400">🔴 שידור חי עכשיו</span>
+        {liveMatches.length > 1 && (
+          <span className="rounded-full bg-red-500/25 px-2 py-0.5 text-[10px] font-black text-red-400">{liveMatches.length} משחקים</span>
+        )}
+        <span className="mr-auto text-[11px] text-white/35">מתעדכן כל 30 שניות</span>
+      </div>
+
+      <div className={`grid gap-0 divide-y divide-white/8 ${liveMatches.length > 1 ? 'sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`} style={{ divideColor: 'rgba(255,255,255,.08)' }}>
+        {liveMatches.map(match => {
+          const events = eventsMap[match.id] ?? [];
+          const minute = minuteMap[match.id] ?? match.minute;
+
+          return (
+            <button key={match.id} onClick={() => onClickMatch(match)} className="w-full p-4 text-right transition-colors hover:bg-white/3">
+              {/* Score row */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                  <span className="text-4xl leading-none">{match.homeTeam.flag}</span>
+                  <span className="mt-1 max-w-full truncate text-sm font-black text-white">{match.homeTeam.nameHe}</span>
+                </div>
+                <div className="shrink-0 text-center">
+                  <motion.div
+                    className="rounded-2xl border border-red-500/25 bg-black/55 px-5 py-3 text-3xl font-black tabular-nums text-[#D4AF37]"
+                    animate={{ opacity: [1, 0.55, 1] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                    dir="ltr"
+                  >
+                    {match.homeScore ?? 0} : {match.awayScore ?? 0}
+                  </motion.div>
+                  <div className="mt-1.5 flex items-center justify-center gap-1.5 text-xs font-black text-red-400">
+                    <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+                    {minute != null ? `דקה ${minute}׳` : 'חי'}
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col items-end gap-0.5">
+                  <span className="text-4xl leading-none">{match.awayTeam.flag}</span>
+                  <span className="mt-1 max-w-full truncate text-right text-sm font-black text-white">{match.awayTeam.nameHe}</span>
+                </div>
+              </div>
+
+              {/* Events chips */}
+              {events.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {events.slice(0, 8).map((ev, i) => (
+                    <span key={i} className="flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-[10px] font-bold text-white/90">
+                      <span className="font-black text-[#D4AF37] tabular-nums">{ev.minute}׳</span>
+                      <span>{EVENT_ICONS[ev.type] ?? '•'}</span>
+                      <span className="max-w-[100px] truncate">{ev.player || ev.teamName}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2 text-[10px] text-white/30">לחץ לפרטים ואירועי משחק ←</div>
+            </button>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 const xSpread: Record<number, number[]> = {
   1: [50],
   2: [25, 75],
@@ -1572,9 +1680,10 @@ function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (
   );
 }
 
-export default function WorldCupHubClient({ matches: initialMatches, standings: initialStandings, playerStats, venues, source: initialSource, updatedAt: initialUpdatedAt }: HubProps) {
+export default function WorldCupHubClient({ matches: initialMatches, standings: initialStandings, playerStats: initialPlayerStats, venues, source: initialSource, updatedAt: initialUpdatedAt }: HubProps) {
   const [matches, setMatches] = useState(initialMatches);
   const [standings, setStandings] = useState(initialStandings);
+  const [playerStats, setPlayerStats] = useState(initialPlayerStats);
   const [source, setSource] = useState(initialSource);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const [selectedMatch, setSelectedMatch] = useState(() => initialMatches.find((match) => match.status === 'live') ?? initialMatches[0]);
@@ -1595,6 +1704,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           if (cancelled || !payload) return;
           if (Array.isArray(payload.matches) && payload.matches.length > 0) setMatches(payload.matches);
           if (Array.isArray(payload.standings) && payload.standings.length > 0) setStandings(payload.standings);
+          if (Array.isArray(payload.playerStats) && payload.playerStats.length > 0) setPlayerStats(payload.playerStats);
           if (payload.source) setSource(payload.source);
           if (payload.updatedAt) setUpdatedAt(payload.updatedAt);
         })
@@ -1723,6 +1833,16 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       <MobileSectionTabs value={activeSection} onChange={handleSectionChange} />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <AnimatePresence>
+          {matches.some(m => m.status === 'live') && (
+            <LiveMatchBanner
+              key="live-banner"
+              matches={matches}
+              onClickMatch={(m) => { setSelectedMatch(m); setMatchDetail(m); }}
+            />
+          )}
+        </AnimatePresence>
+
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
             <CollapsibleCard icon={Tv} title="שידור ישיר · כאן 11" subtitle={`${featureMatch.homeTeam.flag} ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe} ${featureMatch.awayTeam.flag}`} defaultOpen className="overflow-hidden">
