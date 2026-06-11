@@ -15,9 +15,15 @@ interface ProductionInput {
   crew?: { name: string; role: string }[];
 }
 
+function normalizeTime(t: string | null | undefined, fallback: string): string {
+  const raw = (t && t.trim()) || fallback;
+  // Accept "HH:MM" or "HH:MM:SS" — always return "HH:MM"
+  return raw.slice(0, 5);
+}
+
 function buildCalendarEvent(production: ProductionInput) {
-  const startTime = production.startTime || '09:00';
-  const endTime = production.endTime || '18:00';
+  const startTime = normalizeTime(production.startTime, '09:00');
+  const endTime = normalizeTime(production.endTime, '18:00');
   const dateStr = production.date;
 
   const crewText = (production.crew ?? [])
@@ -76,6 +82,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'not_connected', message: 'Google Calendar לא מחובר' }, { status: 401 });
   }
 
+  if (!body.production.date) {
+    return NextResponse.json({ error: 'תאריך חסר בהפקה' }, { status: 400 });
+  }
+
   const event = buildCalendarEvent(body.production);
   const result = await callGoogleAPI(
     'POST',
@@ -127,7 +137,8 @@ export async function PUT(request: NextRequest) {
   }
 
   if (!result.ok) {
-    return NextResponse.json({ error: 'שגיאה בעדכון אירוע' }, { status: 500 });
+    const errMsg = (result.data as { error?: { message?: string } })?.error?.message ?? 'שגיאה בעדכון אירוע';
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 
   const updated = result.data as { id: string; htmlLink: string };
