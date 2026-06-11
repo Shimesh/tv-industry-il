@@ -24,6 +24,10 @@ type FootballDataMatch = {
       home?: number | null;
       away?: number | null;
     };
+    halfTime?: {
+      home?: number | null;
+      away?: number | null;
+    };
   };
 };
 
