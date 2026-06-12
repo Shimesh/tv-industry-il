@@ -277,6 +277,79 @@ export async function GET() {
         }
       }
     }
+  } catch { /* fall through to FD */ }
+
+  // ── Football-Data.org: goals, assists, cards (requires token, works from Vercel) ────
+  try {
+    const fdToken = process.env.FOOTBALL_DATA_API_TOKEN?.trim();
+    if (fdToken) {
+      const [scorersRes, matchesRes] = await Promise.all([
+        fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=20', {
+          headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+        }),
+        fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026&status=FINISHED', {
+          headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+        }),
+      ]);
+
+      const fdGoals = new Map<string, StatEntry>();
+      const fdAssists = new Map<string, StatEntry>();
+      const fdYellow = new Map<string, StatEntry>();
+      const fdRed = new Map<string, StatEntry>();
+
+      if (scorersRes.ok) {
+        type FDScorer = { player?: { name?: string }; team?: { name?: string }; goals?: number; assists?: number };
+        const sd = await scorersRes.json() as { scorers?: FDScorer[] };
+        for (const s of sd.scorers ?? []) {
+          const team = resolveTeam(s.team?.name);
+          const name = s.player?.name ?? '';
+          if (name && (s.goals ?? 0) > 0) {
+            const key = `${name}|${team.id}`;
+            fdGoals.set(key, { playerName: name, team, count: s.goals ?? 0 });
+          }
+          if (name && (s.assists ?? 0) > 0) {
+            const key = `${name}|${team.id}`;
+            fdAssists.set(key, { playerName: name, team, count: s.assists ?? 0 });
+          }
+        }
+      }
+
+      if (matchesRes.ok) {
+        type FDMatch = { id: number };
+        const md = await matchesRes.json() as { matches?: FDMatch[] };
+        const finishedIds = (md.matches ?? []).map(m => m.id);
+
+        await Promise.all(finishedIds.slice(0, 10).map(async (matchId) => {
+          try {
+            const dr = await fetch(`https://api.football-data.org/v4/matches/${matchId}`, {
+              headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+            });
+            if (!dr.ok) return;
+            const d = await dr.json() as {
+              bookings?: Array<{ player?: { name?: string }; team?: { name?: string }; card?: string }>;
+            };
+            for (const b of d.bookings ?? []) {
+              if (!b.player?.name) continue;
+              const team = resolveTeam(b.team?.name);
+              inc(b.card === 'RED_CARD' ? fdRed : fdYellow, b.player.name, team);
+            }
+          } catch { /* skip this match */ }
+        }));
+      }
+
+      const fdGoalsList = toRanked(fdGoals);
+      const fdYellowList = toRanked(fdYellow);
+      if (fdGoalsList.length > 0 || fdYellowList.length > 0) {
+        return NextResponse.json({
+          success: true,
+          goals: fdGoalsList,
+          assists: toRanked(fdAssists),
+          yellowCards: fdYellowList,
+          redCards: toRanked(fdRed),
+          source: 'football-data',
+        }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
+      }
+    }
   } catch { /* fall through to ESPN */ }
 
   // ── ESPN fallback ────────────────────────────────────────────────────────

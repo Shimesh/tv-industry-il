@@ -1694,51 +1694,77 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     const serverUrl = `/api/world-cup/match-events?${params}`;
 
     const load = async () => {
+      const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
+
+      // 1. Fetch base events from server (OF goals or FD full events)
+      let baseEvents: MatchEvent[] = [];
+      let baseMinute: number | null = null;
+      let serverSource = '';
       try {
         const r = await fetch(serverUrl);
-        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null } : null;
+        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null; source?: string } : null;
         if (d?.success && (d.events?.length ?? 0) > 0) {
-          setEvents(d.events ?? []);
-          setLiveMinute(d.minute ?? null);
-          setFetching(false);
-          return;
+          baseEvents = d.events ?? [];
+          baseMinute = d.minute ?? null;
+          serverSource = d.source ?? 'server';
         }
       } catch { /* fall through */ }
 
-      // Server returned no events — fetch OpenFootball directly from browser (bypasses Vercel timeout)
-      const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn) {
-        const ofEvents = await fetchOpenFootballGoalsClient(match.homeTeam.nameEn, match.awayTeam.nameEn).catch(() => null);
-        if (ofEvents && ofEvents.length > 0) {
-          setEvents(ofEvents);
-          setFetching(false);
-          return;
-        }
+      // 2. If server had no events, try client-side OpenFootball as fast fallback
+      if (baseEvents.length === 0 && match.homeTeam.nameEn && match.awayTeam.nameEn) {
+        const ofEvts = await fetchOpenFootballGoalsClient(match.homeTeam.nameEn, match.awayTeam.nameEn).catch(() => null);
+        if (ofEvts && ofEvts.length > 0) { baseEvents = ofEvts; serverSource = 'openfootball-client'; }
       }
 
-      // OpenFootball found nothing (no goals yet / not in OF) — try ESPN from browser
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateStr) {
-        const clientEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
-        if (clientEvents && clientEvents.length > 0) {
-          setEvents(clientEvents);
-          setFetching(false);
-          return;
-        }
+      // Show base events immediately so user sees goals without waiting for cards
+      if (baseEvents.length > 0) {
+        setEvents(baseEvents);
+        setLiveMinute(baseMinute ?? null);
+        setFetching(false);
       }
 
-      // ESPN client-side also failed — try SofaScore client-side as final fallback
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateISO) {
-        try {
-          const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
-          if (sofaId) {
-            const sofaEvents = await fetchSofaIncidentsClient(sofaId);
-            if (sofaEvents && sofaEvents.length > 0) {
-              setEvents(sofaEvents);
-              setFetching(false);
-              return;
+      // 3. If base events lack cards, try ESPN + SofaScore from browser to enrich
+      //    (server can't reach these APIs; real browser IP bypasses their blocks)
+      const baseHasCards = baseEvents.some(e => e.type === 'yellowcard' || e.type === 'redcard');
+      if (!baseHasCards && match.homeTeam.nameEn && match.awayTeam.nameEn) {
+        let richEvents: MatchEvent[] | null = null;
+
+        // ESPN first (generally CORS-friendly from browsers)
+        if (dateStr) {
+          richEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+        }
+
+        // SofaScore if ESPN didn't yield cards
+        const richCards = richEvents?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+        if (richCards.length === 0 && dateISO) {
+          try {
+            const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
+            if (sofaId) {
+              const sofaEvts = await fetchSofaIncidentsClient(sofaId);
+              if ((sofaEvts?.length ?? 0) > 0) richEvents = sofaEvts;
             }
+          } catch { /* ignore */ }
+        }
+
+        if (richEvents && richEvents.length > 0) {
+          if (richEvents.some(e => e.type === 'yellowcard' || e.type === 'redcard')) {
+            // Rich source has cards — merge: keep OF/server goals, add cards/subs from rich source
+            if (baseEvents.length > 0 && serverSource.startsWith('openfootball')) {
+              const baseGoals = baseEvents.filter(e => e.type === 'goal' || e.type === 'owngoal');
+              const htEvent = baseEvents.find(e => e.type === 'halftime');
+              const richNonGoals = richEvents.filter(e => e.type !== 'goal' && e.type !== 'owngoal');
+              const merged = [...baseGoals, ...richNonGoals].sort((a, b) => b.minute - a.minute);
+              if (htEvent) merged.push(htEvent);
+              setEvents(merged);
+            } else {
+              setEvents(richEvents);
+            }
+          } else if (baseEvents.length === 0) {
+            setEvents(richEvents);
           }
-        } catch { /* ignore */ }
+          setFetching(false);
+          return;
+        }
       }
 
       setFetching(false);
