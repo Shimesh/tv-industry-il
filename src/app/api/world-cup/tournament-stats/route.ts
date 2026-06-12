@@ -3,6 +3,58 @@ import { teams } from '@/lib/world-cup/static-data';
 import type { WorldCupTeam } from '@/lib/world-cup/types';
 import { getWC2026SeasonId, getSofaTopScorers, resolveStaticTeam } from '@/lib/world-cup/sofascore';
 
+// OpenFootball fallback — always accessible, has goal scorers for completed matches
+type OFGoal = { name?: string; minute?: string; type?: string };
+type OFMatch = { team1?: string; team2?: string; score?: { ft?: [number, number] }; goals1?: OFGoal[]; goals2?: OFGoal[] };
+
+const ofNameAliases: Record<string, string> = {
+  'czech republic': 'czechia', 'usa': 'united states', 'ivory coast': "côte d'ivoire",
+  "cote d'ivoire": "côte d'ivoire", 'turkey': 'türkiye', 'bosnia & herzegovina': 'bosnia and herzegovina',
+  'korea republic': 'south korea', 'korea dpr': 'north korea', 'ir iran': 'iran', 'china pr': 'china',
+};
+
+function resolveOFTeam(name: string): WorldCupTeam {
+  const norm = ofNameAliases[name.toLowerCase()] ?? name.toLowerCase();
+  return Object.values(teams).find(t => t.nameEn.toLowerCase() === norm || t.nameEn.toLowerCase() === name.toLowerCase())
+    ?? { id: 'tbd', nameHe: name, nameEn: name, flag: '🏳️' };
+}
+
+async function getOpenFootballStats(): Promise<{ goals: ReturnType<typeof toRanked>; assists: ReturnType<typeof toRanked>; yellowCards: ReturnType<typeof toRanked>; redCards: ReturnType<typeof toRanked> } | null> {
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
+    const raw: OFMatch[] = [];
+    if (data.rounds) data.rounds.forEach(r => raw.push(...(r.matches ?? [])));
+    else if (data.matches) raw.push(...data.matches);
+    if (!raw.length) return null;
+
+    const goalsMap = new Map<string, StatEntry>();
+    const assistsMap = new Map<string, StatEntry>();
+    const yellowMap = new Map<string, StatEntry>();
+    const redMap = new Map<string, StatEntry>();
+
+    for (const m of raw) {
+      if (!m.score?.ft) continue; // skip incomplete matches
+      for (const [goals, teamName] of [[m.goals1 ?? [], m.team1 ?? ''], [m.goals2 ?? [], m.team2 ?? '']] as [OFGoal[], string][]) {
+        const team = resolveOFTeam(teamName);
+        for (const g of goals) {
+          if (!g.name) continue;
+          const isOwn = (g.type ?? '').toLowerCase().includes('own');
+          if (!isOwn) inc(goalsMap, g.name, team);
+        }
+      }
+    }
+
+    const goals = toRanked(goalsMap);
+    if (!goals.length) return null;
+    return { goals, assists: toRanked(assistsMap), yellowCards: toRanked(yellowMap), redCards: toRanked(redMap) };
+  } catch { return null; }
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -266,11 +318,25 @@ export async function GET() {
     if (s) parseSummary(s, goals, assists, yellow, red);
   }
 
+  const espnGoals = toRanked(goals);
+  if (espnGoals.length > 0) {
+    return NextResponse.json({
+      success: true,
+      goals: espnGoals,
+      assists: toRanked(assists),
+      yellowCards: toRanked(yellow),
+      redCards: toRanked(red),
+    }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
+  }
+
+  // Final fallback: OpenFootball — always accessible, goals only
+  const ofStats = await getOpenFootballStats();
   return NextResponse.json({
     success: true,
-    goals: toRanked(goals),
-    assists: toRanked(assists),
-    yellowCards: toRanked(yellow),
-    redCards: toRanked(red),
+    goals: ofStats?.goals ?? [],
+    assists: ofStats?.assists ?? [],
+    yellowCards: ofStats?.yellowCards ?? [],
+    redCards: ofStats?.redCards ?? [],
+    source: ofStats ? 'openfootball' : undefined,
   }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
 }
