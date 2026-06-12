@@ -160,17 +160,20 @@ function isProductionAssignedToUser(production: Production, names: string[]): bo
 function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
   const seen = new Map<string, Production>();
   for (const p of prods) {
-    if (!p.date) { seen.set(p.id || Math.random().toString(), p); continue; }
-    // Normalize key: strip role prefixes, collapse whitespace, lowercased
-    const normName = normalizeName(p.name).replace(/\s+/g, ' ').trim();
-    const key = `${normName}::${p.date}::${p.startTime || ''}`;
+    // Always clean up crew duplicates within each production first (ShowCrew can list same person twice)
+    const cleanP = { ...p, crew: deduplicateCrew(p.crew) };
+    if (!cleanP.date) { seen.set(cleanP.id || Math.random().toString(), cleanP); continue; }
+    const normName = normalizeName(cleanP.name).replace(/\s+/g, ' ').trim();
+    // Sort times so swapped 18:00-14:00 and 14:00-18:00 produce the same key
+    const times = [cleanP.startTime || '', cleanP.endTime || ''].sort();
+    const key = `${normName}::${cleanP.date}::${times[0]}`;
     const existing = seen.get(key);
     if (!existing) {
-      seen.set(key, p);
+      seen.set(key, cleanP);
     } else {
       // Merge duplicate: keep base with more crew, fill in missing fields, union crew lists
-      const base = p.crew.length >= existing.crew.length ? p : existing;
-      const other = p.crew.length >= existing.crew.length ? existing : p;
+      const base = cleanP.crew.length >= existing.crew.length ? cleanP : existing;
+      const other = cleanP.crew.length >= existing.crew.length ? existing : cleanP;
       const mergedCrew = deduplicateCrew([...base.crew, ...other.crew]);
       seen.set(key, {
         ...base,
