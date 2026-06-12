@@ -86,6 +86,8 @@ export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember
   const byPhone = new Map<string, string>();
   const byComposite = new Map<string, string>();
   const byNameWithoutPhone = new Map<string, string>();
+  // Reverse lookup: name → key for entries that DO have a phone (missing case: no-phone entry arriving after phone entry)
+  const byNameWithPhone = new Map<string, string>();
 
   for (const member of crew || []) {
     const { normalizedName, normalizedPhone, identityKey } = buildCrewIdentity(member);
@@ -113,6 +115,9 @@ export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember
       key = identityKey;
     } else if (!normalizedPhone && byNameWithoutPhone.has(normalizedName)) {
       key = byNameWithoutPhone.get(normalizedName)!;
+    } else if (!normalizedPhone && byNameWithPhone.has(normalizedName)) {
+      // Entry without phone arriving after an entry with phone for same name — merge into the phone-keyed entry
+      key = byNameWithPhone.get(normalizedName)!;
     }
 
     const normalized: NormalizedCrewMember = {
@@ -133,6 +138,7 @@ export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember
       if (normalizedPhone) {
         byPhone.set(normalizedPhone, key);
         byComposite.set(`${normalizedName}::${normalizedPhone}`, key);
+        byNameWithPhone.set(normalizedName, key);
       } else {
         byNameWithoutPhone.set(normalizedName, key);
       }
@@ -144,6 +150,7 @@ export function deduplicateCrewEntries(crew: CrewMember[]): NormalizedCrewMember
     if (merged.normalizedPhone) {
       byPhone.set(merged.normalizedPhone, key);
       byComposite.set(`${merged.normalizedName}::${merged.normalizedPhone}`, key);
+      byNameWithPhone.set(merged.normalizedName, key);
       byNameWithoutPhone.delete(merged.normalizedName);
     } else {
       byNameWithoutPhone.set(merged.normalizedName, key);
