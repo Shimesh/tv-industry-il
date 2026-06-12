@@ -313,7 +313,10 @@ export async function GET(req: NextRequest) {
             ...(data.bookings ?? []).map((b: RawBooking) => ({ type: b.card === 'RED_CARD' ? 'redcard' : 'yellowcard', minute: b.minute ?? 0, teamName: b.team?.name ?? '', player: b.player?.name ?? '', detail: '' })),
             ...(data.substitutions ?? []).map((s: RawSub) => ({ type: 'substitution', minute: s.minute ?? 0, teamName: s.team?.name ?? '', player: s.playerIn?.name ?? '', detail: s.playerOut?.name ? `יצא: ${s.playerOut.name}` : '' })),
           ].sort((a, b) => b.minute - a.minute);
-          return NextResponse.json({ success: true, minute: data.minute ?? null, events: evts }, { headers: { 'Cache-Control': 'no-store' } });
+          // Only return if FD has actual events — otherwise fall through to SofaScore/OpenFootball
+          if (evts.length > 0) {
+            return NextResponse.json({ success: true, minute: data.minute ?? null, events: evts }, { headers: { 'Cache-Control': 'no-store' } });
+          }
         }
       } catch { /* fall through */ }
     }

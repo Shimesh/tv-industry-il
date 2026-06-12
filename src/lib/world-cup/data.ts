@@ -186,6 +186,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
 
 // openfootball open data — free, no API key required, updated by community after games finish
 type OpenFootballTeam = string | { name?: string; key?: string };
+type OpenFootballGoal = { name?: string; minute?: string; type?: string };
 type OpenFootballMatch = {
   num?: number;
   date?: string;
@@ -196,6 +197,10 @@ type OpenFootballMatch = {
   score2?: number | null;
   group?: string;
   score?: { ft?: [number, number] };
+  goals1?: OpenFootballGoal[];
+  goals2?: OpenFootballGoal[];
+  round?: string;
+  ground?: string;
 };
 type OpenFootballData = {
   rounds?: Array<{ name?: string; matches?: OpenFootballMatch[] }>;
@@ -441,6 +446,71 @@ export function getWorldCupVenues(): WorldCupVenue[] {
   return venues;
 }
 
+async function getPlayerStatsFromOpenFootball(): Promise<WorldCupPlayerStat[] | null> {
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
+      { next: { revalidate: 120 } },
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { rounds?: Array<{ matches?: OpenFootballMatch[] }>; matches?: OpenFootballMatch[] };
+    const raw: OpenFootballMatch[] = [];
+    if (data.rounds) data.rounds.forEach(r => raw.push(...(r.matches ?? [])));
+    else if (data.matches) raw.push(...(data.matches as OpenFootballMatch[]));
+    if (!raw.length) return null;
+
+    type GoalEntry = { goals: number; team: WorldCupTeam };
+    const playerMap = new Map<string, GoalEntry>();
+
+    function word0(s: string) { return s.split(' ')[0].toLowerCase(); }
+
+    function findTeam(teamName: string | undefined): WorldCupTeam {
+      if (!teamName) return teams.tbd;
+      const n = teamName.toLowerCase();
+      return Object.values(teams).find(t =>
+        t.nameEn.toLowerCase() === n ||
+        t.nameEn.toLowerCase().startsWith(word0(n)) ||
+        n.startsWith(word0(t.nameEn.toLowerCase())),
+      ) ?? { id: 'tbd', nameHe: teamName, nameEn: teamName, flag: '🏳️' };
+    }
+
+    for (const m of raw) {
+      const team1 = typeof m.team1 === 'string' ? m.team1 : m.team1?.name;
+      const team2 = typeof m.team2 === 'string' ? m.team2 : m.team2?.name;
+      const score1 = m.score1 ?? m.score?.ft?.[0];
+      const score2 = m.score2 ?? m.score?.ft?.[1];
+      if (typeof score1 !== 'number' || typeof score2 !== 'number') continue;
+
+      for (const g of m.goals1 ?? []) {
+        if (!g.name || (g.type ?? '').toLowerCase().includes('own')) continue;
+        const prev = playerMap.get(g.name) ?? { goals: 0, team: findTeam(team1) };
+        playerMap.set(g.name, { ...prev, goals: prev.goals + 1 });
+      }
+      for (const g of m.goals2 ?? []) {
+        if (!g.name || (g.type ?? '').toLowerCase().includes('own')) continue;
+        const prev = playerMap.get(g.name) ?? { goals: 0, team: findTeam(team2) };
+        playerMap.set(g.name, { ...prev, goals: prev.goals + 1 });
+      }
+    }
+
+    if (!playerMap.size) return null;
+
+    return Array.from(playerMap.entries())
+      .sort((a, b) => b[1].goals - a[1].goals)
+      .map(([name, entry], i) => ({
+        rank: i + 1,
+        playerName: name,
+        team: entry.team,
+        goals: entry.goals,
+        assists: 0,
+        shots: 0,
+        minutes: 0,
+      }));
+  } catch {
+    return null;
+  }
+}
+
 export async function getWorldCupPlayerStats(): Promise<WorldCupPlayerStat[]> {
   const payload = await fetchFootballData<{
     scorers?: Array<{
@@ -451,20 +521,24 @@ export async function getWorldCupPlayerStats(): Promise<WorldCupPlayerStat[]> {
     }>;
   }>('/competitions/WC/scorers?season=2026&limit=10');
 
-  if (!payload?.scorers?.length) return fallbackPlayerStats;
+  if (payload?.scorers?.length) {
+    return payload.scorers.map((s, i) => {
+      const teamObj = normalizeTeam(s.team);
+      return {
+        rank: i + 1,
+        playerName: s.player?.name ?? '—',
+        team: teamObj,
+        goals: s.goals ?? 0,
+        assists: s.assists ?? 0,
+        shots: 0,
+        minutes: 0,
+      };
+    });
+  }
 
-  return payload.scorers.map((s, i) => {
-    const teamObj = normalizeTeam(s.team);
-    return {
-      rank: i + 1,
-      playerName: s.player?.name ?? '—',
-      team: teamObj,
-      goals: s.goals ?? 0,
-      assists: s.assists ?? 0,
-      shots: 0,
-      minutes: 0,
-    };
-  });
+  // FD has no scorer data — aggregate from OpenFootball (free, always accessible)
+  const ofStats = await getPlayerStatsFromOpenFootball();
+  return ofStats ?? fallbackPlayerStats;
 }
 
 export function getActiveWorldCupMatch(matches: WorldCupMatch[]): WorldCupMatch | null {
