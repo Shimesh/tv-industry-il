@@ -23,7 +23,7 @@ async function getOpenFootballStats(): Promise<{ goals: ReturnType<typeof toRank
   try {
     const res = await fetch(
       'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(8000) },
     );
     if (!res.ok) return null;
     const data = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
@@ -134,12 +134,20 @@ function parseSummary(
   for (const ke of s.keyEvents ?? []) {
     const text = (ke.type?.text ?? '').toLowerCase();
     const team = resolveTeam(ke.team?.displayName);
-    const player = ke.participants?.[0]?.athlete?.displayName ?? '';
-    if (!player) continue;
-    if (text.includes('goal') && !text.includes('own')) inc(goals, player, team);
-    else if (text.includes('red card') || text.includes('red-card')) inc(red, player, team);
-    else if (text.includes('yellow card') || text.includes('yellow-card')) inc(yellow, player, team);
-    else if (text.includes('substitut')) inc(subs, player, team);
+    const scorer = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('scor'))?.athlete?.displayName
+      ?? ke.participants?.[0]?.athlete?.displayName ?? '';
+    if (text.includes('goal') && !text.includes('own')) {
+      if (scorer) inc(goals, scorer, team);
+      const assister = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('assist'))?.athlete?.displayName
+        ?? (ke.participants && ke.participants.length > 1 ? ke.participants[1]?.athlete?.displayName : undefined);
+      if (assister && assister !== scorer) inc(assists, assister, team);
+    } else if (text.includes('red card') || text.includes('red-card')) {
+      if (scorer) inc(red, scorer, team);
+    } else if (text.includes('yellow card') || text.includes('yellow-card')) {
+      if (scorer) inc(yellow, scorer, team);
+    } else if (text.includes('substitut')) {
+      if (scorer) inc(subs, scorer, team);
+    }
   }
 }
 
@@ -175,7 +183,7 @@ async function fetchRangeScoreboard(dateRange: string): Promise<ESPNEvent[]> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateRange}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(8000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { events?: ESPNEvent[] };
@@ -187,7 +195,7 @@ async function fetchDateScoreboard(dateStr: string): Promise<ESPNEvent[]> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(6000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { events?: ESPNEvent[] };
@@ -199,7 +207,7 @@ async function fetchDateEventsViaCoreApi(dateStr: string): Promise<ESPNEvent[]> 
   try {
     const res = await fetch(
       `https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events?dates=${dateStr}&limit=30`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(7000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(7000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { items?: Array<{ $ref?: string }> };
@@ -231,7 +239,7 @@ async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${id}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(6000) },
     );
     return res.ok ? (await res.json() as ESPNSummary) : null;
   } catch { return null; }
@@ -282,8 +290,8 @@ export async function GET() {
         const sofaYellow = sofaToRanked(yellowMap);
         const sofaRed = sofaToRanked(redMap);
 
-        // Only return SofaScore data if we got meaningful results
-        if (sofaGoals.length > 0 || sofaYellow.length > 0) {
+        // Only return SofaScore data if we got BOTH goals AND cards/assists — otherwise fall through to ESPN
+        if (sofaGoals.length > 0 && (sofaYellow.length > 0 || sofaRed.length > 0 || sofaAssists.length > 1)) {
           return NextResponse.json(
             {
               success: true,
@@ -294,7 +302,7 @@ export async function GET() {
               substitutions: [],
               source: 'sofascore',
             },
-            { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } },
+            { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } },
           );
         }
       }
@@ -429,7 +437,7 @@ export async function GET() {
       redCards: toRanked(red),
       substitutions: toRanked(subs),
       source: 'espn',
-    }, { headers: { 'Cache-Control': 's-maxage=120, stale-while-revalidate=300' } });
+    }, { headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' } });
   }
 
   // Final fallback: OpenFootball — always accessible, goals only
@@ -442,5 +450,5 @@ export async function GET() {
     redCards: ofStats?.redCards ?? [],
     substitutions: [],
     source: ofStats ? 'openfootball' : undefined,
-  }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
+  }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
 }
