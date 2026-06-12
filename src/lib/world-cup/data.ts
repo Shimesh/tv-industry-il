@@ -196,7 +196,7 @@ type OpenFootballMatch = {
   score1?: number | null;
   score2?: number | null;
   group?: string;
-  score?: { ft?: [number, number] };
+  score?: { ft?: [number, number]; ht?: [number, number] };
   goals1?: OpenFootballGoal[];
   goals2?: OpenFootballGoal[];
   round?: string;
@@ -518,16 +518,17 @@ async function getPlayerStatsFromOpenFootball(): Promise<WorldCupPlayerStat[] | 
     type GoalEntry = { goals: number; team: WorldCupTeam };
     const playerMap = new Map<string, GoalEntry>();
 
-    function word0(s: string) { return s.split(' ')[0].toLowerCase(); }
+    const aliases: Record<string, string> = {
+      'czech republic': 'czechia', 'usa': 'united states', 'ivory coast': "côte d'ivoire",
+      'turkey': 'türkiye', 'bosnia & herzegovina': 'bosnia and herzegovina',
+      'korea republic': 'south korea', 'ir iran': 'iran', 'china pr': 'china',
+    };
 
     function findTeam(teamName: string | undefined): WorldCupTeam {
       if (!teamName) return teams.tbd;
-      const n = teamName.toLowerCase();
-      return Object.values(teams).find(t =>
-        t.nameEn.toLowerCase() === n ||
-        t.nameEn.toLowerCase().startsWith(word0(n)) ||
-        n.startsWith(word0(t.nameEn.toLowerCase())),
-      ) ?? { id: 'tbd', nameHe: teamName, nameEn: teamName, flag: '🏳️' };
+      const n = aliases[teamName.toLowerCase()] ?? teamName.toLowerCase();
+      return Object.values(teams).find(t => t.nameEn.toLowerCase() === n || t.nameEn.toLowerCase() === teamName.toLowerCase())
+        ?? { id: 'tbd', nameHe: teamName, nameEn: teamName, flag: '🏳️' };
     }
 
     for (const m of raw) {

@@ -1210,7 +1210,7 @@ type MatchEvent = {
   detail: string;
 };
 
-const EVENT_ICONS: Record<string, string> = { goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄' };
+const EVENT_ICONS: Record<string, string> = { goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄', halftime: '⏸️' };
 
 function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; onClickMatch: (m: WorldCupMatch) => void }) {
   const liveMatches = matches.filter(m => m.status === 'live');
@@ -1553,7 +1553,18 @@ function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
       : undefined;
     evts.push({ type, minute: getMinute(play), teamName: String((play.team as Record<string,unknown>)?.displayName ?? ''), player: String(player), detail: subOut ? `יצא: ${String(subOut)}` : '' });
   }
-  return evts.sort((a, b) => b.minute - a.minute);
+  evts.sort((a, b) => b.minute - a.minute);
+
+  // Inject halftime separator if we can detect halftime scores from header
+  const comps = (data.header as Record<string,unknown>)?.competitions as Array<Record<string,unknown>> | undefined;
+  const comp0 = comps?.[0];
+  const period = (comp0?.status as Record<string,unknown>)?.period;
+  if (typeof period === 'number' && period >= 2 && evts.length > 0) {
+    const htCompetitors = comp0?.competitors as Array<Record<string,unknown>> | undefined;
+    const htScores = htCompetitors?.map(c => String(c.score ?? '0')).join('-') ?? '';
+    evts.push({ type: 'halftime', minute: 45, teamName: '', player: '', detail: `פגרה: ${htScores}` });
+  }
+  return evts;
 }
 
 async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, dateStr: string): Promise<MatchEvent[] | null> {
@@ -1679,7 +1690,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   }, [match.id, match.espnEventId, match.sofaEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
   const eventIcon: Record<string, string> = {
-    goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄',
+    goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄', halftime: '⏸️',
   };
 
   return (
@@ -1713,7 +1724,18 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
 
       <div className="space-y-2">
         {events.map((ev, i) => {
-          const isHome = match.homeTeam.nameEn.toLowerCase().includes(ev.teamName.toLowerCase().split(' ')[0]);
+          if (ev.type === 'halftime') {
+            return (
+              <div key={`ht-${i}`} className="flex items-center gap-2 py-1">
+                <div className="h-px flex-1" style={{ background: 'var(--theme-border)' }} />
+                <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] px-2">{ev.detail || 'פגרה'}</span>
+                <div className="h-px flex-1" style={{ background: 'var(--theme-border)' }} />
+              </div>
+            );
+          }
+          const tName = ev.teamName.toLowerCase();
+          const isHome = match.homeTeam.nameEn.toLowerCase() === tName
+            || tName.startsWith(match.homeTeam.nameEn.toLowerCase().split(' ')[0]);
           return (
             <motion.div
               key={i}
@@ -2005,7 +2027,7 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   const hasEvents = isLive || isFinished;
-  const [tab, setTab] = useState<'lineup' | 'live'>(isLive ? 'live' : 'lineup');
+  const [tab, setTab] = useState<'lineup' | 'live'>(isLive || isFinished ? 'live' : 'lineup');
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(6px)' }}>

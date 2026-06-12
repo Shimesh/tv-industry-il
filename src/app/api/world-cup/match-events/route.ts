@@ -164,7 +164,7 @@ type OFGoal = { name?: string; minute?: string; type?: string };
 type OFMatch = {
   team1?: string; team2?: string; date?: string; group?: string;
   goals1?: OFGoal[]; goals2?: OFGoal[];
-  score?: { ft?: [number, number] };
+  score?: { ft?: [number, number]; ht?: [number, number] };
 };
 
 async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<object[] | null> {
@@ -208,6 +208,12 @@ async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<o
         detail: (g.type ?? '').toLowerCase().includes('own') ? 'שער עצמי' : '',
       })),
     ].sort((a, b) => b.minute - a.minute);
+
+    // Inject halftime marker if we have HT score
+    const ht = found.score?.ht;
+    if (ht && events.length > 0) {
+      events.push({ type: 'halftime', minute: 45, teamName: '', player: '', detail: `פגרה: ${ht[0]}-${ht[1]}` });
+    }
 
     return events.length > 0 ? events : null;
   } catch { return null; }
