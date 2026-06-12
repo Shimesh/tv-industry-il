@@ -155,6 +155,36 @@ function isProductionAssignedToUser(production: Production, names: string[]): bo
   );
 }
 
+// Final cross-source deduplication: same production can arrive from personal path (one ID)
+// and from global/Herzliya sync (a different ID) — merge them by name+date+startTime.
+function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
+  const seen = new Map<string, Production>();
+  for (const p of prods) {
+    if (!p.date) { seen.set(p.id || Math.random().toString(), p); continue; }
+    // Normalize key: strip role prefixes, collapse whitespace, lowercased
+    const normName = normalizeName(p.name).replace(/\s+/g, ' ').trim();
+    const key = `${normName}::${p.date}::${p.startTime || ''}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, p);
+    } else {
+      // Merge duplicate: keep base with more crew, fill in missing fields, union crew lists
+      const base = p.crew.length >= existing.crew.length ? p : existing;
+      const other = p.crew.length >= existing.crew.length ? existing : p;
+      const mergedCrew = deduplicateCrew([...base.crew, ...other.crew]);
+      seen.set(key, {
+        ...base,
+        studio: base.studio || other.studio,
+        startTime: base.startTime || other.startTime,
+        endTime: base.endTime || other.endTime,
+        crew: mergedCrew,
+        isCurrentUserShift: base.isCurrentUserShift || other.isCurrentUserShift,
+      });
+    }
+  }
+  return Array.from(seen.values());
+}
+
 // Merge global productions into the user's own set; extras get isCurrentUserShift re-evaluated
 function mergeGlobalProductions(
   userProds: Production[],
@@ -538,7 +568,10 @@ function ProductionsContent() {
       // Merge legacy global (name-based), phone matches, then linked profile matches.
       const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
       const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
-      return mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
+      const afterProfile = mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
+      // Final dedup: same event can arrive from personal path AND from Herzliya global sync
+      // with different IDs — merge them by (name, date, startTime) to eliminate visual duplicates
+      return deduplicateProductionsByIdentity(afterProfile);
     } catch (error) {
       console.error('[loadExistingWeek] Error:', error);
       return [];
