@@ -306,18 +306,49 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     m => m.status === 'scheduled' && m.kickoff && now - Date.parse(m.kickoff) > 105 * 60_000,
   );
   if (needsScore) {
-    const openMatches = await fetchOpenFootballData();
-    if (openMatches?.length) {
-      const openByNum = new Map(openMatches.filter(m => m.status === 'finished').map(m => [m.matchNumber, m]));
-      matches = matches.map(m => {
-        if (m.status !== 'scheduled') return m;
-        const open = openByNum.get(m.matchNumber);
-        if (open && open.homeScore != null && open.awayScore != null) {
-          return { ...m, status: 'finished' as const, homeScore: open.homeScore, awayScore: open.awayScore };
+    try {
+      const res = await fetch(
+        'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
+        { next: { revalidate: 120 } },
+      );
+      if (res.ok) {
+        const data = await res.json() as { rounds?: Array<{ matches?: OpenFootballMatch[] }>; matches?: OpenFootballMatch[] };
+        const raw: OpenFootballMatch[] = [];
+        if (data.rounds) data.rounds.forEach(r => raw.push(...(r.matches ?? [])));
+        else if (data.matches) raw.push(...(data.matches as OpenFootballMatch[]));
+
+        // Build lookup by team name for finished matches (team name is reliable; matchNumber from FD uses matchday round, not sequential)
+        const word0 = (s: string) => s.split(' ')[0].toLowerCase();
+        function teamOf(t: OpenFootballTeam | undefined): string {
+          return typeof t === 'string' ? t.toLowerCase() : (t?.name ?? '').toLowerCase();
         }
-        return m;
-      });
-    }
+        function namesMatch(ofName: string, ourName: string): boolean {
+          const a = ofName.toLowerCase();
+          const b = ourName.toLowerCase();
+          return a === b || a.startsWith(word0(b)) || b.startsWith(word0(a));
+        }
+
+        const finishedOf = raw.filter(m => {
+          const s1 = m.score1 ?? m.score?.ft?.[0];
+          const s2 = m.score2 ?? m.score?.ft?.[1];
+          return typeof s1 === 'number' && typeof s2 === 'number';
+        });
+
+        matches = matches.map(m => {
+          if (m.status !== 'scheduled') return m;
+          if (!m.kickoff || now - Date.parse(m.kickoff) <= 105 * 60_000) return m;
+          const ofMatch = finishedOf.find(of =>
+            namesMatch(teamOf(of.team1), m.homeTeam.nameEn) &&
+            namesMatch(teamOf(of.team2), m.awayTeam.nameEn),
+          );
+          if (!ofMatch) return m;
+          const s1 = ofMatch.score1 ?? ofMatch.score?.ft?.[0];
+          const s2 = ofMatch.score2 ?? ofMatch.score?.ft?.[1];
+          if (typeof s1 !== 'number' || typeof s2 !== 'number') return m;
+          return { ...m, status: 'finished' as const, homeScore: s1, awayScore: s2 };
+        });
+      }
+    } catch { /* ignore, use current status */ }
   }
 
   return { matches, source, updatedAt: new Date().toISOString() };
