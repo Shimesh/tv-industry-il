@@ -1253,7 +1253,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
     };
 
     void fetchAll();
-    const id = setInterval(() => void fetchAll(), 30_000);
+    const id = setInterval(() => void fetchAll(), 15_000);
     return () => { cancelled = true; clearInterval(id); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveIds]);
@@ -1805,7 +1805,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
 
     void load();
     if (isFinished) return;
-    const id = setInterval(() => void load(), 30_000);
+    const id = setInterval(() => void load(), 10_000);
     return () => clearInterval(id);
   }, [match.id, match.espnEventId, match.sofaEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
@@ -2450,7 +2450,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
         .catch(() => {});
     };
     poll();
-    const id = window.setInterval(poll, 30_000);
+    const id = window.setInterval(poll, 15_000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, []);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
