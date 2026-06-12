@@ -1405,6 +1405,98 @@ const ESPN_SITE_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/socc
 const ESPN_SITE_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
 const ESPN_CORE_EVENTS = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events';
 
+// ── SofaScore client-side helpers ────────────────────────────────────────────
+const SOFA_CLIENT_BASE = 'https://api.sofascore.com/api/v1';
+const WC_TOURNAMENT_ID = 16;
+
+async function sofaClientFetch<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${SOFA_CLIENT_BASE}${path}`, {
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.sofascore.com/',
+        'Origin': 'https://www.sofascore.com',
+      },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function findSofaEventIdClient(homeEn: string, awayEn: string, dateISO: string): Promise<number | null> {
+  type SofaEv = { id: number; homeTeam: { name: string }; awayTeam: { name: string }; tournament?: { uniqueTournament?: { id: number } } };
+  const data = await sofaClientFetch<{ events: SofaEv[] }>(`/sport/football/scheduled-events/${dateISO}`);
+  if (!data?.events) return null;
+  const word0 = (s: string) => s.split(' ')[0].toLowerCase();
+  function matches(sofaName: string, queryName: string): boolean {
+    const a = sofaName.toLowerCase();
+    const b = queryName.toLowerCase();
+    return a === b || a.startsWith(word0(b)) || b.startsWith(word0(a)) || word0(a) === word0(b);
+  }
+  // Try WC events first
+  for (const ev of data.events.filter(e => e.tournament?.uniqueTournament?.id === WC_TOURNAMENT_ID)) {
+    if (matches(ev.homeTeam.name, homeEn) && matches(ev.awayTeam.name, awayEn)) return ev.id;
+  }
+  // Fallback: all football events
+  for (const ev of data.events) {
+    if (matches(ev.homeTeam.name, homeEn) && matches(ev.awayTeam.name, awayEn)) return ev.id;
+  }
+  return null;
+}
+
+async function fetchSofaIncidentsClient(sofaEventId: number): Promise<MatchEvent[] | null> {
+  type SofaInc = {
+    incidentType: string;
+    incidentClass?: string;
+    goalType?: string;
+    time: number;
+    player?: { id: number; name: string };
+    assist1?: { name: string };
+    playerIn?: { name: string };
+    playerOut?: { name: string };
+    team?: { id: number };
+    homeScore?: number;
+    awayScore?: number;
+  };
+  // Fetch event details to get team IDs
+  type SofaEvDetail = { homeTeam: { id: number; name: string }; awayTeam: { id: number; name: string } };
+  const [incData, evData] = await Promise.all([
+    sofaClientFetch<{ incidents: SofaInc[] }>(`/event/${sofaEventId}/incidents`),
+    sofaClientFetch<SofaEvDetail>(`/event/${sofaEventId}`),
+  ]);
+  if (!incData?.incidents) return null;
+  const homeId = evData?.homeTeam.id ?? 0;
+  const awayId = evData?.awayTeam.id ?? 0;
+  const homeName = evData?.homeTeam.name ?? '';
+  const awayName = evData?.awayTeam.name ?? '';
+  const events: MatchEvent[] = [];
+  for (const inc of incData.incidents) {
+    const minute = inc.time ?? 0;
+    const teamId = inc.team?.id;
+    const teamName = teamId === homeId ? homeName : teamId === awayId ? awayName : '';
+    switch (inc.incidentType) {
+      case 'goal': {
+        const type = inc.goalType === 'own' ? 'owngoal' : 'goal';
+        const assist = inc.assist1?.name ?? '';
+        events.push({ type, minute, teamName, player: inc.player?.name ?? '', detail: assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '') });
+        break;
+      }
+      case 'card': {
+        const type = inc.incidentClass === 'red' || inc.incidentClass === 'yellowRed' ? 'redcard' : 'yellowcard';
+        events.push({ type, minute, teamName, player: inc.player?.name ?? '', detail: '' });
+        break;
+      }
+      case 'substitution': {
+        events.push({ type: 'substitution', minute, teamName, player: inc.playerIn?.name ?? '', detail: inc.playerOut?.name ? `יצא: ${inc.playerOut.name}` : '' });
+        break;
+      }
+    }
+  }
+  return events.sort((a, b) => b.minute - a.minute);
+}
+
 function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
   const evts: MatchEvent[] = [];
   type AnyPlay = Record<string, unknown>;
@@ -1515,6 +1607,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   useEffect(() => {
     const params = new URLSearchParams({ matchId: match.id });
     if (match.espnEventId) params.set('espnId', match.espnEventId);
+    if (match.sofaEventId) params.set('sofaId', String(match.sofaEventId));
     if (match.homeTeam.nameEn) params.set('home', match.homeTeam.nameEn);
     if (match.awayTeam.nameEn) params.set('away', match.awayTeam.nameEn);
     const dateStr = match.kickoff ? match.kickoff.slice(0, 10).replace(/-/g, '') : '';
@@ -1534,10 +1627,31 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
       } catch { /* fall through */ }
 
       // Server API found no events — try client-side ESPN (different IP, better CORS access for historical data)
+      const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
       if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateStr) {
         const clientEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
-        if (clientEvents && clientEvents.length > 0) setEvents(clientEvents);
+        if (clientEvents && clientEvents.length > 0) {
+          setEvents(clientEvents);
+          setFetching(false);
+          return;
+        }
       }
+
+      // ESPN client-side also failed — try SofaScore client-side as final fallback
+      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateISO) {
+        try {
+          const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
+          if (sofaId) {
+            const sofaEvents = await fetchSofaIncidentsClient(sofaId);
+            if (sofaEvents && sofaEvents.length > 0) {
+              setEvents(sofaEvents);
+              setFetching(false);
+              return;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
       setFetching(false);
     };
 
@@ -1545,7 +1659,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     if (isFinished) return;
     const id = setInterval(() => void load(), 30_000);
     return () => clearInterval(id);
-  }, [match.id, match.espnEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
+  }, [match.id, match.espnEventId, match.sofaEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
   const eventIcon: Record<string, string> = {
     goal: '⚽', owngoal: '⚽', yellowcard: '🟨', redcard: '🟥', substitution: '🔄',
@@ -1607,17 +1721,261 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   );
 }
 
-function PlayerRow({ p }: { p: import('@/lib/world-cup/types').WorldCupPlayer }) {
+function PlayerRow({ p, playerId }: { p: import('@/lib/world-cup/types').WorldCupPlayer; playerId?: number }) {
   const pColor: Record<string, string> = { GK: '#D4AF37', DEF: '#4ade80', MID: '#60a5fa', FWD: '#f87171' };
   const pLabel: Record<string, string> = { GK: 'שוער', DEF: 'הגנה', MID: 'קישור', FWD: 'תקיפה' };
+  const initials = p.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase();
   return (
     <div className="flex items-center gap-2 border-t px-3 py-1.5" style={{ borderColor: 'var(--theme-border)' }}>
+      {playerId ? (
+        <img
+          src={`/api/world-cup/player-image?playerId=${playerId}`}
+          alt={p.name}
+          className="h-6 w-6 shrink-0 rounded-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty('display', 'flex'); }}
+        />
+      ) : null}
+      <span
+        className="h-6 w-6 shrink-0 rounded-full items-center justify-center text-[8px] font-black text-white"
+        style={{ background: (pColor[p.position] ?? '#888') + '55', display: playerId ? 'none' : 'flex' }}
+      >
+        {initials}
+      </span>
       <span className="w-5 shrink-0 text-center text-[10px] font-black text-[var(--theme-text-secondary)]">{p.number ?? '–'}</span>
       <span className="flex-1 truncate text-xs font-bold text-[var(--theme-text)]">{p.name}</span>
       {p.club && <span className="hidden text-[10px] text-[var(--theme-text-secondary)] sm:inline">{p.club}</span>}
       <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold" style={{ background: (pColor[p.position] ?? '#888') + '22', color: pColor[p.position] ?? '#888' }}>
         {pLabel[p.position] ?? p.position}
       </span>
+    </div>
+  );
+}
+
+type LiveLineupPlayer = {
+  id: number;
+  name: string;
+  jerseyNumber: number;
+  position: string;
+  isStarter: boolean;
+};
+
+type LiveLineupTeam = {
+  formation: string;
+  players: LiveLineupPlayer[];
+};
+
+function LineupsPanel({ match, homeDetail, awayDetail }: {
+  match: WorldCupMatch;
+  homeDetail: import('@/lib/world-cup/types').WorldCupTeamDetail | undefined;
+  awayDetail: import('@/lib/world-cup/types').WorldCupTeamDetail | undefined;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [homeLineup, setHomeLineup] = useState<LiveLineupTeam | null>(null);
+  const [awayLineup, setAwayLineup] = useState<LiveLineupTeam | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (match.sofaEventId) {
+      params.set('sofaId', String(match.sofaEventId));
+    } else {
+      params.set('home', match.homeTeam.nameEn);
+      params.set('away', match.awayTeam.nameEn);
+      const dateStr = match.kickoff ? match.kickoff.slice(0, 10).replace(/-/g, '') : '';
+      if (dateStr) params.set('date', dateStr);
+    }
+
+    fetch(`/api/world-cup/lineups?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { success?: boolean; home?: LiveLineupTeam; away?: LiveLineupTeam } | null) => {
+        if (d?.success && d.home && d.away) {
+          setHomeLineup(d.home);
+          setAwayLineup(d.away);
+        }
+      })
+      .catch(() => { /* use static fallback */ })
+      .finally(() => setLoading(false));
+  }, [match.sofaEventId, match.homeTeam.nameEn, match.awayTeam.nameEn, match.kickoff]);
+
+  const pColor: Record<string, string> = { GK: '#D4AF37', DEF: '#4ade80', MID: '#60a5fa', FWD: '#f87171' };
+  const pLabel: Record<string, string> = { GK: 'שוער', DEF: 'הגנה', MID: 'קישור', FWD: 'תקיפה' };
+
+  if (loading) {
+    return (
+      <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
+        <div className="mb-2 text-2xl">⏳</div>
+        טוען הרכב...
+      </div>
+    );
+  }
+
+  // Use live lineups if available, else fall back to static squad data
+  const useLive = homeLineup !== null && awayLineup !== null;
+
+  if (!useLive) {
+    // Static fallback
+    const homeStarters = (homeDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
+    const homeSubs = homeDetail?.squad.filter(p => p.isStarter === false) ?? [];
+    const awayStarters = (awayDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
+    const awaySubs = awayDetail?.squad.filter(p => p.isStarter === false) ?? [];
+
+    return (
+      <div className="space-y-4 p-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {homeDetail && homeStarters.length > 0 && (
+            <FormationPitch squad={homeStarters} flag={match.homeTeam.flag} teamName={match.homeTeam.nameHe} formation={homeDetail.formation} />
+          )}
+          {awayDetail && awayStarters.length > 0 && (
+            <FormationPitch squad={awayStarters} flag={match.awayTeam.flag} teamName={match.awayTeam.nameHe} formation={awayDetail.formation} />
+          )}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            { team: match.homeTeam, starters: homeStarters, subs: homeSubs, detail: homeDetail },
+            { team: match.awayTeam, starters: awayStarters, subs: awaySubs, detail: awayDetail },
+          ].map(({ team, starters, subs, detail }) => (
+            <div key={team.id} className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
+              <div className="flex items-center gap-2 px-3 py-2" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <span className="text-xl">{team.flag}</span>
+                <div>
+                  <div className="text-xs font-black text-[var(--theme-text)]">{team.nameHe}</div>
+                  {detail && <div className="text-[9px] text-[var(--theme-text-secondary)]">מאמן: {detail.coachHe}</div>}
+                </div>
+              </div>
+              {starters.length > 0 && (
+                <>
+                  <div className="px-3 py-1 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'var(--theme-bg-secondary)' }}>
+                    הרכב פותח
+                  </div>
+                  {starters.map(p => <PlayerRow key={p.name} p={p} />)}
+                </>
+              )}
+              {subs.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'rgba(255,255,255,.04)' }}>
+                    ספסל חילופים ({subs.length})
+                  </div>
+                  {subs.map(p => <PlayerRow key={p.name} p={p} />)}
+                </>
+              )}
+              {starters.length === 0 && (
+                <div className="px-4 py-4 text-center text-xs text-[var(--theme-text-secondary)]">הרכב טרם פורסם</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Live lineups from SofaScore
+  const renderLiveSide = (team: WorldCupTeam, lineup: LiveLineupTeam, detail: import('@/lib/world-cup/types').WorldCupTeamDetail | undefined) => {
+    const starters = lineup.players.filter(p => p.isStarter);
+    const subs = lineup.players.filter(p => !p.isStarter);
+
+    const toStaticPlayer = (lp: LiveLineupPlayer): import('@/lib/world-cup/types').WorldCupPlayer => ({
+      name: lp.name,
+      number: lp.jerseyNumber || undefined,
+      position: (lp.position as import('@/lib/world-cup/types').WorldCupPlayer['position']) ?? 'MID',
+      isStarter: lp.isStarter,
+    });
+
+    const staticStartersForPitch = starters.map(toStaticPlayer);
+
+    return (
+      <div key={team.id} className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
+        <div className="flex items-center gap-2 px-3 py-2" style={{ background: 'var(--theme-bg-secondary)' }}>
+          <span className="text-xl">{team.flag}</span>
+          <div>
+            <div className="text-xs font-black text-[var(--theme-text)]">{team.nameHe}</div>
+            {lineup.formation && <div className="text-[9px] text-[var(--theme-text-secondary)]">מערך: {lineup.formation}</div>}
+            {detail && <div className="text-[9px] text-[var(--theme-text-secondary)]">מאמן: {detail.coachHe}</div>}
+          </div>
+        </div>
+        {starters.length > 0 && (
+          <>
+            <div className="px-3 py-1 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'var(--theme-bg-secondary)' }}>
+              הרכב פותח
+            </div>
+            {starters.map(lp => (
+              <div key={lp.id} className="flex items-center gap-2 border-t px-3 py-1.5" style={{ borderColor: 'var(--theme-border)' }}>
+                <img
+                  src={`/api/world-cup/player-image?playerId=${lp.id}`}
+                  alt={lp.name}
+                  className="h-6 w-6 shrink-0 rounded-full object-cover"
+                  onError={e => {
+                    const img = e.currentTarget as HTMLImageElement;
+                    img.style.display = 'none';
+                    const span = img.nextElementSibling as HTMLElement | null;
+                    if (span) span.style.display = 'flex';
+                  }}
+                />
+                <span
+                  className="h-6 w-6 shrink-0 rounded-full items-center justify-center text-[8px] font-black text-white"
+                  style={{ background: (pColor[lp.position] ?? '#888') + '55', display: 'none' }}
+                >
+                  {lp.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()}
+                </span>
+                <span className="w-5 shrink-0 text-center text-[10px] font-black text-[var(--theme-text-secondary)]">{lp.jerseyNumber || '–'}</span>
+                <span className="flex-1 truncate text-xs font-bold text-[var(--theme-text)]">{lp.name}</span>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold" style={{ background: (pColor[lp.position] ?? '#888') + '22', color: pColor[lp.position] ?? '#888' }}>
+                  {pLabel[lp.position] ?? lp.position}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+        {subs.length > 0 && (
+          <>
+            <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'rgba(255,255,255,.04)' }}>
+              ספסל חילופים ({subs.length})
+            </div>
+            {subs.map(lp => (
+              <div key={lp.id} className="flex items-center gap-2 border-t px-3 py-1.5" style={{ borderColor: 'var(--theme-border)' }}>
+                <img
+                  src={`/api/world-cup/player-image?playerId=${lp.id}`}
+                  alt={lp.name}
+                  className="h-6 w-6 shrink-0 rounded-full object-cover"
+                  onError={e => {
+                    const img = e.currentTarget as HTMLImageElement;
+                    img.style.display = 'none';
+                    const span = img.nextElementSibling as HTMLElement | null;
+                    if (span) span.style.display = 'flex';
+                  }}
+                />
+                <span
+                  className="h-6 w-6 shrink-0 rounded-full items-center justify-center text-[8px] font-black text-white"
+                  style={{ background: (pColor[lp.position] ?? '#888') + '55', display: 'none' }}
+                >
+                  {lp.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()}
+                </span>
+                <span className="w-5 shrink-0 text-center text-[10px] font-black text-[var(--theme-text-secondary)]">{lp.jerseyNumber || '–'}</span>
+                <span className="flex-1 truncate text-xs font-bold text-[var(--theme-text)]">{lp.name}</span>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold" style={{ background: (pColor[lp.position] ?? '#888') + '22', color: pColor[lp.position] ?? '#888' }}>
+                  {pLabel[lp.position] ?? lp.position}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+        {starters.length === 0 && subs.length === 0 && (
+          <div className="px-4 py-4 text-center text-xs text-[var(--theme-text-secondary)]">הרכב טרם פורסם</div>
+        )}
+        {/* Render pitch for starters */}
+        {staticStartersForPitch.length > 0 && (
+          <div className="border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
+            <FormationPitch squad={staticStartersForPitch} flag={team.flag} teamName={team.nameHe} formation={lineup.formation ?? undefined} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4 p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {renderLiveSide(match.homeTeam, homeLineup, homeDetail)}
+        {renderLiveSide(match.awayTeam, awayLineup, awayDetail)}
+      </div>
     </div>
   );
 }
@@ -1631,11 +1989,6 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
   const isFinished = match.status === 'finished';
   const hasEvents = isLive || isFinished;
   const [tab, setTab] = useState<'lineup' | 'live'>(isLive ? 'live' : 'lineup');
-
-  const homeStarters = (homeDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
-  const homeSubs = homeDetail?.squad.filter(p => p.isStarter === false) ?? [];
-  const awayStarters = (awayDetail?.squad.filter(p => p.isStarter !== false) ?? []).slice(0, 11);
-  const awaySubs = awayDetail?.squad.filter(p => p.isStarter === false) ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(6px)' }}>
@@ -1711,57 +2064,7 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
           {tab === 'live' && hasEvents ? (
             <LiveEventsPanel match={match} />
           ) : (
-            <div className="space-y-4 p-3">
-              {/* Formations side by side */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {homeDetail && homeStarters.length > 0 && (
-                  <FormationPitch squad={homeStarters} flag={match.homeTeam.flag} teamName={match.homeTeam.nameHe} formation={homeDetail.formation} />
-                )}
-                {awayDetail && awayStarters.length > 0 && (
-                  <FormationPitch squad={awayStarters} flag={match.awayTeam.flag} teamName={match.awayTeam.nameHe} formation={awayDetail.formation} />
-                )}
-              </div>
-
-              {/* Starters */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  { team: match.homeTeam, starters: homeStarters, subs: homeSubs, detail: homeDetail },
-                  { team: match.awayTeam, starters: awayStarters, subs: awaySubs, detail: awayDetail },
-                ].map(({ team, starters, subs, detail }) => (
-                  <div key={team.id} className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--theme-border)' }}>
-                    <div className="flex items-center gap-2 px-3 py-2" style={{ background: 'var(--theme-bg-secondary)' }}>
-                      <span className="text-xl">{team.flag}</span>
-                      <div>
-                        <div className="text-xs font-black text-[var(--theme-text)]">{team.nameHe}</div>
-                        {detail && <div className="text-[9px] text-[var(--theme-text-secondary)]">מאמן: {detail.coachHe}</div>}
-                      </div>
-                    </div>
-
-                    {starters.length > 0 && (
-                      <>
-                        <div className="px-3 py-1 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'var(--theme-bg-secondary)' }}>
-                          הרכב פותח
-                        </div>
-                        {starters.map(p => <PlayerRow key={p.name} p={p} />)}
-                      </>
-                    )}
-
-                    {subs.length > 0 && (
-                      <>
-                        <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[var(--theme-text-secondary)]" style={{ background: 'rgba(255,255,255,.04)' }}>
-                          ספסל חילופים ({subs.length})
-                        </div>
-                        {subs.map(p => <PlayerRow key={p.name} p={p} />)}
-                      </>
-                    )}
-
-                    {starters.length === 0 && (
-                      <div className="px-4 py-4 text-center text-xs text-[var(--theme-text-secondary)]">הרכב לא פורסם</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <LineupsPanel match={match} homeDetail={homeDetail} awayDetail={awayDetail} />
           )}
         </div>
       </motion.div>
