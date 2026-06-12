@@ -121,7 +121,7 @@ export default function ClientDebugPage() {
                 Error: {r.error}
               </div>
             )}
-            {r.ok && r.data && (
+            {r.ok && r.data !== undefined && (
               <div style={{ color: '#AAA', fontSize: '11px', marginTop: '4px', wordBreak: 'break-all' }}>
                 {extractMatchesInfo(r.data)}
               </div>
