@@ -167,17 +167,33 @@ type OFMatch = {
   score?: { ft?: [number, number]; ht?: [number, number] };
 };
 
-async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<object[] | null> {
+// Module-level cache so successive match-events requests within the same server instance
+// don't re-download the full JSON (Vercel force-dynamic ignores next.revalidate)
+let ofCache: { data: OFMatch[]; ts: number } | null = null;
+const OF_CACHE_TTL = 120_000; // 2 minutes
+
+async function getOpenFootballMatches(): Promise<OFMatch[]> {
+  if (ofCache && Date.now() - ofCache.ts < OF_CACHE_TTL) return ofCache.data;
   try {
     const res = await fetch(
       'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
-      { next: { revalidate: 120 }, signal: AbortSignal.timeout(5000) },
+      { signal: AbortSignal.timeout(8000) },
     );
-    if (!res.ok) return null;
-    const data = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
+    if (!res.ok) return ofCache?.data ?? [];
+    const raw = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
     const all: OFMatch[] = [];
-    if (data.rounds) data.rounds.forEach(r => all.push(...(r.matches ?? [])));
-    else if (data.matches) all.push(...data.matches);
+    if (raw.rounds) raw.rounds.forEach(r => all.push(...(r.matches ?? [])));
+    else if (raw.matches) all.push(...raw.matches);
+    if (all.length) ofCache = { data: all, ts: Date.now() };
+    return all;
+  } catch {
+    return ofCache?.data ?? [];
+  }
+}
+
+async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<object[] | null> {
+  try {
+    const all = await getOpenFootballMatches();
     if (!all.length) return null;
 
     const w0 = (s: string) => s.split(' ')[0].toLowerCase();

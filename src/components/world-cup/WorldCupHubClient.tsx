@@ -1421,6 +1421,11 @@ function FormationPitch({ squad, flag, teamName, formation }: { squad: import('@
 const ESPN_SITE_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const ESPN_SITE_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
 const ESPN_CORE_EVENTS = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events';
+// WC 2026 might use a different league slug on ESPN — try both
+const ESPN_WC_SCOREBOARDS = [
+  'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard',
+  'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.2026/scoreboard',
+];
 
 // ── SofaScore client-side helpers ────────────────────────────────────────────
 const SOFA_CLIENT_BASE = 'https://api.sofascore.com/api/v1';
@@ -1583,17 +1588,24 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
     return found ? String(found.id ?? '') || null : null;
   }
 
-  // 1. Try site API scoreboard (live + date-specific + full tournament range)
+  // 1. Try site API scoreboard — multiple league slugs (WC 2026 might be under different code)
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  for (const url of [ESPN_SITE_SCOREBOARD, `${ESPN_SITE_SCOREBOARD}?dates=${dateStr}`, `${ESPN_SITE_SCOREBOARD}?dates=20260611-${today}`]) {
+  const scoreboardUrls: string[] = [];
+  for (const base of ESPN_WC_SCOREBOARDS) {
+    scoreboardUrls.push(base, `${base}?dates=${dateStr}`, `${base}?dates=20260611-${today}`);
+  }
+  for (const url of scoreboardUrls) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (!r.ok) continue;
       const d = await r.json() as Record<string, unknown>;
       const id = matchTeams((d.events as Array<Record<string,unknown>>) ?? []);
       if (id) {
-        const sr = await fetch(`${ESPN_SITE_SUMMARY}${id}`);
-        if (sr.ok) return parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+        const sr = await fetch(`${ESPN_SITE_SUMMARY}${id}`, { signal: AbortSignal.timeout(5000) });
+        if (sr.ok) {
+          const evts = parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+          if (evts.length > 0) return evts;
+        }
       }
     } catch { /* try next */ }
   }
@@ -1626,6 +1638,45 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
   return null;
 }
 
+// Client-side OpenFootball fetch with in-memory cache (avoids re-downloading on every click)
+type OFClientGoal = { name?: string; minute?: string; type?: string };
+type OFClientMatch = { team1?: string; team2?: string; goals1?: OFClientGoal[]; goals2?: OFClientGoal[]; score?: { ft?: [number,number]; ht?: [number,number] } };
+let ofClientCache: OFClientMatch[] | null = null;
+let ofClientCacheTime = 0;
+async function fetchOpenFootballGoalsClient(homeEn: string, awayEn: string): Promise<MatchEvent[] | null> {
+  try {
+    if (!ofClientCache || Date.now() - ofClientCacheTime > 120_000) {
+      const r = await fetch('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json', { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return null;
+      const d = await r.json() as { rounds?: Array<{ matches?: OFClientMatch[] }>; matches?: OFClientMatch[] };
+      const all: OFClientMatch[] = [];
+      if (d.rounds) d.rounds.forEach(r2 => all.push(...(r2.matches ?? [])));
+      else if (d.matches) all.push(...d.matches);
+      ofClientCache = all;
+      ofClientCacheTime = Date.now();
+    }
+    const all = ofClientCache;
+    if (!all?.length) return null;
+    const w0 = (s: string) => s.split(' ')[0].toLowerCase();
+    const home = homeEn.toLowerCase();
+    const away = awayEn.toLowerCase();
+    const found = all.find(m => {
+      const t1 = (m.team1 ?? '').toLowerCase();
+      const t2 = (m.team2 ?? '').toLowerCase();
+      return (t1.startsWith(w0(home)) || home.startsWith(w0(t1))) &&
+             (t2.startsWith(w0(away)) || away.startsWith(w0(t2)));
+    });
+    if (!found) return null;
+    const events: MatchEvent[] = [
+      ...(found.goals1 ?? []).map(g => ({ type: (g.type ?? '').includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team1 ?? homeEn, player: g.name ?? '', detail: (g.type ?? '').includes('own') ? 'שער עצמי' : '' })),
+      ...(found.goals2 ?? []).map(g => ({ type: (g.type ?? '').includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team2 ?? awayEn, player: g.name ?? '', detail: (g.type ?? '').includes('own') ? 'שער עצמי' : '' })),
+    ].sort((a, b) => b.minute - a.minute);
+    const ht = found.score?.ht;
+    if (ht && events.length > 0) events.push({ type: 'halftime', minute: 45, teamName: '', player: '', detail: `פגרה: ${ht[0]}-${ht[1]}` });
+    return events.length > 0 ? events : null;
+  } catch { return null; }
+}
+
 function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [liveMinute, setLiveMinute] = useState<number | null>(match.minute ?? null);
@@ -1654,8 +1705,18 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
         }
       } catch { /* fall through */ }
 
-      // Server API found no events — try client-side ESPN (different IP, better CORS access for historical data)
+      // Server returned no events — fetch OpenFootball directly from browser (bypasses Vercel timeout)
       const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
+      if (match.homeTeam.nameEn && match.awayTeam.nameEn) {
+        const ofEvents = await fetchOpenFootballGoalsClient(match.homeTeam.nameEn, match.awayTeam.nameEn).catch(() => null);
+        if (ofEvents && ofEvents.length > 0) {
+          setEvents(ofEvents);
+          setFetching(false);
+          return;
+        }
+      }
+
+      // OpenFootball found nothing (no goals yet / not in OF) — try ESPN from browser
       if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateStr) {
         const clientEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
         if (clientEvents && clientEvents.length > 0) {
