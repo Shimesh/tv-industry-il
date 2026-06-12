@@ -52,8 +52,10 @@ async function runDebug(): Promise<Line[]> {
         out.push(row('Summary keys', topKeys));
         const plays = (s.plays as unknown[]) ?? [];
         const scoringPlays = (s.scoringPlays as unknown[]) ?? [];
+        const keyEvents = (s.keyEvents as unknown[]) ?? [];
         out.push(row('plays count', String(plays.length), plays.length > 0));
         out.push(row('scoringPlays count', String(scoringPlays.length), scoringPlays.length > 0));
+        out.push(row('keyEvents count', String(keyEvents.length), keyEvents.length > 0));
         // Show all unique play types
         const typeSet = new Set<string>();
         for (const p of plays) {
@@ -61,6 +63,17 @@ async function runDebug(): Promise<Line[]> {
           if (pt) typeSet.add(String(pt));
         }
         out.push(row('Play types', Array.from(typeSet).join(' | ') || '(none)', typeSet.size > 0));
+        // Show first 10 keyEvents
+        const keLines = keyEvents.slice(0, 15).map(ke => {
+          const k = ke as Record<string, unknown>;
+          const type = ((k.type as Record<string, unknown>)?.text as string) ?? '?';
+          const clock = ((k.clock as Record<string, unknown>)?.displayValue as string) ?? '';
+          const team = ((k.team as Record<string, unknown>)?.displayName as string) ?? '';
+          const parts = k.participants as Array<Record<string, unknown>> | undefined;
+          const player = (parts?.[0]?.athlete as Record<string, unknown>)?.displayName as string ?? (k.text as string) ?? '';
+          return `${clock} ${type} | ${team} | ${player}`;
+        });
+        out.push(row('keyEvents (first 15)', keLines.join('\n') || '(empty)'));
         // Show first 10 plays with type+minute+team+player
         const playLines = plays.slice(0, 20).map(p => {
           const pp = p as Record<string, unknown>;
@@ -75,8 +88,10 @@ async function runDebug(): Promise<Line[]> {
         // Cards count
         const yellows = plays.filter(p => String(((p as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('yellow'));
         const reds = plays.filter(p => String(((p as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('red'));
+        const keYellows = keyEvents.filter(k => String(((k as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('yellow'));
         out.push(row('Yellow card plays', String(yellows.length), yellows.length > 0));
         out.push(row('Red card plays', String(reds.length), reds.length >= 0));
+        out.push(row('Yellow keyEvents', String(keYellows.length), keYellows.length > 0));
       }
     } catch (e) { out.push(row('Summary error', String(e), false)); }
   } else {
