@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import ChannelLogo from '@/components/ChannelLogo';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
-import type { WorldCupCardStat, WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
+import type { WorldCupCardStat, WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeam, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
 import { teamDetails } from '@/lib/world-cup/static-data';
 
 type WcArticleContent = {
@@ -484,20 +484,74 @@ function StatRow({ rank, name, teamFlag, teamName, value, label }: { rank: numbe
   );
 }
 
-function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlayerStat[] }) {
+function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: WorldCupPlayerStat[]; matches: WorldCupMatch[] }) {
   const [activeTab, setActiveTab] = useState<StatTab>('goals');
   const [stats, setStats] = useState<TournamentStats | null>(null);
   const [cardsLoading, setCardsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    const word0 = (s: string) => s.split(' ')[0].toLowerCase();
+
     fetch('/api/world-cup/tournament-stats')
       .then(r => r.ok ? r.json() : null)
-      .then((d: TournamentStats | null) => { if (!cancelled && d?.success) setStats(d); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setCardsLoading(false); });
+      .then(async (d: TournamentStats | null) => {
+        if (cancelled) return;
+
+        if (d?.success && (d.yellowCards.length > 0 || d.redCards.length > 0)) {
+          setStats(d);
+          setCardsLoading(false);
+          return;
+        }
+
+        // Server returned no cards — try aggregating from client-side ESPN summaries
+        const completed = matches.filter(m => m.status === 'finished');
+        if (!completed.length) { setCardsLoading(false); return; }
+
+        type CardEntry = { playerName: string; team: WorldCupTeam; count: number };
+        const yMap = new Map<string, CardEntry>();
+        const rMap = new Map<string, CardEntry>();
+
+        await Promise.all(completed.map(async (match) => {
+          const dateStr = match.kickoff.replace(/-/g, '').slice(0, 8);
+          const evts = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+          if (!evts) return;
+          for (const evt of evts) {
+            if (evt.type !== 'yellowcard' && evt.type !== 'redcard') continue;
+            const n = evt.teamName.toLowerCase();
+            const team = word0(match.homeTeam.nameEn) === word0(n) || n.startsWith(word0(match.homeTeam.nameEn)) || word0(match.homeTeam.nameEn).startsWith(word0(n))
+              ? match.homeTeam
+              : word0(match.awayTeam.nameEn) === word0(n) || n.startsWith(word0(match.awayTeam.nameEn)) || word0(match.awayTeam.nameEn).startsWith(word0(n))
+              ? match.awayTeam
+              : { id: 'tbd', nameHe: evt.teamName, nameEn: evt.teamName, flag: '🏳️' } as WorldCupTeam;
+            const map = evt.type === 'redcard' ? rMap : yMap;
+            const key = `${evt.player}|${team.id}`;
+            const curr = map.get(key) ?? { playerName: evt.player, team, count: 0 };
+            map.set(key, { ...curr, count: curr.count + 1 });
+          }
+        }));
+
+        if (!cancelled) {
+          const toRanked = (m: Map<string, CardEntry>): WorldCupCardStat[] =>
+            Array.from(m.values())
+              .sort((a, b) => b.count - a.count)
+              .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
+          if (yMap.size > 0 || rMap.size > 0) {
+            setStats(prev => ({
+              success: true,
+              goals: prev?.goals ?? [],
+              assists: prev?.assists ?? [],
+              yellowCards: toRanked(yMap),
+              redCards: toRanked(rMap),
+              playerStats: prev?.playerStats ?? [],
+            }));
+          }
+          setCardsLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setCardsLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [matches]);
 
   const tabs: { key: StatTab; label: string; icon: string }[] = [
     { key: 'goals', label: 'שערים', icon: '⚽' },
@@ -1409,8 +1463,9 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
     return found ? String(found.id ?? '') || null : null;
   }
 
-  // 1. Try site API scoreboard (live + date-specific)
-  for (const url of [ESPN_SITE_SCOREBOARD, `${ESPN_SITE_SCOREBOARD}?dates=${dateStr}`]) {
+  // 1. Try site API scoreboard (live + date-specific + full tournament range)
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  for (const url of [ESPN_SITE_SCOREBOARD, `${ESPN_SITE_SCOREBOARD}?dates=${dateStr}`, `${ESPN_SITE_SCOREBOARD}?dates=20260611-${today}`]) {
     try {
       const r = await fetch(url);
       if (!r.ok) continue;
@@ -2100,7 +2155,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           <StandingsTables standings={standings} />
         </div>
         <div ref={sectionRefs.stats}>
-          <StatsSection initialPlayerStats={playerStats} />
+          <StatsSection initialPlayerStats={playerStats} matches={matches} />
         </div>
         <div ref={sectionRefs.venues}>
           <VenuesGrid venues={venues} matches={matches} />

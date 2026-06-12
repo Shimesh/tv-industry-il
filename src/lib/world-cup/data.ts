@@ -106,13 +106,15 @@ type ESPNEvent = {
 
 async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
   try {
-    // Fetch live scoreboard + today's and yesterday's date scoreboards to capture completed matches
+    // Fetch live scoreboard + date-based queries to capture recently completed matches
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10).replace(/-/g, '');
+    const wcStart = '20260611';
     const urls = [
       'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard',
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${today}`,
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${yesterday}`,
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${wcStart}-${today}`,
     ];
     const results = await Promise.all(
       urls.map(url => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) })

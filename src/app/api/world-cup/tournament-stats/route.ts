@@ -17,6 +17,7 @@ type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string; scor
 type ESPNStatus = { type?: { name?: string; completed?: boolean } };
 type ESPNEvent = {
   id?: string;
+  date?: string;
   competitions?: Array<{ competitors?: ESPNCompetitor[]; status?: ESPNStatus }>;
   status?: ESPNStatus;
 };
@@ -75,6 +76,39 @@ function toRanked(map: Map<string, StatEntry>) {
     .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
 }
 
+// Treat an event as completed if status says so OR if kickoff was >3h ago (defensive fallback)
+function isCompleted(ev: ESPNEvent): boolean {
+  const status = ev.competitions?.[0]?.status ?? ev.status;
+  if (status?.type?.completed === true) return true;
+  if (status?.type?.name === 'STATUS_FINAL') return true;
+  if (ev.date && Date.now() - new Date(ev.date).getTime() > 3 * 3_600_000) return true;
+  return false;
+}
+
+function dedupeEvents(arrays: ESPNEvent[][]): ESPNEvent[] {
+  const seen = new Set<string>();
+  const out: ESPNEvent[] = [];
+  for (const events of arrays) {
+    for (const ev of events) {
+      if (ev.id && !seen.has(ev.id)) { seen.add(ev.id); out.push(ev); }
+      else if (!ev.id) out.push(ev);
+    }
+  }
+  return out;
+}
+
+async function fetchRangeScoreboard(dateRange: string): Promise<ESPNEvent[]> {
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateRange}`,
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) return [];
+    const data = await res.json() as { events?: ESPNEvent[] };
+    return data.events ?? [];
+  } catch { return []; }
+}
+
 async function fetchDateScoreboard(dateStr: string): Promise<ESPNEvent[]> {
   try {
     const res = await fetch(
@@ -106,12 +140,9 @@ async function fetchDateEventsViaCoreApi(dateStr: string): Promise<ESPNEvent[]> 
     );
     return evData.filter(Boolean).map(ev => ({
       id: ev.id as string,
+      date: ev.date as string | undefined,
       competitions: ev.competitions as ESPNEvent['competitions'],
       status: ev.status as ESPNEvent['status'],
-      // If no status, treat as completed if the kickoff was >3h ago
-      ...(!ev.status && ev.date && Date.now() - new Date(ev.date as string).getTime() > 3 * 3_600_000
-        ? { status: { type: { name: 'STATUS_FINAL', completed: true } } as ESPNStatus }
-        : {}),
     })) as ESPNEvent[];
   } catch { return []; }
 }
@@ -119,7 +150,6 @@ async function fetchDateEventsViaCoreApi(dateStr: string): Promise<ESPNEvent[]> 
 async function fetchDateEvents(dateStr: string): Promise<ESPNEvent[]> {
   const siteEvents = await fetchDateScoreboard(dateStr);
   if (siteEvents.length > 0) return siteEvents;
-  // Fallback to Core API which retains historical data
   return fetchDateEventsViaCoreApi(dateStr);
 }
 
@@ -133,29 +163,31 @@ async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   } catch { return null; }
 }
 
-function isCompleted(ev: ESPNEvent): boolean {
-  const status = ev.competitions?.[0]?.status ?? ev.status;
-  return status?.type?.completed === true || status?.type?.name === 'STATUS_FINAL';
-}
-
 export async function GET() {
-  // Fetch ESPN scoreboards for each day from tournament start to today
-  const tourStart = new Date('2026-06-11');
-  const today = new Date();
-  const dates: string[] = [];
-  for (let d = new Date(tourStart); d <= today; d.setDate(d.getDate() + 1)) {
-    dates.push(d.toISOString().slice(0, 10).replace(/-/g, ''));
+  const wcStart = '20260611';
+  const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+  // First try: single date-range query to get all tournament events at once
+  let allEvents = await fetchRangeScoreboard(`${wcStart}-${todayStr}`);
+
+  // Fallback: iterate per day (site scoreboard) → Core API per day
+  if (!allEvents.length) {
+    const tourStart = new Date('2026-06-11');
+    const today = new Date();
+    const dates: string[] = [];
+    for (let d = new Date(tourStart); d <= today; d.setDate(d.getDate() + 1)) {
+      dates.push(d.toISOString().slice(0, 10).replace(/-/g, ''));
+    }
+    const arrays = await Promise.all(dates.map(fetchDateEvents));
+    allEvents = dedupeEvents(arrays);
   }
 
-  const allEventArrays = await Promise.all(dates.map(fetchDateEvents));
   const seen = new Set<string>();
   const completedIds: string[] = [];
-  for (const events of allEventArrays) {
-    for (const ev of events) {
-      if (ev.id && !seen.has(ev.id) && isCompleted(ev)) {
-        seen.add(ev.id);
-        completedIds.push(ev.id);
-      }
+  for (const ev of allEvents) {
+    if (ev.id && !seen.has(ev.id) && isCompleted(ev)) {
+      seen.add(ev.id);
+      completedIds.push(ev.id);
     }
   }
 
