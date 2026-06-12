@@ -107,6 +107,7 @@ function parseSummary(
   assists: Map<string, StatEntry>,
   yellow: Map<string, StatEntry>,
   red: Map<string, StatEntry>,
+  subs: Map<string, StatEntry>,
 ) {
   for (const play of s.scoringPlays ?? []) {
     const isOwn = (play.type?.text ?? '').toLowerCase().includes('own');
@@ -121,32 +122,24 @@ function parseSummary(
   }
   for (const play of s.plays ?? []) {
     const text = (play.type?.text ?? '').toLowerCase();
-    if (!text.includes('yellow') && !text.includes('red card')) continue;
     const team = resolveTeam(play.team?.displayName);
     const player = play.participants?.[0]?.athlete?.displayName ?? '';
     if (!player) continue;
-    inc(text.includes('red') ? red : yellow, player, team);
+    if (text.includes('yellow card') || text.includes('yellow-card')) inc(yellow, player, team);
+    else if (text.includes('red card') || text.includes('red-card')) inc(red, player, team);
+    else if (text.includes('substitut')) inc(subs, player, team);
   }
 
   // keyEvents — populated even when plays/scoringPlays are empty (WC 2026 ESPN behaviour)
-  const seenGoals = new Set(Array.from(goals.keys()));
-  const seenYellow = new Set(Array.from(yellow.keys()));
-  const seenRed = new Set(Array.from(red.keys()));
   for (const ke of s.keyEvents ?? []) {
     const text = (ke.type?.text ?? '').toLowerCase();
     const team = resolveTeam(ke.team?.displayName);
     const player = ke.participants?.[0]?.athlete?.displayName ?? '';
     if (!player) continue;
-    const pkey = `${player}|${team.id}`;
-    if (text.includes('goal') && !text.includes('own')) {
-      if (!seenGoals.has(pkey)) { inc(goals, player, team); seenGoals.add(pkey); }
-      else inc(goals, player, team); // allow multiple goals per player
-    } else if (text.includes('red card') || text.includes('red-card')) {
-      if (!seenRed.has(pkey)) { inc(red, player, team); seenRed.add(pkey); }
-    } else if (text.includes('yellow card') || text.includes('yellow-card')) {
-      if (!seenYellow.has(pkey)) { inc(yellow, player, team); seenYellow.add(pkey); }
-      else inc(yellow, player, team); // multiple yellow cards are possible across matches
-    }
+    if (text.includes('goal') && !text.includes('own')) inc(goals, player, team);
+    else if (text.includes('red card') || text.includes('red-card')) inc(red, player, team);
+    else if (text.includes('yellow card') || text.includes('yellow-card')) inc(yellow, player, team);
+    else if (text.includes('substitut')) inc(subs, player, team);
   }
 }
 
@@ -298,6 +291,7 @@ export async function GET() {
               assists: sofaAssists,
               yellowCards: sofaYellow,
               redCards: sofaRed,
+              substitutions: [],
               source: 'sofascore',
             },
             { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } },
@@ -370,13 +364,15 @@ export async function GET() {
 
       const fdGoalsList = toRanked(fdGoals);
       const fdYellowList = toRanked(fdYellow);
-      if (fdGoalsList.length > 0 || fdYellowList.length > 0) {
+      // Only use FD when it has BOTH goals AND cards — free tier has cards=0, so we fall through to ESPN
+      if (fdGoalsList.length > 0 && fdYellowList.length > 0) {
         return NextResponse.json({
           success: true,
           goals: fdGoalsList,
           assists: toRanked(fdAssists),
           yellowCards: fdYellowList,
           redCards: toRanked(fdRed),
+          substitutions: [],
           source: 'football-data',
         }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
       }
@@ -417,9 +413,10 @@ export async function GET() {
   const assists = new Map<string, StatEntry>();
   const yellow = new Map<string, StatEntry>();
   const red = new Map<string, StatEntry>();
+  const subs = new Map<string, StatEntry>();
 
   for (const s of summaries) {
-    if (s) parseSummary(s, goals, assists, yellow, red);
+    if (s) parseSummary(s, goals, assists, yellow, red, subs);
   }
 
   const espnGoals = toRanked(goals);
@@ -430,7 +427,9 @@ export async function GET() {
       assists: toRanked(assists),
       yellowCards: toRanked(yellow),
       redCards: toRanked(red),
-    }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
+      substitutions: toRanked(subs),
+      source: 'espn',
+    }, { headers: { 'Cache-Control': 's-maxage=120, stale-while-revalidate=300' } });
   }
 
   // Final fallback: OpenFootball — always accessible, goals only
@@ -441,6 +440,7 @@ export async function GET() {
     assists: ofStats?.assists ?? [],
     yellowCards: ofStats?.yellowCards ?? [],
     redCards: ofStats?.redCards ?? [],
+    substitutions: [],
     source: ofStats ? 'openfootball' : undefined,
   }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
 }

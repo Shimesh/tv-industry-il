@@ -462,10 +462,11 @@ type TournamentStats = {
   assists: WorldCupCardStat[];
   yellowCards: WorldCupCardStat[];
   redCards: WorldCupCardStat[];
+  substitutions?: WorldCupCardStat[];
   playerStats: WorldCupPlayerStat[];
 };
 
-type StatTab = 'goals' | 'assists' | 'yellow' | 'red';
+type StatTab = 'goals' | 'assists' | 'yellow' | 'red' | 'subs';
 
 function StatRow({ rank, name, teamFlag, teamName, value, label }: { rank: number; name: string; teamFlag: string; teamName: string; value: number; label: string }) {
   return (
@@ -575,41 +576,52 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
     { key: 'assists', label: 'בישולים', icon: '🅰️' },
     { key: 'yellow', label: 'צהוב', icon: '🟨' },
     { key: 'red', label: 'אדום', icon: '🟥' },
+    { key: 'subs', label: 'חילופים', icon: '🔄' },
   ];
 
-  // Goals & assists: always from football-data.org (reliable, available immediately)
-  const goalsData: WorldCupCardStat[] = initialPlayerStats
-    .filter(s => s.goals > 0)
-    .sort((a, b) => b.goals - a.goals)
-    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals }));
+  // Goals & assists: from ESPN keyEvents (via stats) or playerStats fallback
+  const goalsData: WorldCupCardStat[] = (stats?.goals?.length ?? 0) > 0
+    ? stats!.goals
+    : initialPlayerStats
+        .filter(s => s.goals > 0)
+        .sort((a, b) => b.goals - a.goals)
+        .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals }));
 
-  const assistsData: WorldCupCardStat[] = initialPlayerStats
-    .filter(s => s.assists > 0)
-    .sort((a, b) => b.assists - a.assists)
-    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists }));
+  const assistsData: WorldCupCardStat[] = (stats?.assists?.length ?? 0) > 0
+    ? stats!.assists
+    : initialPlayerStats
+        .filter(s => s.assists > 0)
+        .sort((a, b) => b.assists - a.assists)
+        .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists }));
 
-  // Cards: from ESPN summary aggregation via tournament-stats endpoint
+  // Cards + subs: from ESPN keyEvents aggregation via tournament-stats endpoint
   const yellowData = stats?.yellowCards ?? [];
   const redData = stats?.redCards ?? [];
+  const subsData = stats?.substitutions ?? [];
 
-  const isCardTab = activeTab === 'yellow' || activeTab === 'red';
+  const isLiveTab = activeTab === 'yellow' || activeTab === 'red' || activeTab === 'subs';
+
+  const tabEmptyIcon: Record<StatTab, string> = {
+    goals: '⚽', assists: '🅰️', yellow: '🟨', red: '🟥', subs: '🔄',
+  };
 
   const isEmpty = (tab: StatTab) => {
     if (tab === 'goals') return goalsData.length === 0;
     if (tab === 'assists') return assistsData.length === 0;
     if (tab === 'yellow') return yellowData.length === 0;
-    return redData.length === 0;
+    if (tab === 'red') return redData.length === 0;
+    return subsData.length === 0;
   };
 
   return (
     <CollapsibleCard icon={Zap} title="סטטיסטיקות" className="overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex border-b" style={{ borderColor: 'var(--theme-border)' }}>
+      {/* Tab bar — scrollable on small screens */}
+      <div className="flex overflow-x-auto border-b scrollbar-none" style={{ borderColor: 'var(--theme-border)' }}>
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 py-2.5 text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-0 py-2.5 text-xs font-black transition-colors flex items-center justify-center gap-1 whitespace-nowrap px-2 ${
               activeTab === t.key
                 ? 'text-[#D4AF37] border-b-2 border-[#D4AF37] -mb-px'
                 : 'text-[var(--theme-text-secondary)]'
@@ -621,12 +633,12 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
         ))}
       </div>
 
-      {/* Tab content — cards tabs wait for ESPN data, goals/assists show immediately */}
-      {isCardTab && cardsLoading ? (
+      {/* Tab content */}
+      {isLiveTab && cardsLoading ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">טוען נתונים...</div>
       ) : isEmpty(activeTab) ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
-          <div className="text-2xl mb-2">{activeTab === 'yellow' ? '🟨' : activeTab === 'red' ? '🟥' : '📊'}</div>
+          <div className="text-2xl mb-2">{tabEmptyIcon[activeTab]}</div>
           אין נתונים זמינים עדיין
         </div>
       ) : (
@@ -642,6 +654,9 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
           ))}
           {activeTab === 'red' && redData.map(s => (
             <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כרטיסים" />
+          ))}
+          {activeTab === 'subs' && subsData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כניסות" />
           ))}
         </div>
       )}
