@@ -487,7 +487,7 @@ function StatRow({ rank, name, teamFlag, teamName, value, label }: { rank: numbe
 function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlayerStat[] }) {
   const [activeTab, setActiveTab] = useState<StatTab>('goals');
   const [stats, setStats] = useState<TournamentStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [cardsLoading, setCardsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -495,7 +495,7 @@ function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlay
       .then(r => r.ok ? r.json() : null)
       .then((d: TournamentStats | null) => { if (!cancelled && d?.success) setStats(d); })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) setCardsLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -506,7 +506,7 @@ function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlay
     { key: 'red', label: 'אדום', icon: '🟥' },
   ];
 
-  // Goals & assists: always from football-data.org (reliable, never empty after matches start)
+  // Goals & assists: always from football-data.org (reliable, available immediately)
   const goalsData: WorldCupCardStat[] = initialPlayerStats
     .filter(s => s.goals > 0)
     .sort((a, b) => b.goals - a.goals)
@@ -520,6 +520,8 @@ function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlay
   // Cards: from ESPN summary aggregation via tournament-stats endpoint
   const yellowData = stats?.yellowCards ?? [];
   const redData = stats?.redCards ?? [];
+
+  const isCardTab = activeTab === 'yellow' || activeTab === 'red';
 
   const isEmpty = (tab: StatTab) => {
     if (tab === 'goals') return goalsData.length === 0;
@@ -548,8 +550,8 @@ function StatsSection({ initialPlayerStats }: { initialPlayerStats: WorldCupPlay
         ))}
       </div>
 
-      {/* Tab content */}
-      {loading ? (
+      {/* Tab content — cards tabs wait for ESPN data, goals/assists show immediately */}
+      {isCardTab && cardsLoading ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">טוען נתונים...</div>
       ) : isEmpty(activeTab) ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
@@ -1345,6 +1347,110 @@ function FormationPitch({ squad, flag, teamName, formation }: { squad: import('@
   );
 }
 
+const ESPN_SITE_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+const ESPN_SITE_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
+const ESPN_CORE_EVENTS = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events';
+
+function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
+  const evts: MatchEvent[] = [];
+  type AnyPlay = Record<string, unknown>;
+  function getMinute(play: AnyPlay): number {
+    const clock = play.clock as Record<string, unknown> | undefined;
+    if (typeof clock?.value === 'number') return Math.round(clock.value as number / 60);
+    const m = (String(clock?.displayValue ?? '')).match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  function normType(text?: unknown): string | null {
+    if (!text) return null;
+    const t = String(text).toLowerCase();
+    if (t.includes('own goal') || t.includes('own-goal')) return 'owngoal';
+    if (t.includes('goal') || t.includes('score')) return 'goal';
+    if (t.includes('red card')) return 'redcard';
+    if (t.includes('yellow card')) return 'yellowcard';
+    if (t.includes('substitut')) return 'substitution';
+    return null;
+  }
+  for (const play of (data.scoringPlays as AnyPlay[] ?? [])) {
+    const type = normType((play.type as Record<string,unknown>)?.text);
+    if (!type) continue;
+    const involved = play.athletesInvolved as Array<Record<string,unknown>> | undefined;
+    const parts = play.participants as Array<Record<string,unknown>> | undefined;
+    const scorer = involved?.[0]?.displayName ?? parts?.[0]?.athlete as string ?? '';
+    const assistObj = involved?.find(a => String(a.type ?? '').toLowerCase().includes('assist'));
+    const assist = assistObj?.displayName ?? '';
+    evts.push({ type, minute: getMinute(play), teamName: String((play.team as Record<string,unknown>)?.displayName ?? ''), player: String(scorer), detail: assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '') });
+  }
+  for (const play of (data.plays as AnyPlay[] ?? [])) {
+    const type = normType((play.type as Record<string,unknown>)?.text);
+    if (!type || type === 'goal' || type === 'owngoal') continue;
+    const parts = play.participants as Array<Record<string,unknown>> | undefined;
+    const player = (parts?.[0]?.athlete as Record<string,unknown>)?.displayName ?? play.text ?? '';
+    const subOut = type === 'substitution'
+      ? parts?.find(p => String((p.type as Record<string,unknown>)?.description ?? '').toLowerCase().includes('out'))?.athlete as string
+      : undefined;
+    evts.push({ type, minute: getMinute(play), teamName: String((play.team as Record<string,unknown>)?.displayName ?? ''), player: String(player), detail: subOut ? `יצא: ${String(subOut)}` : '' });
+  }
+  return evts.sort((a, b) => b.minute - a.minute);
+}
+
+async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, dateStr: string): Promise<MatchEvent[] | null> {
+  const home = homeEn.toLowerCase();
+  const away = awayEn.toLowerCase();
+  const word0 = (s: string) => s.split(' ')[0];
+
+  function matchTeams(events: Array<Record<string,unknown>>): string | null {
+    const found = events.find(ev => {
+      const comps = ((ev.competitions as Array<Record<string,unknown>>)?.[0]?.competitors as Array<Record<string,unknown>>) ?? [];
+      const names = comps.map(c => String((c.team as Record<string,unknown>)?.displayName ?? '').toLowerCase());
+      const hasHome = names.some(n => n && (n.startsWith(word0(home)) || home.startsWith(word0(n))));
+      const hasAway = names.some(n => n && (n.startsWith(word0(away)) || away.startsWith(word0(n))));
+      return hasHome && hasAway;
+    });
+    return found ? String(found.id ?? '') || null : null;
+  }
+
+  // 1. Try site API scoreboard (live + date-specific)
+  for (const url of [ESPN_SITE_SCOREBOARD, `${ESPN_SITE_SCOREBOARD}?dates=${dateStr}`]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const d = await r.json() as Record<string, unknown>;
+      const id = matchTeams((d.events as Array<Record<string,unknown>>) ?? []);
+      if (id) {
+        const sr = await fetch(`${ESPN_SITE_SUMMARY}${id}`);
+        if (sr.ok) return parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+      }
+    } catch { /* try next */ }
+  }
+
+  // 2. Try Core API (retains historical events even after site API stops showing them)
+  try {
+    const r = await fetch(`${ESPN_CORE_EVENTS}?dates=${dateStr}&limit=30`);
+    if (r.ok) {
+      const d = await r.json() as Record<string, unknown>;
+      const refs = ((d.items as Array<Record<string,unknown>>) ?? []).map(i => String(i.$ref ?? '')).filter(Boolean);
+      const evData = await Promise.all(refs.slice(0, 20).map(ref =>
+        fetch(ref).then(r2 => r2.ok ? r2.json() as Promise<Record<string,unknown>> : null).catch(() => null),
+      ));
+      for (const ev of evData) {
+        if (!ev?.id) continue;
+        const name = String(ev.name ?? ev.shortName ?? '').toLowerCase();
+        const comps = ((ev.competitions as Array<Record<string,unknown>>)?.[0]?.competitors as Array<Record<string,unknown>>) ?? [];
+        const names = comps.map(c => String((c.team as Record<string,unknown>)?.displayName ?? '').toLowerCase());
+        const hasHome = name.includes(word0(home)) || names.some(n => n.startsWith(word0(home)) || home.startsWith(word0(n)));
+        const hasAway = name.includes(word0(away)) || names.some(n => n.startsWith(word0(away)) || away.startsWith(word0(n)));
+        if (hasHome && hasAway) {
+          const evId = String(ev.id);
+          const sr = await fetch(`${ESPN_SITE_SUMMARY}${evId}`);
+          if (sr.ok) return parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  return null;
+}
+
 function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [liveMinute, setLiveMinute] = useState<number | null>(match.minute ?? null);
@@ -1356,23 +1462,33 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     if (match.espnEventId) params.set('espnId', match.espnEventId);
     if (match.homeTeam.nameEn) params.set('home', match.homeTeam.nameEn);
     if (match.awayTeam.nameEn) params.set('away', match.awayTeam.nameEn);
-    if (match.kickoff) params.set('date', match.kickoff.slice(0, 10).replace(/-/g, ''));
-    const url = `/api/world-cup/match-events?${params}`;
+    const dateStr = match.kickoff ? match.kickoff.slice(0, 10).replace(/-/g, '') : '';
+    if (dateStr) params.set('date', dateStr);
+    const serverUrl = `/api/world-cup/match-events?${params}`;
 
-    const load = () => {
-      fetch(url)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => {
-          if (!d?.success) return;
+    const load = async () => {
+      try {
+        const r = await fetch(serverUrl);
+        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null } : null;
+        if (d?.success && (d.events?.length ?? 0) > 0) {
           setEvents(d.events ?? []);
           setLiveMinute(d.minute ?? null);
-        })
-        .catch(() => {})
-        .finally(() => setFetching(false));
+          setFetching(false);
+          return;
+        }
+      } catch { /* fall through */ }
+
+      // Server API found no events — try client-side ESPN (different IP, better CORS access for historical data)
+      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateStr) {
+        const clientEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+        if (clientEvents && clientEvents.length > 0) setEvents(clientEvents);
+      }
+      setFetching(false);
     };
-    load();
-    if (isFinished) return; // fetch once for finished matches, no polling
-    const id = setInterval(load, 30_000);
+
+    void load();
+    if (isFinished) return;
+    const id = setInterval(() => void load(), 30_000);
     return () => clearInterval(id);
   }, [match.id, match.espnEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 

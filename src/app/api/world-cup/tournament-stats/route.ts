@@ -87,6 +87,42 @@ async function fetchDateScoreboard(dateStr: string): Promise<ESPNEvent[]> {
   } catch { return []; }
 }
 
+async function fetchDateEventsViaCoreApi(dateStr: string): Promise<ESPNEvent[]> {
+  try {
+    const res = await fetch(
+      `https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events?dates=${dateStr}&limit=30`,
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(7000) },
+    );
+    if (!res.ok) return [];
+    const data = await res.json() as { items?: Array<{ $ref?: string }> };
+    const refs = (data.items ?? []).map(i => i.$ref).filter(Boolean) as string[];
+    if (!refs.length) return [];
+    const evData = await Promise.all(
+      refs.slice(0, 20).map(ref =>
+        fetch(ref, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+      ),
+    );
+    return evData.filter(Boolean).map(ev => ({
+      id: ev.id as string,
+      competitions: ev.competitions as ESPNEvent['competitions'],
+      status: ev.status as ESPNEvent['status'],
+      // If no status, treat as completed if the kickoff was >3h ago
+      ...(!ev.status && ev.date && Date.now() - new Date(ev.date as string).getTime() > 3 * 3_600_000
+        ? { status: { type: { name: 'STATUS_FINAL', completed: true } } as ESPNStatus }
+        : {}),
+    })) as ESPNEvent[];
+  } catch { return []; }
+}
+
+async function fetchDateEvents(dateStr: string): Promise<ESPNEvent[]> {
+  const siteEvents = await fetchDateScoreboard(dateStr);
+  if (siteEvents.length > 0) return siteEvents;
+  // Fallback to Core API which retains historical data
+  return fetchDateEventsViaCoreApi(dateStr);
+}
+
 async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   try {
     const res = await fetch(
@@ -111,7 +147,7 @@ export async function GET() {
     dates.push(d.toISOString().slice(0, 10).replace(/-/g, ''));
   }
 
-  const allEventArrays = await Promise.all(dates.map(fetchDateScoreboard));
+  const allEventArrays = await Promise.all(dates.map(fetchDateEvents));
   const seen = new Set<string>();
   const completedIds: string[] = [];
   for (const events of allEventArrays) {

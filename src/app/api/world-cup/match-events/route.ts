@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 // ESPN soccer summary endpoint — free, no key required
 const ESPN_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+const ESPN_CORE = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world';
 
 type ESPNAthlete = {
   displayName?: string;
@@ -59,6 +60,58 @@ function normalizeType(text?: string): string | null {
   return null;
 }
 
+type CoreRef = { $ref?: string };
+type CoreEvent = {
+  id?: string;
+  name?: string;
+  shortName?: string;
+  date?: string;
+  competitions?: Array<{ competitors?: Array<{ team?: { displayName?: string; abbreviation?: string } }> }>;
+};
+
+async function findESPNEventIdViaCore(dateStr: string, homeEn: string, awayEn: string): Promise<string | null> {
+  const home = homeEn.toLowerCase();
+  const away = awayEn.toLowerCase();
+  const word0 = (s: string) => s.split(' ')[0];
+
+  async function searchRefs(refs: string[]): Promise<string | null> {
+    const evs = await Promise.all(
+      refs.slice(0, 20).map(ref =>
+        fetch(ref, { cache: 'no-store', signal: AbortSignal.timeout(5000) })
+          .then(r => r.ok ? r.json() as Promise<CoreEvent> : null)
+          .catch(() => null),
+      ),
+    );
+    for (const ev of evs) {
+      if (!ev?.id) continue;
+      const name = ((ev.name ?? ev.shortName ?? '') as string).toLowerCase();
+      if (name.includes(word0(home)) && name.includes(word0(away))) return ev.id;
+      const comps = ev.competitions?.[0]?.competitors ?? [];
+      const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
+      const hasHome = names.some(n => n && (n.startsWith(word0(home)) || home.startsWith(word0(n))));
+      const hasAway = names.some(n => n && (n.startsWith(word0(away)) || away.startsWith(word0(n))));
+      if (hasHome && hasAway) return ev.id;
+    }
+    return null;
+  }
+
+  for (const query of [`dates=${dateStr}`, 'season=2026&limit=100']) {
+    try {
+      const res = await fetch(`${ESPN_CORE}/events?${query}&limit=30`, {
+        cache: 'no-store', signal: AbortSignal.timeout(7000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json() as { items?: CoreRef[] };
+      const refs = (data.items ?? []).map(i => i.$ref).filter(Boolean) as string[];
+      if (refs.length) {
+        const id = await searchRefs(refs);
+        if (id) return id;
+      }
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
 async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDate?: string): Promise<string | null> {
   const word0 = (s: string) => s.split(' ')[0].toLowerCase();
   const home = homeTeamEn.toLowerCase();
@@ -94,6 +147,14 @@ async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDa
       if (id) return id;
     } catch { /* try next */ }
   }
+
+  // Site API didn't find it — try Core API (retains historical data)
+  if (kickoffDate) {
+    const dateStr = kickoffDate.replace(/-/g, '').slice(0, 8);
+    const coreId = await findESPNEventIdViaCore(dateStr, homeTeamEn, awayTeamEn);
+    if (coreId) return coreId;
+  }
+
   return null;
 }
 
