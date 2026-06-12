@@ -2,147 +2,177 @@
 
 import { useEffect, useState } from 'react';
 
-type DebugResult = {
-  label: string;
-  url: string;
-  status: number | string;
-  ok: boolean;
-  data?: unknown;
-  error?: string;
-  duration: number;
-};
+type Line = { label: string; value: string; ok?: boolean };
 
-async function testUrl(label: string, url: string): Promise<DebugResult> {
-  const t0 = Date.now();
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    let data: unknown;
-    try { data = await r.json(); } catch { data = '(not JSON)'; }
-    return { label, url, status: r.status, ok: r.ok, data, duration: Date.now() - t0 };
-  } catch (e) {
-    return { label, url, status: 'error', ok: false, error: String(e).slice(0, 200), duration: Date.now() - t0 };
-  }
+function row(label: string, value: string, ok?: boolean): Line {
+  return { label, value, ok };
 }
 
-const TODAY = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-const MATCH_DATE = '20260611';
+async function runDebug(): Promise<Line[]> {
+  const out: Line[] = [];
+  const base = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 
-const TESTS: [string, string][] = [
-  ['ESPN fifa.world scoreboard today', `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${TODAY}`],
-  ['ESPN fifa.world scoreboard 20260611', `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${MATCH_DATE}`],
-  ['ESPN fifa.world scoreboard range', `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${MATCH_DATE}-${TODAY}`],
-  ['ESPN fifa.world.2026 scoreboard', `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world.2026/scoreboard?dates=${MATCH_DATE}`],
-  ['ESPN soccer scoreboard today', `https://site.api.espn.com/apis/site/v2/sports/soccer/scoreboard?dates=${TODAY}`],
-  ['ESPN Core fifa.world events', `https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events?dates=${MATCH_DATE}&limit=20`],
-  ['SofaScore WC 2026 seasons', 'https://api.sofascore.com/api/v1/unique-tournament/16/seasons'],
-  ['SofaScore events by date 2026-06-11', 'https://api.sofascore.com/api/v1/sport/football/scheduled-events/2026-06-11'],
-  ['OpenFootball WC 2026', 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'],
-];
+  // 1. Fetch scoreboard for June 11
+  out.push(row('Step', '1 — Fetch ESPN scoreboard for 2026-06-11'));
+  let mexico_id = '';
+  let czechia_id = '';
+  try {
+    const r = await fetch(`${base}?dates=20260611`, { signal: AbortSignal.timeout(8000) });
+    out.push(row('Scoreboard HTTP', String(r.status), r.ok));
+    if (r.ok) {
+      const d = await r.json() as Record<string, unknown>;
+      const events = (d.events as Array<Record<string, unknown>>) ?? [];
+      out.push(row('Events found', String(events.length), events.length > 0));
+      for (const ev of events) {
+        const name = String(ev.name ?? ev.shortName ?? '');
+        const id = String(ev.id ?? '');
+        const comps = ((ev.competitions as Array<Record<string, unknown>>)?.[0]?.competitors as Array<Record<string, unknown>>) ?? [];
+        const teams = comps.map(c => String((c.team as Record<string, unknown>)?.displayName ?? '')).join(' vs ');
+        out.push(row(`  Event [${id}]`, `${name} | teams: ${teams}`));
+        const nameLow = name.toLowerCase();
+        if (nameLow.includes('mexico') || nameLow.includes('south africa')) mexico_id = id;
+        if (nameLow.includes('czechia') || nameLow.includes('korea')) czechia_id = id;
+        // also check competitor names
+        if (!mexico_id && (teams.toLowerCase().includes('mexico') || teams.toLowerCase().includes('south africa'))) mexico_id = id;
+        if (!czechia_id && (teams.toLowerCase().includes('czechia') || teams.toLowerCase().includes('korea'))) czechia_id = id;
+      }
+    }
+  } catch (e) { out.push(row('Scoreboard error', String(e), false)); }
 
-function extractMatchesInfo(data: unknown): string {
-  if (!data || typeof data !== 'object') return '—';
-  const d = data as Record<string, unknown>;
-  if (Array.isArray(d.events)) {
-    const evs = d.events as Array<Record<string, unknown>>;
-    return `${evs.length} events: ${evs.slice(0, 5).map(e => String(e.name ?? e.shortName ?? e.id ?? '')).join(', ')}`;
+  // 2. Fetch summary for Mexico vs South Africa
+  out.push(row('', ''));
+  out.push(row('Step', `2 — ESPN summary for Mexico vs South Africa (id=${mexico_id || '?'})`));
+  if (mexico_id) {
+    try {
+      const sr = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${mexico_id}`, { signal: AbortSignal.timeout(8000) });
+      out.push(row('Summary HTTP', String(sr.status), sr.ok));
+      if (sr.ok) {
+        const s = await sr.json() as Record<string, unknown>;
+        const topKeys = Object.keys(s).join(', ');
+        out.push(row('Summary keys', topKeys));
+        const plays = (s.plays as unknown[]) ?? [];
+        const scoringPlays = (s.scoringPlays as unknown[]) ?? [];
+        out.push(row('plays count', String(plays.length), plays.length > 0));
+        out.push(row('scoringPlays count', String(scoringPlays.length), scoringPlays.length > 0));
+        // Show all unique play types
+        const typeSet = new Set<string>();
+        for (const p of plays) {
+          const pt = ((p as Record<string, unknown>).type as Record<string, unknown>)?.text;
+          if (pt) typeSet.add(String(pt));
+        }
+        out.push(row('Play types', Array.from(typeSet).join(' | ') || '(none)', typeSet.size > 0));
+        // Show first 10 plays with type+minute+team+player
+        const playLines = plays.slice(0, 20).map(p => {
+          const pp = p as Record<string, unknown>;
+          const type = ((pp.type as Record<string, unknown>)?.text as string) ?? '?';
+          const clock = ((pp.clock as Record<string, unknown>)?.displayValue as string) ?? '';
+          const team = ((pp.team as Record<string, unknown>)?.displayName as string) ?? '';
+          const parts = pp.participants as Array<Record<string, unknown>> | undefined;
+          const player = (parts?.[0]?.athlete as Record<string, unknown>)?.displayName as string ?? '';
+          return `${clock} ${type} | ${team} | ${player}`;
+        });
+        out.push(row('First 20 plays', playLines.join('\n') || '(empty)'));
+        // Cards count
+        const yellows = plays.filter(p => String(((p as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('yellow'));
+        const reds = plays.filter(p => String(((p as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('red'));
+        out.push(row('Yellow card plays', String(yellows.length), yellows.length > 0));
+        out.push(row('Red card plays', String(reds.length), reds.length >= 0));
+      }
+    } catch (e) { out.push(row('Summary error', String(e), false)); }
+  } else {
+    out.push(row('⚠️ Mexico match ID', 'not found in scoreboard'));
   }
-  if (d.seasons && Array.isArray(d.seasons)) {
-    const ss = d.seasons as Array<Record<string, unknown>>;
-    return `${ss.length} seasons: ${ss.slice(0, 5).map(s => `${s.name}(${s.id})`).join(', ')}`;
+
+  // 3. Fetch summary for Czechia vs South Korea
+  out.push(row('', ''));
+  out.push(row('Step', `3 — ESPN summary for Czechia vs South Korea (id=${czechia_id || '?'})`));
+  if (czechia_id) {
+    try {
+      const sr = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${czechia_id}`, { signal: AbortSignal.timeout(8000) });
+      out.push(row('Summary HTTP', String(sr.status), sr.ok));
+      if (sr.ok) {
+        const s = await sr.json() as Record<string, unknown>;
+        const plays = (s.plays as unknown[]) ?? [];
+        const typeSet = new Set<string>();
+        for (const p of plays) {
+          const pt = ((p as Record<string, unknown>).type as Record<string, unknown>)?.text;
+          if (pt) typeSet.add(String(pt));
+        }
+        out.push(row('plays count', String(plays.length), plays.length > 0));
+        out.push(row('Play types', Array.from(typeSet).join(' | ') || '(none)', typeSet.size > 0));
+        const yellows = plays.filter(p => String(((p as Record<string,unknown>).type as Record<string,unknown>)?.text ?? '').toLowerCase().includes('yellow'));
+        out.push(row('Yellow card plays', String(yellows.length), yellows.length > 0));
+      }
+    } catch (e) { out.push(row('Summary error', String(e), false)); }
+  } else {
+    out.push(row('⚠️ Czechia match ID', 'not found in scoreboard'));
   }
-  if (d.events && typeof d.events === 'object') {
-    const evs = d.events as Array<Record<string, unknown>>;
-    if (Array.isArray(evs)) return `${evs.length} events`;
-  }
-  if (d.rounds && Array.isArray(d.rounds)) {
-    const rs = d.rounds as Array<Record<string, unknown>>;
-    const total = rs.reduce((acc, r) => acc + ((r.matches as unknown[])?.length ?? 0), 0);
-    return `${rs.length} rounds, ${total} matches`;
-  }
-  const keys = Object.keys(d).slice(0, 8).join(', ');
-  return `keys: {${keys}}`;
+
+  // 4. Test /api/world-cup/match-events for Mexico vs South Africa
+  out.push(row('', ''));
+  out.push(row('Step', '4 — Our own match-events API for Mexico vs SA'));
+  try {
+    const r = await fetch('/api/world-cup/match-events?home=Mexico&away=South+Africa&date=20260611&matchId=wc-2026-1', { signal: AbortSignal.timeout(10000) });
+    out.push(row('match-events HTTP', String(r.status), r.ok));
+    if (r.ok) {
+      const d = await r.json() as Record<string, unknown>;
+      const events = (d.events as unknown[]) ?? [];
+      const source = String(d.source ?? '');
+      out.push(row('source', source));
+      out.push(row('events count', String(events.length), events.length > 0));
+      const types = events.map(e => String((e as Record<string,unknown>).type ?? '')).join(', ');
+      out.push(row('event types', types || '(none)'));
+    }
+  } catch (e) { out.push(row('match-events error', String(e), false)); }
+
+  return out;
 }
 
 export default function ClientDebugPage() {
-  const [results, setResults] = useState<DebugResult[]>([]);
-  const [running, setRunning] = useState(false);
+  const [lines, setLines] = useState<Line[]>([]);
   const [done, setDone] = useState(false);
 
-  const runTests = async () => {
-    setRunning(true);
-    setResults([]);
-    setDone(false);
-    for (const [label, url] of TESTS) {
-      const r = await testUrl(label, url);
-      setResults(prev => [...prev, r]);
-    }
-    setDone(true);
-    setRunning(false);
-  };
-
-  useEffect(() => { void runTests(); }, []);
+  useEffect(() => {
+    runDebug().then(l => { setLines(l); setDone(true); });
+  }, []);
 
   return (
-    <div style={{ fontFamily: 'monospace', padding: '16px', background: '#111', color: '#eee', minHeight: '100vh' }}>
-      <h1 style={{ fontSize: '18px', color: '#FFD700', marginBottom: '8px' }}>🔍 World Cup Client Debug</h1>
-      <p style={{ color: '#888', fontSize: '12px', marginBottom: '16px' }}>
-        Tests run from your browser — shows what each sports API returns.<br/>
-        Date: {new Date().toISOString()}
-      </p>
+    <div style={{ fontFamily: 'monospace', padding: '16px', background: '#0a0a0a', color: '#eee', minHeight: '100vh', fontSize: '12px' }}>
+      <h1 style={{ fontSize: '16px', color: '#FFD700', marginBottom: '4px' }}>🔍 ESPN Deep Debug — WC 2026</h1>
+      <p style={{ color: '#666', marginBottom: '12px' }}>Date: {new Date().toISOString()}</p>
 
-      {running && (
-        <div style={{ color: '#4AF', marginBottom: '12px' }}>⏳ Running tests...</div>
-      )}
+      {!done && <div style={{ color: '#4AF' }}>⏳ Running...</div>}
 
-      {done && (
-        <div style={{ color: '#4F4', marginBottom: '12px' }}>✅ All tests complete</div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {results.map((r, i) => (
-          <div key={i} style={{
-            background: r.ok ? '#1a2a1a' : '#2a1a1a',
-            border: `1px solid ${r.ok ? '#2a4a2a' : '#4a2a2a'}`,
-            borderRadius: '8px',
-            padding: '10px',
-          }}>
-            <div style={{ fontWeight: 'bold', color: r.ok ? '#4F4' : '#F44', fontSize: '14px' }}>
-              {r.ok ? '✅' : '❌'} {r.label}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {lines.map((l, i) => {
+          if (l.label === '') return <div key={i} style={{ height: '6px' }} />;
+          if (l.label === 'Step') return (
+            <div key={i} style={{ color: '#FFD700', fontWeight: 'bold', marginTop: '4px' }}>{l.value}</div>
+          );
+          if (l.label === 'First 20 plays') return (
+            <div key={i} style={{ background: '#111', border: '1px solid #333', borderRadius: '4px', padding: '6px', marginTop: '2px' }}>
+              <div style={{ color: '#888', marginBottom: '2px' }}>Plays:</div>
+              {l.value.split('\n').map((line, j) => (
+                <div key={j} style={{ color: line.toLowerCase().includes('yellow') ? '#FF0' : line.toLowerCase().includes('red') ? '#F55' : line.toLowerCase().includes('goal') ? '#4F4' : '#CCC' }}>
+                  {line}
+                </div>
+              ))}
             </div>
-            <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>
-              {r.url.slice(0, 80)}{r.url.length > 80 ? '…' : ''}
+          );
+          const color = l.ok === true ? '#4F4' : l.ok === false ? '#F55' : '#AAA';
+          return (
+            <div key={i} style={{ display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#666', minWidth: '140px', flexShrink: 0 }}>{l.label}:</span>
+              <span style={{ color, wordBreak: 'break-all' }}>{l.value}</span>
             </div>
-            <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              <span style={{ color: r.ok ? '#4F4' : '#F44' }}>HTTP {r.status}</span>
-              {' · '}{r.duration}ms
-            </div>
-            {r.error && (
-              <div style={{ color: '#F84', fontSize: '11px', marginTop: '4px' }}>
-                Error: {r.error}
-              </div>
-            )}
-            {r.ok && r.data !== undefined && (
-              <div style={{ color: '#AAA', fontSize: '11px', marginTop: '4px', wordBreak: 'break-all' }}>
-                {extractMatchesInfo(r.data)}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {done && (
         <button
-          onClick={() => void runTests()}
-          style={{
-            marginTop: '16px',
-            padding: '8px 16px',
-            background: '#333',
-            color: '#FFD700',
-            border: '1px solid #555',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
+          onClick={() => { setLines([]); setDone(false); runDebug().then(l => { setLines(l); setDone(true); }); }}
+          style={{ marginTop: '16px', padding: '8px 16px', background: '#222', color: '#FFD700', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}
         >
           🔄 Run Again
         </button>
