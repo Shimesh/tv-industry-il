@@ -168,10 +168,10 @@ function MatchScore({ match, compact = false }: { match: WorldCupMatch; compact?
       <div className={`shrink-0 rounded-xl bg-[#002046] text-center font-black tabular-nums text-[#D4AF37] ${compact ? 'px-2 py-1.5 text-sm' : 'px-3 py-2 text-lg'}`} dir="ltr">
         {isLive ? (
           <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
-            {match.homeScore ?? '0'} : {match.awayScore ?? '0'}
+            {match.awayScore ?? '0'} : {match.homeScore ?? '0'}
           </motion.span>
         ) : (
-          <>{match.homeScore ?? '-'} : {match.awayScore ?? '-'}</>
+          <>{match.awayScore ?? '-'} : {match.homeScore ?? '-'}</>
         )}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
@@ -319,10 +319,10 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
                         }`} dir="ltr">
                           {isLive ? (
                             <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
-                              {match.homeScore ?? '0'}:{match.awayScore ?? '0'}
+                              {match.awayScore ?? '0'}:{match.homeScore ?? '0'}
                             </motion.span>
                           ) : match.homeScore != null
-                            ? `${match.homeScore}:${match.awayScore}`
+                            ? `${match.awayScore}:${match.homeScore}`
                             : 'vs'}
                         </div>
                         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
@@ -462,10 +462,11 @@ type TournamentStats = {
   assists: WorldCupCardStat[];
   yellowCards: WorldCupCardStat[];
   redCards: WorldCupCardStat[];
+  substitutions?: WorldCupCardStat[];
   playerStats: WorldCupPlayerStat[];
 };
 
-type StatTab = 'goals' | 'assists' | 'yellow' | 'red';
+type StatTab = 'goals' | 'assists' | 'yellow' | 'red' | 'subs';
 
 function StatRow({ rank, name, teamFlag, teamName, value, label }: { rank: number; name: string; teamFlag: string; teamName: string; value: number; label: string }) {
   return (
@@ -575,41 +576,52 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
     { key: 'assists', label: 'בישולים', icon: '🅰️' },
     { key: 'yellow', label: 'צהוב', icon: '🟨' },
     { key: 'red', label: 'אדום', icon: '🟥' },
+    { key: 'subs', label: 'חילופים', icon: '🔄' },
   ];
 
-  // Goals & assists: always from football-data.org (reliable, available immediately)
-  const goalsData: WorldCupCardStat[] = initialPlayerStats
-    .filter(s => s.goals > 0)
-    .sort((a, b) => b.goals - a.goals)
-    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals }));
+  // Goals & assists: from ESPN keyEvents (via stats) or playerStats fallback
+  const goalsData: WorldCupCardStat[] = (stats?.goals?.length ?? 0) > 0
+    ? stats!.goals
+    : initialPlayerStats
+        .filter(s => s.goals > 0)
+        .sort((a, b) => b.goals - a.goals)
+        .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.goals }));
 
-  const assistsData: WorldCupCardStat[] = initialPlayerStats
-    .filter(s => s.assists > 0)
-    .sort((a, b) => b.assists - a.assists)
-    .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists }));
+  const assistsData: WorldCupCardStat[] = (stats?.assists?.length ?? 0) > 0
+    ? stats!.assists
+    : initialPlayerStats
+        .filter(s => s.assists > 0)
+        .sort((a, b) => b.assists - a.assists)
+        .map((s, i) => ({ rank: i + 1, playerName: s.playerName, team: s.team, count: s.assists }));
 
-  // Cards: from ESPN summary aggregation via tournament-stats endpoint
+  // Cards + subs: from ESPN keyEvents aggregation via tournament-stats endpoint
   const yellowData = stats?.yellowCards ?? [];
   const redData = stats?.redCards ?? [];
+  const subsData = stats?.substitutions ?? [];
 
-  const isCardTab = activeTab === 'yellow' || activeTab === 'red';
+  const isLiveTab = activeTab === 'yellow' || activeTab === 'red' || activeTab === 'subs';
+
+  const tabEmptyIcon: Record<StatTab, string> = {
+    goals: '⚽', assists: '🅰️', yellow: '🟨', red: '🟥', subs: '🔄',
+  };
 
   const isEmpty = (tab: StatTab) => {
     if (tab === 'goals') return goalsData.length === 0;
     if (tab === 'assists') return assistsData.length === 0;
     if (tab === 'yellow') return yellowData.length === 0;
-    return redData.length === 0;
+    if (tab === 'red') return redData.length === 0;
+    return subsData.length === 0;
   };
 
   return (
     <CollapsibleCard icon={Zap} title="סטטיסטיקות" className="overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex border-b" style={{ borderColor: 'var(--theme-border)' }}>
+      {/* Tab bar — scrollable on small screens */}
+      <div className="flex overflow-x-auto border-b scrollbar-none" style={{ borderColor: 'var(--theme-border)' }}>
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 py-2.5 text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-0 py-2.5 text-xs font-black transition-colors flex items-center justify-center gap-1 whitespace-nowrap px-2 ${
               activeTab === t.key
                 ? 'text-[#D4AF37] border-b-2 border-[#D4AF37] -mb-px'
                 : 'text-[var(--theme-text-secondary)]'
@@ -621,12 +633,12 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
         ))}
       </div>
 
-      {/* Tab content — cards tabs wait for ESPN data, goals/assists show immediately */}
-      {isCardTab && cardsLoading ? (
+      {/* Tab content */}
+      {isLiveTab && cardsLoading ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">טוען נתונים...</div>
       ) : isEmpty(activeTab) ? (
         <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
-          <div className="text-2xl mb-2">{activeTab === 'yellow' ? '🟨' : activeTab === 'red' ? '🟥' : '📊'}</div>
+          <div className="text-2xl mb-2">{tabEmptyIcon[activeTab]}</div>
           אין נתונים זמינים עדיין
         </div>
       ) : (
@@ -642,6 +654,9 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
           ))}
           {activeTab === 'red' && redData.map(s => (
             <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כרטיסים" />
+          ))}
+          {activeTab === 'subs' && subsData.map(s => (
+            <StatRow key={`${s.rank}-${s.playerName}`} rank={s.rank} name={s.playerName} teamFlag={s.team.flag} teamName={s.team.nameHe} value={s.count} label="כניסות" />
           ))}
         </div>
       )}
@@ -1238,7 +1253,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
     };
 
     void fetchAll();
-    const id = setInterval(() => void fetchAll(), 30_000);
+    const id = setInterval(() => void fetchAll(), 15_000);
     return () => { cancelled = true; clearInterval(id); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveIds]);
@@ -1283,7 +1298,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {match.homeScore ?? 0} : {match.awayScore ?? 0}
+                    {match.awayScore ?? 0} : {match.homeScore ?? 0}
                   </motion.div>
                   <div className="mt-1.5 flex items-center justify-center gap-1.5 text-xs font-black text-red-400">
                     <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -1597,25 +1612,36 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
   for (const url of scoreboardUrls) {
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      console.log('[WC-debug] ESPN scoreboard', url.split('?')[0].split('/').pop(), r.status, url.includes('?') ? url.split('?')[1] : '');
       if (!r.ok) continue;
       const d = await r.json() as Record<string, unknown>;
-      const id = matchTeams((d.events as Array<Record<string,unknown>>) ?? []);
+      const events = (d.events as Array<Record<string,unknown>>) ?? [];
+      console.log('[WC-debug] ESPN events count:', events.length, events.slice(0,3).map(e => (e.name ?? e.shortName ?? '').toString().slice(0,40)));
+      const id = matchTeams(events);
+      console.log('[WC-debug] ESPN matched event id:', id, 'for', homeEn, 'vs', awayEn);
       if (id) {
         const sr = await fetch(`${ESPN_SITE_SUMMARY}${id}`, { signal: AbortSignal.timeout(5000) });
         if (sr.ok) {
-          const evts = parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+          const summary = await sr.json() as Record<string,unknown>;
+          const plays = (summary.plays as unknown[]) ?? [];
+          const scoringPlays = (summary.scoringPlays as unknown[]) ?? [];
+          console.log('[WC-debug] ESPN summary plays:', plays.length, 'scoringPlays:', scoringPlays.length);
+          const evts = parseESPNSummaryClient(summary);
+          console.log('[WC-debug] ESPN parsed events:', evts.map(e => `${e.type}@${e.minute}`).join(', '));
           if (evts.length > 0) return evts;
         }
       }
-    } catch { /* try next */ }
+    } catch(e) { console.log('[WC-debug] ESPN fetch error:', String(e).slice(0,80)); }
   }
 
   // 2. Try Core API (retains historical events even after site API stops showing them)
   try {
     const r = await fetch(`${ESPN_CORE_EVENTS}?dates=${dateStr}&limit=30`);
+    console.log('[WC-debug] ESPN Core API status:', r.status, 'dates:', dateStr);
     if (r.ok) {
       const d = await r.json() as Record<string, unknown>;
       const refs = ((d.items as Array<Record<string,unknown>>) ?? []).map(i => String(i.$ref ?? '')).filter(Boolean);
+      console.log('[WC-debug] ESPN Core refs:', refs.length);
       const evData = await Promise.all(refs.slice(0, 20).map(ref =>
         fetch(ref).then(r2 => r2.ok ? r2.json() as Promise<Record<string,unknown>> : null).catch(() => null),
       ));
@@ -1628,13 +1654,20 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
         const hasAway = name.includes(word0(away)) || names.some(n => n.startsWith(word0(away)) || away.startsWith(word0(n)));
         if (hasHome && hasAway) {
           const evId = String(ev.id);
+          console.log('[WC-debug] ESPN Core matched:', ev.name, 'id:', evId);
           const sr = await fetch(`${ESPN_SITE_SUMMARY}${evId}`);
-          if (sr.ok) return parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+          if (sr.ok) {
+            const summary = await sr.json() as Record<string,unknown>;
+            const evts = parseESPNSummaryClient(summary);
+            console.log('[WC-debug] ESPN Core parsed events:', evts.map(e => `${e.type}@${e.minute}`).join(', '));
+            return evts;
+          }
         }
       }
     }
-  } catch { /* ignore */ }
+  } catch(e) { console.log('[WC-debug] ESPN Core error:', String(e).slice(0,80)); }
 
+  console.log('[WC-debug] ESPN: no events found for', homeEn, 'vs', awayEn, 'date:', dateStr);
   return null;
 }
 
@@ -1694,51 +1727,77 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
     const serverUrl = `/api/world-cup/match-events?${params}`;
 
     const load = async () => {
+      const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
+
+      // 1. Fetch base events from server (OF goals or FD full events)
+      let baseEvents: MatchEvent[] = [];
+      let baseMinute: number | null = null;
+      let serverSource = '';
       try {
         const r = await fetch(serverUrl);
-        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null } : null;
+        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null; source?: string } : null;
         if (d?.success && (d.events?.length ?? 0) > 0) {
-          setEvents(d.events ?? []);
-          setLiveMinute(d.minute ?? null);
-          setFetching(false);
-          return;
+          baseEvents = d.events ?? [];
+          baseMinute = d.minute ?? null;
+          serverSource = d.source ?? 'server';
         }
       } catch { /* fall through */ }
 
-      // Server returned no events — fetch OpenFootball directly from browser (bypasses Vercel timeout)
-      const dateISO = match.kickoff ? match.kickoff.slice(0, 10) : '';
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn) {
-        const ofEvents = await fetchOpenFootballGoalsClient(match.homeTeam.nameEn, match.awayTeam.nameEn).catch(() => null);
-        if (ofEvents && ofEvents.length > 0) {
-          setEvents(ofEvents);
-          setFetching(false);
-          return;
-        }
+      // 2. If server had no events, try client-side OpenFootball as fast fallback
+      if (baseEvents.length === 0 && match.homeTeam.nameEn && match.awayTeam.nameEn) {
+        const ofEvts = await fetchOpenFootballGoalsClient(match.homeTeam.nameEn, match.awayTeam.nameEn).catch(() => null);
+        if (ofEvts && ofEvts.length > 0) { baseEvents = ofEvts; serverSource = 'openfootball-client'; }
       }
 
-      // OpenFootball found nothing (no goals yet / not in OF) — try ESPN from browser
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateStr) {
-        const clientEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
-        if (clientEvents && clientEvents.length > 0) {
-          setEvents(clientEvents);
-          setFetching(false);
-          return;
-        }
+      // Show base events immediately so user sees goals without waiting for cards
+      if (baseEvents.length > 0) {
+        setEvents(baseEvents);
+        setLiveMinute(baseMinute ?? null);
+        setFetching(false);
       }
 
-      // ESPN client-side also failed — try SofaScore client-side as final fallback
-      if (match.homeTeam.nameEn && match.awayTeam.nameEn && dateISO) {
-        try {
-          const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
-          if (sofaId) {
-            const sofaEvents = await fetchSofaIncidentsClient(sofaId);
-            if (sofaEvents && sofaEvents.length > 0) {
-              setEvents(sofaEvents);
-              setFetching(false);
-              return;
+      // 3. If base events lack cards, try ESPN + SofaScore from browser to enrich
+      //    (server can't reach these APIs; real browser IP bypasses their blocks)
+      const baseHasCards = baseEvents.some(e => e.type === 'yellowcard' || e.type === 'redcard');
+      if (!baseHasCards && match.homeTeam.nameEn && match.awayTeam.nameEn) {
+        let richEvents: MatchEvent[] | null = null;
+
+        // ESPN first (generally CORS-friendly from browsers)
+        if (dateStr) {
+          richEvents = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+        }
+
+        // SofaScore if ESPN didn't yield cards
+        const richCards = richEvents?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+        if (richCards.length === 0 && dateISO) {
+          try {
+            const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
+            if (sofaId) {
+              const sofaEvts = await fetchSofaIncidentsClient(sofaId);
+              if ((sofaEvts?.length ?? 0) > 0) richEvents = sofaEvts;
             }
+          } catch { /* ignore */ }
+        }
+
+        if (richEvents && richEvents.length > 0) {
+          if (richEvents.some(e => e.type === 'yellowcard' || e.type === 'redcard')) {
+            // Rich source has cards — merge: keep OF/server goals, add cards/subs from rich source
+            if (baseEvents.length > 0 && serverSource.startsWith('openfootball')) {
+              const baseGoals = baseEvents.filter(e => e.type === 'goal' || e.type === 'owngoal');
+              const htEvent = baseEvents.find(e => e.type === 'halftime');
+              const richNonGoals = richEvents.filter(e => e.type !== 'goal' && e.type !== 'owngoal');
+              const merged = [...baseGoals, ...richNonGoals].sort((a, b) => b.minute - a.minute);
+              if (htEvent) merged.push(htEvent);
+              setEvents(merged);
+            } else {
+              setEvents(richEvents);
+            }
+          } else if (baseEvents.length === 0) {
+            setEvents(richEvents);
           }
-        } catch { /* ignore */ }
+          setFetching(false);
+          return;
+        }
       }
 
       setFetching(false);
@@ -1746,7 +1805,7 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
 
     void load();
     if (isFinished) return;
-    const id = setInterval(() => void load(), 30_000);
+    const id = setInterval(() => void load(), 10_000);
     return () => clearInterval(id);
   }, [match.id, match.espnEventId, match.sofaEventId, match.kickoff, match.homeTeam.nameEn, match.awayTeam.nameEn, isFinished]);
 
@@ -2391,7 +2450,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
         .catch(() => {});
     };
     poll();
-    const id = window.setInterval(poll, 30_000);
+    const id = window.setInterval(poll, 15_000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, []);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];

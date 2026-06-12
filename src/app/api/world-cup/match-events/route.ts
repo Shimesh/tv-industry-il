@@ -25,9 +25,18 @@ type ESPNPlay = {
   text?: string;
   scoringPlay?: boolean;
 };
+type ESPNKeyEvent = {
+  id?: string;
+  clock?: { value?: number; displayValue?: string };
+  type?: { id?: string; text?: string };
+  team?: { displayName?: string };
+  participants?: ESPNParticipant[];
+  text?: string;
+};
 type ESPNSummary = {
   scoringPlays?: ESPNPlay[];
   plays?: ESPNPlay[];
+  keyEvents?: ESPNKeyEvent[];
   header?: {
     competitions?: Array<{
       status?: { clock?: number; period?: number; type?: { completed?: boolean; name?: string } };
@@ -289,6 +298,21 @@ function parseSummary(data: ESPNSummary): { events: object[]; minute: number | n
     });
   }
 
+  // Also parse keyEvents — ESPN sometimes populates these even when plays array is empty
+  const seenMinutesTypes = new Set(events.map(e => `${e.minute}|${e.type}`));
+  for (const ke of data.keyEvents ?? []) {
+    const type = normalizeType(ke.type?.text);
+    if (!type) continue;
+    const minute = typeof ke.clock?.value === 'number' ? Math.round(ke.clock.value / 60)
+      : parseInt((ke.clock?.displayValue ?? '').split(':')[0] ?? '0', 10) || 0;
+    const key = `${minute}|${type}`;
+    if (seenMinutesTypes.has(key)) continue; // already have it from plays/scoringPlays
+    seenMinutesTypes.add(key);
+    const teamName = ke.team?.displayName ?? '';
+    const player = ke.participants?.[0]?.athlete?.displayName ?? ke.text ?? '';
+    events.push({ type, minute, teamName, player, detail: '' });
+  }
+
   // Sort newest first
   events.sort((a, b) => b.minute - a.minute);
 
@@ -431,5 +455,14 @@ export async function GET(req: NextRequest) {
   }
 
   const { events, minute } = parseSummary(summary);
-  return NextResponse.json({ success: true, minute, events }, { headers: { 'Cache-Control': 'no-store' } });
+
+  // If ESPN summary returned 0 events (plays not yet populated), fall through to OpenFootball
+  if (events.length === 0 && homeTeam && awayTeam) {
+    const ofEvents = await fetchOpenFootballGoals(homeTeam, awayTeam);
+    if (ofEvents && ofEvents.length > 0) {
+      return NextResponse.json({ success: true, minute: null, events: ofEvents, source: 'openfootball' }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+  }
+
+  return NextResponse.json({ success: true, minute, events, source: events.length > 0 ? 'espn' : undefined }, { headers: { 'Cache-Control': 'no-store' } });
 }

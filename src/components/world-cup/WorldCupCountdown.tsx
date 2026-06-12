@@ -181,12 +181,33 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
             <span className="block text-sm font-black leading-tight text-white">{label}</span>
           </span>
 
-          <span className="relative flex shrink-0 gap-1" dir="ltr">
-            <Digit value={diff?.days ?? null} label="ימים" compact />
-            <Digit value={diff?.hours ?? null} label="שעות" compact />
-            <Digit value={diff?.minutes ?? null} label="דקות" compact />
-            <Digit value={diff?.seconds ?? null} label="שניות" compact />
-          </span>
+          {activeMatch ? (
+            <span className="relative flex shrink-0 items-center gap-1.5" dir="ltr">
+              <motion.span
+                className="rounded-lg px-2.5 py-1 text-sm font-black tabular-nums text-[#D4AF37]"
+                style={{
+                  background: 'rgba(212,175,55,0.15)',
+                  border: '1px solid rgba(212,175,55,0.4)',
+                }}
+                animate={{ opacity: [1, 0.5, 1] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                {activeMatch.awayScore ?? 0}:{activeMatch.homeScore ?? 0}
+              </motion.span>
+              <motion.span
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 0.9, repeat: Infinity }}
+                className="h-2 w-2 rounded-full bg-red-500"
+              />
+            </span>
+          ) : (
+            <span className="relative flex shrink-0 gap-1" dir="ltr">
+              <Digit value={diff?.days ?? null} label="ימים" compact />
+              <Digit value={diff?.hours ?? null} label="שעות" compact />
+              <Digit value={diff?.minutes ?? null} label="דקות" compact />
+              <Digit value={diff?.seconds ?? null} label="שניות" compact />
+            </span>
+          )}
         </>
       )}
 
@@ -244,19 +265,45 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                 </span>
               </span>
 
-              {/* VS badge */}
-              <span className="flex flex-col items-center gap-0.5">
-                <span
-                  className="rounded-full px-3 py-1 text-[12px] font-black text-[#D4AF37]"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))',
-                    border: '1px solid rgba(212,175,55,0.35)',
-                  }}
-                  dir="ltr"
-                >
-                  VS
+              {/* Live score or VS badge */}
+              {activeMatch ? (
+                <span className="flex flex-col items-center gap-1">
+                  <motion.span
+                    className="rounded-xl px-3 py-1.5 text-2xl font-black tabular-nums text-[#D4AF37]"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.08))',
+                      border: '1px solid rgba(212,175,55,0.45)',
+                      boxShadow: '0 0 16px rgba(212,175,55,0.2)',
+                    }}
+                    animate={{ opacity: [1, 0.55, 1] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                    dir="ltr"
+                  >
+                    {activeMatch.awayScore ?? 0}:{activeMatch.homeScore ?? 0}
+                  </motion.span>
+                  <span className="flex items-center gap-1 text-[10px] font-black text-red-400">
+                    <motion.span
+                      animate={{ opacity: [1, 0, 1] }}
+                      transition={{ duration: 0.9, repeat: Infinity }}
+                      className="inline-block h-1.5 w-1.5 rounded-full bg-red-500"
+                    />
+                    {activeMatch.minute != null ? `דקה ${activeMatch.minute}׳` : 'חי'}
+                  </span>
                 </span>
-              </span>
+              ) : (
+                <span className="flex flex-col items-center gap-0.5">
+                  <span
+                    className="rounded-full px-3 py-1 text-[12px] font-black text-[#D4AF37]"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))',
+                      border: '1px solid rgba(212,175,55,0.35)',
+                    }}
+                    dir="ltr"
+                  >
+                    VS
+                  </span>
+                </span>
+              )}
 
               {/* Team away */}
               <span className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
@@ -268,13 +315,30 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
             </motion.span>
           )}
 
-          {/* Countdown */}
-          <span className="relative grid w-full grid-cols-4 gap-2" dir="ltr">
-            <Digit value={diff?.days ?? null} label="ימים" />
-            <Digit value={diff?.hours ?? null} label="שעות" />
-            <Digit value={diff?.minutes ?? null} label="דקות" />
-            <Digit value={diff?.seconds ?? null} label="שניות" />
-          </span>
+          {/* Countdown or live indicator */}
+          {activeMatch ? (
+            <span
+              className="relative flex w-full items-center justify-center gap-2 rounded-2xl py-2.5"
+              style={{
+                background: 'rgba(239,68,68,0.1)',
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}
+            >
+              <motion.span
+                animate={{ opacity: [1, 0.1, 1] }}
+                transition={{ duration: 0.9, repeat: Infinity }}
+                className="h-2.5 w-2.5 rounded-full bg-red-500"
+              />
+              <span className="text-sm font-black text-red-400">שידור חי עכשיו</span>
+            </span>
+          ) : (
+            <span className="relative grid w-full grid-cols-4 gap-2" dir="ltr">
+              <Digit value={diff?.days ?? null} label="ימים" />
+              <Digit value={diff?.hours ?? null} label="שעות" />
+              <Digit value={diff?.minutes ?? null} label="דקות" />
+              <Digit value={diff?.seconds ?? null} label="שניות" />
+            </span>
+          )}
         </>
       )}
     </motion.button>

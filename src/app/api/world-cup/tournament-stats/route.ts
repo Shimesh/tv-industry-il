@@ -23,7 +23,7 @@ async function getOpenFootballStats(): Promise<{ goals: ReturnType<typeof toRank
   try {
     const res = await fetch(
       'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(8000) },
     );
     if (!res.ok) return null;
     const data = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
@@ -65,7 +65,14 @@ type ESPNPlay = {
   participants?: Array<{ athlete?: { displayName?: string }; type?: { description?: string } }>;
   athletesInvolved?: Array<{ displayName?: string; type?: string }>;
 };
-type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[] };
+type ESPNKeyEvent = {
+  clock?: { displayValue?: string; value?: number };
+  type?: { text?: string };
+  team?: { displayName?: string };
+  participants?: Array<{ athlete?: { displayName?: string }; type?: { description?: string } }>;
+  text?: string;
+};
+type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[]; keyEvents?: ESPNKeyEvent[] };
 type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string; score?: string };
 type ESPNStatus = { type?: { name?: string; completed?: boolean } };
 type ESPNEvent = {
@@ -100,6 +107,7 @@ function parseSummary(
   assists: Map<string, StatEntry>,
   yellow: Map<string, StatEntry>,
   red: Map<string, StatEntry>,
+  subs: Map<string, StatEntry>,
 ) {
   for (const play of s.scoringPlays ?? []) {
     const isOwn = (play.type?.text ?? '').toLowerCase().includes('own');
@@ -114,11 +122,32 @@ function parseSummary(
   }
   for (const play of s.plays ?? []) {
     const text = (play.type?.text ?? '').toLowerCase();
-    if (!text.includes('yellow') && !text.includes('red card')) continue;
     const team = resolveTeam(play.team?.displayName);
     const player = play.participants?.[0]?.athlete?.displayName ?? '';
     if (!player) continue;
-    inc(text.includes('red') ? red : yellow, player, team);
+    if (text.includes('yellow card') || text.includes('yellow-card')) inc(yellow, player, team);
+    else if (text.includes('red card') || text.includes('red-card')) inc(red, player, team);
+    else if (text.includes('substitut')) inc(subs, player, team);
+  }
+
+  // keyEvents — populated even when plays/scoringPlays are empty (WC 2026 ESPN behaviour)
+  for (const ke of s.keyEvents ?? []) {
+    const text = (ke.type?.text ?? '').toLowerCase();
+    const team = resolveTeam(ke.team?.displayName);
+    const scorer = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('scor'))?.athlete?.displayName
+      ?? ke.participants?.[0]?.athlete?.displayName ?? '';
+    if (text.includes('goal') && !text.includes('own')) {
+      if (scorer) inc(goals, scorer, team);
+      const assister = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('assist'))?.athlete?.displayName
+        ?? (ke.participants && ke.participants.length > 1 ? ke.participants[1]?.athlete?.displayName : undefined);
+      if (assister && assister !== scorer) inc(assists, assister, team);
+    } else if (text.includes('red card') || text.includes('red-card')) {
+      if (scorer) inc(red, scorer, team);
+    } else if (text.includes('yellow card') || text.includes('yellow-card')) {
+      if (scorer) inc(yellow, scorer, team);
+    } else if (text.includes('substitut')) {
+      if (scorer) inc(subs, scorer, team);
+    }
   }
 }
 
@@ -154,7 +183,7 @@ async function fetchRangeScoreboard(dateRange: string): Promise<ESPNEvent[]> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateRange}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(8000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { events?: ESPNEvent[] };
@@ -166,7 +195,7 @@ async function fetchDateScoreboard(dateStr: string): Promise<ESPNEvent[]> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(6000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { events?: ESPNEvent[] };
@@ -178,7 +207,7 @@ async function fetchDateEventsViaCoreApi(dateStr: string): Promise<ESPNEvent[]> 
   try {
     const res = await fetch(
       `https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events?dates=${dateStr}&limit=30`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(7000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(7000) },
     );
     if (!res.ok) return [];
     const data = await res.json() as { items?: Array<{ $ref?: string }> };
@@ -210,7 +239,7 @@ async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
   try {
     const res = await fetch(
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${id}`,
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(6000) },
     );
     return res.ok ? (await res.json() as ESPNSummary) : null;
   } catch { return null; }
@@ -261,8 +290,8 @@ export async function GET() {
         const sofaYellow = sofaToRanked(yellowMap);
         const sofaRed = sofaToRanked(redMap);
 
-        // Only return SofaScore data if we got meaningful results
-        if (sofaGoals.length > 0 || sofaYellow.length > 0) {
+        // Only return SofaScore data if we got BOTH goals AND cards/assists — otherwise fall through to ESPN
+        if (sofaGoals.length > 0 && (sofaYellow.length > 0 || sofaRed.length > 0 || sofaAssists.length > 1)) {
           return NextResponse.json(
             {
               success: true,
@@ -270,11 +299,90 @@ export async function GET() {
               assists: sofaAssists,
               yellowCards: sofaYellow,
               redCards: sofaRed,
+              substitutions: [],
               source: 'sofascore',
             },
-            { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } },
+            { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } },
           );
         }
+      }
+    }
+  } catch { /* fall through to FD */ }
+
+  // ── Football-Data.org: goals, assists, cards (requires token, works from Vercel) ────
+  try {
+    const fdToken = process.env.FOOTBALL_DATA_API_TOKEN?.trim();
+    if (fdToken) {
+      const [scorersRes, matchesRes] = await Promise.all([
+        fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=50', {
+          headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+        }),
+        fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026&status=FINISHED', {
+          headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+        }),
+      ]);
+
+      const fdGoals = new Map<string, StatEntry>();
+      const fdAssists = new Map<string, StatEntry>();
+      const fdYellow = new Map<string, StatEntry>();
+      const fdRed = new Map<string, StatEntry>();
+
+      if (scorersRes.ok) {
+        type FDScorer = {
+          player?: { name?: string };
+          team?: { name?: string };
+          goals?: number; assists?: number;
+          yellowCards?: number; redCards?: number;
+        };
+        const sd = await scorersRes.json() as { scorers?: FDScorer[] };
+        for (const s of sd.scorers ?? []) {
+          const team = resolveTeam(s.team?.name);
+          const name = s.player?.name ?? '';
+          if (!name) continue;
+          const key = `${name}|${team.id}`;
+          if ((s.goals ?? 0) > 0) fdGoals.set(key, { playerName: name, team, count: s.goals ?? 0 });
+          if ((s.assists ?? 0) > 0) fdAssists.set(key, { playerName: name, team, count: s.assists ?? 0 });
+          if ((s.yellowCards ?? 0) > 0) fdYellow.set(key, { playerName: name, team, count: s.yellowCards ?? 0 });
+          if ((s.redCards ?? 0) > 0) fdRed.set(key, { playerName: name, team, count: s.redCards ?? 0 });
+        }
+      }
+
+      if (matchesRes.ok) {
+        type FDMatch = { id: number };
+        const md = await matchesRes.json() as { matches?: FDMatch[] };
+        const finishedIds = (md.matches ?? []).map(m => m.id);
+
+        await Promise.all(finishedIds.slice(0, 10).map(async (matchId) => {
+          try {
+            const dr = await fetch(`https://api.football-data.org/v4/matches/${matchId}`, {
+              headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
+            });
+            if (!dr.ok) return;
+            const d = await dr.json() as {
+              bookings?: Array<{ player?: { name?: string }; team?: { name?: string }; card?: string }>;
+            };
+            for (const b of d.bookings ?? []) {
+              if (!b.player?.name) continue;
+              const team = resolveTeam(b.team?.name);
+              inc(b.card === 'RED_CARD' ? fdRed : fdYellow, b.player.name, team);
+            }
+          } catch { /* skip this match */ }
+        }));
+      }
+
+      const fdGoalsList = toRanked(fdGoals);
+      const fdYellowList = toRanked(fdYellow);
+      // Only use FD when it has BOTH goals AND cards — free tier has cards=0, so we fall through to ESPN
+      if (fdGoalsList.length > 0 && fdYellowList.length > 0) {
+        return NextResponse.json({
+          success: true,
+          goals: fdGoalsList,
+          assists: toRanked(fdAssists),
+          yellowCards: fdYellowList,
+          redCards: toRanked(fdRed),
+          substitutions: [],
+          source: 'football-data',
+        }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
       }
     }
   } catch { /* fall through to ESPN */ }
@@ -313,9 +421,10 @@ export async function GET() {
   const assists = new Map<string, StatEntry>();
   const yellow = new Map<string, StatEntry>();
   const red = new Map<string, StatEntry>();
+  const subs = new Map<string, StatEntry>();
 
   for (const s of summaries) {
-    if (s) parseSummary(s, goals, assists, yellow, red);
+    if (s) parseSummary(s, goals, assists, yellow, red, subs);
   }
 
   const espnGoals = toRanked(goals);
@@ -326,7 +435,9 @@ export async function GET() {
       assists: toRanked(assists),
       yellowCards: toRanked(yellow),
       redCards: toRanked(red),
-    }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
+      substitutions: toRanked(subs),
+      source: 'espn',
+    }, { headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' } });
   }
 
   // Final fallback: OpenFootball — always accessible, goals only
@@ -337,6 +448,7 @@ export async function GET() {
     assists: ofStats?.assists ?? [],
     yellowCards: ofStats?.yellowCards ?? [],
     redCards: ofStats?.redCards ?? [],
+    substitutions: [],
     source: ofStats ? 'openfootball' : undefined,
-  }, { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } });
+  }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
 }

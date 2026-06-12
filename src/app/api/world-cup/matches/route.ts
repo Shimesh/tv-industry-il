@@ -11,8 +11,15 @@ export async function GET() {
     getWorldCupPlayerStats(),
   ]);
 
-  // Always derive standings from actual finished match results — more reliable than any external API
-  const finished = matches.filter(m => m.status === 'finished' && m.homeScore != null && m.awayScore != null);
+  // Derive standings only from finished matches whose kickoff is already in the past —
+  // guards against APIs that pre-populate future matches with scores
+  const now = Date.now();
+  const finished = matches.filter(m =>
+    m.status === 'finished' &&
+    m.homeScore != null &&
+    m.awayScore != null &&
+    (!m.kickoff || Date.parse(m.kickoff) < now),
+  );
   const standings = finished.length > 0 ? deriveStandingsFromMatches(finished) : apiStandings;
 
   const hasLive = matches.some(m => m.status === 'live');
