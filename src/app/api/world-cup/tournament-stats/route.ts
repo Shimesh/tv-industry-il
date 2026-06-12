@@ -65,7 +65,14 @@ type ESPNPlay = {
   participants?: Array<{ athlete?: { displayName?: string }; type?: { description?: string } }>;
   athletesInvolved?: Array<{ displayName?: string; type?: string }>;
 };
-type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[] };
+type ESPNKeyEvent = {
+  clock?: { displayValue?: string; value?: number };
+  type?: { text?: string };
+  team?: { displayName?: string };
+  participants?: Array<{ athlete?: { displayName?: string }; type?: { description?: string } }>;
+  text?: string;
+};
+type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[]; keyEvents?: ESPNKeyEvent[] };
 type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string; score?: string };
 type ESPNStatus = { type?: { name?: string; completed?: boolean } };
 type ESPNEvent = {
@@ -119,6 +126,27 @@ function parseSummary(
     const player = play.participants?.[0]?.athlete?.displayName ?? '';
     if (!player) continue;
     inc(text.includes('red') ? red : yellow, player, team);
+  }
+
+  // keyEvents — populated even when plays/scoringPlays are empty (WC 2026 ESPN behaviour)
+  const seenGoals = new Set(Array.from(goals.keys()));
+  const seenYellow = new Set(Array.from(yellow.keys()));
+  const seenRed = new Set(Array.from(red.keys()));
+  for (const ke of s.keyEvents ?? []) {
+    const text = (ke.type?.text ?? '').toLowerCase();
+    const team = resolveTeam(ke.team?.displayName);
+    const player = ke.participants?.[0]?.athlete?.displayName ?? '';
+    if (!player) continue;
+    const pkey = `${player}|${team.id}`;
+    if (text.includes('goal') && !text.includes('own')) {
+      if (!seenGoals.has(pkey)) { inc(goals, player, team); seenGoals.add(pkey); }
+      else inc(goals, player, team); // allow multiple goals per player
+    } else if (text.includes('red card') || text.includes('red-card')) {
+      if (!seenRed.has(pkey)) { inc(red, player, team); seenRed.add(pkey); }
+    } else if (text.includes('yellow card') || text.includes('yellow-card')) {
+      if (!seenYellow.has(pkey)) { inc(yellow, player, team); seenYellow.add(pkey); }
+      else inc(yellow, player, team); // multiple yellow cards are possible across matches
+    }
   }
 }
 
