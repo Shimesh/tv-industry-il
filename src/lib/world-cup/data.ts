@@ -221,19 +221,44 @@ async function fetchOpenFootballData(): Promise<WorldCupMatch[] | null> {
     else if (data.matches) raw.push(...data.matches);
     if (!raw.length) return null;
 
-    const staticByNum = new Map(fallbackMatches.map(m => [m.matchNumber, m]));
+    // Build team-name keyed lookup (OF sorts by group, not date — matchNumber unreliable)
+    const ofNameAliases: Record<string, string> = {
+      'czech republic': 'czechia',
+      'usa': 'united states',
+      'ivory coast': "côte d'ivoire",
+      "cote d'ivoire": "côte d'ivoire",
+      'turkey': 'türkiye',
+      'bosnia & herzegovina': 'bosnia and herzegovina',
+      'korea republic': 'south korea',
+      'korea dpr': 'north korea',
+      'ir iran': 'iran',
+      'china pr': 'china',
+    };
 
-    function resolveTeam(t?: OpenFootballTeam): WorldCupTeam {
-      const name = typeof t === 'string' ? t : (t?.name ?? '');
-      const found = Object.values(teams).find(
-        tm => tm.nameEn.toLowerCase() === name.toLowerCase() || tm.nameHe === name,
-      );
-      return found ?? teams.tbd;
+    function resolveTeam(t?: OpenFootballTeam): WorldCupTeam | null {
+      const rawName = typeof t === 'string' ? t : (t?.name ?? '');
+      if (!rawName) return null;
+      const nameNorm = ofNameAliases[rawName.toLowerCase()] ?? rawName.toLowerCase();
+      const found = Object.values(teams).find(tm => {
+        const en = tm.nameEn.toLowerCase();
+        return en === nameNorm || en === rawName.toLowerCase() || tm.nameHe === rawName;
+      });
+      return found ?? null;
     }
 
+    const teamKey = (a: string, b: string) => [a.toLowerCase(), b.toLowerCase()].sort().join('||');
+    const staticByTeamKey = new Map(
+      fallbackMatches.map(m => [teamKey(m.homeTeam.nameEn, m.awayTeam.nameEn), m]),
+    );
+    const staticByNum = new Map(fallbackMatches.map(m => [m.matchNumber, m]));
+
     return raw.map((m, i) => {
-      const matchNum = m.num ?? i + 1;
-      const base = staticByNum.get(matchNum);
+      const resolvedHome = resolveTeam(m.team1);
+      const resolvedAway = resolveTeam(m.team2);
+      const base = (resolvedHome && resolvedAway
+        ? staticByTeamKey.get(teamKey(resolvedHome.nameEn, resolvedAway.nameEn))
+        : undefined) ?? staticByNum.get(m.num ?? i + 1);
+      const matchNum = base?.matchNumber ?? m.num ?? i + 1;
       const score1 = m.score1 ?? m.score?.ft?.[0] ?? null;
       const score2 = m.score2 ?? m.score?.ft?.[1] ?? null;
       const finished = typeof score1 === 'number' && typeof score2 === 'number';
@@ -242,8 +267,8 @@ async function fetchOpenFootballData(): Promise<WorldCupMatch[] | null> {
         matchNumber: matchNum,
         stage: base?.stage ?? 'group',
         group: base?.group,
-        homeTeam: resolveTeam(m.team1) ?? base?.homeTeam ?? teams.tbd,
-        awayTeam: resolveTeam(m.team2) ?? base?.awayTeam ?? teams.tbd,
+        homeTeam: resolvedHome ?? base?.homeTeam ?? teams.tbd,
+        awayTeam: resolvedAway ?? base?.awayTeam ?? teams.tbd,
         homeScore: score1,
         awayScore: score2,
         status: finished ? 'finished' : (base?.status ?? 'scheduled'),
