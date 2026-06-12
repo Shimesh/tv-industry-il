@@ -284,7 +284,7 @@ export async function GET() {
     const fdToken = process.env.FOOTBALL_DATA_API_TOKEN?.trim();
     if (fdToken) {
       const [scorersRes, matchesRes] = await Promise.all([
-        fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=20', {
+        fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=50', {
           headers: { 'X-Auth-Token': fdToken }, cache: 'no-store', signal: AbortSignal.timeout(8000),
         }),
         fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026&status=FINISHED', {
@@ -298,19 +298,22 @@ export async function GET() {
       const fdRed = new Map<string, StatEntry>();
 
       if (scorersRes.ok) {
-        type FDScorer = { player?: { name?: string }; team?: { name?: string }; goals?: number; assists?: number };
+        type FDScorer = {
+          player?: { name?: string };
+          team?: { name?: string };
+          goals?: number; assists?: number;
+          yellowCards?: number; redCards?: number;
+        };
         const sd = await scorersRes.json() as { scorers?: FDScorer[] };
         for (const s of sd.scorers ?? []) {
           const team = resolveTeam(s.team?.name);
           const name = s.player?.name ?? '';
-          if (name && (s.goals ?? 0) > 0) {
-            const key = `${name}|${team.id}`;
-            fdGoals.set(key, { playerName: name, team, count: s.goals ?? 0 });
-          }
-          if (name && (s.assists ?? 0) > 0) {
-            const key = `${name}|${team.id}`;
-            fdAssists.set(key, { playerName: name, team, count: s.assists ?? 0 });
-          }
+          if (!name) continue;
+          const key = `${name}|${team.id}`;
+          if ((s.goals ?? 0) > 0) fdGoals.set(key, { playerName: name, team, count: s.goals ?? 0 });
+          if ((s.assists ?? 0) > 0) fdAssists.set(key, { playerName: name, team, count: s.assists ?? 0 });
+          if ((s.yellowCards ?? 0) > 0) fdYellow.set(key, { playerName: name, team, count: s.yellowCards ?? 0 });
+          if ((s.redCards ?? 0) > 0) fdRed.set(key, { playerName: name, team, count: s.redCards ?? 0 });
         }
       }
 
