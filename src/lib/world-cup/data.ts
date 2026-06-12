@@ -152,10 +152,11 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     if (!espn) return match;
 
     const statusName = espn.status?.type?.name ?? '';
+    const isCompleted = espn.status?.type?.completed === true;
     let status: WorldCupMatch['status'] = match.status;
     if (statusName === 'STATUS_IN_PROGRESS' || statusName === 'STATUS_HALFTIME') status = 'live';
-    else if (statusName === 'STATUS_FINAL') status = 'finished';
-    else if (statusName === 'STATUS_SCHEDULED') status = 'scheduled';
+    else if (isCompleted || ['STATUS_FINAL', 'STATUS_FULL_TIME', 'STATUS_AWARDED', 'STATUS_POSTPONED'].includes(statusName)) status = 'finished';
+    else if (statusName === 'STATUS_SCHEDULED' || statusName === 'STATUS_PRE') status = 'scheduled';
 
     const comps = espn.competitions?.[0]?.competitors ?? [];
     const word0 = (s: string) => s.split(' ')[0];
@@ -324,17 +325,21 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     matches = applyESPNOverlay(matches, espnEvents);
   }
 
-  // Supplement with openfootball for matches whose kickoff has passed but still show 'scheduled'.
-  // This catches completed matches that ESPN scoreboard no longer includes (hours after game ends).
+  // Supplement with openfootball for:
+  // 1. matches still 'scheduled' but kickoff >105 min ago (ESPN missed them)
+  // 2. matches stuck as 'live' but kickoff >120 min ago (ESPN stopped reporting)
   const now = Date.now();
-  const needsScore = matches.some(
-    m => m.status === 'scheduled' && m.kickoff && now - Date.parse(m.kickoff) > 105 * 60_000,
-  );
+  const needsScore = matches.some(m => {
+    if (!m.kickoff) return false;
+    const elapsed = now - Date.parse(m.kickoff);
+    return (m.status === 'scheduled' && elapsed > 105 * 60_000) ||
+           (m.status === 'live'      && elapsed > 120 * 60_000);
+  });
   if (needsScore) {
     try {
       const res = await fetch(
         'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
-        { next: { revalidate: 120 } },
+        { cache: 'no-store' },
       );
       if (res.ok) {
         const data = await res.json() as { rounds?: Array<{ matches?: OpenFootballMatch[] }>; matches?: OpenFootballMatch[] };
@@ -342,7 +347,6 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
         if (data.rounds) data.rounds.forEach(r => raw.push(...(r.matches ?? [])));
         else if (data.matches) raw.push(...(data.matches as OpenFootballMatch[]));
 
-        // Build lookup by team name for finished matches (team name is reliable; matchNumber from FD uses matchday round, not sequential)
         const word0 = (s: string) => s.split(' ')[0].toLowerCase();
         function teamOf(t: OpenFootballTeam | undefined): string {
           return typeof t === 'string' ? t.toLowerCase() : (t?.name ?? '').toLowerCase();
@@ -360,8 +364,11 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
         });
 
         matches = matches.map(m => {
-          if (m.status !== 'scheduled') return m;
-          if (!m.kickoff || now - Date.parse(m.kickoff) <= 105 * 60_000) return m;
+          if (m.status !== 'scheduled' && m.status !== 'live') return m;
+          if (!m.kickoff) return m;
+          const elapsed = now - Date.parse(m.kickoff);
+          if (m.status === 'scheduled' && elapsed <= 105 * 60_000) return m;
+          if (m.status === 'live'      && elapsed <= 120 * 60_000) return m;
           const ofMatch = finishedOf.find(of =>
             namesMatch(teamOf(of.team1), m.homeTeam.nameEn) &&
             namesMatch(teamOf(of.team2), m.awayTeam.nameEn),

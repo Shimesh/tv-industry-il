@@ -75,9 +75,9 @@ export const venues: WorldCupVenue[] = [
 
 export const fallbackMatches: WorldCupMatch[] = [
   // ── יום משחק 1 (11–17 יוני) ─────────────────────────────────────────────────
-  { id: 'm1',  matchNumber: 1,  stage: 'group', group: 'A', homeTeam: teams.mex, awayTeam: teams.rsa, homeScore: null, awayScore: null, status: 'live',      kickoff: '2026-06-11T19:00:00.000Z', venueId: 'mexico-city',            broadcaster: 'kan11', minute: null },
-  { id: 'm2',  matchNumber: 2,  stage: 'group', group: 'A', homeTeam: teams.kor, awayTeam: teams.cze, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T02:00:00.000Z', venueId: 'guadalajara',            broadcaster: 'kan11' },
-  { id: 'm3',  matchNumber: 3,  stage: 'group', group: 'B', homeTeam: teams.can, awayTeam: teams.bih, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-12T19:00:00.000Z', venueId: 'toronto',                broadcaster: 'kan11' },
+  { id: 'm1',  matchNumber: 1,  stage: 'group', group: 'A', homeTeam: teams.mex, awayTeam: teams.rsa, homeScore: 2,    awayScore: 0,    status: 'finished',  kickoff: '2026-06-11T19:00:00.000Z', venueId: 'mexico-city',            broadcaster: 'kan11' },
+  { id: 'm2',  matchNumber: 2,  stage: 'group', group: 'A', homeTeam: teams.kor, awayTeam: teams.cze, homeScore: 2,    awayScore: 1,    status: 'finished',  kickoff: '2026-06-12T02:00:00.000Z', venueId: 'guadalajara',            broadcaster: 'kan11' },
+  { id: 'm3',  matchNumber: 3,  stage: 'group', group: 'B', homeTeam: teams.can, awayTeam: teams.bih, homeScore: 1,    awayScore: 1,    status: 'finished',  kickoff: '2026-06-12T19:00:00.000Z', venueId: 'toronto',                broadcaster: 'kan11' },
   { id: 'm4',  matchNumber: 4,  stage: 'group', group: 'D', homeTeam: teams.usa, awayTeam: teams.par, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T01:00:00.000Z', venueId: 'los-angeles',            broadcaster: 'kan11' },
   { id: 'm5',  matchNumber: 5,  stage: 'group', group: 'B', homeTeam: teams.qat, awayTeam: teams.swi, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T19:00:00.000Z', venueId: 'san-francisco-bay-area', broadcaster: 'kan11' },
   { id: 'm6',  matchNumber: 6,  stage: 'group', group: 'C', homeTeam: teams.bra, awayTeam: teams.mar, homeScore: null, awayScore: null, status: 'scheduled', kickoff: '2026-06-13T22:00:00.000Z', venueId: 'new-york-new-jersey',    broadcaster: 'kan11' },
