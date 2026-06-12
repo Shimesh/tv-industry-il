@@ -1597,25 +1597,36 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
   for (const url of scoreboardUrls) {
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      console.log('[WC-debug] ESPN scoreboard', url.split('?')[0].split('/').pop(), r.status, url.includes('?') ? url.split('?')[1] : '');
       if (!r.ok) continue;
       const d = await r.json() as Record<string, unknown>;
-      const id = matchTeams((d.events as Array<Record<string,unknown>>) ?? []);
+      const events = (d.events as Array<Record<string,unknown>>) ?? [];
+      console.log('[WC-debug] ESPN events count:', events.length, events.slice(0,3).map(e => (e.name ?? e.shortName ?? '').toString().slice(0,40)));
+      const id = matchTeams(events);
+      console.log('[WC-debug] ESPN matched event id:', id, 'for', homeEn, 'vs', awayEn);
       if (id) {
         const sr = await fetch(`${ESPN_SITE_SUMMARY}${id}`, { signal: AbortSignal.timeout(5000) });
         if (sr.ok) {
-          const evts = parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+          const summary = await sr.json() as Record<string,unknown>;
+          const plays = (summary.plays as unknown[]) ?? [];
+          const scoringPlays = (summary.scoringPlays as unknown[]) ?? [];
+          console.log('[WC-debug] ESPN summary plays:', plays.length, 'scoringPlays:', scoringPlays.length);
+          const evts = parseESPNSummaryClient(summary);
+          console.log('[WC-debug] ESPN parsed events:', evts.map(e => `${e.type}@${e.minute}`).join(', '));
           if (evts.length > 0) return evts;
         }
       }
-    } catch { /* try next */ }
+    } catch(e) { console.log('[WC-debug] ESPN fetch error:', String(e).slice(0,80)); }
   }
 
   // 2. Try Core API (retains historical events even after site API stops showing them)
   try {
     const r = await fetch(`${ESPN_CORE_EVENTS}?dates=${dateStr}&limit=30`);
+    console.log('[WC-debug] ESPN Core API status:', r.status, 'dates:', dateStr);
     if (r.ok) {
       const d = await r.json() as Record<string, unknown>;
       const refs = ((d.items as Array<Record<string,unknown>>) ?? []).map(i => String(i.$ref ?? '')).filter(Boolean);
+      console.log('[WC-debug] ESPN Core refs:', refs.length);
       const evData = await Promise.all(refs.slice(0, 20).map(ref =>
         fetch(ref).then(r2 => r2.ok ? r2.json() as Promise<Record<string,unknown>> : null).catch(() => null),
       ));
@@ -1628,13 +1639,20 @@ async function clientFindEspnIdAndFetchSummary(homeEn: string, awayEn: string, d
         const hasAway = name.includes(word0(away)) || names.some(n => n.startsWith(word0(away)) || away.startsWith(word0(n)));
         if (hasHome && hasAway) {
           const evId = String(ev.id);
+          console.log('[WC-debug] ESPN Core matched:', ev.name, 'id:', evId);
           const sr = await fetch(`${ESPN_SITE_SUMMARY}${evId}`);
-          if (sr.ok) return parseESPNSummaryClient(await sr.json() as Record<string,unknown>);
+          if (sr.ok) {
+            const summary = await sr.json() as Record<string,unknown>;
+            const evts = parseESPNSummaryClient(summary);
+            console.log('[WC-debug] ESPN Core parsed events:', evts.map(e => `${e.type}@${e.minute}`).join(', '));
+            return evts;
+          }
         }
       }
     }
-  } catch { /* ignore */ }
+  } catch(e) { console.log('[WC-debug] ESPN Core error:', String(e).slice(0,80)); }
 
+  console.log('[WC-debug] ESPN: no events found for', homeEn, 'vs', awayEn, 'date:', dateStr);
   return null;
 }
 
