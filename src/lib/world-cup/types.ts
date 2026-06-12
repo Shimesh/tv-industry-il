@@ -22,6 +22,7 @@ export type WorldCupMatch = {
   broadcaster: 'kan11' | 'sport5' | 'tbd';
   minute?: number | null;
   espnEventId?: string;
+  sofaEventId?: number;
 };
 
 export type WorldCupStanding = {

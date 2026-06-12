@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { findSofaEventId, getSofaIncidents, parseSofaIncidents } from '@/lib/world-cup/sofascore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -230,6 +231,7 @@ export async function GET(req: NextRequest) {
   const homeTeam = sp.get('home') ?? '';
   const awayTeam = sp.get('away') ?? '';
   const kickoffDate = sp.get('date') ?? '';
+  const sofaIdParam = sp.get('sofaId') ?? '';
 
   // Resolve ESPN event ID: use explicit param, or look up from scoreboard by team names
   let espnId = espnIdParam;
@@ -261,11 +263,79 @@ export async function GET(req: NextRequest) {
         }
       } catch { /* fall through */ }
     }
+
+    // SofaScore fallback (server-side, browser headers)
+    if (homeTeam && awayTeam) {
+      try {
+        const dateForSofa = kickoffDate.length >= 8
+          ? `${kickoffDate.slice(0, 4)}-${kickoffDate.slice(4, 6)}-${kickoffDate.slice(6, 8)}`
+          : kickoffDate;
+        const sofaIdRaw = sofaIdParam ? parseInt(sofaIdParam, 10) : NaN;
+        const sofaId = !isNaN(sofaIdRaw)
+          ? sofaIdRaw
+          : dateForSofa
+          ? await findSofaEventId(homeTeam, awayTeam, dateForSofa)
+          : null;
+        if (sofaId) {
+          const incidents = await getSofaIncidents(sofaId);
+          if (incidents && incidents.length > 0) {
+            // We need team IDs for parseSofaIncidents — fetch event for team IDs
+            const { sofaFetch: sf } = await import('@/lib/world-cup/sofascore');
+            type SofaEventDetail = { homeTeam: { id: number }; awayTeam: { id: number } };
+            const evDetail = await sf<SofaEventDetail>(`/event/${sofaId}`, 60);
+            const homeTeamId = evDetail?.homeTeam?.id ?? 0;
+            const awayTeamId = evDetail?.awayTeam?.id ?? 0;
+            const events = parseSofaIncidents(incidents, homeTeamId, awayTeamId, homeTeam, awayTeam);
+            if (events.length > 0) {
+              return NextResponse.json(
+                { success: true, minute: null, events, source: 'sofascore' },
+                { headers: { 'Cache-Control': 'no-store' } },
+              );
+            }
+          }
+        }
+      } catch { /* fall through */ }
+    }
+
     return NextResponse.json({ success: false, events: [], minute: null });
   }
 
   const summary = await fetchESPNSummary(espnId);
-  if (!summary) return NextResponse.json({ success: false, events: [], minute: null });
+
+  // If ESPN summary failed, try SofaScore as final server-side fallback
+  if (!summary) {
+    if (homeTeam && awayTeam) {
+      try {
+        const dateForSofa = kickoffDate.length >= 8
+          ? `${kickoffDate.slice(0, 4)}-${kickoffDate.slice(4, 6)}-${kickoffDate.slice(6, 8)}`
+          : kickoffDate;
+        const sofaIdRaw = sofaIdParam ? parseInt(sofaIdParam, 10) : NaN;
+        const sofaId = !isNaN(sofaIdRaw)
+          ? sofaIdRaw
+          : dateForSofa
+          ? await findSofaEventId(homeTeam, awayTeam, dateForSofa)
+          : null;
+        if (sofaId) {
+          const incidents = await getSofaIncidents(sofaId);
+          if (incidents && incidents.length > 0) {
+            const { sofaFetch: sf } = await import('@/lib/world-cup/sofascore');
+            type SofaEventDetail = { homeTeam: { id: number }; awayTeam: { id: number } };
+            const evDetail = await sf<SofaEventDetail>(`/event/${sofaId}`, 60);
+            const homeTeamId = evDetail?.homeTeam?.id ?? 0;
+            const awayTeamId = evDetail?.awayTeam?.id ?? 0;
+            const events = parseSofaIncidents(incidents, homeTeamId, awayTeamId, homeTeam, awayTeam);
+            if (events.length > 0) {
+              return NextResponse.json(
+                { success: true, minute: null, events, source: 'sofascore' },
+                { headers: { 'Cache-Control': 'no-store' } },
+              );
+            }
+          }
+        }
+      } catch { /* fall through */ }
+    }
+    return NextResponse.json({ success: false, events: [], minute: null });
+  }
 
   const { events, minute } = parseSummary(summary);
   return NextResponse.json({ success: true, minute, events }, { headers: { 'Cache-Control': 'no-store' } });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { teams } from '@/lib/world-cup/static-data';
 import type { WorldCupTeam } from '@/lib/world-cup/types';
+import { getWC2026SeasonId, getSofaTopScorers, resolveStaticTeam } from '@/lib/world-cup/sofascore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -164,6 +165,69 @@ async function fetchESPNSummary(id: string): Promise<ESPNSummary | null> {
 }
 
 export async function GET() {
+  // ── SofaScore: try as primary source first ──────────────────────────────
+  try {
+    const seasonId = await getWC2026SeasonId();
+    if (seasonId) {
+      const topScorers = await getSofaTopScorers(seasonId);
+      if (topScorers && topScorers.length > 0) {
+        type StatEntry = { playerName: string; team: WorldCupTeam; count: number };
+        const goalsMap = new Map<string, StatEntry>();
+        const assistsMap = new Map<string, StatEntry>();
+        const yellowMap = new Map<string, StatEntry>();
+        const redMap = new Map<string, StatEntry>();
+
+        function sofaInc(map: Map<string, StatEntry>, player: string, teamObj: WorldCupTeam, n: number) {
+          if (!player || n <= 0) return;
+          const key = `${player}|${teamObj.id}`;
+          const e = map.get(key) ?? { playerName: player, team: teamObj, count: 0 };
+          map.set(key, { ...e, count: e.count + n });
+        }
+
+        for (const scorer of topScorers) {
+          const teamObj: WorldCupTeam =
+            resolveStaticTeam(scorer.team.name) ??
+            { id: 'tbd', nameHe: scorer.team.name, nameEn: scorer.team.name, flag: '🏳️' };
+          const name = scorer.player.name;
+          const stats = scorer.statistics;
+          sofaInc(goalsMap, name, teamObj, stats.goals ?? 0);
+          sofaInc(assistsMap, name, teamObj, stats.assists ?? 0);
+          sofaInc(yellowMap, name, teamObj, stats.yellowCards ?? 0);
+          sofaInc(redMap, name, teamObj, stats.redCards ?? 0);
+        }
+
+        function sofaToRanked(map: Map<string, StatEntry>) {
+          return Array.from(map.values())
+            .filter(e => e.count > 0)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 20)
+            .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
+        }
+
+        const sofaGoals = sofaToRanked(goalsMap);
+        const sofaAssists = sofaToRanked(assistsMap);
+        const sofaYellow = sofaToRanked(yellowMap);
+        const sofaRed = sofaToRanked(redMap);
+
+        // Only return SofaScore data if we got meaningful results
+        if (sofaGoals.length > 0 || sofaYellow.length > 0) {
+          return NextResponse.json(
+            {
+              success: true,
+              goals: sofaGoals,
+              assists: sofaAssists,
+              yellowCards: sofaYellow,
+              redCards: sofaRed,
+              source: 'sofascore',
+            },
+            { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=600' } },
+          );
+        }
+      }
+    }
+  } catch { /* fall through to ESPN */ }
+
+  // ── ESPN fallback ────────────────────────────────────────────────────────
   const wcStart = '20260611';
   const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
