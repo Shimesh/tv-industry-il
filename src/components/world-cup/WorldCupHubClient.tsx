@@ -504,7 +504,7 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
           return;
         }
 
-        // Server returned no cards — try aggregating from client-side ESPN summaries
+        // Server returned no cards — aggregate from multiple per-match sources
         const completed = matches.filter(m => m.status === 'finished');
         if (!completed.length) { setCardsLoading(false); return; }
 
@@ -512,10 +512,7 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
         const yMap = new Map<string, CardEntry>();
         const rMap = new Map<string, CardEntry>();
 
-        await Promise.all(completed.map(async (match) => {
-          const dateStr = match.kickoff.replace(/-/g, '').slice(0, 8);
-          const evts = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
-          if (!evts) return;
+        const accumulateCards = (evts: MatchEvent[], match: WorldCupMatch) => {
           for (const evt of evts) {
             if (evt.type !== 'yellowcard' && evt.type !== 'redcard') continue;
             const n = evt.teamName.toLowerCase();
@@ -529,6 +526,26 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
             const curr = map.get(key) ?? { playerName: evt.player, team, count: 0 };
             map.set(key, { ...curr, count: curr.count + 1 });
           }
+        };
+
+        await Promise.all(completed.map(async (match) => {
+          const dateStr = match.kickoff.replace(/-/g, '').slice(0, 8);
+          const dateISO = match.kickoff.slice(0, 10);
+
+          // 1. Try client-side ESPN (different IP, may bypass server-side blocks)
+          const espnEvts = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+          const espnCards = espnEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+          if (espnCards.length > 0) { accumulateCards(espnCards, match); return; }
+
+          // 2. Try client-side SofaScore (browser may have CORS access)
+          try {
+            const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
+            if (sofaId) {
+              const sofaEvts = await fetchSofaIncidentsClient(sofaId);
+              const sofaCards = sofaEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+              if (sofaCards.length > 0) { accumulateCards(sofaCards, match); return; }
+            }
+          } catch { /* ignore */ }
         }));
 
         if (!cancelled) {

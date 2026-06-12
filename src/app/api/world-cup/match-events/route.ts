@@ -159,6 +159,60 @@ async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDa
   return null;
 }
 
+// OpenFootball (GitHub raw) — free, works from Vercel, has goal scorers for WC 2026 completed matches
+type OFGoal = { name?: string; minute?: string; type?: string };
+type OFMatch = {
+  team1?: string; team2?: string; date?: string; group?: string;
+  goals1?: OFGoal[]; goals2?: OFGoal[];
+  score?: { ft?: [number, number] };
+};
+
+async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<object[] | null> {
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',
+      { next: { revalidate: 120 }, signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { rounds?: Array<{ matches?: OFMatch[] }>; matches?: OFMatch[] };
+    const all: OFMatch[] = [];
+    if (data.rounds) data.rounds.forEach(r => all.push(...(r.matches ?? [])));
+    else if (data.matches) all.push(...data.matches);
+    if (!all.length) return null;
+
+    const w0 = (s: string) => s.split(' ')[0].toLowerCase();
+    const home = homeEn.toLowerCase();
+    const away = awayEn.toLowerCase();
+
+    const found = all.find(m => {
+      const t1 = (m.team1 ?? '').toLowerCase();
+      const t2 = (m.team2 ?? '').toLowerCase();
+      return (t1.startsWith(w0(home)) || home.startsWith(w0(t1))) &&
+             (t2.startsWith(w0(away)) || away.startsWith(w0(t2)));
+    });
+    if (!found) return null;
+
+    const events: { type: string; minute: number; teamName: string; player: string; detail: string }[] = [
+      ...(found.goals1 ?? []).map(g => ({
+        type: (g.type ?? '').toLowerCase().includes('own') ? 'owngoal' : 'goal',
+        minute: parseInt(g.minute ?? '0', 10),
+        teamName: found.team1 ?? homeEn,
+        player: g.name ?? '',
+        detail: (g.type ?? '').toLowerCase().includes('own') ? 'שער עצמי' : '',
+      })),
+      ...(found.goals2 ?? []).map(g => ({
+        type: (g.type ?? '').toLowerCase().includes('own') ? 'owngoal' : 'goal',
+        minute: parseInt(g.minute ?? '0', 10),
+        teamName: found.team2 ?? awayEn,
+        player: g.name ?? '',
+        detail: (g.type ?? '').toLowerCase().includes('own') ? 'שער עצמי' : '',
+      })),
+    ].sort((a, b) => b.minute - a.minute);
+
+    return events.length > 0 ? events : null;
+  } catch { return null; }
+}
+
 async function fetchESPNSummary(espnId: string): Promise<ESPNSummary | null> {
   try {
     const res = await fetch(`${ESPN_SUMMARY}${espnId}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
@@ -297,6 +351,13 @@ export async function GET(req: NextRequest) {
       } catch { /* fall through */ }
     }
 
+    // Final fallback: OpenFootball GitHub data — always accessible, has WC goal scorers
+    if (homeTeam && awayTeam) {
+      const ofEvents = await fetchOpenFootballGoals(homeTeam, awayTeam);
+      if (ofEvents && ofEvents.length > 0) {
+        return NextResponse.json({ success: true, minute: null, events: ofEvents, source: 'openfootball' }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+    }
     return NextResponse.json({ success: false, events: [], minute: null });
   }
 
@@ -333,6 +394,13 @@ export async function GET(req: NextRequest) {
           }
         }
       } catch { /* fall through */ }
+    }
+    // Final fallback: OpenFootball GitHub data
+    if (homeTeam && awayTeam) {
+      const ofEvents = await fetchOpenFootballGoals(homeTeam, awayTeam);
+      if (ofEvents && ofEvents.length > 0) {
+        return NextResponse.json({ success: true, minute: null, events: ofEvents, source: 'openfootball' }, { headers: { 'Cache-Control': 'no-store' } });
+      }
     }
     return NextResponse.json({ success: false, events: [], minute: null });
   }
