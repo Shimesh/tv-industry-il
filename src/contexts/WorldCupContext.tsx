@@ -58,14 +58,8 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
     if (Array.isArray(payload.matches)) setMatches(payload.matches);
   }, []);
 
-  useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 30_000);
-    return () => window.clearInterval(interval);
-  }, [refresh]);
-
   // Stabilise references — only update when the match ID actually changes,
-  // so context consumers don't re-render on every 60-second poll.
+  // so context consumers don't re-render on every poll cycle.
   const prevActiveRef = useRef<WorldCupMatch | null>(null);
   const activeMatch = useMemo(() => {
     const found = matches.find((m) => m.status === 'live') ?? null;
@@ -73,6 +67,13 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
     prevActiveRef.current = found;
     return found;
   }, [matches]);
+
+  useEffect(() => {
+    void refresh();
+    // Poll faster when a match is live (10s), slower otherwise (15s, matching hub page)
+    const interval = window.setInterval(() => void refresh(), activeMatch ? 10_000 : 15_000);
+    return () => window.clearInterval(interval);
+  }, [refresh, activeMatch]);
 
   const prevNextRef = useRef<WorldCupMatch | null>(null);
   const nextMatch = useMemo(() => {

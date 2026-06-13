@@ -87,20 +87,34 @@ function FlagBadge({ team, small = false }: { team: { id: string; nameHe: string
 
 export default function WorldCupCountdown({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const { activeMatch, nextMatch } = useWorldCup();
+  const { activeMatch, nextMatch, refresh } = useWorldCup();
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
-
-  const label = useMemo(() => (activeMatch ? 'מונדיאל LIVE' : 'מונדיאל 2026'), [activeMatch]);
-  const previewMatch = activeMatch ?? nextMatch ?? null;
 
   // Count down to next/active match kickoff, not to the fixed tournament start date
   const targetIso = nextMatch?.kickoff ?? activeMatch?.kickoff ?? WORLD_CUP_START_ISO;
 
+  // Locally treat a match as "starting" when its scheduled kickoff has passed,
+  // so the widget switches at exactly 00:00 without waiting for the next API poll.
+  const isStarting = Boolean(
+    activeMatch || (nextMatch && Date.parse(nextMatch.kickoff) <= Date.now()),
+  );
+
+  const label = useMemo(() => (isStarting ? 'מונדיאל LIVE' : 'מונדיאל 2026'), [isStarting]);
+  // Show the active match if confirmed, otherwise show nextMatch when it just started
+  const previewMatch = activeMatch ?? nextMatch ?? null;
+
   useEffect(() => {
     setDiff(getDiff(targetIso));
-    const interval = window.setInterval(() => setDiff(getDiff(targetIso)), 1000);
+    const interval = window.setInterval(() => {
+      const d = getDiff(targetIso);
+      setDiff(d);
+      // When timer hits exactly 0, fire an immediate context refresh
+      if (d.days === 0 && d.hours === 0 && d.minutes === 0 && d.seconds === 0) {
+        void refresh();
+      }
+    }, 1000);
     return () => window.clearInterval(interval);
-  }, [targetIso]);
+  }, [targetIso, refresh]);
 
   return (
     <motion.button
@@ -115,7 +129,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       }`}
       style={{
         background: 'linear-gradient(175deg, #001230 0%, #000c22 45%, #000818 100%)',
-        boxShadow: activeMatch
+        boxShadow: isStarting
           ? '0 0 0 1.5px rgba(212,175,55,0.6), 0 8px 32px rgba(212,175,55,0.25), 0 24px 64px rgba(0,0,0,0.5)'
           : '0 0 0 1.5px rgba(212,175,55,0.18), 0 8px 32px rgba(0,0,0,0.4), 0 2px 0 rgba(255,255,255,0.04) inset',
       }}
@@ -125,7 +139,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
       <motion.span
         className="pointer-events-none absolute inset-0 rounded-[inherit]"
         animate={{
-          boxShadow: activeMatch
+          boxShadow: isStarting
             ? [
                 '0 0 0 1.5px rgba(212,175,55,0.5), 0 0 24px rgba(212,175,55,0.25)',
                 '0 0 0 2px rgba(212,175,55,0.9), 0 0 48px rgba(212,175,55,0.55)',
@@ -181,7 +195,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
             <span className="block text-sm font-black leading-tight text-white">{label}</span>
           </span>
 
-          {activeMatch ? (
+          {isStarting ? (
             <span className="relative flex shrink-0 items-center gap-1.5" dir="ltr">
               <motion.span
                 className="rounded-lg px-2.5 py-1 text-sm font-black tabular-nums text-[#D4AF37]"
@@ -192,7 +206,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                 animate={{ opacity: [1, 0.5, 1] }}
                 transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
               >
-                {activeMatch.awayScore ?? 0}:{activeMatch.homeScore ?? 0}
+                {activeMatch ? `${activeMatch.awayScore ?? 0}:${activeMatch.homeScore ?? 0}` : 'חי'}
               </motion.span>
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
@@ -266,7 +280,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
               </span>
 
               {/* Live score or VS badge */}
-              {activeMatch ? (
+              {isStarting ? (
                 <span className="flex flex-col items-center gap-1">
                   <motion.span
                     className="rounded-xl px-3 py-1.5 text-2xl font-black tabular-nums text-[#D4AF37]"
@@ -279,7 +293,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {activeMatch.awayScore ?? 0}:{activeMatch.homeScore ?? 0}
+                    {activeMatch ? `${activeMatch.awayScore ?? 0}:${activeMatch.homeScore ?? 0}` : '0:0'}
                   </motion.span>
                   <span className="flex items-center gap-1 text-[10px] font-black text-red-400">
                     <motion.span
@@ -287,7 +301,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                       transition={{ duration: 0.9, repeat: Infinity }}
                       className="inline-block h-1.5 w-1.5 rounded-full bg-red-500"
                     />
-                    {activeMatch.minute != null ? `דקה ${activeMatch.minute}׳` : 'חי'}
+                    {activeMatch?.minute != null ? `דקה ${activeMatch.minute}׳` : 'חי'}
                   </span>
                 </span>
               ) : (
@@ -316,7 +330,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
           )}
 
           {/* Countdown or live indicator */}
-          {activeMatch ? (
+          {isStarting ? (
             <span
               className="relative flex w-full items-center justify-center gap-2 rounded-2xl py-2.5"
               style={{
