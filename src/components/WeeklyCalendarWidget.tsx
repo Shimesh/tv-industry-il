@@ -208,7 +208,8 @@ export default function WeeklyCalendarWidget() {
   const [days, setDays] = useState<string[]>(() => getWeekDays(0));
   const [productions, setProductions] = useState<Production[] | null>(null);
   const [myProductionDates, setMyProductionDates] = useState<Set<string> | null>(null);
-  const [mounted, setMounted] = useState(false);
+  // true on client from the start (avoids a mount re-render); false during SSR to prevent hydration mismatches
+  const [mounted] = useState(() => typeof window !== 'undefined');
   const [popupDate, setPopupDate] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -220,9 +221,14 @@ export default function WeeklyCalendarWidget() {
   const phone = profile?.phone ?? '';
   const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Keep profile fields in refs so the fetch effect always uses current values
+  // without re-triggering a full re-fetch when profile loads after initial user auth
+  const displayNameRef = useRef(displayName);
+  const phoneRef = useRef(phone);
+  const profileIdentityIdRef = useRef(profileIdentityId);
+  useEffect(() => { displayNameRef.current = displayName; }, [displayName]);
+  useEffect(() => { phoneRef.current = phone; }, [phone]);
+  useEffect(() => { profileIdentityIdRef.current = profileIdentityId; }, [profileIdentityId]);
 
   useEffect(() => {
     const requestRefresh = () => {
@@ -267,7 +273,10 @@ export default function WeeklyCalendarWidget() {
       const token = await user.getIdToken().catch(() => '');
       if (!token) return;
 
-      const normalizedPhone = normalizePhone(phone) ?? '';
+      const curDisplayName = displayNameRef.current;
+      const curPhone = phoneRef.current;
+      const curProfileIdentityId = profileIdentityIdRef.current;
+      const normalizedPhone = normalizePhone(curPhone) ?? '';
 
       const [globalPayload, personalPayload, myPayload, profilePayload] = await Promise.all([
         fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
@@ -292,9 +301,9 @@ export default function WeeklyCalendarWidget() {
               .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
               .catch(() => ({ productions: [] as Production[] }))
           : Promise.resolve({ productions: [] as Production[] }),
-        profileIdentityId
+        curProfileIdentityId
           ? fetch(
-              `/api/productions/global?profileId=${encodeURIComponent(profileIdentityId)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
+              `/api/productions/global?profileId=${encodeURIComponent(curProfileIdentityId)}&weekStart=${weekStart}&weekEnd=${weekEnd}`,
               { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
             )
               .then((r) => (r.ok ? (r.json() as Promise<{ productions?: Production[] }>) : { productions: [] }))
@@ -309,9 +318,9 @@ export default function WeeklyCalendarWidget() {
       const myPhoneProds = myPayload.productions ?? [];
       const myProfileProds = profilePayload.productions ?? [];
 
-      const afterGlobal = mergeProductions(personalProds, globalProds, displayName, phone);
-      const afterPhone = mergeProductions(afterGlobal, myPhoneProds, displayName, phone);
-      const merged = mergeProductions(afterPhone, myProfileProds, displayName, phone);
+      const afterGlobal = mergeProductions(personalProds, globalProds, curDisplayName, curPhone);
+      const afterPhone = mergeProductions(afterGlobal, myPhoneProds, curDisplayName, curPhone);
+      const merged = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
 
       setProductions(merged);
       if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
@@ -322,7 +331,7 @@ export default function WeeklyCalendarWidget() {
       setMyProductionDates(
         new Set(
           merged
-            .filter((p) => isMyProduction(p, displayName, phone))
+            .filter((p) => isMyProduction(p, curDisplayName, curPhone))
             .map((p) => p.date)
             .filter(Boolean),
         ),
@@ -336,10 +345,11 @@ export default function WeeklyCalendarWidget() {
     return () => {
       cancelled = true;
     };
-  // displayName, phone, and profileIdentityId are included so matching uses current profile data
-  }, [days, user, displayName, phone, profileIdentityId, refreshNonce]);
+  // displayName/phone/profileIdentityId are in refs — no need in dep array; avoids a double fetch
+  // when profile loads after initial user auth
+  }, [days, user, refreshNonce]);
 
-  const todayStr = mounted ? toDateStr(new Date()) : '';
+  const todayStr = toDateStr(new Date());
   const byDate = useMemo(() => {
     return (productions ?? []).reduce<Record<string, Production[]>>((acc, production) => {
       if (!production.date) return acc;
@@ -527,13 +537,15 @@ export default function WeeklyCalendarWidget() {
           })}
         </div>
 
-        {mounted && productions === null && (
-          <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)' }}>
-            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              {user ? 'טוען את לוח ההפקות הגלובלי...' : 'יש להתחבר כדי לצפות בלוח ההפקות'}
-            </p>
-          </div>
-        )}
+        {/* Always reserve this height so loading→loaded doesn't cause a layout shift */}
+        <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)', minHeight: '2.25rem' }}>
+          <p
+            className="text-xs transition-opacity duration-300"
+            style={{ color: 'var(--theme-text-secondary)', opacity: productions === null ? 1 : 0 }}
+          >
+            {user ? 'טוען את לוח ההפקות הגלובלי...' : 'יש להתחבר כדי לצפות בלוח ההפקות'}
+          </p>
+        </div>
       </div>
 
       {popupDate && popupProductions.length > 0 && (

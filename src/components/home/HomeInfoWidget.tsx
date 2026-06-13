@@ -167,7 +167,7 @@ function getTempStyle(temp: number | null): React.CSSProperties {
 // Animated weather icons
 function SunIcon() {
   return (
-    <div className="relative flex h-7 w-7 items-center justify-center">
+    <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full">
       <motion.div
         className="absolute inset-0 rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.55), transparent 70%)' }}
@@ -443,8 +443,8 @@ export default function HomeInfoWidget() {
                   style={{ background: `linear-gradient(to top, ${config.bottomGlow}, transparent)` }}
                 />
 
-                {/* Card content */}
-                <div className="relative flex flex-col p-3 gap-1.5">
+                {/* Card content — z-10 keeps it above the animated gradient overlays */}
+                <div className="relative z-10 flex flex-col p-3 gap-1.5">
 
                   {/* Row 1: city name + weather icon */}
                   <div className="flex items-center justify-between">

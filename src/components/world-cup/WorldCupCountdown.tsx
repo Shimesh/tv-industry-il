@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
-import { fallbackMatches, WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
+import { WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 
 const TROPHY_IMG = '/wc2026-logo.png';
@@ -91,7 +91,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
 
   const label = useMemo(() => (activeMatch ? 'מונדיאל LIVE' : 'מונדיאל 2026'), [activeMatch]);
-  const previewMatch = activeMatch ?? nextMatch ?? fallbackMatches[0] ?? null;
+  const previewMatch = activeMatch ?? nextMatch ?? null;
 
   // Count down to next/active match kickoff, not to the fixed tournament start date
   const targetIso = nextMatch?.kickoff ?? activeMatch?.kickoff ?? WORLD_CUP_START_ISO;

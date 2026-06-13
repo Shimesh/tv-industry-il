@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldCupMatch } from '@/lib/world-cup/types';
+import { fallbackMatches } from '@/lib/world-cup/static-data';
 
 type WorldCupContextValue = {
   isWorldCupMode: boolean;
@@ -47,7 +48,8 @@ function getNextMatch(matches: WorldCupMatch[]) {
 }
 
 export function WorldCupProvider({ children }: { children: React.ReactNode }) {
-  const [matches, setMatches] = useState<WorldCupMatch[]>([]);
+  // Seed with fallback so consumers render correctly before the first API response
+  const [matches, setMatches] = useState<WorldCupMatch[]>(fallbackMatches);
 
   const refresh = useMemo(() => async () => {
     const response = await fetch('/api/world-cup/matches', { cache: 'no-store' });
