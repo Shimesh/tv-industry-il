@@ -12,6 +12,7 @@ import {
   mergeGlobalProduction,
   type GlobalProductionDoc,
 } from '@/lib/globalProductions';
+import { splitHerzliyaRole } from '@/lib/productionScheduleParser';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
@@ -216,7 +217,30 @@ export async function GET(request: NextRequest) {
         })
       : docs;
 
-    const productions = sourceDocs.map(fromGlobalProduction);
+    // Dedup by herzliyaId+date and strip role suffix from names (cleans old Firestore entries)
+    const byHerzliya = new Map<string, GlobalProductionDoc>();
+    const noHerzliyaId: GlobalProductionDoc[] = [];
+    for (const doc of sourceDocs) {
+      if (doc.herzliyaId) {
+        const key = `${doc.herzliyaId}::${doc.date}`;
+        const existing = byHerzliya.get(key);
+        if (!existing || doc.crew_list.length > existing.crew_list.length ||
+            (doc.crew_list.length === existing.crew_list.length &&
+              String(doc.lastUpdatedAt) > String(existing.lastUpdatedAt))) {
+          byHerzliya.set(key, doc);
+        }
+      } else {
+        noHerzliyaId.push(doc);
+      }
+    }
+    const cleanDoc = (doc: GlobalProductionDoc): GlobalProductionDoc => {
+      const { name } = splitHerzliyaRole(doc.name);
+      return name && name !== doc.name ? { ...doc, name } : doc;
+    };
+    const productions = [
+      ...Array.from(byHerzliya.values()).map(cleanDoc),
+      ...noHerzliyaId.map(cleanDoc),
+    ].map(fromGlobalProduction);
     return NextResponse.json({ success: true, count: productions.length, productions, identity }, {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0' },
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthToken, unauthorizedResponse } from '@/lib/apiAuth';
 import { fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
+import { splitHerzliyaRole } from '@/lib/productionScheduleParser';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 import { runQuery, getDocument } from '@/lib/server/firestoreAdminRest';
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
     ]);
 
-    // Compatibility endpoint: read the canonical global calendar source.
+    // Dedup by Firestore ID (handles re-uploads of the same document)
     const byId = new Map<string, GlobalProductionDoc>();
     for (const doc of docs) {
       if (!doc.id || !doc.date || !doc.name) continue;
@@ -71,7 +72,43 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const productions = Array.from(byId.values()).map(fromGlobalProduction);
+    // Second dedup: by herzliyaId+date — merges old (name+role) and new (clean name) entries
+    const byHerzliya = new Map<string, GlobalProductionDoc>();
+    const noHerzliyaId: GlobalProductionDoc[] = [];
+    for (const doc of byId.values()) {
+      if (doc.herzliyaId) {
+        const key = `${doc.herzliyaId}::${doc.date}`;
+        const existing = byHerzliya.get(key);
+        if (!existing) {
+          byHerzliya.set(key, doc);
+        } else {
+          // Prefer the entry with more crew; on tie prefer newer lastUpdatedAt
+          const useIncoming =
+            doc.crew_list.length > existing.crew_list.length ||
+            (doc.crew_list.length === existing.crew_list.length &&
+              String(doc.lastUpdatedAt) > String(existing.lastUpdatedAt));
+          const winner = useIncoming ? doc : existing;
+          // Always use the shorter (role-stripped) name
+          const existingClean = splitHerzliyaRole(existing.name).name || existing.name;
+          const incomingClean = splitHerzliyaRole(doc.name).name || doc.name;
+          const cleanName = existingClean.length <= incomingClean.length ? existingClean : incomingClean;
+          byHerzliya.set(key, { ...winner, name: cleanName });
+        }
+      } else {
+        noHerzliyaId.push(doc);
+      }
+    }
+
+    // Strip role suffix from all remaining names (cleans old Firestore entries)
+    const cleanDoc = (doc: GlobalProductionDoc): GlobalProductionDoc => {
+      const { name } = splitHerzliyaRole(doc.name);
+      return name && name !== doc.name ? { ...doc, name } : doc;
+    };
+
+    const productions = [
+      ...Array.from(byHerzliya.values()).map(cleanDoc),
+      ...noHerzliyaId.map(cleanDoc),
+    ].map(fromGlobalProduction);
 
     // Prefer the user's own last sync time; fall back to the global system sync timestamp
     const lastSyncAt = userSyncDoc?.lastSyncAt ?? systemSyncDoc?.lastSyncAt ?? null;
