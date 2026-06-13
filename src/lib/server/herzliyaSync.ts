@@ -54,13 +54,53 @@ const BASE_HEADERS: Record<string, string> = {
 
 /**
  * Extract cookies from a fetch response for passthrough to subsequent requests.
- * Magic XPA may set session cookies on the first request.
+ * Node.js 20 (undici) exposes each Set-Cookie header separately via getSetCookie().
  */
 function extractCookies(response: Response): string {
+  const headersAny = response.headers as unknown as { getSetCookie?: () => string[] };
+  if (typeof headersAny.getSetCookie === 'function') {
+    return headersAny.getSetCookie()
+      .map(c => c.split(';')[0].trim())
+      .filter(Boolean)
+      .join('; ');
+  }
   const raw = response.headers.get('set-cookie');
   if (!raw) return '';
-  // Multiple Set-Cookie headers arrive as comma-joined in Node.js fetch
   return raw.split(',').map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+}
+
+/**
+ * Extract Magic XPA session argument (-A{id}) from a URL or raw string.
+ * Magic XPA embeds a session token in the `arguments` parameter as "-A{token}".
+ */
+function extractMagicXpaSession(str: string): string {
+  try {
+    const u = new URL(str);
+    const args = u.searchParams.get('arguments') || '';
+    const m = args.match(/-A([a-zA-Z0-9]+)/);
+    if (m) return `-A${m[1]}`;
+  } catch { /* fall through to raw string search */ }
+  const m = str.match(/-A([a-zA-Z0-9]{6,})/);
+  return m ? `-A${m[1]}` : '';
+}
+
+/**
+ * Find Magic XPA session argument in the page HTML.
+ * Looks in JavaScript openmd2 function definitions and inline script blocks.
+ */
+function extractMagicXpaSessionFromHtml(html: string): string {
+  // Common patterns where Magic XPA embeds the session in the HTML:
+  // "arguments=-A{sess}-N"+id  or  "ShowCrew&arguments=-A{sess}"
+  const patterns = [
+    /arguments=-A([a-zA-Z0-9]{6,})/,
+    /ShowCrew[^"'<]{0,60}-A([a-zA-Z0-9]{6,})/,
+    /-A([a-zA-Z0-9]{8,})-N/,
+  ];
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m) return `-A${m[1]}`;
+  }
+  return '';
 }
 
 export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncResult> {
@@ -106,6 +146,11 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
   const htmlBaseUrl = extractHerzliyaBaseUrl(personalHtml);
   const popupBaseUrl = htmlBaseUrl || finalUrl;
   debugLines.push(`popupBaseUrl:${popupBaseUrl.slice(0, 80)}`);
+
+  // Extract Magic XPA session argument so popup requests carry the same session
+  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(personalHtml);
+  debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
+
   const deptSameAsPersonal = deptHtml === personalHtml;
 
   const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
@@ -141,10 +186,20 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     await Promise.allSettled(
       uniqueIds.map(async (id) => {
-        const popupUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
+        // Build popup URL: include Magic XPA session prefix if extracted, as it may be required
+        let popupUrl = '';
+        try {
+          const u = new URL(popupBaseUrl);
+          u.searchParams.set('appname', 'HsILWeb');
+          u.searchParams.set('prgname', 'ShowCrew');
+          u.searchParams.set('arguments', magicXpaSession ? `${magicXpaSession}-N${id}` : `-N${id}`);
+          popupUrl = u.toString();
+        } catch {
+          popupUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
+        }
         if (!popupUrl) return;
         try {
-          const res = await fetch(popupUrl, popupFetchOpts);
+          const res = await fetch(popupUrl, { ...popupFetchOpts, signal: AbortSignal.timeout(10000) });
           if (res.ok) {
             const html = await res.text();
             // Only cache if the response looks like actual crew data (contains a table)
@@ -154,6 +209,20 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
             } else {
               debugLines.push(`popup${id}:no-table(${html.slice(0,80).replace(/\s+/g,' ')})`);
               popupFail++;
+              // Retry without session prefix if we had one (fallback attempt)
+              if (magicXpaSession) {
+                const fallbackUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
+                const res2 = await fetch(fallbackUrl, popupFetchOpts).catch(() => null);
+                if (res2?.ok) {
+                  const html2 = await res2.text();
+                  if (html2.includes('<table') || html2.includes('<TABLE')) {
+                    popupCache[id] = html2;
+                    popupOk++;
+                    popupFail--; // undo the earlier increment
+                    debugLines.push(`popup${id}:fallback-ok`);
+                  }
+                }
+              }
             }
           } else {
             debugLines.push(`popup${id}:http${res.status}`);
