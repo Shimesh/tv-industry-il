@@ -1309,7 +1309,12 @@ function ProductionsContent() {
             }
           } catch { /* ignore poll errors */ }
         }, 10000);
-        setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          setRequestStatus(prev =>
+            prev === 'pending' || prev === 'processing' ? 'idle' : prev,
+          );
+        }, 5 * 60 * 1000);
       }
     } catch (error: unknown) {
       setRequestStatus('error');
