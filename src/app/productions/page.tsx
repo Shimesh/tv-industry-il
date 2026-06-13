@@ -331,6 +331,9 @@ function ProductionsContent() {
   const [claimProfession, setClaimProfession] = useState('');
   const [showClaimModal, setShowClaimModal] = useState(false);
   const claimCheckedRef = useRef(false);
+  // Profile ref — lets loadExistingWeek read the latest profile without being in its dep array
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
   // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
@@ -522,8 +525,9 @@ function ProductionsContent() {
       const weekEnd = getWeekEndStr(weekId);
       const token = await user.getIdToken().catch(() => '');
 
-      const normalizedPhone = normalizePhone(profile?.phone || '');
-      const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
+      const currentProfile = profileRef.current;
+      const normalizedPhone = normalizePhone(currentProfile?.phone || '');
+      const profileIdentityId = currentProfile?.profileId || (currentProfile?.linkedContactId ? String(currentProfile.linkedContactId) : '');
 
       const [personalRes, globalRes, phoneRes, profileRes] = await Promise.all([
         token
@@ -566,7 +570,7 @@ function ProductionsContent() {
       if (typeof globalRes.lastSyncAt === 'number') setLastSyncAt(globalRes.lastSyncAt);
 
       const userProds = personalRes.productions ?? [];
-      const displayName = profile?.crewName || profile?.displayName || user.displayName || '';
+      const displayName = currentProfile?.crewName || currentProfile?.displayName || user.displayName || '';
 
       // Merge legacy global (name-based), phone matches, then linked profile matches.
       const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
@@ -579,7 +583,7 @@ function ProductionsContent() {
       console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [user, selectedTeamId, restListDocs, parseProductionDocs, profile]);
+  }, [user, selectedTeamId, restListDocs, parseProductionDocs]);
 
   const fetchGlobalWeekIds = useCallback(async (): Promise<string[]> => {
     if (!user || selectedTeamId) return [];
@@ -1899,6 +1903,7 @@ function ProductionsContent() {
         });
       } else if (result.notConnected || result.tokenRevoked) {
         setStatusMessage('Google Calendar לא מחובר — חבר מדף ההגדרות');
+        void updateUserProfile({ googleCalendarConnected: false } as Parameters<typeof updateUserProfile>[0]);
       } else {
         setStatusMessage(result.error ?? 'שגיאה בסנכרון');
       }
@@ -1907,7 +1912,7 @@ function ProductionsContent() {
     } finally {
       setGcalSyncing(null);
     }
-  }, [user, addNotification]);
+  }, [user, addNotification, updateUserProfile]);
 
   const getUpcomingPersonalProductions = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -2096,6 +2101,7 @@ function ProductionsContent() {
 
       if (stoppedDueToAuth) {
         setCalendarMenuMsg({ text: 'Google Calendar לא מחובר — חבר מחדש מדף ההגדרות', ok: false });
+        void updateUserProfile({ googleCalendarConnected: false } as Parameters<typeof updateUserProfile>[0]);
       } else if (errorCount === 0) {
         setCalendarMenuMsg({ text: `${successCount} הפקות סונכרנו ✓`, ok: true });
       } else {
@@ -2108,7 +2114,7 @@ function ProductionsContent() {
       setGcalBulkProgress(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, profile, workerName, calendarEventMap, calendarMapLoaded, loadCalendarEventMap, saveCalendarEventMap, loadProductionsForPeriod]);
+  }, [user, profile, workerName, calendarEventMap, calendarMapLoaded, loadCalendarEventMap, saveCalendarEventMap, loadProductionsForPeriod, updateUserProfile]);
 
   // Auto-sync changed productions to Google Calendar and send push notification.
   // Called silently after processSchedule detects changes — no popup interaction.
