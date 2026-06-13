@@ -63,6 +63,7 @@ function normalizeType(text?: string): string | null {
   if (!text) return null;
   const t = text.toLowerCase();
   if (t.includes('own goal') || t.includes('own-goal')) return 'owngoal';
+  if ((t.includes('penalty') || t.includes('pen.')) && (t.includes('goal') || t.includes('score') || t.includes('kick'))) return 'penalty';
   if (t.includes('goal') || t.includes('score')) return 'goal';
   if (t.includes('red card') || t.includes('red-card')) return 'redcard';
   if (t.includes('yellow card') || t.includes('yellow-card')) return 'yellowcard';
@@ -218,20 +219,14 @@ async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<o
     if (!found) return null;
 
     const events: { type: string; minute: number; teamName: string; player: string; detail: string }[] = [
-      ...(found.goals1 ?? []).map(g => ({
-        type: (g.type ?? '').toLowerCase().includes('own') ? 'owngoal' : 'goal',
-        minute: parseInt(g.minute ?? '0', 10),
-        teamName: found.team1 ?? homeEn,
-        player: g.name ?? '',
-        detail: (g.type ?? '').toLowerCase().includes('own') ? 'שער עצמי' : '',
-      })),
-      ...(found.goals2 ?? []).map(g => ({
-        type: (g.type ?? '').toLowerCase().includes('own') ? 'owngoal' : 'goal',
-        minute: parseInt(g.minute ?? '0', 10),
-        teamName: found.team2 ?? awayEn,
-        player: g.name ?? '',
-        detail: (g.type ?? '').toLowerCase().includes('own') ? 'שער עצמי' : '',
-      })),
+      ...(found.goals1 ?? []).map(g => {
+        const gt = (g.type ?? '').toLowerCase();
+        return { type: gt.includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team1 ?? homeEn, player: g.name ?? '', detail: gt.includes('own') ? 'שער עצמי' : gt.includes('penalty') ? 'פנדל' : '' };
+      }),
+      ...(found.goals2 ?? []).map(g => {
+        const gt = (g.type ?? '').toLowerCase();
+        return { type: gt.includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team2 ?? awayEn, player: g.name ?? '', detail: gt.includes('own') ? 'שער עצמי' : gt.includes('penalty') ? 'פנדל' : '' };
+      }),
     ].sort((a, b) => b.minute - a.minute);
 
     // Inject halftime marker if we have HT score
@@ -269,12 +264,13 @@ function parseSummary(data: ESPNSummary): { events: object[]; minute: number | n
       ?? '';
     const assist = play.athletesInvolved?.find(a => a.type?.toLowerCase().includes('assist'))?.displayName
       ?? play.participants?.find(p => p.type?.description?.toLowerCase().includes('assist'))?.athlete?.displayName;
+    const isPenalty = type === 'penalty';
     events.push({
-      type,
+      type: isPenalty ? 'goal' : type,
       minute,
       teamName,
       player: athlete,
-      detail: assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : ''),
+      detail: isPenalty ? 'פנדל' : (assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '')),
     });
   }
 
@@ -355,7 +351,7 @@ export async function GET(req: NextRequest) {
           type RawBooking = { minute?: number; team?: { name?: string }; player?: { name?: string }; card?: string };
           type RawSub = { minute?: number; team?: { name?: string }; playerIn?: { name?: string }; playerOut?: { name?: string } };
           const evts = [
-            ...(data.goals ?? []).map((g: RawGoal) => ({ type: g.type === 'OWN' ? 'owngoal' : 'goal', minute: g.minute ?? 0, teamName: g.team?.name ?? '', player: g.scorer?.name ?? '', detail: g.assist?.name ? `בישול: ${g.assist.name}` : (g.type === 'OWN' ? 'שער עצמי' : '') })),
+            ...(data.goals ?? []).map((g: RawGoal) => ({ type: g.type === 'OWN' ? 'owngoal' : 'goal', minute: g.minute ?? 0, teamName: g.team?.name ?? '', player: g.scorer?.name ?? '', detail: g.type === 'OWN' ? 'שער עצמי' : g.type === 'PENALTY' ? 'פנדל' : (g.assist?.name ? `בישול: ${g.assist.name}` : '') })),
             ...(data.bookings ?? []).map((b: RawBooking) => ({ type: b.card === 'RED_CARD' ? 'redcard' : 'yellowcard', minute: b.minute ?? 0, teamName: b.team?.name ?? '', player: b.player?.name ?? '', detail: '' })),
             ...(data.substitutions ?? []).map((s: RawSub) => ({ type: 'substitution', minute: s.minute ?? 0, teamName: s.team?.name ?? '', player: s.playerIn?.name ?? '', detail: s.playerOut?.name ? `יצא: ${s.playerOut.name}` : '' })),
           ].sort((a, b) => b.minute - a.minute);

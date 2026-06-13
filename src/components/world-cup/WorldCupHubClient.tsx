@@ -1515,9 +1515,10 @@ async function fetchSofaIncidentsClient(sofaEventId: number): Promise<MatchEvent
     const teamName = teamId === homeId ? homeName : teamId === awayId ? awayName : '';
     switch (inc.incidentType) {
       case 'goal': {
+        const isPenalty = inc.goalType === 'penalty';
         const type = inc.goalType === 'own' ? 'owngoal' : 'goal';
         const assist = inc.assist1?.name ?? '';
-        events.push({ type, minute, teamName, player: inc.player?.name ?? '', detail: assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '') });
+        events.push({ type, minute, teamName, player: inc.player?.name ?? '', detail: isPenalty ? 'פנדל' : (assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '')) });
         break;
       }
       case 'card': {
@@ -1547,6 +1548,7 @@ function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
     if (!text) return null;
     const t = String(text).toLowerCase();
     if (t.includes('own goal') || t.includes('own-goal')) return 'owngoal';
+    if ((t.includes('penalty') || t.includes('pen.')) && (t.includes('goal') || t.includes('score') || t.includes('kick'))) return 'penalty';
     if (t.includes('goal') || t.includes('score')) return 'goal';
     if (t.includes('red card')) return 'redcard';
     if (t.includes('yellow card')) return 'yellowcard';
@@ -1554,14 +1556,16 @@ function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
     return null;
   }
   for (const play of (data.scoringPlays as AnyPlay[] ?? [])) {
-    const type = normType((play.type as Record<string,unknown>)?.text);
-    if (!type) continue;
+    const rawType = normType((play.type as Record<string,unknown>)?.text);
+    if (!rawType) continue;
+    const isPenalty = rawType === 'penalty';
+    const type = isPenalty ? 'goal' : rawType;
     const involved = play.athletesInvolved as Array<Record<string,unknown>> | undefined;
     const parts = play.participants as Array<Record<string,unknown>> | undefined;
     const scorer = involved?.[0]?.displayName ?? parts?.[0]?.athlete as string ?? '';
     const assistObj = involved?.find(a => String(a.type ?? '').toLowerCase().includes('assist'));
     const assist = assistObj?.displayName ?? '';
-    evts.push({ type, minute: getMinute(play), teamName: String((play.team as Record<string,unknown>)?.displayName ?? ''), player: String(scorer), detail: assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '') });
+    evts.push({ type, minute: getMinute(play), teamName: String((play.team as Record<string,unknown>)?.displayName ?? ''), player: String(scorer), detail: isPenalty ? 'פנדל' : (assist ? `בישול: ${assist}` : (type === 'owngoal' ? 'שער עצמי' : '')) });
   }
   for (const play of (data.plays as AnyPlay[] ?? [])) {
     const type = normType((play.type as Record<string,unknown>)?.text);
@@ -1701,8 +1705,8 @@ async function fetchOpenFootballGoalsClient(homeEn: string, awayEn: string): Pro
     });
     if (!found) return null;
     const events: MatchEvent[] = [
-      ...(found.goals1 ?? []).map(g => ({ type: (g.type ?? '').includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team1 ?? homeEn, player: g.name ?? '', detail: (g.type ?? '').includes('own') ? 'שער עצמי' : '' })),
-      ...(found.goals2 ?? []).map(g => ({ type: (g.type ?? '').includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team2 ?? awayEn, player: g.name ?? '', detail: (g.type ?? '').includes('own') ? 'שער עצמי' : '' })),
+      ...(found.goals1 ?? []).map(g => { const gt = (g.type ?? '').toLowerCase(); return { type: gt.includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team1 ?? homeEn, player: g.name ?? '', detail: gt.includes('own') ? 'שער עצמי' : gt.includes('penalty') ? 'פנדל' : '' }; }),
+      ...(found.goals2 ?? []).map(g => { const gt = (g.type ?? '').toLowerCase(); return { type: gt.includes('own') ? 'owngoal' : 'goal', minute: parseInt(g.minute ?? '0', 10), teamName: found.team2 ?? awayEn, player: g.name ?? '', detail: gt.includes('own') ? 'שער עצמי' : gt.includes('penalty') ? 'פנדל' : '' }; }),
     ].sort((a, b) => b.minute - a.minute);
     const ht = found.score?.ht;
     if (ht && events.length > 0) events.push({ type: 'halftime', minute: 45, teamName: '', player: '', detail: `פגרה: ${ht[0]}-${ht[1]}` });

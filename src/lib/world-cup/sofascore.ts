@@ -218,8 +218,8 @@ export function parseSofaIncidents(
 
     switch (inc.incidentType) {
       case 'goal': {
-        const type =
-          inc.goalType === 'own' ? 'owngoal' : 'goal';
+        const isPenalty = inc.goalType === 'penalty';
+        const type = inc.goalType === 'own' ? 'owngoal' : 'goal';
         const player = inc.player?.name ?? '';
         const assist = inc.assist1?.name ?? '';
         events.push({
@@ -227,7 +227,9 @@ export function parseSofaIncidents(
           minute,
           teamName,
           player,
-          detail: assist
+          detail: isPenalty
+            ? 'פנדל'
+            : assist
             ? `בישול: ${assist}`
             : type === 'owngoal'
             ? 'שער עצמי'
