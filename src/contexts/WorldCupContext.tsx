@@ -52,7 +52,8 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
   const [matches, setMatches] = useState<WorldCupMatch[]>(fallbackMatches);
 
   const refresh = useMemo(() => async () => {
-    const response = await fetch('/api/world-cup/matches', { cache: 'no-store' });
+    // Add cache-busting param so Vercel CDN never serves a stale edge-cached response
+    const response = await fetch(`/api/world-cup/matches?_t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) return;
     const payload = (await response.json()) as { matches?: WorldCupMatch[] };
     if (Array.isArray(payload.matches)) setMatches(payload.matches);

@@ -23,7 +23,11 @@ export async function GET() {
   const standings = finished.length > 0 ? deriveStandingsFromMatches(finished) : apiStandings;
 
   const hasLive = matches.some(m => m.status === 'live');
-  const ttl = hasLive ? 30 : 60;
+  // During a live match: bypass CDN cache so ESPN scores are always real-time.
+  // When idle: allow CDN to cache for up to 60s to reduce serverless invocations.
+  const cacheHeader = hasLive
+    ? 'no-store'
+    : 's-maxage=60, stale-while-revalidate=120';
 
   return NextResponse.json({
     success: true,
@@ -36,7 +40,7 @@ export async function GET() {
     venues: getWorldCupVenues(),
   }, {
     headers: {
-      'Cache-Control': `s-maxage=${ttl}, stale-while-revalidate=${ttl * 2}`,
+      'Cache-Control': cacheHeader,
     },
   });
 }
