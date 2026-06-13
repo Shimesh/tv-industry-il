@@ -297,8 +297,10 @@ function parseSummary(data: ESPNSummary): { events: object[]; minute: number | n
   // Also parse keyEvents — ESPN sometimes populates these even when plays array is empty
   const seenMinutesTypes = new Set(events.map(e => `${e.minute}|${e.type}`));
   for (const ke of data.keyEvents ?? []) {
-    const type = normalizeType(ke.type?.text);
-    if (!type) continue;
+    const rawType = normalizeType(ke.type?.text);
+    if (!rawType) continue;
+    const isPenalty = rawType === 'penalty';
+    const type = isPenalty ? 'goal' : rawType;
     const minute = typeof ke.clock?.value === 'number' ? Math.round(ke.clock.value / 60)
       : parseInt((ke.clock?.displayValue ?? '').split(':')[0] ?? '0', 10) || 0;
     const key = `${minute}|${type}`;
@@ -306,7 +308,7 @@ function parseSummary(data: ESPNSummary): { events: object[]; minute: number | n
     seenMinutesTypes.add(key);
     const teamName = ke.team?.displayName ?? '';
     const player = ke.participants?.[0]?.athlete?.displayName ?? ke.text ?? '';
-    events.push({ type, minute, teamName, player, detail: '' });
+    events.push({ type, minute, teamName, player, detail: isPenalty ? 'פנדל' : '' });
   }
 
   // Sort newest first

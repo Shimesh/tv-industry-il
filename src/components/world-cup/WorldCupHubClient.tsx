@@ -492,83 +492,98 @@ function StatsSection({ initialPlayerStats, matches }: { initialPlayerStats: Wor
 
   useEffect(() => {
     let cancelled = false;
+    const isLive = matches.some(m => m.status === 'live');
     const word0 = (s: string) => s.split(' ')[0].toLowerCase();
 
-    fetch('/api/world-cup/tournament-stats')
-      .then(r => r.ok ? r.json() : null)
-      .then(async (d: TournamentStats | null) => {
+    const fetchTournamentStats = () =>
+      fetch(`/api/world-cup/tournament-stats?_t=${Date.now()}`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null) as Promise<TournamentStats | null>;
+
+    fetchTournamentStats().then(async (d: TournamentStats | null) => {
+      if (cancelled) return;
+
+      if (d?.success && (d.yellowCards.length > 0 || d.redCards.length > 0)) {
+        setStats(d);
+        setCardsLoading(false);
+        return;
+      }
+
+      // Server returned no cards — aggregate from multiple per-match sources
+      const completed = matches.filter(m => m.status === 'finished');
+      if (!completed.length) { setCardsLoading(false); return; }
+
+      type CardEntry = { playerName: string; team: WorldCupTeam; count: number };
+      const yMap = new Map<string, CardEntry>();
+      const rMap = new Map<string, CardEntry>();
+
+      const accumulateCards = (evts: MatchEvent[], match: WorldCupMatch) => {
+        for (const evt of evts) {
+          if (evt.type !== 'yellowcard' && evt.type !== 'redcard') continue;
+          const n = evt.teamName.toLowerCase();
+          const team = word0(match.homeTeam.nameEn) === word0(n) || n.startsWith(word0(match.homeTeam.nameEn)) || word0(match.homeTeam.nameEn).startsWith(word0(n))
+            ? match.homeTeam
+            : word0(match.awayTeam.nameEn) === word0(n) || n.startsWith(word0(match.awayTeam.nameEn)) || word0(match.awayTeam.nameEn).startsWith(word0(n))
+            ? match.awayTeam
+            : { id: 'tbd', nameHe: evt.teamName, nameEn: evt.teamName, flag: '🏳️' } as WorldCupTeam;
+          const map = evt.type === 'redcard' ? rMap : yMap;
+          const key = `${evt.player}|${team.id}`;
+          const curr = map.get(key) ?? { playerName: evt.player, team, count: 0 };
+          map.set(key, { ...curr, count: curr.count + 1 });
+        }
+      };
+
+      await Promise.all(completed.map(async (match) => {
+        const dateStr = match.kickoff.replace(/-/g, '').slice(0, 8);
+        const dateISO = match.kickoff.slice(0, 10);
+
+        // 1. Try client-side ESPN (different IP, may bypass server-side blocks)
+        const espnEvts = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
+        const espnCards = espnEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+        if (espnCards.length > 0) { accumulateCards(espnCards, match); return; }
+
+        // 2. Try client-side SofaScore (browser may have CORS access)
+        try {
+          const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
+          if (sofaId) {
+            const sofaEvts = await fetchSofaIncidentsClient(sofaId);
+            const sofaCards = sofaEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
+            if (sofaCards.length > 0) { accumulateCards(sofaCards, match); return; }
+          }
+        } catch { /* ignore */ }
+      }));
+
+      if (!cancelled) {
+        const toRanked = (m: Map<string, CardEntry>): WorldCupCardStat[] =>
+          Array.from(m.values())
+            .sort((a, b) => b.count - a.count)
+            .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
+        if (yMap.size > 0 || rMap.size > 0) {
+          setStats(prev => ({
+            success: true,
+            goals: prev?.goals ?? [],
+            assists: prev?.assists ?? [],
+            yellowCards: toRanked(yMap),
+            redCards: toRanked(rMap),
+            playerStats: prev?.playerStats ?? [],
+          }));
+        }
+        setCardsLoading(false);
+      }
+    });
+
+    // During a live match, refresh tournament-stats every 30 seconds
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isLive) {
+      interval = setInterval(() => {
         if (cancelled) return;
+        fetchTournamentStats().then((d: TournamentStats | null) => {
+          if (!cancelled && d?.success) setStats(d);
+        });
+      }, 30_000);
+    }
 
-        if (d?.success && (d.yellowCards.length > 0 || d.redCards.length > 0)) {
-          setStats(d);
-          setCardsLoading(false);
-          return;
-        }
-
-        // Server returned no cards — aggregate from multiple per-match sources
-        const completed = matches.filter(m => m.status === 'finished');
-        if (!completed.length) { setCardsLoading(false); return; }
-
-        type CardEntry = { playerName: string; team: WorldCupTeam; count: number };
-        const yMap = new Map<string, CardEntry>();
-        const rMap = new Map<string, CardEntry>();
-
-        const accumulateCards = (evts: MatchEvent[], match: WorldCupMatch) => {
-          for (const evt of evts) {
-            if (evt.type !== 'yellowcard' && evt.type !== 'redcard') continue;
-            const n = evt.teamName.toLowerCase();
-            const team = word0(match.homeTeam.nameEn) === word0(n) || n.startsWith(word0(match.homeTeam.nameEn)) || word0(match.homeTeam.nameEn).startsWith(word0(n))
-              ? match.homeTeam
-              : word0(match.awayTeam.nameEn) === word0(n) || n.startsWith(word0(match.awayTeam.nameEn)) || word0(match.awayTeam.nameEn).startsWith(word0(n))
-              ? match.awayTeam
-              : { id: 'tbd', nameHe: evt.teamName, nameEn: evt.teamName, flag: '🏳️' } as WorldCupTeam;
-            const map = evt.type === 'redcard' ? rMap : yMap;
-            const key = `${evt.player}|${team.id}`;
-            const curr = map.get(key) ?? { playerName: evt.player, team, count: 0 };
-            map.set(key, { ...curr, count: curr.count + 1 });
-          }
-        };
-
-        await Promise.all(completed.map(async (match) => {
-          const dateStr = match.kickoff.replace(/-/g, '').slice(0, 8);
-          const dateISO = match.kickoff.slice(0, 10);
-
-          // 1. Try client-side ESPN (different IP, may bypass server-side blocks)
-          const espnEvts = await clientFindEspnIdAndFetchSummary(match.homeTeam.nameEn, match.awayTeam.nameEn, dateStr).catch(() => null);
-          const espnCards = espnEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
-          if (espnCards.length > 0) { accumulateCards(espnCards, match); return; }
-
-          // 2. Try client-side SofaScore (browser may have CORS access)
-          try {
-            const sofaId = match.sofaEventId ?? await findSofaEventIdClient(match.homeTeam.nameEn, match.awayTeam.nameEn, dateISO);
-            if (sofaId) {
-              const sofaEvts = await fetchSofaIncidentsClient(sofaId);
-              const sofaCards = sofaEvts?.filter(e => e.type === 'yellowcard' || e.type === 'redcard') ?? [];
-              if (sofaCards.length > 0) { accumulateCards(sofaCards, match); return; }
-            }
-          } catch { /* ignore */ }
-        }));
-
-        if (!cancelled) {
-          const toRanked = (m: Map<string, CardEntry>): WorldCupCardStat[] =>
-            Array.from(m.values())
-              .sort((a, b) => b.count - a.count)
-              .map((e, i) => ({ rank: i + 1, playerName: e.playerName, team: e.team, count: e.count }));
-          if (yMap.size > 0 || rMap.size > 0) {
-            setStats(prev => ({
-              success: true,
-              goals: prev?.goals ?? [],
-              assists: prev?.assists ?? [],
-              yellowCards: toRanked(yMap),
-              redCards: toRanked(rMap),
-              playerStats: prev?.playerStats ?? [],
-            }));
-          }
-          setCardsLoading(false);
-        }
-      })
-      .catch(() => { if (!cancelled) setCardsLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (interval) clearInterval(interval); };
   }, [matches]);
 
   const tabs: { key: StatTab; label: string; icon: string }[] = [
@@ -1569,7 +1584,7 @@ function parseESPNSummaryClient(data: Record<string, unknown>): MatchEvent[] {
   }
   for (const play of (data.plays as AnyPlay[] ?? [])) {
     const type = normType((play.type as Record<string,unknown>)?.text);
-    if (!type || type === 'goal' || type === 'owngoal') continue;
+    if (!type || type === 'goal' || type === 'owngoal' || type === 'penalty') continue;
     const parts = play.participants as Array<Record<string,unknown>> | undefined;
     const player = (parts?.[0]?.athlete as Record<string,unknown>)?.displayName ?? play.text ?? '';
     const subOut = type === 'substitution'

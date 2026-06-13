@@ -302,7 +302,7 @@ export async function GET() {
               substitutions: [],
               source: 'sofascore',
             },
-            { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } },
+            { headers: { 'Cache-Control': 'no-store' } },
           );
         }
       }
@@ -382,7 +382,7 @@ export async function GET() {
           redCards: toRanked(fdRed),
           substitutions: [],
           source: 'football-data',
-        }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
+        }, { headers: { 'Cache-Control': 'no-store' } });
       }
     }
   } catch { /* fall through to ESPN */ }
@@ -437,7 +437,7 @@ export async function GET() {
       redCards: toRanked(red),
       substitutions: toRanked(subs),
       source: 'espn',
-    }, { headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=60' } });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   // Final fallback: OpenFootball — always accessible, goals only
@@ -450,5 +450,5 @@ export async function GET() {
     redCards: ofStats?.redCards ?? [],
     substitutions: [],
     source: ofStats ? 'openfootball' : undefined,
-  }, { headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=120' } });
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
