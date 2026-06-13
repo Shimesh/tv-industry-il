@@ -37,6 +37,54 @@ function extractStudioFromName(name: string): { studio: string; remaining: strin
   return { studio: '', remaining: name };
 }
 
+/**
+ * Known role suffixes appended to production names in Herzliya calendar cells,
+ * e.g. "אסתטיקה 360 צילום" → name="אסתטיקה 360", userRole="צילום".
+ * Sorted longest-first so multi-word roles are matched before single words.
+ */
+const HERZLIYA_ROLE_SUFFIXES: string[] = [
+  'ניהול הפקה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
+  'ע. עריכה', 'ע. תאורה', 'ע. סאונד', 'סטדי קאם', 'סטדי-קאם', 'סטדיקאם',
+  'צלם רחף', 'רחף', 'רחפן', 'רחפנית',
+  'צילום', 'עריכה', 'סאונד', 'תאורה', 'בימוי', 'עיצוב', 'ניהול',
+  'שידור', 'מפיקה', 'מפיק', 'ספרות', 'תסריט', 'גרפיקה', 'תפאורה',
+  'איפור', 'לוגיסטיקה', 'הנחיה', 'הפקה', 'עורך', 'עורכת',
+  'מנהל', 'מנהלת', 'הדלקות', 'לייטינג', 'חשמל', 'קאמרה', 'CCU',
+];
+
+/**
+ * Split Herzliya event text into production name and user role.
+ * Herzliya appends the user's role as the last word(s): "מונדיאל 2026 צילום" → { name: "מונדיאל 2026", userRole: "צילום" }
+ */
+export function splitHerzliyaRole(fullName: string): { name: string; userRole: string } {
+  const t = fullName.trim();
+  for (const role of HERZLIYA_ROLE_SUFFIXES) {
+    if (t === role) return { name: t, userRole: role };
+    if (t.endsWith(' ' + role)) {
+      const name = t.slice(0, t.length - role.length - 1).trim();
+      if (name) return { name, userRole: role };
+    }
+  }
+  return { name: t, userRole: '' };
+}
+
+/**
+ * Extract worker name from Herzliya calendar HTML.
+ * Tries: "שלום {name}", <font color=RED><b>...</b></font> table header, "עובד: {name}".
+ */
+export function extractHerzliyaWorkerName(html: string): string {
+  // Pattern 1: "שלום ירון" greeting
+  const m1 = html.match(/שלום\s+([^<\n,]{2,40})/);
+  if (m1) return m1[1].trim();
+  // Pattern 2: <font color="RED"><b>Name</b></font> in header table (actual Herzliya HTML)
+  const m2 = html.match(/<font[^>]*color=["']?RED["']?[^>]*>\s*<b>([^<]{2,40})<\/b>/i);
+  if (m2) return m2[1].trim();
+  // Pattern 3: "עובד: Name"
+  const m3 = html.match(/עובד[:\s]+([^<\n]{2,40})/);
+  if (m3) return m3[1].trim();
+  return '';
+}
+
 /** Check if HTML string is from the Herzliya schedule system */
 export function isHerzliyaHTML(text: string): boolean {
   return (
@@ -340,12 +388,7 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
   }
 
   // ── Step 2: Extract worker name ──
-  let workerName = '';
-  const bodyText = doc.body?.textContent || '';
-  const nameMatch = bodyText.match(/שלום\s+([^\n,]+)/) || bodyText.match(/עובד[:\s]+([^\n]+)/);
-  if (nameMatch) {
-    workerName = nameMatch[1].trim();
-  }
+  const workerName = extractHerzliyaWorkerName(html);
 
   // ── Step 3: Extract productions from day cells ──
   const calendarBody = doc.querySelector('.calendar-body');
@@ -386,6 +429,9 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
           .replace(/\s+/g, ' ')
           .trim();
       if (!rawProductionName) return;
+
+      // Extract user role appended to name: "\u05de\u05d5\u05e0\u05d3\u05d9\u05d0\u05dc 2026 \u05e6\u05d9\u05dc\u05d5\u05dd" \u2192 name + role
+      const { name: nameWithoutRole, userRole: eventUserRole } = splitHerzliyaRole(rawProductionName);
 
       // Parse crew from innerHTML (split by <br>)
       const innerHTML = eventDiv.innerHTML;
@@ -461,10 +507,10 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
         }
       }
 
-      // Extract studio: prefer standalone line from event div, fallback to production name
-      const { studio: studioFromName, remaining: cleanName } = extractStudioFromName(rawProductionName);
+      // Extract studio from role-stripped name; store final clean name
+      const { studio: studioFromName, remaining: cleanName } = extractStudioFromName(nameWithoutRole);
       const studio = studioFromParts || studioFromName;
-      const finalName = (studioFromName ? cleanName : rawProductionName) || rawProductionName;
+      const finalName = (studioFromName ? cleanName : nameWithoutRole) || nameWithoutRole;
 
       // Determine isCurrentUserShift
       const isCurrentUserShift = isHighlightedShift || crew.some(c => c.isCurrentUser);
@@ -777,9 +823,7 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
   }
 
   // Worker name
-  let workerName = '';
-  const nameM = html.match(/שלום\s+([^<\n,]+)/) || html.match(/עובד[:\s]+([^<\n]+)/);
-  if (nameM) workerName = nameM[1].trim();
+  const workerName = extractHerzliyaWorkerName(html);
 
   // Weekday dates from the header section (Sun … Sat in order)
   const headerHtml = html.slice(headerStart, bodyStart);
@@ -811,11 +855,11 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         if (!idM) continue;
         const herzliyaId = parseInt(idM[1]);
         const summary = parseHerzliyaEventSummary(chunk);
-        const rawName = summary.name;
-        if (!rawName) continue;
-        const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+        if (!summary.name) continue;
+        const { name: nameNoRole } = splitHerzliyaRole(summary.name);
+        const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studioFromName = studioM ? studioM[0].trim() : '';
-        const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+        const name = studioFromName ? nameNoRole.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
         const parsedCrew = parseEventCrewFromHtml(chunk);
         const crew = parsedCrew.crew;
         const startTime = parsedCrew.startTime || summary.startTime;
@@ -828,25 +872,23 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
   }
 
   // ── Strategy 2 fallback: if no cells matched, assign events to days by round-robin ──
-  // This handles cases where day-cell divs have unusual attributes or tag types.
   if (productions.length === 0) {
     const allEventChunks = bodyHtml.split(/onclick=["']openmd2\(/);
     const eventsPerDay = Math.ceil((allEventChunks.length - 1) / weekDays.length) || 1;
     let dayIdx = 0;
     for (let i = 1; i < allEventChunks.length; i++) {
-      // Advance day when we estimate we've consumed that day's events
       if (i > 1 && (i - 1) % eventsPerDay === 0 && dayIdx + 1 < weekDays.length) dayIdx++;
       const chunk = allEventChunks[i];
       const idM = chunk.match(/^(\d+)\)/);
       if (!idM) continue;
       const herzliyaId = parseInt(idM[1]);
       const summary = parseHerzliyaEventSummary(chunk);
-      const rawName = summary.name;
-      if (!rawName) continue;
+      if (!summary.name) continue;
       const isoDate = weekDays[dayIdx]?.isoDate || weekDays[0].isoDate;
-      const studioM = rawName.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+      const { name: nameNoRole } = splitHerzliyaRole(summary.name);
+      const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
       const studioFromName = studioM ? studioM[0].trim() : '';
-      const name = studioFromName ? rawName.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : rawName;
+      const name = studioFromName ? nameNoRole.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
       const parsedCrew = parseEventCrewFromHtml(chunk);
       const crew = parsedCrew.crew;
       const startTime = parsedCrew.startTime || summary.startTime;
