@@ -21,10 +21,29 @@ function normalizeTime(t: string | null | undefined, fallback: string): string {
   return raw.slice(0, 5);
 }
 
+function addDaysToDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function buildCalendarEvent(production: ProductionInput) {
-  const startTime = normalizeTime(production.startTime, '09:00');
-  const endTime = normalizeTime(production.endTime, '18:00');
+  const rawStart = normalizeTime(production.startTime, '09:00');
+  const rawEnd = normalizeTime(production.endTime, '18:00');
   const dateStr = production.date;
+
+  // Handle times past midnight (e.g. "25:00" → next day "01:00")
+  const startHours = parseInt(rawStart.slice(0, 2), 10);
+  const endHours = parseInt(rawEnd.slice(0, 2), 10);
+
+  const startOverflow = Math.floor(startHours / 24);
+  const endOverflow = Math.floor(endHours / 24);
+
+  const startDateStr = startOverflow > 0 ? addDaysToDate(dateStr, startOverflow) : dateStr;
+  const endDateStr = endOverflow > 0 ? addDaysToDate(dateStr, endOverflow) : dateStr;
+
+  const startTime = `${String(startHours % 24).padStart(2, '0')}:${rawStart.slice(3)}`;
+  const endTime = `${String(endHours % 24).padStart(2, '0')}:${rawEnd.slice(3)}`;
 
   const crewText = (production.crew ?? [])
     .map((c) => `${c.name}${c.role ? ` — ${c.role}` : ''}`)
@@ -41,8 +60,8 @@ function buildCalendarEvent(production: ProductionInput) {
     summary: production.name,
     description: descriptionParts.join('\n'),
     location: production.studio ?? '',
-    start: { dateTime: `${dateStr}T${startTime}:00`, timeZone: 'Asia/Jerusalem' },
-    end: { dateTime: `${dateStr}T${endTime}:00`, timeZone: 'Asia/Jerusalem' },
+    start: { dateTime: `${startDateStr}T${startTime}:00`, timeZone: 'Asia/Jerusalem' },
+    end: { dateTime: `${endDateStr}T${endTime}:00`, timeZone: 'Asia/Jerusalem' },
     extendedProperties: {
       private: { tvIndustryProductionId: production.id, source: 'tv-industry-il' },
     },
