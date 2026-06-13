@@ -2176,9 +2176,9 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
               <div className="rounded-xl bg-black/35 px-3 py-2 font-black text-[#D4AF37] text-xl tabular-nums" dir="ltr">
                 {isLive ? (
                   <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
-                    {match.homeScore ?? '0'} : {match.awayScore ?? '0'}
+                    {match.awayScore ?? '0'} : {match.homeScore ?? '0'}
                   </motion.span>
-                ) : (match.homeScore != null ? `${match.homeScore} : ${match.awayScore}` : formatIsraelTimeShort(match.kickoff))}
+                ) : (match.homeScore != null ? `${match.awayScore} : ${match.homeScore}` : formatIsraelTimeShort(match.kickoff))}
               </div>
               {isLive && match.minute && (
                 <div className="mt-1 text-[10px] font-bold text-red-400">דקה {match.minute}׳</div>
