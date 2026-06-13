@@ -93,6 +93,28 @@ function normalizeRole(role) {
     .trim();
 }
 
+const HERZLIYA_ROLE_SUFFIXES = [
+  'ניהול הפקה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
+  'ע. עריכה', 'ע. תאורה', 'ע. סאונד', 'סטדי קאם', 'סטדי-קאם', 'סטדיקאם',
+  'צלם רחף', 'רחף', 'רחפן', 'רחפנית',
+  'צילום', 'עריכה', 'סאונד', 'תאורה', 'בימוי', 'עיצוב', 'ניהול',
+  'שידור', 'מפיקה', 'מפיק', 'ספרות', 'תסריט', 'גרפיקה', 'תפאורה',
+  'איפור', 'לוגיסטיקה', 'הנחיה', 'הפקה', 'עורך', 'עורכת',
+  'מנהל', 'מנהלת', 'הדלקות', 'לייטינג', 'חשמל', 'קאמרה', 'CCU',
+];
+
+function splitHerzliyaRole(fullName) {
+  const t = (fullName || '').trim();
+  for (const role of HERZLIYA_ROLE_SUFFIXES) {
+    if (t === role) return { name: t, userRole: role };
+    if (t.endsWith(' ' + role)) {
+      const name = t.slice(0, t.length - role.length - 1).trim();
+      if (name) return { name, userRole: role };
+    }
+  }
+  return { name: t, userRole: '' };
+}
+
 function normalizePhone(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
   if (!digits) return null;
@@ -474,13 +496,15 @@ async function fetchSchedule(browser, url) {
             }
           }
 
-          const studioMatch = rawProductionName.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
+          const { name: nameNoRole, userRole } = splitHerzliyaRole(rawProductionName);
+          const studioMatch = nameNoRole.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
-          const cleanName = studio ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : rawProductionName;
+          const cleanName = studio ? nameNoRole.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
 
           productions.push({
             herzliyaId,
-            name: cleanName || rawProductionName,
+            name: cleanName || nameNoRole,
+            userRole,
             studio,
             date: dayInfo.isoDate,
             day: dayInfo.dayName,
@@ -1236,7 +1260,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     if (!prod.departmentEnriched && prod.isCurrentUserShift && currentWorkerName && !sourceCrew.some((member) => normalizeName(member.name) === normalizeName(currentWorkerName))) {
       sourceCrew.push({
         name: currentWorkerName,
-        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',
+        role: prod.userRole || (prod.name && /צילום/u.test(prod.name) ? 'צילום' : ''),
         roleDetail: '',
         phone: null,
         startTime: prod.startTime || '',
