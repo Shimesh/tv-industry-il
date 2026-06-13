@@ -25,10 +25,15 @@ function isRatingsArticle(title: string): boolean {
 
 function formatTimeAgo(dateStr: string): string {
   try {
-    const diffMin = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-    const diffHours = Math.floor(diffMin / 60);
+    const pub = new Date(dateStr);
+    if (isNaN(pub.getTime())) return '';
+    const diffMin = Math.floor((Date.now() - pub.getTime()) / 60000);
     if (diffMin < 1) return 'עכשיו';
-    if (diffMin < 60) return `לפני ${diffMin} דק׳`;
+    if (diffMin < 30) return `לפני ${diffMin} דק׳`;
+    // For today's articles: show publication time to avoid confusing live content with stale timestamps
+    if (pub.toDateString() === new Date().toDateString())
+      return pub.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const diffHours = Math.floor(diffMin / 60);
     if (diffHours < 24) return `לפני ${diffHours} שעות`;
     return `לפני ${Math.floor(diffHours / 24)} ימים`;
   } catch {

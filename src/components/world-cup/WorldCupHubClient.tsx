@@ -78,7 +78,13 @@ function stageLabel(stage: WorldCupMatch['stage']) {
 }
 
 function statusLabel(match: WorldCupMatch) {
-  if (match.status === 'live') return `🔴 חי${match.minute ? ` · דקה ${match.minute}` : ''}`;
+  if (match.status === 'live') {
+    const ml = match.minuteLabel ?? (match.minute != null ? String(match.minute) : null);
+    const minuteStr = ml
+      ? (ml === 'פנדלים' || ml.startsWith('הארכה') ? ` · ${ml}` : ` · דקה ${ml}׳`)
+      : '';
+    return `🔴 חי${minuteStr}`;
+  }
   if (match.status === 'finished') return 'הסתיים';
   return formatIsraelTime(match.kickoff);
 }
@@ -1246,6 +1252,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
   const liveMatches = matches.filter(m => m.status === 'live');
   const [eventsMap, setEventsMap] = useState<Record<string, MatchEvent[]>>({});
   const [minuteMap, setMinuteMap] = useState<Record<string, number | null>>({});
+  const [minuteLabelMap, setMinuteLabelMap] = useState<Record<string, string | null>>({});
   const liveIds = liveMatches.map(m => m.id).join(',');
 
   useEffect(() => {
@@ -1258,10 +1265,11 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
         try {
           const r = await fetch(`/api/world-cup/match-events?matchId=${match.id}`, { cache: 'no-store' });
           if (!r.ok || cancelled) continue;
-          const d = await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null };
+          const d = await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null; minuteLabel?: string | null };
           if (d.success && !cancelled) {
             setEventsMap(prev => ({ ...prev, [match.id]: d.events ?? [] }));
             setMinuteMap(prev => ({ ...prev, [match.id]: d.minute ?? null }));
+            setMinuteLabelMap(prev => ({ ...prev, [match.id]: d.minuteLabel ?? null }));
           }
         } catch { /* ignore */ }
       }
@@ -1297,6 +1305,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
         {liveMatches.map(match => {
           const events = eventsMap[match.id] ?? [];
           const minute = minuteMap[match.id] ?? match.minute;
+          const minuteLabelVal = minuteLabelMap[match.id] ?? match.minuteLabel;
 
           return (
             <button key={match.id} onClick={() => onClickMatch(match)} className="w-full p-4 text-right transition-colors hover:bg-white/3">
@@ -1317,7 +1326,11 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
                   </motion.div>
                   <div className="mt-1.5 flex items-center justify-center gap-1.5 text-xs font-black text-red-400">
                     <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-                    {minute != null ? `דקה ${minute}׳` : 'חי'}
+                    {minuteLabelVal === 'פנדלים' ? 'פנדלים'
+                      : minuteLabelVal?.startsWith('הארכה') ? minuteLabelVal
+                      : minuteLabelVal ? `דקה ${minuteLabelVal}׳`
+                      : minute != null ? `דקה ${minute}׳`
+                      : 'חי'}
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col items-end gap-0.5">
@@ -1732,6 +1745,7 @@ async function fetchOpenFootballGoalsClient(homeEn: string, awayEn: string): Pro
 function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [liveMinute, setLiveMinute] = useState<number | null>(match.minute ?? null);
+  const [liveMinuteLabel, setLiveMinuteLabel] = useState<string | null>(match.minuteLabel ?? null);
   const [fetching, setFetching] = useState(true);
   const isFinished = match.status === 'finished';
 
@@ -1754,11 +1768,12 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
       let serverSource = '';
       try {
         const r = await fetch(serverUrl);
-        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null; source?: string } : null;
+        const d = r.ok ? await r.json() as { success?: boolean; events?: MatchEvent[]; minute?: number | null; minuteLabel?: string | null; source?: string } : null;
         if (d?.success && (d.events?.length ?? 0) > 0) {
           baseEvents = d.events ?? [];
           baseMinute = d.minute ?? null;
           serverSource = d.source ?? 'server';
+          if (d.minuteLabel !== undefined) setLiveMinuteLabel(d.minuteLabel);
         }
       } catch { /* fall through */ }
 
@@ -1845,8 +1860,13 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
             </>
           )}
         </div>
-        {!isFinished && liveMinute != null && (
-          <span className="rounded-full bg-red-500/15 px-3 py-1 text-sm font-black text-red-400">דקה {liveMinute}׳</span>
+        {!isFinished && (liveMinuteLabel != null || liveMinute != null) && (
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-sm font-black text-red-400">
+            {liveMinuteLabel === 'פנדלים' ? 'פנדלים'
+              : liveMinuteLabel?.startsWith('הארכה') ? liveMinuteLabel
+              : liveMinuteLabel ? `דקה ${liveMinuteLabel}׳`
+              : `דקה ${liveMinute}׳`}
+          </span>
         )}
       </div>
 
@@ -2199,8 +2219,13 @@ function MatchDetailModal({ match, onClose, venues }: { match: WorldCupMatch; on
                   </motion.span>
                 ) : (match.homeScore != null ? `${match.awayScore} : ${match.homeScore}` : formatIsraelTimeShort(match.kickoff))}
               </div>
-              {isLive && match.minute && (
-                <div className="mt-1 text-[10px] font-bold text-red-400">דקה {match.minute}׳</div>
+              {isLive && (match.minuteLabel != null || match.minute != null) && (
+                <div className="mt-1 text-[10px] font-bold text-red-400">
+                  {match.minuteLabel === 'פנדלים' ? 'פנדלים'
+                    : match.minuteLabel?.startsWith('הארכה') ? match.minuteLabel
+                    : match.minuteLabel ? `דקה ${match.minuteLabel}׳`
+                    : `דקה ${match.minute}׳`}
+                </div>
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
@@ -2295,10 +2320,14 @@ function WcArticleModal({
               <span className="text-[10px] text-white/55">
                 {(() => {
                   try {
-                    const diffMin = Math.floor((Date.now() - new Date(item.pubDate).getTime()) / 60000);
-                    const diffHours = Math.floor(diffMin / 60);
+                    const pub = new Date(item.pubDate);
+                    if (isNaN(pub.getTime())) return '';
+                    const diffMin = Math.floor((Date.now() - pub.getTime()) / 60000);
                     if (diffMin < 1) return 'עכשיו';
-                    if (diffMin < 60) return `לפני ${diffMin} דק׳`;
+                    if (diffMin < 30) return `לפני ${diffMin} דק׳`;
+                    if (pub.toDateString() === new Date().toDateString())
+                      return pub.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+                    const diffHours = Math.floor(diffMin / 60);
                     if (diffHours < 24) return `לפני ${diffHours} שעות`;
                     return `לפני ${Math.floor(diffHours / 24)} ימים`;
                   } catch { return ''; }

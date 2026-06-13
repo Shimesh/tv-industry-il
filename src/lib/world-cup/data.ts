@@ -169,10 +169,21 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     const homeScore = homeComp?.score != null ? parseInt(homeComp.score, 10) : null;
     const awayScore = awayComp?.score != null ? parseInt(awayComp.score, 10) : null;
 
-    // Parse minute from ESPN shortDetail, e.g. "87'" → 87, "HT" → null
+    // Parse minute from ESPN shortDetail, e.g. "87'" → 87, "45+2'" → 45 + label "45+2", "Pen." → label "פנדלים"
     const shortDetail = espn.status?.type?.shortDetail ?? '';
-    const minuteMatch = shortDetail.match(/^(\d+)/);
-    const minute = minuteMatch ? parseInt(minuteMatch[1], 10) : (status === 'live' ? match.minute : undefined);
+    const minuteMatch = shortDetail.match(/^(\d+)(\+(\d+))?/);
+    const baseMin = minuteMatch ? parseInt(minuteMatch[1], 10) : (status === 'live' ? match.minute : undefined);
+    const addedMin = minuteMatch?.[3] ? parseInt(minuteMatch[3], 10) : undefined;
+    const isPenShootout = /^pen/i.test(shortDetail);
+    const isET = /^et\b/i.test(shortDetail);
+    const minuteLabel: string | null = isPenShootout
+      ? 'פנדלים'
+      : isET && baseMin != null
+      ? `הארכה ${baseMin}`
+      : addedMin != null
+      ? `${minuteMatch![1]}+${addedMin}`
+      : null;
+    const minute = baseMin;
 
     return {
       ...match,
@@ -180,6 +191,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
       homeScore: (homeScore != null && !isNaN(homeScore)) ? homeScore : match.homeScore,
       awayScore: (awayScore != null && !isNaN(awayScore)) ? awayScore : match.awayScore,
       minute: minute ?? match.minute,
+      minuteLabel: minuteLabel ?? match.minuteLabel,
       espnEventId: espn.id ?? match.espnEventId,
     };
   });

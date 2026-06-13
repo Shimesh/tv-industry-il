@@ -39,7 +39,7 @@ type ESPNSummary = {
   keyEvents?: ESPNKeyEvent[];
   header?: {
     competitions?: Array<{
-      status?: { clock?: number; period?: number; type?: { completed?: boolean; name?: string } };
+      status?: { clock?: number; period?: number; type?: { completed?: boolean; name?: string; shortDetail?: string } };
       competitors?: Array<{ team?: { displayName?: string }; score?: string; homeAway?: string }>;
     }>;
   };
@@ -249,7 +249,7 @@ async function fetchESPNSummary(espnId: string): Promise<ESPNSummary | null> {
   }
 }
 
-function parseSummary(data: ESPNSummary): { events: object[]; minute: number | null } {
+function parseSummary(data: ESPNSummary): { events: object[]; minute: number | null; minuteLabel: string | null } {
   const events: { type: string; minute: number; teamName: string; player: string; detail: string }[] = [];
 
   // Parse scoring plays (goals)
@@ -317,9 +317,32 @@ function parseSummary(data: ESPNSummary): { events: object[]; minute: number | n
   // Current match minute from header
   const comp = data.header?.competitions?.[0];
   const rawClock = comp?.status?.clock;
-  const minute = typeof rawClock === 'number' ? Math.round(rawClock / 60) : null;
+  const period = comp?.status?.period;
+  const shortDetail = comp?.status?.type?.shortDetail ?? '';
 
-  return { events, minute };
+  let minute: number | null = null;
+  let minuteLabel: string | null = null;
+
+  // Prefer shortDetail (e.g. "45+2'", "ET 103'", "Pen.") over raw clock
+  const sdMatch = shortDetail.match(/^(\d+)(\+(\d+))?/);
+  if (/^pen/i.test(shortDetail)) {
+    minuteLabel = 'פנדלים';
+  } else if (/^et\b/i.test(shortDetail) && sdMatch) {
+    minute = parseInt(sdMatch[1], 10);
+    minuteLabel = `הארכה ${sdMatch[1]}`;
+  } else if (sdMatch) {
+    minute = parseInt(sdMatch[1], 10);
+    if (sdMatch[3]) minuteLabel = `${sdMatch[1]}+${sdMatch[3]}`;
+  } else if (typeof rawClock === 'number') {
+    minute = Math.round(rawClock / 60);
+    // Infer added time from period + clock
+    if (period === 1 && minute > 45) minuteLabel = `45+${minute - 45}`;
+    else if (period === 2 && minute > 90) minuteLabel = `90+${minute - 90}`;
+    else if (period === 3 || period === 4) minuteLabel = `הארכה ${minute}`;
+    else if (period === 5) { minuteLabel = 'פנדלים'; minute = null; }
+  }
+
+  return { events, minute, minuteLabel };
 }
 
 export async function GET(req: NextRequest) {
@@ -452,15 +475,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, events: [], minute: null });
   }
 
-  const { events, minute } = parseSummary(summary);
+  const { events, minute, minuteLabel } = parseSummary(summary);
 
   // If ESPN summary returned 0 events (plays not yet populated), fall through to OpenFootball
   if (events.length === 0 && homeTeam && awayTeam) {
     const ofEvents = await fetchOpenFootballGoals(homeTeam, awayTeam);
     if (ofEvents && ofEvents.length > 0) {
-      return NextResponse.json({ success: true, minute: null, events: ofEvents, source: 'openfootball' }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ success: true, minute: null, minuteLabel: null, events: ofEvents, source: 'openfootball' }, { headers: { 'Cache-Control': 'no-store' } });
     }
   }
 
-  return NextResponse.json({ success: true, minute, events, source: events.length > 0 ? 'espn' : undefined }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ success: true, minute, minuteLabel, events, source: events.length > 0 ? 'espn' : undefined }, { headers: { 'Cache-Control': 'no-store' } });
 }
