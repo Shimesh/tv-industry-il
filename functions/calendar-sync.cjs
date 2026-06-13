@@ -1695,16 +1695,23 @@ async function main() {
     const previousWeekStart = getPreviousWeekStart(currentWeekStart);
     const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
     const savedSnap = await db.collection('user_calendar_sync').get();
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const savedCalendars = savedSnap.docs
       .map((doc) => ({ uid: doc.id, ...doc.data() }))
-      .filter((entry) => entry.url && eligibleWeekStarts.has(entry.weekStart));
+      .filter((entry) =>
+        entry.url && (
+          eligibleWeekStarts.has(entry.weekStart) ||
+          (entry.savedAt && entry.savedAt >= sevenDaysAgo)
+        ),
+      );
 
     console.log(
       `Found ${savedCalendars.length} eligible saved calendars `
       + `(${previousWeekStart}, ${currentWeekStart})`,
     );
     if (!savedCalendars.length) {
-      throw new Error('No eligible saved calendars found for hourly sync');
+      console.log('No eligible saved calendars found — nothing to sync, exiting cleanly.');
+      return;
     }
 
     const browser = await puppeteer.launch({
