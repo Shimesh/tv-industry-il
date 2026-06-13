@@ -204,7 +204,7 @@ export default function HomePageClient({ greeting }: { greeting: string }) {
           {liveNews.length > 0 ? (
             <LatestNewsCarousel news={liveNews.slice(0, 10)} />
           ) : (
-            <div className="rounded-xl border p-4 text-sm" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
+            <div className="rounded-xl border p-4 text-sm flex items-center" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-secondary)', minHeight: '14rem' }}>
               {newsLoaded ? 'אין חדשות זמינות כרגע.' : 'טוען כותרות בזמן אמת...'}
             </div>
           )}

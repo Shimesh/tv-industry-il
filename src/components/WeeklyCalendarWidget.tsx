@@ -537,13 +537,15 @@ export default function WeeklyCalendarWidget() {
           })}
         </div>
 
-        {mounted && productions === null && (
-          <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)' }}>
-            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              {user ? 'טוען את לוח ההפקות הגלובלי...' : 'יש להתחבר כדי לצפות בלוח ההפקות'}
-            </p>
-          </div>
-        )}
+        {/* Always reserve this height so loading→loaded doesn't cause a layout shift */}
+        <div className="border-t px-4 py-3 text-center" style={{ borderColor: 'var(--theme-border)', minHeight: '2.25rem' }}>
+          <p
+            className="text-xs transition-opacity duration-300"
+            style={{ color: 'var(--theme-text-secondary)', opacity: productions === null ? 1 : 0 }}
+          >
+            {user ? 'טוען את לוח ההפקות הגלובלי...' : 'יש להתחבר כדי לצפות בלוח ההפקות'}
+          </p>
+        </div>
       </div>
 
       {popupDate && popupProductions.length > 0 && (
