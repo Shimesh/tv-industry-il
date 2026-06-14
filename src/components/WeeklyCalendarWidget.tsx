@@ -261,10 +261,10 @@ export default function WeeklyCalendarWidget() {
 
   useEffect(() => {
     const requestRefresh = () => {
-      if (Date.now() - lastFetchStartedAt.current < 60 * 60 * 1000) return;
+      if (Date.now() - lastFetchStartedAt.current < 5 * 60 * 1000) return;
       setRefreshNonce((value) => value + 1);
     };
-    const intervalId = window.setInterval(requestRefresh, 60 * 60 * 1000);
+    const intervalId = window.setInterval(requestRefresh, 5 * 60 * 1000);
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') requestRefresh();
     };
