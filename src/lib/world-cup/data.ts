@@ -153,10 +153,17 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
 
     const statusName = espn.status?.type?.name ?? '';
     const isCompleted = espn.status?.type?.completed === true;
+    const kickoffMs = match.kickoff ? Date.parse(match.kickoff) : 0;
+    const kickoffInFuture = kickoffMs > 0 && kickoffMs > Date.now();
     let status: WorldCupMatch['status'] = match.status;
-    if (statusName === 'STATUS_IN_PROGRESS' || statusName === 'STATUS_HALFTIME') status = 'live';
-    else if (isCompleted || ['STATUS_FINAL', 'STATUS_FULL_TIME', 'STATUS_AWARDED', 'STATUS_POSTPONED'].includes(statusName)) status = 'finished';
-    else if (statusName === 'STATUS_SCHEDULED' || statusName === 'STATUS_PRE') status = 'scheduled';
+    if (!kickoffInFuture) {
+      if (statusName === 'STATUS_IN_PROGRESS' || statusName === 'STATUS_HALFTIME') status = 'live';
+      else if (isCompleted || ['STATUS_FINAL', 'STATUS_FULL_TIME', 'STATUS_AWARDED', 'STATUS_POSTPONED'].includes(statusName)) status = 'finished';
+      else if (statusName === 'STATUS_SCHEDULED' || statusName === 'STATUS_PRE') status = 'scheduled';
+    } else {
+      // Kickoff still in the future — ESPN sometimes pre-populates scores; ignore them
+      status = 'scheduled';
+    }
 
     const comps = espn.competitions?.[0]?.competitors ?? [];
     const word0 = (s: string) => s.split(' ')[0];
@@ -188,10 +195,10 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     return {
       ...match,
       status,
-      homeScore: (homeScore != null && !isNaN(homeScore)) ? homeScore : match.homeScore,
-      awayScore: (awayScore != null && !isNaN(awayScore)) ? awayScore : match.awayScore,
-      minute: minute ?? match.minute,
-      minuteLabel: minuteLabel ?? match.minuteLabel,
+      homeScore: !kickoffInFuture && homeScore != null && !isNaN(homeScore) ? homeScore : match.homeScore,
+      awayScore: !kickoffInFuture && awayScore != null && !isNaN(awayScore) ? awayScore : match.awayScore,
+      minute: !kickoffInFuture ? (minute ?? match.minute) : undefined,
+      minuteLabel: !kickoffInFuture ? (minuteLabel ?? match.minuteLabel) : null,
       espnEventId: espn.id ?? match.espnEventId,
     };
   });
