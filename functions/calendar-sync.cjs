@@ -44,6 +44,16 @@ function getPreviousWeekStart(weekStart) {
   return date.toISOString().split('T')[0];
 }
 
+// Replace the embedded date in a Herzliya URL (format: ?A=UUID,DDMMYYYY)
+// with a date inside the given ISO week so we always fetch the current week.
+function urlForWeek(url, weekStart) {
+  const d = new Date(`${weekStart}T12:00:00Z`);
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getUTCFullYear());
+  return url.replace(/,\d{8}(\b|$)/, `,${dd}${mm}${yyyy}`);
+}
+
 function normalizeName(name) {
   if (!name) return '';
 
@@ -1765,7 +1775,10 @@ async function main() {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
-          const schedule = await fetchSchedule(browser, saved.url);
+          // Always fetch the current week regardless of the date embedded in the saved URL
+          const urlToFetch = urlForWeek(saved.url, currentWeekStart);
+          console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
+          const schedule = await fetchSchedule(browser, urlToFetch);
           if (!schedule || !schedule.productions.length) {
             throw new Error('No productions found in saved Herzliya calendar');
           }
