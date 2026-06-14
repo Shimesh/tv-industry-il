@@ -42,7 +42,8 @@ const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 export default function ProductionsPage() {
   const { user, loading } = useAuth();
 
-  if (loading) return <ProductionsLoadingState />;
+  // Auth loads in < 200ms from IndexedDB — blank is less jarring than a spinner
+  if (loading) return null;
   if (!user) return <ProductionsLoginRequired />;
 
   return <ProductionsContent />;

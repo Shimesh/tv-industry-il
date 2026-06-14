@@ -264,30 +264,20 @@ function WeatherIconLarge({ kind, heatwave }: { kind: WeatherKind; heatwave: boo
 }
 
 export default function HomeInfoWidget() {
-  const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
-  const [weather, setWeather] = useState<WeatherState[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // Read weather cache synchronously — no skeleton on repeat visits
+  const [weather, setWeather] = useState<WeatherState[]>(() => readWeatherCache() ?? []);
+  const [loaded, setLoaded] = useState(() => readWeatherCache() !== null);
 
+  // Clock: always update client-side (avoid SSR time mismatch by starting null)
   useEffect(() => {
-    const mountTimer = window.setTimeout(() => {
-      setMounted(true);
-      setNow(new Date());
-    }, 0);
+    setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 60000);
-    return () => {
-      window.clearTimeout(mountTimer);
-      window.clearInterval(timer);
-    };
+    return () => window.clearInterval(timer);
   }, []);
 
+  // Weather: fetch fresh on mount (silently if cache exists)
   useEffect(() => {
-    if (!mounted) return;
-    const cached = readWeatherCache();
-    if (cached) {
-      const cacheTimer = window.setTimeout(() => { setWeather(cached); setLoaded(true); }, 0);
-      return () => window.clearTimeout(cacheTimer);
-    }
     let cancelled = false;
     fetchWeather()
       .then((nextWeather) => {
@@ -297,10 +287,14 @@ export default function HomeInfoWidget() {
         writeWeatherCache(nextWeather);
       })
       .catch(() => {
-        if (!cancelled) { setWeather(WEATHER_CITIES.map(emptyWeatherState)); setLoaded(true); }
+        if (!cancelled && !loaded) {
+          setWeather(WEATHER_CITIES.map(emptyWeatherState));
+          setLoaded(true);
+        }
       });
     return () => { cancelled = true; };
-  }, [mounted]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const clock = useMemo(() => {
     if (!now) return { time: '--:--', date: '--/--' };

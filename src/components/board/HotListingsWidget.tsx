@@ -5,16 +5,42 @@ import Link from 'next/link';
 import { Flame, ArrowLeft, MapPin, Eye } from 'lucide-react';
 import { LISTING_TYPE_CONFIG, formatPrice, type BoardListing } from '@/lib/boardTypes';
 
+const CACHE_KEY = 'hot-listings-widget-v1';
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readCache(): BoardListing[] | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { data, savedAt } = JSON.parse(raw) as { data: BoardListing[]; savedAt: number };
+    if (Date.now() - savedAt > CACHE_TTL_MS) return null;
+    return Array.isArray(data) ? data : null;
+  } catch { return null; }
+}
+
+function writeCache(data: BoardListing[]) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() })); } catch {}
+}
+
 export default function HotListingsWidget() {
-  const [listings, setListings] = useState<BoardListing[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [{ listings, loading }, setState] = useState<{ listings: BoardListing[]; loading: boolean }>(() => {
+    const cached = readCache();
+    return { listings: cached ?? [], loading: cached === null };
+  });
 
   useEffect(() => {
     fetch('/api/board/listings?hot=1&limit=6')
       .then(r => r.json())
-      .then(data => { if (data.ok) setListings(data.listings); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then(data => {
+        if (data.ok) {
+          setState({ listings: data.listings ?? [], loading: false });
+          writeCache(data.listings ?? []);
+        } else {
+          setState(prev => ({ ...prev, loading: false }));
+        }
+      })
+      .catch(() => setState(prev => ({ ...prev, loading: false })));
   }, []);
 
   if (!loading && listings.length === 0) return null;
