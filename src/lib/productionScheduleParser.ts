@@ -57,7 +57,8 @@ const HERZLIYA_ROLE_SUFFIXES: string[] = [
  * Herzliya appends the user's role as the last word(s): "מונדיאל 2026 צילום" → { name: "מונדיאל 2026", userRole: "צילום" }
  */
 export function splitHerzliyaRole(fullName: string): { name: string; userRole: string } {
-  const t = fullName.trim();
+  // Strip Herzliya "+הקמה..." additional-duty notation (space + plus at end, e.g. "+הקמה פינס")
+  const t = fullName.trim().replace(/ \+\S.*$/, '').trim();
   for (const role of HERZLIYA_ROLE_SUFFIXES) {
     if (t === role) return { name: t, userRole: role };
     if (t.endsWith(' ' + role)) {

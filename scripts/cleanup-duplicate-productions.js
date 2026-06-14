@@ -60,7 +60,7 @@ const HERZLIYA_ROLE_SUFFIXES = [
   'מנהל','מנהלת','הדלקות','לייטינג','חשמל','קאמרה','קול','CCU',
 ];
 function stripRole(name) {
-  const t = (name || '').trim();
+  const t = (name || '').trim().replace(/ \+\S.*$/, '').trim();
   for (const role of HERZLIYA_ROLE_SUFFIXES) {
     if (t === role) return t;
     if (t.endsWith(' ' + role)) {

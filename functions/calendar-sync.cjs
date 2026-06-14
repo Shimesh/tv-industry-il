@@ -104,7 +104,8 @@ const HERZLIYA_ROLE_SUFFIXES = [
 ];
 
 function splitHerzliyaRole(fullName) {
-  const t = (fullName || '').trim();
+  // Strip Herzliya "+הקמה..." additional-duty notation (space + plus at end, e.g. "+הקמה פינס")
+  const t = (fullName || '').trim().replace(/ \+\S.*$/, '').trim();
   for (const role of HERZLIYA_ROLE_SUFFIXES) {
     if (t === role) return { name: t, userRole: role };
     if (t.endsWith(' ' + role)) {
