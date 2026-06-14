@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
+import { normalizeName, normalizePhone, deduplicateCrewEntries } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
 
 const CACHE_KEY = 'productions_global_widget_cache_v3';
@@ -94,29 +94,33 @@ function mergeProductions(
   return [...personal, ...extras];
 }
 
-function deduplicateByHerzliyaId(productions: Production[]): Production[] {
-  const byKey = new Map<string, Production>();
-  const noId: Production[] = [];
+// Robust cross-source dedup: same production can arrive from multiple endpoints
+// with different IDs (personal path vs global sync). Key = name+date+startTime.
+function deduplicateByIdentity(productions: Production[]): Production[] {
+  const seen = new Map<string, Production>();
   for (const prod of productions) {
-    if (prod.herzliyaId && prod.date) {
-      const key = `${prod.herzliyaId}::${prod.date}`;
-      const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, prod);
-      } else {
-        const incomingCrew = prod.crew?.length ?? 0;
-        const existingCrew = existing.crew?.length ?? 0;
-        const preferIncoming =
-          incomingCrew > existingCrew ||
-          (incomingCrew === existingCrew &&
-            String(prod.lastUpdatedAt ?? '') > String(existing.lastUpdatedAt ?? ''));
-        if (preferIncoming) byKey.set(key, prod);
-      }
+    if (!prod.date) { seen.set(prod.id || String(Math.random()), prod); continue; }
+    const normName = normalizeName(prod.name).replace(/\s+/g, ' ').trim();
+    const times = [prod.startTime || '', prod.endTime || ''].sort();
+    const key = `${normName}::${prod.date}::${times[0]}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, prod);
     } else {
-      noId.push(prod);
+      const base = (prod.crew?.length ?? 0) >= (existing.crew?.length ?? 0) ? prod : existing;
+      const other = base === prod ? existing : prod;
+      const mergedCrew = deduplicateCrewEntries([...(base.crew ?? []), ...(other.crew ?? [])]);
+      seen.set(key, {
+        ...base,
+        studio: base.studio || other.studio,
+        startTime: base.startTime || other.startTime,
+        endTime: base.endTime || other.endTime,
+        crew: mergedCrew,
+        isCurrentUserShift: base.isCurrentUserShift || other.isCurrentUserShift,
+      });
     }
   }
-  return [...byKey.values(), ...noId];
+  return Array.from(seen.values());
 }
 
 function getMyRole(production: Production, displayName: string, phone: string): string {
@@ -346,7 +350,7 @@ export default function WeeklyCalendarWidget() {
       const afterGlobal = mergeProductions(personalProds, globalProds, curDisplayName, curPhone);
       const afterPhone = mergeProductions(afterGlobal, myPhoneProds, curDisplayName, curPhone);
       const afterProfile = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
-      const merged = deduplicateByHerzliyaId(afterProfile);
+      const merged = deduplicateByIdentity(afterProfile);
 
       setProductions(merged);
       if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
