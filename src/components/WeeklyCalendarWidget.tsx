@@ -94,6 +94,31 @@ function mergeProductions(
   return [...personal, ...extras];
 }
 
+function deduplicateByHerzliyaId(productions: Production[]): Production[] {
+  const byKey = new Map<string, Production>();
+  const noId: Production[] = [];
+  for (const prod of productions) {
+    if (prod.herzliyaId && prod.date) {
+      const key = `${prod.herzliyaId}::${prod.date}`;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, prod);
+      } else {
+        const incomingCrew = prod.crew?.length ?? 0;
+        const existingCrew = existing.crew?.length ?? 0;
+        const preferIncoming =
+          incomingCrew > existingCrew ||
+          (incomingCrew === existingCrew &&
+            String(prod.lastUpdatedAt ?? '') > String(existing.lastUpdatedAt ?? ''));
+        if (preferIncoming) byKey.set(key, prod);
+      }
+    } else {
+      noId.push(prod);
+    }
+  }
+  return [...byKey.values(), ...noId];
+}
+
 function getMyRole(production: Production, displayName: string, phone: string): string {
   const myName = normalizeName(displayName);
   const myPhone = normalizePhone(phone);
@@ -320,7 +345,8 @@ export default function WeeklyCalendarWidget() {
 
       const afterGlobal = mergeProductions(personalProds, globalProds, curDisplayName, curPhone);
       const afterPhone = mergeProductions(afterGlobal, myPhoneProds, curDisplayName, curPhone);
-      const merged = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
+      const afterProfile = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
+      const merged = deduplicateByHerzliyaId(afterProfile);
 
       setProductions(merged);
       if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
