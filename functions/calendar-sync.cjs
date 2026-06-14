@@ -535,7 +535,7 @@ async function fetchSchedule(browser, url) {
     schedule.fetchedAt = new Date().toISOString();
 
     // Filter out non-production Herzliya entries (vacations, sick leave, etc.)
-    const NON_PRODUCTION_PREFIXES = ['חופש', 'מחלה', 'חג', 'יום עיון', 'השתלמות', 'אבל', 'מנוחה'];
+    const NON_PRODUCTION_PREFIXES = ['חופש', 'מחלה', 'יום עיון', 'השתלמות', 'אבל', 'מנוחה'];
     schedule.productions = schedule.productions.filter((prod) =>
       !NON_PRODUCTION_PREFIXES.some((prefix) => prod.name.startsWith(prefix)),
     );
