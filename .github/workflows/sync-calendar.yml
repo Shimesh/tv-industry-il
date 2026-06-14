@@ -12,19 +12,23 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+
     steps:
-      - name: Sync all saved calendars via API
-        run: |
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://tv-industry-il.vercel.app/api/admin/sync-all-calendars" \
-            -H "Authorization: Bearer ${{ secrets.ADMIN_SYNC_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --max-time 90)
-          body=$(echo "$response" | head -n -1)
-          status=$(echo "$response" | tail -n 1)
-          echo "HTTP $status: $body"
-          if [ "$status" != "200" ]; then
-            echo "Sync API returned HTTP $status"
-            exit 1
-          fi
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Sync saved calendars
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: node functions/calendar-sync.cjs
