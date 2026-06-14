@@ -114,6 +114,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   const mainFetchOpts: RequestInit = {
     headers: BASE_HEADERS,
+    signal: AbortSignal.timeout(10000),
     // @ts-expect-error - Node.js 20
     rejectUnauthorized: false,
   };
