@@ -6,6 +6,7 @@ import {
   buildHerzliyaPopupUrl,
   extractStudioFromPopup,
   extractDateFromPopup,
+  splitHerzliyaRole,
 } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
@@ -71,16 +72,18 @@ function extractCookies(response: Response): string {
 
 /**
  * Extract Magic XPA session argument (-A{id}) from a URL or raw string.
- * Magic XPA embeds a session token in the `arguments` parameter as "-A{token}".
+ * Session tokens are alphanumeric and contain at least one letter (not all-digit dates like 20062026).
  */
 function extractMagicXpaSession(str: string): string {
+  // Matches -A followed by alphanumeric that contains at least one letter (not a date like 20062026)
+  const SESSION_RE = /-A([a-zA-Z0-9]*[a-zA-Z][a-zA-Z0-9]{5,})/;
   try {
     const u = new URL(str);
     const args = u.searchParams.get('arguments') || '';
-    const m = args.match(/-A([a-zA-Z0-9]+)/);
+    const m = args.match(SESSION_RE);
     if (m) return `-A${m[1]}`;
   } catch { /* fall through to raw string search */ }
-  const m = str.match(/-A([a-zA-Z0-9]{6,})/);
+  const m = str.match(SESSION_RE);
   return m ? `-A${m[1]}` : '';
 }
 
@@ -111,6 +114,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   const mainFetchOpts: RequestInit = {
     headers: BASE_HEADERS,
+    signal: AbortSignal.timeout(10000),
     // @ts-expect-error - Node.js 20
     rejectUnauthorized: false,
   };
@@ -165,8 +169,11 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     for (const e of events) {
       nameToId[e.name] = e.herzliyaId;
       idToEventName[e.herzliyaId] = e.name;
-      const cleaned = e.name.replace(/\s*(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?\s*/gi, '').trim();
-      if (cleaned && cleaned !== e.name) nameToId[cleaned] = e.herzliyaId;
+      // Also index by role-stripped name so lookup works for both "מונדיאל 2026 צילום" and "מונדיאל 2026"
+      const { name: nameNoRole } = splitHerzliyaRole(e.name);
+      if (nameNoRole !== e.name) nameToId[nameNoRole] = e.herzliyaId;
+      const cleaned = nameNoRole.replace(/\s*(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?\s*/gi, '').trim();
+      if (cleaned && cleaned !== nameNoRole) nameToId[cleaned] = e.herzliyaId;
     }
 
     // Extract calendar dates from header section (before first event call)
@@ -253,9 +260,10 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         const date = popupDate || fallbackDate;
         if (!date) continue;
         const popupStudio = popupHtml ? extractStudioFromPopup(popupHtml) : '';
-        const studioM = event.name.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
+        const { name: nameNoRole } = splitHerzliyaRole(event.name);
+        const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studio = popupStudio || (studioM ? studioM[0].trim() : '');
-        const name = studioM ? event.name.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : event.name;
+        const name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
         const popupCrew = popupHtml ? parseHerzliyaPopupHtml(popupHtml) : [];
         const crew: CrewMember[] = popupCrew.map(pc => ({
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,

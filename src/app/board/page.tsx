@@ -13,6 +13,24 @@ import ListingCard from '@/components/board/ListingCard';
 import NewListingModal from '@/components/board/NewListingModal';
 import { LISTING_TYPE_CONFIG, type BoardListing, type ListingType } from '@/lib/boardTypes';
 
+const BOARD_CACHE_PREFIX = 'board-listings-v1:';
+const BOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readBoardCache(filter: string): BoardListing[] | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(BOARD_CACHE_PREFIX + filter);
+    if (!raw) return null;
+    const { data, savedAt } = JSON.parse(raw) as { data: BoardListing[]; savedAt: number };
+    if (Date.now() - savedAt > BOARD_CACHE_TTL_MS) return null;
+    return Array.isArray(data) ? data : null;
+  } catch { return null; }
+}
+
+function writeBoardCache(filter: string, data: BoardListing[]) {
+  try { localStorage.setItem(BOARD_CACHE_PREFIX + filter, JSON.stringify({ data, savedAt: Date.now() })); } catch {}
+}
+
 const TYPE_ICONS: Record<ListingType | 'all', React.ElementType> = {
   all: Megaphone,
   job_offer: Briefcase,
@@ -61,8 +79,11 @@ function BoardPageContent() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get('listing');
 
-  const [allListings, setAllListings] = useState<BoardListing[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [allListings, setAllListings] = useState<BoardListing[]>(() => readBoardCache('all') ?? []);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return readBoardCache('all') === null;
+  });
   const [typeFilter, setTypeFilter] = useState<ListingType | 'all'>('all');
   const [locationFilter, setLocationFilter] = useState('הכל');
   const [search, setSearch] = useState('');
@@ -72,23 +93,33 @@ function BoardPageContent() {
   const [fabBottom, setFabBottom] = useState(24);
   const fabRef = useRef<HTMLButtonElement>(null);
 
-  const loadListings = useCallback(() => {
-    setLoading(true);
+  const loadListings = useCallback((silent = false) => {
+    if (!silent) {
+      // Show cached data immediately while fetching, or skeleton if no cache
+      const cached = readBoardCache(typeFilter);
+      if (cached) setAllListings(cached);
+      else setLoading(true);
+    }
     const url = typeFilter !== 'all'
       ? `/api/board/listings?type=${typeFilter}`
       : '/api/board/listings';
     fetch(url)
       .then(r => r.json())
-      .then(data => { if (data.ok) setAllListings(data.listings ?? []); })
+      .then(data => {
+        if (data.ok) {
+          setAllListings(data.listings ?? []);
+          writeBoardCache(typeFilter, data.listings ?? []);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [typeFilter]);
 
   useEffect(() => { loadListings(); }, [loadListings]);
 
-  // Auto-refresh every 90 seconds
+  // Auto-refresh every 90 seconds — silent, no loading state
   useEffect(() => {
-    const t = setInterval(loadListings, 90000);
+    const t = setInterval(() => loadListings(true), 90000);
     return () => clearInterval(t);
   }, [loadListings]);
 

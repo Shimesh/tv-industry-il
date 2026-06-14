@@ -42,7 +42,8 @@ const getUserProductionsRoot = (uid: string) => `productions/${uid}/weeks`;
 export default function ProductionsPage() {
   const { user, loading } = useAuth();
 
-  if (loading) return <ProductionsLoadingState />;
+  // Auth loads in < 200ms from IndexedDB — blank is less jarring than a spinner
+  if (loading) return null;
   if (!user) return <ProductionsLoginRequired />;
 
   return <ProductionsContent />;
@@ -1309,7 +1310,12 @@ function ProductionsContent() {
             }
           } catch { /* ignore poll errors */ }
         }, 10000);
-        setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          setRequestStatus(prev =>
+            prev === 'pending' || prev === 'processing' ? 'idle' : prev,
+          );
+        }, 5 * 60 * 1000);
       }
     } catch (error: unknown) {
       setRequestStatus('error');

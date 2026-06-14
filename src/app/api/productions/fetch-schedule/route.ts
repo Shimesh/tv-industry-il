@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
         },
+        signal: AbortSignal.timeout(10000),
         // @ts-expect-error - Node.js 20 experimental option
         rejectUnauthorized: false,
       };

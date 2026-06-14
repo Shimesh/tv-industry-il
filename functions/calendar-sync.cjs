@@ -44,6 +44,16 @@ function getPreviousWeekStart(weekStart) {
   return date.toISOString().split('T')[0];
 }
 
+// Replace the embedded date in a Herzliya URL (format: ?A=UUID,DDMMYYYY)
+// with a date inside the given ISO week so we always fetch the current week.
+function urlForWeek(url, weekStart) {
+  const d = new Date(`${weekStart}T12:00:00Z`);
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getUTCFullYear());
+  return url.replace(/,\d{8}(\b|$)/, `,${dd}${mm}${yyyy}`);
+}
+
 function normalizeName(name) {
   if (!name) return '';
 
@@ -91,6 +101,29 @@ function normalizeRole(role) {
     .replace(/[|,:;]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const HERZLIYA_ROLE_SUFFIXES = [
+  'ניהול הפקה', 'ניהול במה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
+  'ע. עריכה', 'ע. תאורה', 'ע. סאונד', 'סטדי קאם', 'סטדי-קאם', 'סטדיקאם',
+  'צלם רחף', 'רחף', 'רחפן', 'רחפנית',
+  'צילום', 'עריכה', 'סאונד', 'תאורה', 'בימוי', 'עיצוב', 'ניהול',
+  'שידור', 'מפיקה', 'מפיק', 'ספרות', 'תסריט', 'גרפיקה', 'תפאורה',
+  'איפור', 'לוגיסטיקה', 'הנחיה', 'הפקה', 'עורך', 'עורכת',
+  'מנהל', 'מנהלת', 'הדלקות', 'לייטינג', 'חשמל', 'קאמרה', 'קול', 'CCU',
+];
+
+function splitHerzliyaRole(fullName) {
+  // Strip Herzliya "+הקמה..." additional-duty notation (space + plus at end, e.g. "+הקמה פינס")
+  const t = (fullName || '').trim().replace(/ \+\S.*$/, '').trim();
+  for (const role of HERZLIYA_ROLE_SUFFIXES) {
+    if (t === role) return { name: t, userRole: role };
+    if (t.endsWith(' ' + role)) {
+      const name = t.slice(0, t.length - role.length - 1).trim();
+      if (name) return { name, userRole: role };
+    }
+  }
+  return { name: t, userRole: '' };
 }
 
 function normalizePhone(phone) {
@@ -476,11 +509,11 @@ async function fetchSchedule(browser, url) {
 
           const studioMatch = rawProductionName.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
-          const cleanName = studio ? rawProductionName.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : rawProductionName;
 
           productions.push({
             herzliyaId,
-            name: cleanName || rawProductionName,
+            name: rawProductionName,
+            userRole: '',
             studio,
             date: dayInfo.isoDate,
             day: dayInfo.dayName,
@@ -500,6 +533,20 @@ async function fetchSchedule(browser, url) {
     schedule.weekEnd = schedule.weekDays[schedule.weekDays.length - 1]?.isoDate || '';
     schedule.workerName = workerName || schedule.workerName;
     schedule.fetchedAt = new Date().toISOString();
+
+    // Filter out non-production Herzliya entries (vacations, sick leave, etc.)
+    const NON_PRODUCTION_PREFIXES = ['חופש', 'מחלה', 'יום עיון', 'השתלמות', 'אבל', 'מנוחה'];
+    schedule.productions = schedule.productions.filter((prod) =>
+      !NON_PRODUCTION_PREFIXES.some((prefix) => prod.name.startsWith(prefix)),
+    );
+
+    // Apply role/studio stripping in Node.js (splitHerzliyaRole is not available in browser context)
+    for (const prod of schedule.productions) {
+      const { name, userRole } = splitHerzliyaRole(prod.name);
+      const cleanName = prod.studio ? (name || prod.name).replace(prod.studio, '').replace(/\s{2,}/g, ' ').trim() : (name || prod.name);
+      prod.name = cleanName || name || prod.name;
+      if (userRole) prod.userRole = userRole;
+    }
 
     let departmentEnrichedCount = 0;
     let departmentPage = null;
@@ -1236,7 +1283,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     if (!prod.departmentEnriched && prod.isCurrentUserShift && currentWorkerName && !sourceCrew.some((member) => normalizeName(member.name) === normalizeName(currentWorkerName))) {
       sourceCrew.push({
         name: currentWorkerName,
-        role: /צילום/u.test(prod.name || '') ? 'צילום' : '',
+        role: prod.userRole || (prod.name && /צילום/u.test(prod.name) ? 'צילום' : ''),
         roleDetail: '',
         phone: null,
         startTime: prod.startTime || '',
@@ -1695,16 +1742,23 @@ async function main() {
     const previousWeekStart = getPreviousWeekStart(currentWeekStart);
     const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
     const savedSnap = await db.collection('user_calendar_sync').get();
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const savedCalendars = savedSnap.docs
       .map((doc) => ({ uid: doc.id, ...doc.data() }))
-      .filter((entry) => entry.url && eligibleWeekStarts.has(entry.weekStart));
+      .filter((entry) =>
+        entry.url && (
+          eligibleWeekStarts.has(entry.weekStart) ||
+          (entry.savedAt && entry.savedAt >= sevenDaysAgo)
+        ),
+      );
 
     console.log(
       `Found ${savedCalendars.length} eligible saved calendars `
       + `(${previousWeekStart}, ${currentWeekStart})`,
     );
     if (!savedCalendars.length) {
-      throw new Error('No eligible saved calendars found for hourly sync');
+      console.log('No eligible saved calendars found — nothing to sync, exiting cleanly.');
+      return;
     }
 
     const browser = await puppeteer.launch({
@@ -1727,7 +1781,10 @@ async function main() {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
-          const schedule = await fetchSchedule(browser, saved.url);
+          // Always fetch the current week regardless of the date embedded in the saved URL
+          const urlToFetch = urlForWeek(saved.url, currentWeekStart);
+          console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
+          const schedule = await fetchSchedule(browser, urlToFetch);
           if (!schedule || !schedule.productions.length) {
             throw new Error('No productions found in saved Herzliya calendar');
           }

@@ -1,17 +1,10 @@
-name: Sync Calendar (Hourly)
+name: Cleanup Duplicate Productions
 
 on:
-  schedule:
-    - cron: '0 * * * *'   # every hour at :00
-    - cron: '30 * * * *'  # every hour at :30 (backup — GitHub cron is unreliable)
-  workflow_dispatch:
-
-concurrency:
-  group: calendar-sync
-  cancel-in-progress: false
+  workflow_dispatch:  # manual trigger only
 
 jobs:
-  sync:
+  cleanup:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -27,10 +20,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
 
-      - name: Sync saved calendars
+      - name: Remove duplicate productions from Firestore
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          SYNC_SAVED_CALENDARS: '1'
-        run: node functions/calendar-sync.cjs
+        run: node scripts/cleanup-duplicate-productions.js
