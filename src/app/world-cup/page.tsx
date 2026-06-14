@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import WorldCupHubClient from '@/components/world-cup/WorldCupHubClient';
 import { deriveStandingsFromMatches, getWorldCupMatches, getWorldCupPlayerStats, getWorldCupStandings, getWorldCupVenues } from '@/lib/world-cup/data';
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'מונדיאל 2026 | TV Industry IL',
