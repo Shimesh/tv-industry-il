@@ -496,15 +496,13 @@ async function fetchSchedule(browser, url) {
             }
           }
 
-          const { name: nameNoRole, userRole } = splitHerzliyaRole(rawProductionName);
-          const studioMatch = nameNoRole.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
+          const studioMatch = rawProductionName.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio|st\.?)\s*(\d+\w?)/i);
           const studio = studioMatch ? studioMatch[0].trim() : '';
-          const cleanName = studio ? nameNoRole.replace(studioMatch[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
 
           productions.push({
             herzliyaId,
-            name: cleanName || nameNoRole,
-            userRole,
+            name: rawProductionName,
+            userRole: '',
             studio,
             date: dayInfo.isoDate,
             day: dayInfo.dayName,
@@ -524,6 +522,14 @@ async function fetchSchedule(browser, url) {
     schedule.weekEnd = schedule.weekDays[schedule.weekDays.length - 1]?.isoDate || '';
     schedule.workerName = workerName || schedule.workerName;
     schedule.fetchedAt = new Date().toISOString();
+
+    // Apply role/studio stripping in Node.js (splitHerzliyaRole is not available in browser context)
+    for (const prod of schedule.productions) {
+      const { name, userRole } = splitHerzliyaRole(prod.name);
+      const cleanName = prod.studio ? (name || prod.name).replace(prod.studio, '').replace(/\s{2,}/g, ' ').trim() : (name || prod.name);
+      prod.name = cleanName || name || prod.name;
+      if (userRole) prod.userRole = userRole;
+    }
 
     let departmentEnrichedCount = 0;
     let departmentPage = null;
