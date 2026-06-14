@@ -1,20 +1,18 @@
 'use strict';
 /**
- * Cleanup script: remove duplicate global_productions entries caused by the
- * role-suffix stripping change (e.g. "אסתטיקה 360 צילום" vs "אסתטיקה 360"
- * are stored with different IDs but represent the same Herzliya production).
+ * Cleanup script: remove duplicate global_productions entries and eliminate
+ * personal productions that already exist in global_productions (the root
+ * cause of duplicates in the WeeklyCalendarWidget without requiring a Vercel
+ * redeploy).
  *
- * Strategy:
- *  1. Fetch all global_productions documents.
- *  2. Group by herzliyaId+date (primary key) or by stripped_name+date+startTime (fallback).
- *  3. Within each group keep the "winner" (most crew members, then newest lastUpdatedAt).
- *  4. Delete all other documents in the group.
- *  5. Update the winner's name if it still contains a role suffix.
+ * Phases:
+ *  1. global_productions — dedup by herzliyaId+date, strip role suffixes from names.
+ *  2. personal subcollections — for each entry that has a matching global entry
+ *     (same herzliyaId+date), delete it; global is the single source of truth.
+ *     For entries without a global counterpart, dedup + strip role suffix.
  *
  * Usage:
  *   node scripts/cleanup-duplicate-productions.js [--dry-run]
- *
- * Set --dry-run to preview changes without writing to Firestore.
  */
 
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
@@ -23,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ---------------------------------------------------------------------------
-// Load env (from .env.local if running locally, or from process.env for CI)
+// Load env vars
 // ---------------------------------------------------------------------------
 const envFile = path.join(__dirname, '..', '.env.local');
 if (fs.existsSync(envFile)) {
@@ -38,23 +36,19 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-// Support both FIREBASE_ADMIN_* (local) and FIREBASE_* (GitHub Actions) prefixes
-const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+const projectId   = process.env.FIREBASE_ADMIN_PROJECT_ID  || process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY || '')
-  .replace(/\\n/g, '\n');
+const privateKey  = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
 if (!projectId || !clientEmail || !privateKey) {
   console.error('Missing Firebase credentials. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY.');
   process.exit(1);
 }
 
-if (!getApps().length) {
-  initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
-}
+if (!getApps().length) initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
 
 // ---------------------------------------------------------------------------
-// Role suffixes (mirrors productionScheduleParser.ts)
+// Role suffixes (mirrors productionScheduleParser.ts + calendar-sync.cjs)
 // ---------------------------------------------------------------------------
 const HERZLIYA_ROLE_SUFFIXES = [
   'ניהול הפקה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
@@ -69,7 +63,7 @@ const HERZLIYA_ROLE_SUFFIXES = [
 function stripRole(name) {
   const t = (name || '').trim();
   for (const role of HERZLIYA_ROLE_SUFFIXES) {
-    if (t === role) return t; // entire name is a role — keep as-is
+    if (t === role) return t;
     if (t.endsWith(' ' + role)) {
       const stripped = t.slice(0, t.length - role.length - 1).trim();
       if (stripped) return stripped;
@@ -85,101 +79,98 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 async function main() {
   const db = getFirestore();
-  console.log(`[cleanup-duplicates] DRY_RUN=${DRY_RUN}`);
-  console.log('[cleanup-duplicates] Fetching all global_productions …');
+  console.log(`[cleanup] DRY_RUN=${DRY_RUN}\n`);
 
-  const snap = await db.collection('global_productions').get();
-  console.log(`[cleanup-duplicates] Fetched ${snap.size} documents.`);
+  // ==========================================================================
+  // PHASE 1 — global_productions
+  // ==========================================================================
+  console.log('=== PHASE 1: global_productions ===');
+  const globalSnap = await db.collection('global_productions').get();
+  console.log(`Fetched ${globalSnap.size} global documents.`);
 
-  // Group docs
-  const byHerzliya = new Map();   // key: `{herzliyaId}::{date}`
-  const noId = [];
+  const byHerzliya = new Map();   // key: herzliyaId::date → winning doc (after dedup)
+  const globalNoId = [];
 
-  for (const doc of snap.docs) {
+  for (const doc of globalSnap.docs) {
     const data = doc.data();
-    const herzliyaId = data.herzliyaId;
-    const date = data.date;
-    if (herzliyaId && date) {
-      const key = `${herzliyaId}::${date}`;
-      if (!byHerzliya.has(key)) byHerzliya.set(key, []);
+    if (data.herzliyaId && data.date) {
+      const key = `${data.herzliyaId}::${data.date}`;
+      if (!byHerzliya.has(key)) {
+        byHerzliya.set(key, []);
+      }
       byHerzliya.get(key).push({ id: doc.id, ref: doc.ref, data });
     } else {
-      noId.push({ id: doc.id, ref: doc.ref, data });
+      globalNoId.push({ id: doc.id, ref: doc.ref, data });
     }
   }
 
-  let deletedCount = 0;
-  let updatedCount = 0;
+  let g_deleted = 0, g_updated = 0;
 
   for (const [key, group] of byHerzliya.entries()) {
-    if (group.length === 1) {
-      // No duplicate — but still check if name needs stripping
-      const { id, ref, data } = group[0];
-      const cleanName = stripRole(data.name);
-      if (cleanName !== data.name) {
-        console.log(`  [UPDATE] ${id} name: "${data.name}" → "${cleanName}"`);
-        if (!DRY_RUN) await ref.update({ name: cleanName });
-        updatedCount++;
-      }
-      continue;
-    }
-
-    // Sort: most crew first, then newest lastUpdatedAt
     group.sort((a, b) => {
-      const crewDiff = (b.data.crew_list?.length ?? 0) - (a.data.crew_list?.length ?? 0);
-      if (crewDiff !== 0) return crewDiff;
+      const diff = (b.data.crew_list?.length ?? 0) - (a.data.crew_list?.length ?? 0);
+      if (diff !== 0) return diff;
       return String(b.data.lastUpdatedAt ?? '') > String(a.data.lastUpdatedAt ?? '') ? 1 : -1;
     });
 
     const winner = group[0];
     const losers = group.slice(1);
-    const cleanName = stripRole(winner.data.name);
 
-    const loserIds = losers.map((l) => l.id).join(', ');
-    console.log(`  [DEDUP] herzliyaId=${key.split('::')[0]} date=${key.split('::')[1]}`);
-    console.log(`    KEEP: ${winner.id} (name="${winner.data.name}", crew=${winner.data.crew_list?.length ?? 0})`);
-    console.log(`    DELETE: ${loserIds}`);
-
-    if (!DRY_RUN) {
-      await Promise.all(losers.map((l) => l.ref.delete()));
-      if (cleanName !== winner.data.name) {
-        await winner.ref.update({ name: cleanName });
-        updatedCount++;
-      }
+    if (losers.length > 0) {
+      console.log(`  [GLOBAL DEDUP] ${key} → keep ${winner.id}, delete [${losers.map(l => l.id).join(', ')}]`);
+      if (!DRY_RUN) await Promise.all(losers.map(l => l.ref.delete()));
+      g_deleted += losers.length;
+      // Replace group entry with winner only
+      byHerzliya.set(key, [winner]);
     }
-    deletedCount += losers.length;
+
+    const cleanName = stripRole(winner.data.name);
+    if (cleanName !== winner.data.name) {
+      console.log(`  [GLOBAL RENAME] ${winner.id}: "${winner.data.name}" → "${cleanName}"`);
+      if (!DRY_RUN) await winner.ref.update({ name: cleanName });
+      winner.data = { ...winner.data, name: cleanName };  // update local cache
+      g_updated++;
+    }
   }
 
-  // Strip roles from no-herzliyaId entries too
-  for (const { id, ref, data } of noId) {
+  for (const { id, ref, data } of globalNoId) {
     const cleanName = stripRole(data.name);
     if (cleanName !== data.name) {
-      console.log(`  [UPDATE] ${id} name: "${data.name}" → "${cleanName}"`);
+      console.log(`  [GLOBAL RENAME] ${id}: "${data.name}" → "${cleanName}"`);
       if (!DRY_RUN) await ref.update({ name: cleanName });
-      updatedCount++;
+      g_updated++;
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Phase 2: Fix personal productions subcollections
-  // Path: productions/{uid}/weeks/{weekId}/productions/{prodId}
-  // These have the old role-suffixed names AND old IDs based on the old name.
-  // Fix: for entries with role in name, delete old doc + create new doc with
-  // stripped name and new ID so they match the global_productions IDs.
-  // -------------------------------------------------------------------------
-  console.log('\n[cleanup-duplicates] Phase 2: scanning personal productions subcollections …');
+  console.log(`\nPhase 1 done: deleted=${g_deleted}, updated_names=${g_updated}\n`);
 
+  // Build a set of herzliyaId::date keys that exist in global (for Phase 2 lookup)
+  const globalHerzliyaKeys = new Set(byHerzliya.keys());
+
+  // ==========================================================================
+  // PHASE 2 — personal subcollections
+  // productions/{uid}/weeks/{weekId}/productions/{prodId}
+  //
+  // Strategy:
+  //   • If a matching global entry exists (same herzliyaId+date): DELETE the
+  //     personal entry entirely. Global is the single source of truth, so the
+  //     widget will see each production exactly once.
+  //   • If no global counterpart: strip role from name, deduplicate.
+  // ==========================================================================
+  console.log('=== PHASE 2: personal subcollections ===');
   const personalSnap = await db.collectionGroup('productions').get();
-  // Filter to only personal subcollection docs (not global)
+
   const personalDocs = personalSnap.docs.filter((doc) => {
     const parts = doc.ref.path.split('/');
-    // productions/{uid}/weeks/{weekId}/productions/{prodId}  →  length 6
+    // productions/{uid}/weeks/{weekId}/productions/{prodId} → length 6
     return parts.length === 6 && parts[0] === 'productions' && parts[2] === 'weeks' && parts[4] === 'productions';
   });
-  console.log(`[cleanup-duplicates] Found ${personalDocs.length} personal production documents.`);
+  console.log(`Found ${personalDocs.length} personal production documents.`);
 
-  // Group by uid+weekId so we can dedup within each week
-  const personalByKey = new Map(); // key: `{herzliyaId}::{date}::{uid}`
+  let p_deleted = 0, p_updated = 0, p_skipped = 0;
+
+  // Group by herzliyaId::date::uid for per-user dedup
+  const personalByKey = new Map();
   const personalNoId = [];
 
   for (const doc of personalDocs) {
@@ -194,82 +185,61 @@ async function main() {
       if (!personalByKey.has(key)) personalByKey.set(key, []);
       personalByKey.get(key).push({ id: doc.id, ref: doc.ref, data, uid });
     } else {
-      personalNoId.push({ id: doc.id, ref: doc.ref, data, uid });
+      personalNoId.push({ id: doc.id, ref: doc.ref, data, uid: parts[1] });
     }
   }
 
-  let personalDeleted = 0;
-  let personalRenamed = 0;
+  for (const [key, group] of personalByKey.entries()) {
+    const [herzliyaId, date] = key.split('::');
+    const globalKey = `${herzliyaId}::${date}`;
 
-  for (const [, group] of personalByKey.entries()) {
-    // Sort: most crew, then newest
-    group.sort((a, b) => {
-      const crewDiff = (b.data.crew?.length ?? 0) - (a.data.crew?.length ?? 0);
-      if (crewDiff !== 0) return crewDiff;
-      return String(b.data.lastUpdatedAt ?? '') > String(a.data.lastUpdatedAt ?? '') ? 1 : -1;
-    });
-
-    const winner = group[0];
-    const losers = group.slice(1);
-
-    // Delete duplicate losers
-    if (losers.length > 0) {
-      const loserIds = losers.map((l) => l.id).join(', ');
-      console.log(`  [PERSONAL DEDUP] uid=${winner.uid} keep=${winner.id} delete=${loserIds}`);
-      if (!DRY_RUN) await Promise.all(losers.map((l) => l.ref.delete()));
-      personalDeleted += losers.length;
-    }
-
-    // Rename winner if it has a role suffix
-    const cleanName = stripRole(winner.data.name);
-    if (cleanName !== winner.data.name) {
-      // Compute the new ID (same formula as generateProductionId in productionDiff.ts)
-      const studio = winner.data.studio || '';
-      const date = winner.data.date || '';
-      const key = `${cleanName}::${date}::${studio}`.toLowerCase().trim();
-      let hash = 0;
-      for (let i = 0; i < key.length; i++) {
-        const char = key.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
+    if (globalHerzliyaKeys.has(globalKey)) {
+      // Global counterpart exists — delete ALL personal entries for this production.
+      // The widget will show it from global_productions only, no duplicate.
+      console.log(`  [PERSONAL DELETE] herzliyaId=${herzliyaId} date=${date} uid=${group[0].uid} (${group.length} doc(s)) — global exists`);
+      if (!DRY_RUN) await Promise.all(group.map(entry => entry.ref.delete()));
+      p_deleted += group.length;
+    } else {
+      // No global entry — keep personal, just clean it up
+      group.sort((a, b) => {
+        const diff = (b.data.crew?.length ?? 0) - (a.data.crew?.length ?? 0);
+        if (diff !== 0) return diff;
+        return String(b.data.lastUpdatedAt ?? '') > String(a.data.lastUpdatedAt ?? '') ? 1 : -1;
+      });
+      const winner = group[0];
+      const losers = group.slice(1);
+      if (losers.length > 0) {
+        if (!DRY_RUN) await Promise.all(losers.map(l => l.ref.delete()));
+        p_deleted += losers.length;
       }
-      const newId = Math.abs(hash).toString(36);
-
-      if (newId !== winner.id) {
-        console.log(`  [PERSONAL RENAME] ${winner.id} → ${newId} (name: "${winner.data.name}" → "${cleanName}")`);
-        if (!DRY_RUN) {
-          // Create new doc, delete old doc
-          const newRef = winner.ref.parent.doc(newId);
-          await newRef.set({ ...winner.data, id: newId, name: cleanName });
-          await winner.ref.delete();
-        }
-        personalRenamed++;
-      } else {
-        // Same ID but name needs updating
-        console.log(`  [PERSONAL UPDATE] ${winner.id} name: "${winner.data.name}" → "${cleanName}"`);
+      const cleanName = stripRole(winner.data.name);
+      if (cleanName !== winner.data.name) {
         if (!DRY_RUN) await winner.ref.update({ name: cleanName });
-        personalRenamed++;
+        p_updated++;
       }
+      p_skipped++;
     }
   }
 
-  // Strip roles from no-herzliyaId personal entries too
+  // Strip roles from no-herzliyaId personal entries
   for (const { id, ref, data } of personalNoId) {
     const cleanName = stripRole(data.name);
     if (cleanName !== data.name) {
-      console.log(`  [PERSONAL UPDATE] ${id} name: "${data.name}" → "${cleanName}"`);
       if (!DRY_RUN) await ref.update({ name: cleanName });
-      personalRenamed++;
+      p_updated++;
     }
   }
 
-  console.log(`\n[cleanup-duplicates] Done.`);
-  console.log(`  global_productions — Deleted: ${deletedCount} duplicates, Updated: ${updatedCount} names`);
-  console.log(`  personal subcollections — Deleted: ${personalDeleted} duplicates, Renamed/Updated: ${personalRenamed} names`);
-  if (DRY_RUN) console.log('  (DRY RUN — no changes written)');
+  console.log(`\nPhase 2 done: deleted=${p_deleted}, updated_names=${p_updated}, no_global_counterpart=${p_skipped}`);
+
+  console.log('\n=== SUMMARY ===');
+  console.log(`global_productions: ${g_deleted} duplicates deleted, ${g_updated} names stripped`);
+  console.log(`personal docs: ${p_deleted} deleted (had global counterpart), ${p_updated} names stripped, ${p_skipped} kept (no global)`);
+  if (DRY_RUN) console.log('\n(DRY RUN — no changes written to Firestore)');
+  else console.log('\nFirestore cleanup complete. Refresh the app to see the result.');
 }
 
 main().catch((err) => {
-  console.error('[cleanup-duplicates] Fatal error:', err);
+  console.error('[cleanup] Fatal error:', err);
   process.exit(1);
 });

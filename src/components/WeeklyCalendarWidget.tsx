@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
 
-const CACHE_KEY = 'productions_global_widget_cache_v2';
+const CACHE_KEY = 'productions_global_widget_cache_v3';
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes — keeps data fresh across page navigations
 const DAY_NAMES = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];

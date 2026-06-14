@@ -1,6 +1,6 @@
 {
   "name": "tv-industry-il",
-  "version": "2.8.121",
+  "version": "2.8.122",
   "private": true,
   "scripts": {
     "dev": "next dev",
