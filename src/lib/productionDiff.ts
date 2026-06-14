@@ -70,8 +70,8 @@ export interface ParsedSchedule {
 }
 
 // Generate a stable ID for a production (composite key)
-export function generateProductionId(name: string, date: string, studio: string): string {
-  const key = `${name}::${date}::${studio}`.toLowerCase().trim();
+export function generateProductionId(name: string, date: string, studio: string, startTime?: string): string {
+  const key = `${name}::${date}::${studio}::${startTime || ''}`.toLowerCase().trim();
   // Simple hash
   let hash = 0;
   for (let i = 0; i < key.length; i++) {

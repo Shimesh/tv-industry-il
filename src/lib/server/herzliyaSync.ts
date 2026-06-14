@@ -328,7 +328,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   const productions = parsed.productions.map(prod => ({
     ...prod,
-    id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio)),
+    id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio, prod.startTime)),
     day: prod.day || getHebrewDay(prod.date),
   }));
 

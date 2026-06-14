@@ -531,7 +531,7 @@ export function parseHerzliyaHTML(html: string, currentUserName?: string): Parse
       }
 
       productions.push({
-        id: generateProductionId(finalName, dayInfo.isoDate, studio),
+        id: generateProductionId(finalName, dayInfo.isoDate, studio, productionStartTime),
         herzliyaId,
         name: finalName,
         studio,
@@ -721,7 +721,7 @@ export function parseManualText(text: string): ParsedSchedule {
       if (!name) name = 'הפקה';
 
       currentProduction = {
-        id: generateProductionId(name, currentDate, studio),
+        id: generateProductionId(name, currentDate, studio, startTime),
         name,
         studio,
         date: currentDate,
@@ -742,7 +742,7 @@ export function parseManualText(text: string): ParsedSchedule {
       const name = remaining.replace(/^[\s\-–|,.:]+|[\s\-–|,.:]+$/g, '').trim();
       if (name && name.length >= 2) {
         currentProduction = {
-          id: generateProductionId(name, currentDate, studio),
+          id: generateProductionId(name, currentDate, studio, time),
           name,
           studio,
           date: currentDate,
@@ -867,7 +867,7 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         const endTime = parsedCrew.endTime || summary.endTime;
         const studioFromParts = parsedCrew.studio;
         const studio = studioFromParts || studioFromName;
-        productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
+        productions.push({ id: generateProductionId(name, isoDate, studio, startTime), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
       }
     });
   }
@@ -896,7 +896,7 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
       const endTime = parsedCrew.endTime || summary.endTime;
       const studioFromParts = parsedCrew.studio;
       const studio = studioFromParts || studioFromName;
-      productions.push({ id: generateProductionId(name, isoDate, studio), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
+      productions.push({ id: generateProductionId(name, isoDate, studio, startTime), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
     }
   }
 

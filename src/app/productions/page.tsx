@@ -787,7 +787,7 @@ function ProductionsContent() {
       const updateCount = prevCount + 1;
       weekUpdateCountRef.current.set(weekId, updateCount);
 
-      const prodIds = prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio));
+      const prodIds = prods.map(p => p.id || generateProductionId(p.name, p.date, p.studio, p.startTime));
       const userSchedulePath = `userSchedules/${user.uid}/weeks/${weekId}`;
       const now = new Date().toISOString();
 
@@ -959,7 +959,7 @@ function ProductionsContent() {
         const productionEntries = memberProds.map(p => {
           const crewEntry = p.crew.find(c => c.name === crewName);
           return {
-            productionId: p.id || generateProductionId(p.name, p.date, p.studio),
+            productionId: p.id || generateProductionId(p.name, p.date, p.studio, p.startTime),
             name: p.name,
             studio: p.studio,
             date: p.date,
@@ -1052,7 +1052,7 @@ function ProductionsContent() {
       } else {
         const prodsWithIds = parsed.productions.map(p => ({
           ...p,
-          id: p.id || generateProductionId(p.name, p.date, p.studio),
+          id: p.id || generateProductionId(p.name, p.date, p.studio, p.startTime),
           day: p.day || getHebrewDay(p.date),
           versions: [{
             timestamp: new Date().toISOString(),
@@ -1838,7 +1838,7 @@ function ProductionsContent() {
         location?: string; studio?: string; notes?: string;
         crew?: { name: string; role: string; department: string }[];
       }) => ({
-        id: generateProductionId(p.name || '', p.date || '', p.studio || p.location || ''),
+        id: generateProductionId(p.name || '', p.date || '', p.studio || p.location || '', p.startTime || ''),
         name: p.name || '',
         date: p.date || '',
         day: p.date ? getHebrewDay(p.date) : '',
