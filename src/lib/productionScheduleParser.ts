@@ -43,7 +43,7 @@ function extractStudioFromName(name: string): { studio: string; remaining: strin
  * Sorted longest-first so multi-word roles are matched before single words.
  */
 const HERZLIYA_ROLE_SUFFIXES: string[] = [
-  'ניהול הפקה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
+  'ניהול הפקה', 'ניהול במה', 'עריכת שיא', 'ע. בימוי', 'ע. מפיק', 'ע. מפיקה', 'ע. צילום',
   'ע. עריכה', 'ע. תאורה', 'ע. סאונד', 'סטדי קאם', 'סטדי-קאם', 'סטדיקאם',
   'צלם רחף', 'רחף', 'רחפן', 'רחפנית',
   'צילום', 'עריכה', 'סאונד', 'תאורה', 'בימוי', 'עיצוב', 'ניהול',
