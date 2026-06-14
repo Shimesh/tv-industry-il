@@ -64,7 +64,18 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
   const prevActiveRef = useRef<WorldCupMatch | null>(null);
   const activeMatch = useMemo(() => {
     const found = matches.find((m) => m.status === 'live') ?? null;
-    if (found?.id === prevActiveRef.current?.id) return prevActiveRef.current;
+    const prev = prevActiveRef.current;
+    // Stabilise reference only when nothing score/status/minute-relevant changed,
+    // so consumers that show live scores still re-render when the match updates.
+    if (
+      found?.id === prev?.id &&
+      found?.homeScore === prev?.homeScore &&
+      found?.awayScore === prev?.awayScore &&
+      found?.minute === prev?.minute &&
+      found?.status === prev?.status
+    ) {
+      return prev;
+    }
     prevActiveRef.current = found;
     return found;
   }, [matches]);
