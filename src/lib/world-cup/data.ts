@@ -136,14 +136,35 @@ async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
   }
 }
 
+// Canonical nameEn → alternative names used by ESPN / OpenFootball
+const ESPN_TEAM_ALIASES: Record<string, string[]> = {
+  "côte d'ivoire": ['ivory coast', "cote d'ivoire"],
+  'türkiye': ['turkey'],
+  'bosnia and herzegovina': ['bosnia & herzegovina', 'bosnia-herzegovina'],
+  'south korea': ['korea republic', 'korea'],
+  'north korea': ['korea dpr'],
+  'iran': ['ir iran'],
+  'china': ['china pr'],
+  'czechia': ['czech republic'],
+  'united states': ['usa', 'united states of america'],
+};
+
+function espnNormalize(name: string): string {
+  const n = name.toLowerCase().trim();
+  for (const [canonical, aliases] of Object.entries(ESPN_TEAM_ALIASES)) {
+    if (n === canonical || aliases.includes(n)) return canonical;
+  }
+  return n;
+}
+
 function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): WorldCupMatch[] {
   return matches.map(match => {
-    const homeEn = match.homeTeam.nameEn.toLowerCase();
-    const awayEn = match.awayTeam.nameEn.toLowerCase();
+    const homeEn = espnNormalize(match.homeTeam.nameEn);
+    const awayEn = espnNormalize(match.awayTeam.nameEn);
 
     const espn = espnEvents.find(ev => {
       const comps = ev.competitions?.[0]?.competitors ?? [];
-      const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
+      const names = comps.map(c => espnNormalize(c.team?.displayName ?? ''));
       const word0 = (s: string) => s.split(' ')[0];
       const hasHome = names.some(n => n && (n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n))));
       const hasAway = names.some(n => n && (n === awayEn || n.startsWith(word0(awayEn)) || awayEn.startsWith(word0(n))));
@@ -168,7 +189,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     const comps = espn.competitions?.[0]?.competitors ?? [];
     const word0 = (s: string) => s.split(' ')[0];
     const homeComp = comps.find(c => {
-      const n = (c.team?.displayName ?? '').toLowerCase();
+      const n = espnNormalize(c.team?.displayName ?? '');
       return n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n));
     });
     const awayComp = comps.find(c => c !== homeComp);

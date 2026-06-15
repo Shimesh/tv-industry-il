@@ -81,9 +81,14 @@ type CoreEvent = {
 };
 
 async function findESPNEventIdViaCore(dateStr: string, homeEn: string, awayEn: string): Promise<string | null> {
-  const home = homeEn.toLowerCase();
-  const away = awayEn.toLowerCase();
-  const word0 = (s: string) => s.split(' ')[0];
+  const home = normalizeTeamName(homeEn);
+  const away = normalizeTeamName(awayEn);
+  const word0 = (s: string) => s.split(' ')[0].toLowerCase();
+
+  function teamsMatch(n: string, canonical: string): boolean {
+    const norm = normalizeTeamName(n);
+    return norm === canonical || norm.startsWith(word0(canonical)) || canonical.startsWith(word0(norm));
+  }
 
   async function searchRefs(refs: string[]): Promise<string | null> {
     const evs = await Promise.all(
@@ -99,8 +104,8 @@ async function findESPNEventIdViaCore(dateStr: string, homeEn: string, awayEn: s
       if (name.includes(word0(home)) && name.includes(word0(away))) return ev.id;
       const comps = ev.competitions?.[0]?.competitors ?? [];
       const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
-      const hasHome = names.some(n => n && (n.startsWith(word0(home)) || home.startsWith(word0(n))));
-      const hasAway = names.some(n => n && (n.startsWith(word0(away)) || away.startsWith(word0(n))));
+      const hasHome = names.some(n => n && teamsMatch(n, home));
+      const hasAway = names.some(n => n && teamsMatch(n, away));
       if (hasHome && hasAway) return ev.id;
     }
     return null;
@@ -125,15 +130,20 @@ async function findESPNEventIdViaCore(dateStr: string, homeEn: string, awayEn: s
 
 async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDate?: string): Promise<string | null> {
   const word0 = (s: string) => s.split(' ')[0].toLowerCase();
-  const home = homeTeamEn.toLowerCase();
-  const away = awayTeamEn.toLowerCase();
+  const home = normalizeTeamName(homeTeamEn);
+  const away = normalizeTeamName(awayTeamEn);
+
+  function teamsMatch(n: string, canonical: string): boolean {
+    const norm = normalizeTeamName(n);
+    return norm === canonical || norm.startsWith(word0(canonical)) || canonical.startsWith(word0(norm));
+  }
 
   function searchEvents(events: ESPNScoreboardEvent[]): string | null {
     const found = events.find(ev => {
       const comps = ev.competitions?.[0]?.competitors ?? [];
       const names = comps.map(c => (c.team?.displayName ?? '').toLowerCase());
-      const hasHome = names.some(n => n && (n === home || n.startsWith(word0(home)) || home.startsWith(word0(n))));
-      const hasAway = names.some(n => n && (n === away || n.startsWith(word0(away)) || away.startsWith(word0(n))));
+      const hasHome = names.some(n => n && teamsMatch(n, home));
+      const hasAway = names.some(n => n && teamsMatch(n, away));
       return hasHome && hasAway;
     });
     return found?.id ?? null;
@@ -167,6 +177,30 @@ async function findESPNEventId(homeTeamEn: string, awayTeamEn: string, kickoffDa
   }
 
   return null;
+}
+
+// Team name aliases: our canonical nameEn → common variants used by OpenFootball / ESPN
+const TEAM_ALIASES: Record<string, string[]> = {
+  "côte d'ivoire": ['ivory coast', "cote d'ivoire", 'côte divoire'],
+  'türkiye': ['turkey'],
+  'bosnia and herzegovina': ['bosnia & herzegovina', 'bosnia-herzegovina'],
+  'south korea': ['korea republic', 'korea'],
+  'north korea': ['korea dpr'],
+  'iran': ['ir iran'],
+  'china': ['china pr'],
+  'czechia': ['czech republic'],
+  'united states': ['usa', 'united states of america'],
+};
+
+function normalizeTeamName(name: string): string {
+  const n = name.toLowerCase().trim();
+  // If already canonical, return as-is
+  if (TEAM_ALIASES[n]) return n;
+  // If it's an alias, return the canonical name
+  for (const [canonical, aliases] of Object.entries(TEAM_ALIASES)) {
+    if (aliases.includes(n)) return canonical;
+  }
+  return n;
 }
 
 // OpenFootball (GitHub raw) — free, works from Vercel, has goal scorers for WC 2026 completed matches
@@ -207,12 +241,12 @@ async function fetchOpenFootballGoals(homeEn: string, awayEn: string): Promise<o
     if (!all.length) return null;
 
     const w0 = (s: string) => s.split(' ')[0].toLowerCase();
-    const home = homeEn.toLowerCase();
-    const away = awayEn.toLowerCase();
+    const home = normalizeTeamName(homeEn);
+    const away = normalizeTeamName(awayEn);
 
     const found = all.find(m => {
-      const t1 = (m.team1 ?? '').toLowerCase();
-      const t2 = (m.team2 ?? '').toLowerCase();
+      const t1 = normalizeTeamName(m.team1 ?? '');
+      const t2 = normalizeTeamName(m.team2 ?? '');
       return (t1.startsWith(w0(home)) || home.startsWith(w0(t1))) &&
              (t2.startsWith(w0(away)) || away.startsWith(w0(t2)));
     });
