@@ -16,6 +16,7 @@ import {
   generateProductionId,
   getHebrewDay,
   getWeekIdsInRange,
+  canonicalProductionName,
 } from '@/lib/productionDiff';
 import { CalendarView } from '@/components/productions/CalendarNavigation';
 import { ClaimShiftsModal } from '@/components/productions/ClaimShiftsModal';
@@ -164,10 +165,12 @@ function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
     // Always clean up crew duplicates within each production first (ShowCrew can list same person twice)
     const cleanP = { ...p, crew: deduplicateCrew(p.crew) };
     if (!cleanP.date) { seen.set(cleanP.id || Math.random().toString(), cleanP); continue; }
-    const normName = normalizeName(cleanP.name).replace(/\s+/g, ' ').trim();
-    // Sort times so swapped 18:00-14:00 and 14:00-18:00 produce the same key
+    // Use canonical name (strips draft qualifiers like "(לוז לא סופי)") and endTime
+    // so that a renamed production on the same date merges instead of duplicating.
+    // endTime is more stable than startTime across draft/final schedule revisions.
+    const canonName = canonicalProductionName(cleanP.name || '');
     const times = [cleanP.startTime || '', cleanP.endTime || ''].sort();
-    const key = `${normName}::${cleanP.date}::${times[0]}`;
+    const key = `${canonName}::${cleanP.date}::${times[1]}`;
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, cleanP);
