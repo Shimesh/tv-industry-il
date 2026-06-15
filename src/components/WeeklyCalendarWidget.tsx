@@ -6,6 +6,7 @@ import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'luci
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone, deduplicateCrewEntries } from '@/lib/crewNormalization';
 import type { Production } from '@/lib/productionDiff';
+import { canonicalProductionName } from '@/lib/productionDiff';
 
 const CACHE_KEY = 'productions_global_widget_cache_v3';
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes — keeps data fresh across page navigations
@@ -95,20 +96,22 @@ function mergeProductions(
 }
 
 // Robust cross-source dedup: same production can arrive from multiple endpoints
-// with different IDs (personal path vs global sync). Key = name+date+startTime.
+// with different IDs (personal path vs global sync).
+// Uses canonical name (strips draft qualifiers) and endTime (stable across revisions).
 function deduplicateByIdentity(productions: Production[]): Production[] {
   const seen = new Map<string, Production>();
   for (const prod of productions) {
     if (!prod.date) { seen.set(prod.id || String(Math.random()), prod); continue; }
-    const normName = normalizeName(prod.name).replace(/\s+/g, ' ').trim();
+    const canonName = canonicalProductionName(prod.name || '');
     const times = [prod.startTime || '', prod.endTime || ''].sort();
-    const key = `${normName}::${prod.date}::${times[0]}`;
+    const key = `${canonName}::${prod.date}::${times[1]}`;
+    const cleanCrew = deduplicateCrewEntries(prod.crew ?? []);
     const existing = seen.get(key);
     if (!existing) {
-      seen.set(key, prod);
+      seen.set(key, { ...prod, crew: cleanCrew });
     } else {
-      const base = (prod.crew?.length ?? 0) >= (existing.crew?.length ?? 0) ? prod : existing;
-      const other = base === prod ? existing : prod;
+      const base = cleanCrew.length >= (existing.crew?.length ?? 0) ? { ...prod, crew: cleanCrew } : existing;
+      const other = base === existing ? { ...prod, crew: cleanCrew } : existing;
       const mergedCrew = deduplicateCrewEntries([...(base.crew ?? []), ...(other.crew ?? [])]);
       seen.set(key, {
         ...base,
