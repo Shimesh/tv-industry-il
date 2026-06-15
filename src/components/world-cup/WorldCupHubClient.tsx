@@ -1893,8 +1893,22 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
             );
           }
           const tName = ev.teamName.toLowerCase();
-          const isHome = match.homeTeam.nameEn.toLowerCase() === tName
-            || tName.startsWith(match.homeTeam.nameEn.toLowerCase().split(' ')[0]);
+          // Normalize aliases so "Ivory Coast" matches "Côte d'Ivoire" etc.
+          const WC_ALIASES: Record<string, string> = {
+            "ivory coast": "côte d'ivoire", "cote d'ivoire": "côte d'ivoire",
+            "turkey": "türkiye", "korea republic": "south korea", "korea dpr": "north korea",
+            "ir iran": "iran", "china pr": "china", "czech republic": "czechia",
+            "usa": "united states", "bosnia & herzegovina": "bosnia and herzegovina",
+          };
+          const normT = WC_ALIASES[tName] ?? tName;
+          const normHome = WC_ALIASES[match.homeTeam.nameEn.toLowerCase()] ?? match.homeTeam.nameEn.toLowerCase();
+          const normAway = WC_ALIASES[match.awayTeam.nameEn.toLowerCase()] ?? match.awayTeam.nameEn.toLowerCase();
+          const w0 = (s: string) => s.split(' ')[0];
+          const isHome = normHome === normT || normT.startsWith(w0(normHome)) || normHome.startsWith(w0(normT));
+          const teamObj = isHome ? match.homeTeam : match.awayTeam;
+          // If neither home nor away matched, fall back to checking away explicitly
+          const isAway = !isHome && (normAway === normT || normT.startsWith(w0(normAway)) || normAway.startsWith(w0(normT)));
+          const resolvedTeam = isHome ? match.homeTeam : isAway ? match.awayTeam : null;
           return (
             <motion.div
               key={i}
@@ -1910,7 +1924,10 @@ function LiveEventsPanel({ match }: { match: WorldCupMatch }) {
                 <div className="text-xs font-black text-[var(--theme-text)]">{ev.player || ev.teamName}</div>
                 {ev.detail && <div className="text-[10px] text-[var(--theme-text-secondary)]">{ev.detail}</div>}
               </div>
-              <span className="shrink-0 text-lg">{isHome ? match.homeTeam.flag : match.awayTeam.flag}</span>
+              <div className={`shrink-0 flex flex-col items-center gap-0.5 ${isHome ? '' : 'items-end'}`}>
+                <span className="text-lg leading-none">{resolvedTeam ? resolvedTeam.flag : (isHome ? match.homeTeam.flag : match.awayTeam.flag)}</span>
+                <span className="text-[9px] text-[var(--theme-text-secondary)] leading-tight">{resolvedTeam ? resolvedTeam.nameHe : (teamObj?.nameHe ?? '')}</span>
+              </div>
             </motion.div>
           );
         })}
