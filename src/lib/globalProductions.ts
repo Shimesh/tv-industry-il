@@ -106,11 +106,17 @@ export function toGlobalProduction(
   const crewList: GlobalProductionCrewEntry[] = [];
   const phonesSet = new Set<string>();
   const shadowKeysSet = new Set<string>();
+  // Deduplicate crew by normalizedName::normalizedRole so the same person
+  // listed in multiple Herzliya schedule blocks doesn't create duplicate entries.
+  const seenCrewKeys = new Set<string>();
 
   for (const member of prod.crew ?? []) {
     const normPhone = normalizePhone(member.phone);
     const normName = normalizeName(member.name || '');
     const normRole = normalizeRole(member.role || '');
+    const dedupKey = normPhone ?? `${normName}::${normRole || member.role || ''}`;
+    if (dedupKey && seenCrewKeys.has(dedupKey)) continue;
+    if (dedupKey) seenCrewKeys.add(dedupKey);
 
     const shadowKey =
       normPhone === null && normName

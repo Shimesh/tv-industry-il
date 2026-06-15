@@ -93,6 +93,13 @@ function toLocalDateStr(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+// Strip parenthetical qualifiers like "(לוז לא סופי)", "(טנטטיבי)" from a
+// production name for fuzzy matching — so a renamed production is recognised
+// as the same one rather than duplicated.
+export function canonicalProductionName(name: string): string {
+  return name.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 // Generate weekId from a date (Sunday of that week)
 export function getWeekId(dateStr: string): string {
   const date = parseLocalDate(dateStr);
@@ -178,10 +185,16 @@ export function diffSchedules(
   const changes: Change[] = [];
 
   for (const newProd of incoming) {
+    // Exact match first; fall back to canonical (strip parenthetical qualifiers)
+    // so "אסנהיים (לוז לא סופי)" → "אסנהיים" is treated as an update, not a new production.
     const existingProd = existing.find(p =>
       p.name === newProd.name &&
       p.date === newProd.date &&
       p.studio === newProd.studio
+    ) ?? existing.find(p =>
+      p.date === newProd.date &&
+      p.studio === newProd.studio &&
+      canonicalProductionName(p.name) === canonicalProductionName(newProd.name)
     );
 
     if (!existingProd) {
@@ -196,9 +209,24 @@ export function diffSchedules(
       continue;
     }
 
-    // Check time changes
-    if (existingProd.startTime !== newProd.startTime ||
+    // If the name changed (e.g. removed "(לוז לא סופי)"), record the update
+    if (existingProd.name !== newProd.name) {
+      changes.push({
+        type: 'UPDATE_TIME',
+        productionName: newProd.name,
+        productionDate: newProd.date,
+        description: `עדכון שם "${existingProd.name}" → "${newProd.name}" (${formatDateShort(newProd.date)})`,
+        details: {
+          oldStart: existingProd.startTime,
+          oldEnd: existingProd.endTime,
+          newStart: newProd.startTime || existingProd.startTime,
+          newEnd: newProd.endTime || existingProd.endTime,
+          newName: newProd.name,
+        },
+      });
+    } else if (existingProd.startTime !== newProd.startTime ||
       existingProd.endTime !== newProd.endTime) {
+      // Check time changes
       changes.push({
         type: 'UPDATE_TIME',
         productionName: newProd.name,
@@ -295,15 +323,16 @@ export function applyDiff(
       }
       case 'UPDATE_TIME': {
         const idx = result.findIndex(p =>
-          p.name === change.productionName &&
-          p.date === change.productionDate
+          p.date === change.productionDate &&
+          (p.name === change.productionName || canonicalProductionName(p.name) === canonicalProductionName(change.productionName))
         );
         if (idx >= 0) {
-          const details = change.details as { newStart: string; newEnd: string };
+          const details = change.details as { newStart: string; newEnd: string; newName?: string };
           result[idx] = {
             ...result[idx],
-            startTime: details.newStart,
-            endTime: details.newEnd,
+            name: details.newName ?? result[idx].name,
+            startTime: details.newStart || result[idx].startTime,
+            endTime: details.newEnd || result[idx].endTime,
             lastUpdatedBy: userId,
             lastUpdatedAt: now,
             versions: [
@@ -316,8 +345,8 @@ export function applyDiff(
       }
       case 'ADD_CREW': {
         const idx = result.findIndex(p =>
-          p.name === change.productionName &&
-          p.date === change.productionDate
+          p.date === change.productionDate &&
+          (p.name === change.productionName || canonicalProductionName(p.name) === canonicalProductionName(change.productionName))
         );
         if (idx >= 0) {
           const crewMember = (change.details as { crewMember: CrewMember }).crewMember;
