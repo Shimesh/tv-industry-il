@@ -313,10 +313,15 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     ),
   [taggedCrew]);
 
+  const directorNames = useMemo(() => new Set(directors.map((d) => d.name)), [directors]);
   const filteredCrew = useMemo(() => {
-    if (activeDepartment === 'הכל') return sortedCrew;
-    return sortedCrew.filter((member) => member.department === activeDepartment);
-  }, [sortedCrew, activeDepartment]);
+    const base = activeDepartment === 'הכל' ? sortedCrew : sortedCrew.filter((member) => member.department === activeDepartment);
+    // Directors are already shown in the hero box at the top; hide them from the main list to avoid double display.
+    if (directors.length > 0 && activeDepartment === 'הכל') {
+      return base.filter((m) => !directorNames.has(m.name));
+    }
+    return base;
+  }, [sortedCrew, activeDepartment, directors, directorNames]);
 
   const shareMyDetails = () => {
     const myEntry = sortedCrew.find((member) => member.isCurrentUser);
