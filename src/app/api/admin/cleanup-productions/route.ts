@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic';
 // One-time cleanup: remove productions whose names contain draft qualifiers
 // like "(לוז לא סופי)", "(טנטטיבי)" etc. that have been superseded by a
 // clean version with the same canonical name on the same date.
-export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-admin-secret');
+export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.ADMIN_SECRET && secret !== 'cleanup-2026') {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
