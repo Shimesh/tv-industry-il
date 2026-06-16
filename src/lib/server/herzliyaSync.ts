@@ -155,6 +155,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectiveDeptHtml = deptHtml;
   // Cookie used for ShowCrew popup calls — updated with ShowEmp3 session cookie if available
   let effectivePopupCookie = sessionCookie;
+  // Base URL for ShowCrew popup calls — for sendwa.html this must be mgrqispi.dll, not sendwa.html
+  let effectivePopupBaseUrl = popupBaseUrl;
   // Log raw personalHtml preview for sendwa URLs to understand what server returns
   if (url.includes('sendwa.html')) {
     const hasOpenmd2 = personalHtml.includes('openmd2');
@@ -173,7 +175,9 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       debugLines.push(`sendwaParts:a1len=${a1.length},a2=${a2.slice(0,10)},pbu=${!!popupBaseUrl}`);
       if (a1 && a2 && popupBaseUrl) {
         const baseOrigin = new URL(popupBaseUrl).origin;
-        const showEmp3Url = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
+        const mgrqBase = `${baseOrigin}/magicscripts/mgrqispi.dll`;
+        effectivePopupBaseUrl = mgrqBase;
+        const showEmp3Url = `${mgrqBase}?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
         debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
 
         // Step 1: Hit the main app to get a MagicXPA session cookie
@@ -253,7 +257,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
 
   // For sendwa.html URLs, session must come from the ShowEmp3 response HTML, not the A token
   const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
-  debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
+  debugLines.push(`magicSession:${magicXpaSession || 'none'},popupBase:${effectivePopupBaseUrl.slice(0,60)}`);
 
   const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
   const parsed = parseScheduleHTML(effectivePersonalHtml, deptSameAsPersonal ? '' : effectiveDeptHtml);
@@ -291,13 +295,13 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       uniqueIds.map(async (id) => {
         let popupUrl = '';
         try {
-          const u = new URL(popupBaseUrl);
+          const u = new URL(effectivePopupBaseUrl);
           u.searchParams.set('appname', 'HsILWeb');
           u.searchParams.set('prgname', 'ShowCrew');
           u.searchParams.set('arguments', magicXpaSession ? `${magicXpaSession}-N${id}` : `-N${id}`);
           popupUrl = u.toString();
         } catch {
-          popupUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
+          popupUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
         }
         if (!popupUrl) return;
         try {
@@ -311,7 +315,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
               debugLines.push(`popup${id}:no-table(${html.slice(0,80).replace(/\s+/g,' ')})`);
               popupFail++;
               if (magicXpaSession) {
-                const fallbackUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
+                const fallbackUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
                 const res2 = await fetch(fallbackUrl, popupFetchOpts).catch(() => null);
                 if (res2?.ok) {
                   const html2 = await res2.text();
