@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
+import { listDocuments, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import {
   fetchHerzliyaProductions,
   getCurrentWeekStartIsrael,
@@ -210,7 +210,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }),
   );
 
-  // ── Step 4: Simulate a user's view (optional) ────────────────────────────
+  // ── Step 4: Delete stale "הפקה" productions not in current rebuild ──────
+  let deletedGeneric = 0;
+  const deleteErrors: string[] = [];
+  try {
+    type GenericDoc = { id?: string; name?: string; _path?: string };
+    const genericDocs = await runQuery<GenericDoc>({
+      from: [{ collectionId: 'global_productions' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'name' },
+          op: 'EQUAL',
+          value: { stringValue: 'הפקה' },
+        },
+      },
+      limit: 200,
+    });
+    await Promise.allSettled(
+      genericDocs.map(async (doc) => {
+        const docId = doc.id || String(doc._path || '').split('/').pop();
+        if (!docId || freshProductionMap.has(docId)) return;
+        try {
+          await deleteDocument(`global_productions/${docId}`);
+          deletedGeneric++;
+        } catch (err) {
+          deleteErrors.push(`${docId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }),
+    );
+  } catch { /* non-critical — log only */ }
+
+  // ── Step 5: Simulate a user's view (optional) ────────────────────────────
   type SimCrewEntry = { name: string; role: string; phone: string | null; startTime: string; endTime: string };
   type SimProduction = { id: string; name: string; date: string; studio: string; startTime: string; endTime: string; crewCount: number; crew: SimCrewEntry[] };
   let simulation: null | { phone: string; matchedProductions: SimProduction[] } = null;
@@ -254,6 +284,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       unique: freshProductionMap.size,
       written: writtenCount,
       writeErrors: writeErrors.slice(0, 20),
+      deletedGeneric,
+      deleteErrors: deleteErrors.slice(0, 5),
     },
     elapsed,
     simulation,
