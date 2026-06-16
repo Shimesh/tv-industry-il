@@ -169,7 +169,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           freshProductionMap.set(prod.id, mergeGlobalProduction(existing, doc));
         }
 
-        herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'parsed', productionCount: productions.length });
+        herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'parsed', productionCount: productions.length, error: debug?.slice(0, 2000) });
       } catch (err) {
         herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'error', error: (err instanceof Error ? err.message : String(err)).slice(0, 200) });
       }
