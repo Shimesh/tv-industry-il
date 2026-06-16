@@ -308,6 +308,9 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   const popupFetchOpts: RequestInit = {
     headers: {
       ...BASE_HEADERS,
+      // jQuery .load() / .ajax() sets these headers — server may check X-Requested-With
+      'X-Requested-With': 'XMLHttpRequest',
+      Accept: '*/*',
       ...(effectivePopupCookie ? { Cookie: effectivePopupCookie } : {}),
       Referer: popupReferer,
     },
