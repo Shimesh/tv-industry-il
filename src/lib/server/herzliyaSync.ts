@@ -254,6 +254,7 @@ export async function fetchHerzliyaProductions(
   providedSessionCookie?: string,
   herzliyaUser?: string,
   herzliyaPass?: string,
+  workerName?: string,
 ): Promise<ParsedHerzliyaResult> {
   const debugLines: string[] = [];
 
@@ -608,16 +609,17 @@ export async function fetchHerzliyaProductions(
         let name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
 
         // When event name resolves to just a role suffix (e.g. "הפקה"), try popup header for real name
+        const rawRole = splitHerzliyaRole(event.name).userRole || '';
         if (!name || name === 'הפקה') {
           const popupName = popupHtml ? extractNameFromPopup(popupHtml) : '';
           if (popupName && popupName !== 'הפקה') {
             name = popupName;
-          } else {
-            // No recoverable name — skip to avoid polluting global_productions
-            skippedGeneric++;
-            debugLines.push(`skipGeneric:id=${event.herzliyaId},raw=${event.name.slice(0,30)}`);
-            continue;
           }
+          // Don't skip — save with generic name so this user's crew membership is recorded.
+          // mergeGlobalProduction will preserve real names from other users' syncs.
+          if (!name) name = 'הפקה';
+          skippedGeneric++; // count it as degraded (for debug), but still save
+          debugLines.push(`genericSaved:id=${event.herzliyaId},raw=${event.name.slice(0,30)}`);
         }
 
         const popupCrew = popupHtml ? parseHerzliyaPopupHtml(popupHtml) : [];
@@ -625,6 +627,12 @@ export async function fetchHerzliyaProductions(
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
           startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
         }));
+        // If ShowCrew failed and we know the worker's name, add them as crew.
+        // The rebuild merges crew from all users — this ensures the syncing user
+        // appears on their own productions even without a popup session.
+        if (crew.length === 0 && workerName) {
+          crew.push({ name: workerName, role: rawRole, roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: true });
+        }
         // Derive production start/end from crew shift times (Herzliya: endTime=shiftStart, startTime=shiftEnd)
         const shiftStarts = crew.map(c => c.endTime).filter(Boolean).sort();
         const shiftEnds = crew.map(c => c.startTime).filter(Boolean).sort();
@@ -696,12 +704,13 @@ export async function syncHerzliyaUrl(
   sessionCookie?: string,
   herzliyaUser?: string,
   herzliyaPass?: string,
+  workerName?: string,
 ): Promise<SyncResult> {
   const debugLines: string[] = [];
 
   let parsed: ParsedHerzliyaResult;
   try {
-    parsed = await fetchHerzliyaProductions(url, sessionCookie, herzliyaUser, herzliyaPass);
+    parsed = await fetchHerzliyaProductions(url, sessionCookie, herzliyaUser, herzliyaPass, workerName);
   } catch (err) {
     throw err; // propagate to caller (cron catches it)
   }

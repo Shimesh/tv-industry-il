@@ -57,6 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sessionCookie || undefined,
       herzliyaUser || undefined,
       herzliyaPass || undefined,
+      workerName || undefined,
     );
 
     const statusPatch: Partial<UserCalendarSyncDoc> = {

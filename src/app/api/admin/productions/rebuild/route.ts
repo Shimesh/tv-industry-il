@@ -159,7 +159,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const storedCookie = userRaw.sessionCookie as string | undefined;
         const storedUser = userRaw.herzliyaUser as string | undefined;
         const storedPass = userRaw.herzliyaPass as string | undefined;
-        const { productions, debug } = await fetchHerzliyaProductions(url, storedCookie || undefined, storedUser || undefined, storedPass || undefined);
+        const storedWorkerName = user.workerName || (userRaw.workerName as string | undefined) || undefined;
+        const { productions, debug } = await fetchHerzliyaProductions(url, storedCookie || undefined, storedUser || undefined, storedPass || undefined, storedWorkerName);
 
         if (productions.length === 0) {
           herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty', error: debug?.slice(0, 2000) });

@@ -78,10 +78,11 @@ export function mergeGlobalProduction(
     else if (entry.shadowKey) crewShadowKeys.add(entry.shadowKey);
   }
 
+  const isGenericName = (n: string) => !n || n === 'הפקה';
   return {
     ...existing,
     ...incoming,
-    name: incoming.name || existing.name,
+    name: !isGenericName(existing.name) && isGenericName(incoming.name) ? existing.name : (incoming.name || existing.name),
     studio: incoming.studio || existing.studio,
     date: incoming.date || existing.date,
     day: incoming.day || existing.day,
