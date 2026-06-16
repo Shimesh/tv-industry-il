@@ -585,6 +585,23 @@ export async function fetchHerzliyaProductions(
 
     debugLines.push(`popupOk:${popupOk} popupFail:${popupFail}`);
 
+    // Enrich crew for productions that came from parseScheduleHTML (real names, no ShowCrew crew yet)
+    // popupCache is populated for ALL events — use it to add crew to ANY parsed production with herzliyaId
+    if (Object.keys(popupCache).length > 0) {
+      for (const prod of parsed.productions) {
+        if (!prod.herzliyaId || !popupCache[prod.herzliyaId]) continue;
+        const addCrew = parseHerzliyaPopupHtml(popupCache[prod.herzliyaId]);
+        if (addCrew.length === 0) continue;
+        const existingNames = new Set(prod.crew.map(c => c.name));
+        for (const pc of addCrew) {
+          if (pc.name && !existingNames.has(pc.name)) {
+            prod.crew.push({ name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone, startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false });
+            existingNames.add(pc.name);
+          }
+        }
+      }
+    }
+
     // Also rebuild from events when parseScheduleHTML found only generic "הפקה" names
     // (this happens with ShowEmp3 HTML which has openmd2 but different name format)
     const allGenericNames = parsed.productions.length > 0 && parsed.productions.every(p => p.name === 'הפקה');
@@ -607,6 +624,12 @@ export async function fetchHerzliyaProductions(
         const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studio = popupStudio || (studioM ? studioM[0].trim() : '');
         let name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
+
+        // Skip vacation/non-production entries (חופש, ביטול, מחלה, etc.)
+        if (/^(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) {
+          debugLines.push(`skipVacation:id=${event.herzliyaId},name=${name.slice(0, 30)}`);
+          continue;
+        }
 
         // When event name resolves to just a role suffix (e.g. "הפקה"), try popup header for real name
         const rawRole = splitHerzliyaRole(event.name).userRole || '';

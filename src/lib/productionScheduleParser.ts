@@ -867,6 +867,7 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studioFromName = studioM ? studioM[0].trim() : '';
         const name = studioFromName ? nameNoRole.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
+        if (!name || /^(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) continue;
         const parsedCrew = parseEventCrewFromHtml(chunk);
         const crew = parsedCrew.crew;
         const startTime = parsedCrew.startTime || summary.startTime;
@@ -896,6 +897,7 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
       const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
       const studioFromName = studioM ? studioM[0].trim() : '';
       const name = studioFromName ? nameNoRole.replace(studioM![0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
+      if (!name || /^(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) continue;
       const parsedCrew = parseEventCrewFromHtml(chunk);
       const crew = parsedCrew.crew;
       const startTime = parsedCrew.startTime || summary.startTime;
