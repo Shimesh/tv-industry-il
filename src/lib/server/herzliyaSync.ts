@@ -172,28 +172,44 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       const a1 = parts[0] ?? '';
       const a2 = parts[1] ?? '';
       if (a1 && a2 && popupBaseUrl) {
-        const showEmp3Url = `${new URL(popupBaseUrl).origin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
+        const baseOrigin = new URL(popupBaseUrl).origin;
+        const showEmp3Url = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
+        debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
+
+        // Step 1: Hit the main app to get a MagicXPA session cookie
+        let initCookie = sessionCookie || '';
+        try {
+          const initUrl = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=Main`;
+          const initResp = await fetch(initUrl, {
+            headers: BASE_HEADERS,
+            signal: AbortSignal.timeout(8000),
+            // @ts-expect-error - Node.js 20
+            rejectUnauthorized: false,
+          });
+          const initCookieHeader = initResp.headers.get('set-cookie') || '';
+          if (initCookieHeader) initCookie = initCookieHeader.split(';')[0];
+          debugLines.push(`initCk:${initCookie.slice(0, 40)}`);
+        } catch (e) {
+          debugLines.push(`initErr:${String(e).slice(0, 60)}`);
+        }
+
+        // Step 2: Fetch ShowEmp3 with session cookie + Referer from sendwa.html
         const sendwaFetchOpts: RequestInit = {
           headers: {
             ...BASE_HEADERS,
-            ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-            Referer: url,
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Site': 'same-origin',
+            ...(initCookie ? { Cookie: initCookie } : {}),
+            Referer: `${baseOrigin}/sendwa.html`,
           },
           signal: AbortSignal.timeout(12000),
           // @ts-expect-error - Node.js 20
           rejectUnauthorized: false,
         };
-        debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
         try {
           const emp3Resp = await fetch(showEmp3Url, sendwaFetchOpts);
           const ct = emp3Resp.headers.get('content-type') || '';
-          const setCookie = emp3Resp.headers.get('set-cookie') || '';
-          const loc = emp3Resp.headers.get('location') || '';
+          const setCookie2 = emp3Resp.headers.get('set-cookie') || '';
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,30)},ck=${setCookie.slice(0,30)},loc=${loc.slice(0,40)}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},ck2=${setCookie2.slice(0,20)}`);
           debugLines.push(`showEmp3body:${emp3Html.slice(0, 200).replace(/\s+/g, ' ')}`);
           if (emp3Html.includes('openmd2')) {
             effectivePersonalHtml = emp3Html;
