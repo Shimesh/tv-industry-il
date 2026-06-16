@@ -162,8 +162,10 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
-    // sendwa.html is a JS-only page — actual data loaded client-side via the ?A= token.
-    // Extract the A parameter and use it directly as the MagicXPA session to fetch the calendar.
+    // Extract the JS code from sendwa.html to understand what API it calls with the A param
+    const scriptMatch = personalHtml.match(/<script[^>]*>([\s\S]{0,2000})<\/script>/i);
+    const jsSnippet = scriptMatch ? scriptMatch[1].replace(/\s+/g, ' ').trim().slice(0, 500) : 'no-script';
+    debugLines.push(`sendwaJS:${jsSnippet}`);
     const sendwaAParam = (() => { try { return new URL(url).searchParams.get('A'); } catch { return null; } })();
     if (sendwaAParam && popupBaseUrl) {
       const session = `-A${sendwaAParam}`;
