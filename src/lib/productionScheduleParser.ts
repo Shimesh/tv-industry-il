@@ -199,8 +199,8 @@ function stripPopupHtml(html: string): string {
     .trim();
 }
 
-/** Parse popup header line into {studio, isoDate} by scanning <tr> blocks directly */
-function parsePopupHeader(html: string): { studio: string; isoDate: string } | null {
+/** Parse popup header line into {studio, isoDate, name} by scanning <tr> blocks directly */
+function parsePopupHeader(html: string): { studio: string; isoDate: string; name?: string } | null {
   // Process each <tr>...</tr> block and extract its <td> cell texts
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let trMatch;
@@ -222,6 +222,7 @@ function parsePopupHeader(html: string): { studio: string; isoDate: string } | n
       if (dm) return {
         studio: cells[dateIdx - 1],
         isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
+        name: dateIdx >= 3 ? cells[dateIdx - 2] : undefined,
       };
     }
   }
@@ -231,6 +232,11 @@ function parsePopupHeader(html: string): { studio: string; isoDate: string } | n
 /** Extract the ISO date (YYYY-MM-DD) from a Herzliya ShowCrew popup header */
 export function extractDateFromPopup(html: string): string {
   return parsePopupHeader(html)?.isoDate || '';
+}
+
+/** Extract the production name from a Herzliya ShowCrew popup header (cell before studio) */
+export function extractNameFromPopup(html: string): string {
+  return parsePopupHeader(html)?.name || '';
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   buildHerzliyaPopupUrl,
   extractStudioFromPopup,
   extractDateFromPopup,
+  extractNameFromPopup,
   splitHerzliyaRole,
 } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
@@ -140,15 +141,6 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   debugLines.push(`finalUrl:${finalUrl.slice(0, 80)}`);
 
   const sessionCookie = extractCookies(personalResponse);
-  const popupFetchOpts: RequestInit = {
-    headers: {
-      ...BASE_HEADERS,
-      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-      Referer: finalUrl,
-    },
-    // @ts-expect-error - Node.js 20
-    rejectUnauthorized: false,
-  };
 
   const personalHtml = await personalResponse.text();
   const deptHtml = deptResult?.ok ? await deptResult.text() : '';
@@ -161,6 +153,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   // calendar interface. Try to find a link to the real mgrqispi.dll schedule view in the HTML.
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
+  // Cookie used for ShowCrew popup calls — updated with ShowEmp3 session cookie if available
+  let effectivePopupCookie = sessionCookie;
   // Log raw personalHtml preview for sendwa URLs to understand what server returns
   if (url.includes('sendwa.html')) {
     const hasOpenmd2 = personalHtml.includes('openmd2');
@@ -192,8 +186,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             // @ts-expect-error - Node.js 20
             rejectUnauthorized: false,
           });
-          const initCookieHeader = initResp.headers.get('set-cookie') || '';
-          if (initCookieHeader) initCookie = initCookieHeader.split(';')[0];
+          initCookie = extractCookies(initResp) || initCookie;
           debugLines.push(`initCk:${initCookie.slice(0, 40)}`);
         } catch (e) {
           debugLines.push(`initErr:${String(e).slice(0, 60)}`);
@@ -206,6 +199,9 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
               ...BASE_HEADERS,
               ...(initCookie ? { Cookie: initCookie } : {}),
               Referer: `${baseOrigin}/sendwa.html`,
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'same-origin',
             },
             redirect: 'manual',
             signal: AbortSignal.timeout(12000),
@@ -215,16 +211,20 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           const emp3Resp = await fetch(showEmp3Url, sendwaFetchOpts);
           const ct = emp3Resp.headers.get('content-type') || '';
           const loc = emp3Resp.headers.get('location') || '';
-          const setCookie2 = emp3Resp.headers.get('set-cookie') || '';
+          // Capture ShowEmp3 session cookie — this is what ShowCrew popup calls need
+          const emp3Cookie = extractCookies(emp3Resp);
+          if (emp3Cookie) effectivePopupCookie = emp3Cookie;
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck2=${setCookie2.slice(0,30)}`);
-          debugLines.push(`showEmp3body:${emp3Html.slice(0, 200).replace(/\s+/g, ' ')}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck=${emp3Cookie.slice(0,30)}`);
+          debugLines.push(`showEmp3body:${emp3Html.slice(0, 300).replace(/\s+/g, ' ')}`);
 
           // If redirect, follow manually
           if ((emp3Resp.status === 301 || emp3Resp.status === 302 || emp3Resp.status === 303) && loc) {
             const followResp = await fetch(loc.startsWith('http') ? loc : `${baseOrigin}${loc}`, {
               ...sendwaFetchOpts, redirect: 'follow',
             });
+            const followCookie = extractCookies(followResp);
+            if (followCookie) effectivePopupCookie = followCookie;
             const followHtml = await followResp.text();
             debugLines.push(`showEmp3follow:s=${followResp.status},len=${followHtml.length},${followHtml.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${followHtml.slice(0,80).replace(/\s+/g,' ')})`}`);
             if (followHtml.includes('openmd2')) effectivePersonalHtml = followHtml;
@@ -241,6 +241,16 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     }
   }
 
+  const popupFetchOpts: RequestInit = {
+    headers: {
+      ...BASE_HEADERS,
+      ...(effectivePopupCookie ? { Cookie: effectivePopupCookie } : {}),
+      Referer: finalUrl,
+    },
+    // @ts-expect-error - Node.js 20
+    rejectUnauthorized: false,
+  };
+
   // For sendwa.html URLs, session must come from the ShowEmp3 response HTML, not the A token
   const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
   debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
@@ -251,7 +261,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
 
   if (effectivePersonalHtml.includes('openmd2')) {
     const events = extractHerzliyaEventIds(effectivePersonalHtml);
-    debugLines.push(`events:${events.length}`);
+    debugLines.push(`events:${events.length},names:${events.slice(0,6).map(e=>e.name.slice(0,25)).join('|')}`);
 
     const nameToId: Record<string, number> = {};
     const idToEventName: Record<number, string> = {};
@@ -334,6 +344,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       if (allGenericNames) parsed.productions.splice(0);
       const seenIds = new Set<number>();
       let builtIdx = 0;
+      let skippedGeneric = 0;
       for (const event of events) {
         if (seenIds.has(event.herzliyaId)) continue;
         seenIds.add(event.herzliyaId);
@@ -347,7 +358,21 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         const { name: nameNoRole } = splitHerzliyaRole(event.name);
         const studioM = nameNoRole.match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         const studio = popupStudio || (studioM ? studioM[0].trim() : '');
-        const name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
+        let name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
+
+        // When event name resolves to just a role suffix (e.g. "הפקה"), try popup header for real name
+        if (!name || name === 'הפקה') {
+          const popupName = popupHtml ? extractNameFromPopup(popupHtml) : '';
+          if (popupName && popupName !== 'הפקה') {
+            name = popupName;
+          } else {
+            // No recoverable name — skip to avoid polluting global_productions
+            skippedGeneric++;
+            debugLines.push(`skipGeneric:id=${event.herzliyaId},raw=${event.name.slice(0,30)}`);
+            continue;
+          }
+        }
+
         const popupCrew = popupHtml ? parseHerzliyaPopupHtml(popupHtml) : [];
         const crew: CrewMember[] = popupCrew.map(pc => ({
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
@@ -369,7 +394,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           herzliyaId: event.herzliyaId,
         } as Production);
       }
-      debugLines.push(`builtFromEvents:${parsed.productions.length}`);
+      debugLines.push(`builtFromEvents:${parsed.productions.length},skipped:${skippedGeneric}`);
     }
 
     for (const prod of parsed.productions) {
