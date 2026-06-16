@@ -86,6 +86,17 @@ export default function SyncPage() {
   const [globalMigrateResult, setGlobalMigrateResult] = useState<{ written: number; unique: number; errors: string[] } | null>(null);
   const [globalMigrateError, setGlobalMigrateError] = useState<string | null>(null);
 
+  const [rebuildStatus, setRebuildStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [rebuildResult, setRebuildResult] = useState<{
+    users: { total: number; parsed: number; errors: number };
+    productions: { unique: number; written: number; writeErrors: string[] };
+    elapsed: number;
+    userResults: Array<{ uid: string; workerName: string; status: string; productionCount?: number; error?: string }>;
+    simulation: null | { phone: string; matchedProductions: Array<{ name: string; date: string; studio: string; startTime: string; endTime: string; crewCount: number }> };
+  } | null>(null);
+  const [rebuildError, setRebuildError] = useState<string | null>(null);
+  const [rebuildSimPhone, setRebuildSimPhone] = useState('');
+
   useEffect(() => {
     if (!user || profile?.siteRole !== 'admin') {
       setPreviewLoading(false);
@@ -180,6 +191,26 @@ export default function SyncPage() {
     } catch (error) {
       setDeptError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
       setDeptStatus('error');
+    }
+  }
+
+  async function handleRebuild() {
+    setRebuildStatus('running');
+    setRebuildError(null);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch('/api/admin/productions/rebuild', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ simulatePhone: rebuildSimPhone.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setRebuildResult(data);
+      setRebuildStatus('done');
+    } catch (error) {
+      setRebuildError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
+      setRebuildStatus('error');
     }
   }
 
@@ -430,6 +461,106 @@ export default function SyncPage() {
             <p className="font-bold">שגיאה בהעברה</p>
             <p className="mt-1 text-sm">{globalMigrateError}</p>
             <button onClick={() => setGlobalMigrateStatus('idle')} className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
+              נסה שוב
+            </button>
+          </div>
+        )}
+      </section>
+
+      <hr className="w-full max-w-2xl border-gray-700" />
+
+      {/* Rebuild global_productions from all Herzliya URLs — REPLACE semantics (no stale crew accumulation) */}
+      <section className="w-full max-w-2xl flex flex-col gap-4">
+        <h2 className="text-xl font-bold">בנה מחדש הפקות גלובליות מהרצליה</h2>
+        <p className="text-sm text-gray-400">
+          שואב את לוחות ההרצליה מכל המשתמשים הפעילים (כולל הצג מחלקה ו-ShowCrew), ממזג את הנתונים לפי herzliyaId
+          ו<strong>מחליף</strong> את הנתונים ב-Firestore — ללא צבירה של crew ישנה.
+        </p>
+
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={rebuildSimPhone}
+            onChange={e => setRebuildSimPhone(e.target.value)}
+            placeholder="טלפון לסימולציה (אופציונלי, למשל 0501234567)"
+            className="flex-1 px-4 py-2 rounded-xl border text-sm"
+            style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            dir="ltr"
+          />
+        </div>
+
+        {rebuildStatus === 'idle' && (
+          <button onClick={handleRebuild} className="self-start px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-semibold transition-colors">
+            הפעל rebuild מהרצליה
+          </button>
+        )}
+        {rebuildStatus === 'running' && (
+          <div className="flex items-center gap-3 text-orange-400"><Spinner />שואב ומנתח לוחות הרצליה מכל המשתמשים...</div>
+        )}
+        {rebuildStatus === 'done' && rebuildResult && (
+          <div className="rounded-2xl border p-6 space-y-4" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+            <p className="text-green-400 text-lg font-bold">הrebuild הושלם</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-sm">
+              <div className="rounded-xl p-3" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">משתמשים</p>
+                <p className="text-xl font-bold">{rebuildResult.users.parsed}/{rebuildResult.users.total}</p>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">הפקות ייחודיות</p>
+                <p className="text-xl font-bold text-cyan-300">{rebuildResult.productions.unique}</p>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">נכתבו</p>
+                <p className="text-xl font-bold text-green-300">{rebuildResult.productions.written}</p>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <p className="text-[var(--theme-text-secondary)]">זמן</p>
+                <p className="text-xl font-bold">{(rebuildResult.elapsed / 1000).toFixed(1)}s</p>
+              </div>
+            </div>
+
+            {rebuildResult.users.errors > 0 && (
+              <div className="text-amber-400 text-sm">
+                {rebuildResult.userResults.filter(r => r.status === 'error').map(r => (
+                  <p key={r.uid}>{r.workerName}: {r.error}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-1 text-sm">
+              {rebuildResult.userResults.map(r => (
+                <div key={r.uid} className="flex items-center justify-between gap-3 border-b pb-1" style={{ borderColor: 'var(--theme-border)' }}>
+                  <span className="font-medium">{r.workerName}</span>
+                  <span className={r.status === 'parsed' ? 'text-green-400' : r.status === 'error' ? 'text-red-400' : 'text-gray-400'}>
+                    {r.status === 'parsed' ? `${r.productionCount} הפקות` : r.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {rebuildResult.simulation && (
+              <div className="rounded-xl border p-4 space-y-2" style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}>
+                <p className="font-semibold">סימולציית משתמש — {rebuildResult.simulation.phone}</p>
+                <p className="text-sm text-[var(--theme-text-secondary)]">{rebuildResult.simulation.matchedProductions.length} הפקות</p>
+                {rebuildResult.simulation.matchedProductions.map(p => (
+                  <div key={p.name + p.date} className="text-sm border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
+                    <p className="font-medium">{p.name} — {p.date} | {p.studio} | {p.startTime}-{p.endTime}</p>
+                    <p className="text-[var(--theme-text-secondary)]">{p.crewCount} אנשי צוות</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={() => setRebuildStatus('idle')} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm">
+              הרץ שוב
+            </button>
+          </div>
+        )}
+        {rebuildStatus === 'error' && (
+          <div className="bg-red-900/30 border border-red-500/40 rounded-2xl p-6 text-red-400">
+            <p className="font-bold">שגיאה בrebuild</p>
+            <p className="mt-1 text-sm">{rebuildError}</p>
+            <button onClick={() => setRebuildStatus('idle')} className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
               נסה שוב
             </button>
           </div>

@@ -31,6 +31,12 @@ export type UserCalendarSyncDoc = {
   lastSyncError?: string | null;
 };
 
+export type ParsedHerzliyaResult = {
+  productions: Production[];
+  debug: string;
+  finalUrl?: string;
+};
+
 export function getCurrentWeekStartIsrael(): string {
   const israelDate = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Jerusalem',
@@ -106,7 +112,11 @@ function extractMagicXpaSessionFromHtml(html: string): string {
   return '';
 }
 
-export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncResult> {
+/**
+ * Fetch and parse a Herzliya schedule URL — personal view + department view + ShowCrew popups.
+ * Returns parsed productions with normalized IDs. Does NOT write to Firestore.
+ */
+export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzliyaResult> {
   const debugLines: string[] = [];
 
   const deptUrl = new URL(url);
@@ -126,11 +136,9 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
   if (!personalResponse.ok) throw new Error(`HTTP ${personalResponse.status} from Herzliya`);
 
-  // Use the final URL after redirects (sendwa.html → mgrqispi.dll) for building popup URLs
   const finalUrl: string = (personalResponse as Response & { url?: string }).url || url;
   debugLines.push(`finalUrl:${finalUrl.slice(0, 80)}`);
 
-  // Carry session cookies (if any) into popup requests
   const sessionCookie = extractCookies(personalResponse);
   const popupFetchOpts: RequestInit = {
     headers: {
@@ -145,18 +153,14 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
   const personalHtml = await personalResponse.text();
   const deptHtml = deptResult?.ok ? await deptResult.text() : '';
 
-  // Extract the mgrqispi.dll base URL from the page HTML (most reliable method).
-  // Falls back to the post-redirect URL, which may still contain session params.
   const htmlBaseUrl = extractHerzliyaBaseUrl(personalHtml);
   const popupBaseUrl = htmlBaseUrl || finalUrl;
   debugLines.push(`popupBaseUrl:${popupBaseUrl.slice(0, 80)}`);
 
-  // Extract Magic XPA session argument so popup requests carry the same session
   const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(personalHtml);
   debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
 
   const deptSameAsPersonal = deptHtml === personalHtml;
-
   const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
   debugLines.push(`htmlParse:${parsed.productions.length}`);
 
@@ -169,14 +173,12 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     for (const e of events) {
       nameToId[e.name] = e.herzliyaId;
       idToEventName[e.herzliyaId] = e.name;
-      // Also index by role-stripped name so lookup works for both "מונדיאל 2026 צילום" and "מונדיאל 2026"
       const { name: nameNoRole } = splitHerzliyaRole(e.name);
       if (nameNoRole !== e.name) nameToId[nameNoRole] = e.herzliyaId;
       const cleaned = nameNoRole.replace(/\s*(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?\s*/gi, '').trim();
       if (cleaned && cleaned !== nameNoRole) nameToId[cleaned] = e.herzliyaId;
     }
 
-    // Extract calendar dates from header section (before first event call)
     const calendarDates: string[] = [];
     const firstEventPos = personalHtml.indexOf('openmd2');
     const headerSection = firstEventPos > 0 ? personalHtml.slice(0, firstEventPos) : personalHtml.slice(0, 3000);
@@ -186,14 +188,12 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     }
     debugLines.push(`calDates:${calendarDates.length}`);
 
-    // Fetch all popups: try session-aware URL first, fall back to clean ShowCrew URL
     const uniqueIds = [...new Set(events.map(e => e.herzliyaId))];
     const popupCache: Record<number, string> = {};
     let popupOk = 0, popupFail = 0;
 
     await Promise.allSettled(
       uniqueIds.map(async (id) => {
-        // Build popup URL: include Magic XPA session prefix if extracted, as it may be required
         let popupUrl = '';
         try {
           const u = new URL(popupBaseUrl);
@@ -209,14 +209,12 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
           const res = await fetch(popupUrl, { ...popupFetchOpts, signal: AbortSignal.timeout(10000) });
           if (res.ok) {
             const html = await res.text();
-            // Only cache if the response looks like actual crew data (contains a table)
             if (html.includes('<table') || html.includes('<TABLE')) {
               popupCache[id] = html;
               popupOk++;
             } else {
               debugLines.push(`popup${id}:no-table(${html.slice(0,80).replace(/\s+/g,' ')})`);
               popupFail++;
-              // Retry without session prefix if we had one (fallback attempt)
               if (magicXpaSession) {
                 const fallbackUrl = buildHerzliyaPopupUrl(popupBaseUrl, id);
                 const res2 = await fetch(fallbackUrl, popupFetchOpts).catch(() => null);
@@ -225,7 +223,7 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
                   if (html2.includes('<table') || html2.includes('<TABLE')) {
                     popupCache[id] = html2;
                     popupOk++;
-                    popupFail--; // undo the earlier increment
+                    popupFail--;
                     debugLines.push(`popup${id}:fallback-ok`);
                   }
                 }
@@ -244,8 +242,6 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
 
     debugLines.push(`popupOk:${popupOk} popupFail:${popupFail}`);
 
-    // Build productions from popup data when HTML parse returned nothing.
-    // Falls back to event name + calendar date when popup HTTP fails.
     if (parsed.productions.length === 0) {
       const seenIds = new Set<number>();
       let builtIdx = 0;
@@ -254,7 +250,6 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
         seenIds.add(event.herzliyaId);
         const popupHtml = popupCache[event.herzliyaId];
         const popupDate = popupHtml ? extractDateFromPopup(popupHtml) : '';
-        // Fallback date: assign calendar dates by position, or use first available date
         const fallbackDate = calendarDates[builtIdx] || calendarDates[0] || '';
         builtIdx++;
         const date = popupDate || fallbackDate;
@@ -285,11 +280,9 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
       debugLines.push(`builtFromEvents:${parsed.productions.length}`);
     }
 
-    // Enrich parsed productions with popup data (studio, date, crew)
     for (const prod of parsed.productions) {
       const herzliyaId = prod.herzliyaId || nameToId[prod.name];
 
-      // Extract studio from event name as fallback even when popup is unavailable
       if (!prod.studio && herzliyaId && idToEventName[herzliyaId]) {
         const studioM = idToEventName[herzliyaId].match(/(?:אולפן|סטודיו|studio|st\.?)\s*\d+\w?/i);
         if (studioM) prod.studio = studioM[0].trim();
@@ -320,17 +313,37 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
     }
   }
 
-  if (parsed.productions.length === 0) {
-    const debug = debugLines.join(' | ');
-    console.log('[herzliyaSync] empty:', debug);
-    return { status: 'empty', debug };
-  }
-
   const productions = parsed.productions.map(prod => ({
     ...prod,
     id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio, prod.startTime)),
     day: prod.day || getHebrewDay(prod.date),
   }));
+
+  return {
+    productions,
+    debug: debugLines.join(' | '),
+    finalUrl: finalUrl !== url ? finalUrl : undefined,
+  };
+}
+
+export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncResult> {
+  const debugLines: string[] = [];
+
+  let parsed: ParsedHerzliyaResult;
+  try {
+    parsed = await fetchHerzliyaProductions(url);
+  } catch (err) {
+    throw err; // propagate to caller (cron catches it)
+  }
+
+  debugLines.push(parsed.debug);
+
+  if (parsed.productions.length === 0) {
+    console.log('[herzliyaSync] empty:', parsed.debug);
+    return { status: 'empty', debug: parsed.debug };
+  }
+
+  const productions = parsed.productions;
 
   const snapshotRunId = `${Date.now()}-${uid.slice(0, 10)}-http`;
   await patchDocument(`calendar_sync_snapshots/${snapshotRunId}`, {
@@ -378,14 +391,13 @@ export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncRes
   void syncContactsFromSavedProductions(true).catch(() => {});
 
   const studioSummary = productions.map(p => `${p.name}→"${p.studio}"`).join(', ');
-  const debug = debugLines.join(' | ');
-  console.log('[herzliyaSync] saved', productions.length, '| studios:', studioSummary, '| debug:', debug);
+  console.log('[herzliyaSync] saved', productions.length, '| studios:', studioSummary, '| debug:', parsed.debug);
 
   return {
     status: 'success',
     count: productions.length,
     studios: productions.map(p => ({ name: p.name, studio: p.studio })),
-    debug,
-    finalUrl: finalUrl !== url ? finalUrl : undefined,
+    debug: parsed.debug,
+    finalUrl: parsed.finalUrl,
   };
 }
