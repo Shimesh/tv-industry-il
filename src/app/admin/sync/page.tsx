@@ -206,7 +206,17 @@ export default function SyncPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setRebuildResult(data);
+      setRebuildResult({
+        users: {
+          total: data.herzliya?.usersTotal ?? 0,
+          parsed: data.herzliya?.usersParsed ?? 0,
+          errors: data.herzliya?.usersError ?? 0,
+        },
+        productions: data.productions ?? { unique: 0, written: 0, writeErrors: [] },
+        elapsed: data.elapsed ?? 0,
+        userResults: data.herzliya?.userResults ?? [],
+        simulation: data.simulation ?? null,
+      });
       setRebuildStatus('done');
     } catch (error) {
       setRebuildError(error instanceof Error ? error.message : 'שגיאה לא ידועה');
