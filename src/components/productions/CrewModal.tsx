@@ -324,10 +324,11 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
     const prodStartMin = timeToMinutes(production.startTime ?? '');
     const base = (activeDepartment === 'הכל' ? sortedCrew : sortedCrew.filter((member) => member.department === activeDepartment))
       .filter((member) => {
-        if (prodStartMin !== null && member.startTime) {
-          const memberStartMin = timeToMinutes(member.startTime);
-          // Exclude crew whose shift starts more than 2 hours before this production's shift
-          if (memberStartMin !== null && memberStartMin < prodStartMin - 120) return false;
+        if (prodStartMin !== null && member.endTime) {
+          // Crew times are stored in Herzliya convention: startTime=shiftEnd, endTime=shiftStart
+          // Filter out crew whose actual shift start (stored in endTime) is more than 2h before production
+          const memberActualStartMin = timeToMinutes(member.endTime);
+          if (memberActualStartMin !== null && memberActualStartMin < prodStartMin - 120) return false;
         }
         return true;
       });
