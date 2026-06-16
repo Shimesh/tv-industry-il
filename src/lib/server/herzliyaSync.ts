@@ -172,11 +172,11 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     const sendwaAParam = (() => { try { return new URL(url).searchParams.get('A'); } catch { return null; } })();
     if (sendwaAParam) {
       debugLines.push(`sendwaA:${sendwaAParam.slice(0, 60)}`);
-      // JS does aParam.split('.') and takes [0],[1] — use same logic (not lastIndexOf)
-      const parts = sendwaAParam.split('.');
+      // JS does aParam.split('.') — some URLs use '.' others use ',' as separator
+      const parts = sendwaAParam.split(/[.,]/);
       const a1 = parts[0] ?? '';
       const a2 = parts[1] ?? '';
-      debugLines.push(`sendwaParts:a1len=${a1.length},a2=${a2},pbu=${!!popupBaseUrl}`);
+      debugLines.push(`sendwaParts:a1len=${a1.length},a2=${a2.slice(0,10)},pbu=${!!popupBaseUrl}`);
       if (a1 && a2 && popupBaseUrl) {
         const baseOrigin = new URL(popupBaseUrl).origin;
         const showEmp3Url = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
