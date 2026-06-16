@@ -167,29 +167,31 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     const sendwaAParam = (() => { try { return new URL(url).searchParams.get('A'); } catch { return null; } })();
     if (sendwaAParam) {
       debugLines.push(`sendwaA:${sendwaAParam.slice(0, 60)}`);
-      const dotIdx = sendwaAParam.lastIndexOf('.');
-      if (dotIdx > 0 && popupBaseUrl) {
-        const a1 = sendwaAParam.slice(0, dotIdx);
-        const a2 = sendwaAParam.slice(dotIdx + 1);
+      // JS does aParam.split('.') and takes [0],[1] — use same logic (not lastIndexOf)
+      const parts = sendwaAParam.split('.');
+      const a1 = parts[0] ?? '';
+      const a2 = parts[1] ?? '';
+      if (a1 && a2 && popupBaseUrl) {
         const showEmp3Url = `${new URL(popupBaseUrl).origin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
+        const sendwaFetchOpts: RequestInit = {
+          headers: { ...BASE_HEADERS, Referer: url },
+          signal: AbortSignal.timeout(12000),
+          // @ts-expect-error - Node.js 20
+          rejectUnauthorized: false,
+        };
         debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
         try {
-          const emp3Resp = await fetch(showEmp3Url, mainFetchOpts);
-          if (emp3Resp.ok) {
-            const emp3Html = await emp3Resp.text();
-            debugLines.push(`showEmp3:${emp3Html.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${emp3Html.slice(0, 150).replace(/\s+/g, ' ')})`}`);
-            if (emp3Html.includes('openmd2')) {
-              effectivePersonalHtml = emp3Html;
-              // Fetch dept view too
-              const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
-              const deptResp2 = await fetch(deptUrl2, mainFetchOpts).catch(() => null);
-              effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
-            }
-          } else {
-            debugLines.push(`showEmp3:http${emp3Resp.status}`);
+          const emp3Resp = await fetch(showEmp3Url, sendwaFetchOpts);
+          const emp3Html = await emp3Resp.text();
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},${emp3Html.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${emp3Html.slice(0, 120).replace(/\s+/g, ' ')})`}`);
+          if (emp3Html.includes('openmd2')) {
+            effectivePersonalHtml = emp3Html;
+            const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
+            const deptResp2 = await fetch(deptUrl2, sendwaFetchOpts).catch(() => null);
+            effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
           }
         } catch (e) {
-          debugLines.push(`showEmp3Err:${String(e).slice(0, 80)}`);
+          debugLines.push(`showEmp3Err:${String(e).slice(0, 100)}`);
         }
       }
     }
