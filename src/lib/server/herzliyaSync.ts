@@ -162,65 +162,41 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
-    // Extract the JS code from sendwa.html to understand what API it calls with the A param
-    const scriptMatch = personalHtml.match(/<script[^>]*>([\s\S]{0,5000})<\/script>/i);
-    const jsSnippet = scriptMatch ? scriptMatch[1].replace(/\s+/g, ' ').trim().slice(0, 3000) : 'no-script';
-    debugLines.push(`sendwaJS:${jsSnippet}`);
+    // sendwa.html JS constructs: mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N{a1},-A{a2}
+    // where A param format is "{a1}.{a2}" (e.g. "934F-A8FD-...-DB70.2" → a1=GUID, a2="2")
     const sendwaAParam = (() => { try { return new URL(url).searchParams.get('A'); } catch { return null; } })();
-    if (sendwaAParam && popupBaseUrl) {
-      const session = `-A${sendwaAParam}`;
-      debugLines.push(`sendwaA:${sendwaAParam.slice(0, 40)}`);
-      const tryPrgnames = ['ShowFmp', 'SHOWFMP', 'PersonalSchedule', 'ShowEmpSchedule'];
-      for (const prgname of tryPrgnames) {
+    if (sendwaAParam) {
+      debugLines.push(`sendwaA:${sendwaAParam.slice(0, 60)}`);
+      const dotIdx = sendwaAParam.lastIndexOf('.');
+      if (dotIdx > 0 && popupBaseUrl) {
+        const a1 = sendwaAParam.slice(0, dotIdx);
+        const a2 = sendwaAParam.slice(dotIdx + 1);
+        const showEmp3Url = `${new URL(popupBaseUrl).origin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
+        debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
         try {
-          const calUrl = new URL(popupBaseUrl);
-          calUrl.searchParams.set('appname', 'HsILWeb');
-          calUrl.searchParams.set('prgname', prgname);
-          calUrl.searchParams.set('arguments', session);
-          const calResp = await fetch(calUrl.toString(), mainFetchOpts);
-          if (calResp.ok) {
-            const calHtml = await calResp.text();
-            debugLines.push(`${prgname}:${calHtml.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${calHtml.slice(0,80).replace(/\s+/g,' ')})`}`);
-            if (calHtml.includes('openmd2')) {
-              effectivePersonalHtml = calHtml;
-              const deptUrl2 = new URL(popupBaseUrl);
-              deptUrl2.searchParams.set('appname', 'HsILWeb');
-              deptUrl2.searchParams.set('prgname', prgname);
-              deptUrl2.searchParams.set('arguments', session);
-              deptUrl2.searchParams.set('HSELWEBprgnameShowFmp', '1');
-              const deptResp2 = await fetch(deptUrl2.toString(), mainFetchOpts).catch(() => null);
+          const emp3Resp = await fetch(showEmp3Url, mainFetchOpts);
+          if (emp3Resp.ok) {
+            const emp3Html = await emp3Resp.text();
+            debugLines.push(`showEmp3:${emp3Html.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${emp3Html.slice(0, 150).replace(/\s+/g, ' ')})`}`);
+            if (emp3Html.includes('openmd2')) {
+              effectivePersonalHtml = emp3Html;
+              // Fetch dept view too
+              const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
+              const deptResp2 = await fetch(deptUrl2, mainFetchOpts).catch(() => null);
               effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
-              break;
             }
+          } else {
+            debugLines.push(`showEmp3:http${emp3Resp.status}`);
           }
         } catch (e) {
-          debugLines.push(`${prgname}Err:${String(e).slice(0,40)}`);
+          debugLines.push(`showEmp3Err:${String(e).slice(0, 80)}`);
         }
-      }
-    }
-
-    const mgrqMatch = personalHtml.match(/https?:\/\/[^"'<\s]+mgrqispi\.dll[^"'<\s]*/i);
-    if (!effectivePersonalHtml.includes('openmd2') && mgrqMatch) {
-      const mgrqUrl = mgrqMatch[0];
-      debugLines.push(`sendwaRedirect:${mgrqUrl.slice(0, 100)}`);
-      try {
-        const [mgrqResp, mgrqDeptResp] = await Promise.all([
-          fetch(mgrqUrl, mainFetchOpts),
-          fetch(mgrqUrl.includes('ShowFmp') ? mgrqUrl : (() => { const u = new URL(mgrqUrl); u.searchParams.set('HSELWEBprgnameShowFmp', '1'); return u.toString(); })(), mainFetchOpts).catch(() => null),
-        ]);
-        if (mgrqResp.ok) {
-          effectivePersonalHtml = await mgrqResp.text();
-          effectiveDeptHtml = mgrqDeptResp?.ok ? await mgrqDeptResp.text() : '';
-          debugLines.push(`sendwaHtml:${effectivePersonalHtml.includes('openmd2') ? 'hasOpenmd2' : 'noOpenmd2'}`);
-        }
-      } catch (e) {
-        debugLines.push(`sendwaErr:${String(e).slice(0, 60)}`);
       }
     }
   }
 
-  const sendwaA = (() => { try { return url.includes('sendwa.html') ? new URL(url).searchParams.get('A') : null; } catch { return null; } })();
-  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml) || (sendwaA ? `-A${sendwaA}` : '');
+  // For sendwa.html URLs, session must come from the ShowEmp3 response HTML, not the A token
+  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
   debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
 
   const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
