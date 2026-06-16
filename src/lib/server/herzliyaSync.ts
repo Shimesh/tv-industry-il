@@ -167,6 +167,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectivePopupCookie = sessionCookie;
   // Base URL for ShowCrew popup calls — for sendwa.html this must be mgrqispi.dll, not sendwa.html
   let effectivePopupBaseUrl = popupBaseUrl;
+  // Referer for ShowCrew popup calls — for sendwa users, should be the ShowEmp3 URL
+  let popupReferer = finalUrl;
   // Log raw personalHtml preview for sendwa URLs to understand what server returns
   if (url.includes('sendwa.html')) {
     const hasOpenmd2 = personalHtml.includes('openmd2');
@@ -189,6 +191,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         effectivePopupBaseUrl = mgrqBase;
         const showEmp3Url = `${mgrqBase}?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
         debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
+        popupReferer = showEmp3Url;
 
         // Step 1: Hit the main app to get a MagicXPA session cookie
         let initCookie = sessionCookie || '';
@@ -201,7 +204,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             rejectUnauthorized: false,
           });
           initCookie = extractCookies(initResp) || initCookie;
-          debugLines.push(`initCk:${initCookie.slice(0, 40)}`);
+          debugLines.push(`initCk:${initCookie.slice(0, 60)}`);
         } catch (e) {
           debugLines.push(`initErr:${String(e).slice(0, 60)}`);
         }
@@ -227,9 +230,14 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           const loc = emp3Resp.headers.get('location') || '';
           // Capture ShowEmp3 session cookie — this is what ShowCrew popup calls need
           const emp3Cookie = extractCookies(emp3Resp);
-          if (emp3Cookie) effectivePopupCookie = emp3Cookie;
+          // If ShowEmp3 sets a cookie, use it; otherwise fall back to initCookie from /Main
+          if (emp3Cookie) {
+            effectivePopupCookie = emp3Cookie;
+          } else if (initCookie) {
+            effectivePopupCookie = initCookie;
+          }
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck=${emp3Cookie.slice(0,30)}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck=${effectivePopupCookie.slice(0,50)}`);
           debugLines.push(`showEmp3body:${emp3Html.slice(0, 300).replace(/\s+/g, ' ')}`);
 
           // If redirect, follow manually
@@ -285,7 +293,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     headers: {
       ...BASE_HEADERS,
       ...(effectivePopupCookie ? { Cookie: effectivePopupCookie } : {}),
-      Referer: finalUrl,
+      Referer: popupReferer,
     },
     // @ts-expect-error - Node.js 20
     rejectUnauthorized: false,
@@ -297,9 +305,18 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   const openmd2DefIdx = effectivePersonalHtml.indexOf('openmd2');
   if (openmd2DefIdx >= 0) {
     const start = Math.max(0, openmd2DefIdx - 10);
-    debugLines.push(`openmd2def:${effectivePersonalHtml.slice(start, start + 300).replace(/\s+/g, ' ')}`);
+    debugLines.push(`openmd2def:${effectivePersonalHtml.slice(start, start + 500).replace(/\s+/g, ' ')}`);
   }
-  debugLines.push(`magicSession:${magicXpaSession || 'none'},popupBase:${effectivePopupBaseUrl.slice(0,60)}`);
+  // Debug: search for ShowCrew URLs anywhere in the HTML (might reveal session format)
+  const showCrewHits = [...effectivePersonalHtml.matchAll(/ShowCrew[^"'\n<]{0,200}/g)].slice(0, 3).map(m => m[0].slice(0, 120));
+  if (showCrewHits.length) debugLines.push(`showCrewInHtml:${showCrewHits.join(' | ')}`);
+  // Debug: data-remote attributes (Bootstrap modal remote loading)
+  const dataRemoteHits = [...effectivePersonalHtml.matchAll(/data-remote=["']([^"']+)["']/g)].slice(0, 3).map(m => m[1].slice(0, 100));
+  if (dataRemoteHits.length) debugLines.push(`dataRemote:${dataRemoteHits.join(' | ')}`);
+  // Debug: AJAX load URLs near openmd2
+  const ajaxHits = [...effectivePersonalHtml.matchAll(/(?:\.ajax|\.get|\.load|\.post)\s*\([^)]{0,200}/g)].slice(0, 2).map(m => m[0].replace(/\s+/g,' ').slice(0,120));
+  if (ajaxHits.length) debugLines.push(`ajaxInHtml:${ajaxHits.join(' | ')}`);
+  debugLines.push(`popupCk:${effectivePopupCookie.slice(0,60)},magicSession:${magicXpaSession || 'none'},popupBase:${effectivePopupBaseUrl.slice(0,60)}`);
 
   const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml || !effectiveDeptHtml;
   const parsed = parseScheduleHTML(effectivePersonalHtml, deptSameAsPersonal ? '' : effectiveDeptHtml);
@@ -348,7 +365,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         let popupUrl = '';
         try {
           const u = new URL(effectivePopupBaseUrl);
-          u.searchParams.set('appname', 'HsILWeb');
+          u.searchParams.set('appname', 'HsILWEB');
           u.searchParams.set('prgname', 'ShowCrew');
           u.searchParams.set('arguments', magicXpaSession ? `${magicXpaSession}-N${id}` : `-N${id}`);
           popupUrl = u.toString();
@@ -357,7 +374,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         }
         if (!popupUrl) return;
         try {
-          const res = await fetch(popupUrl, { ...popupFetchOpts, signal: AbortSignal.timeout(10000) });
+          const res = await fetch(popupUrl, { ...popupFetchOpts, signal: AbortSignal.timeout(12000) });
           if (res.ok) {
             const html = await res.text();
             if (html.includes('<table') || html.includes('<TABLE')) {
@@ -385,8 +402,28 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             popupFail++;
           }
         } catch (e) {
-          debugLines.push(`popup${id}:err(${String(e).slice(0,60)})`);
+          const errStr = String(e).slice(0, 80);
+          debugLines.push(`popup${id}:err(${errStr})`);
           popupFail++;
+          // Timeout → try POST, some MagicXPA systems load ShowCrew via POST AJAX
+          if (/timeout|abort|TimeoutError/i.test(errStr)) {
+            const postRes = await fetch(popupUrl, {
+              ...popupFetchOpts,
+              method: 'POST',
+              signal: AbortSignal.timeout(15000),
+            }).catch(e2 => { debugLines.push(`popup${id}:post-err(${String(e2).slice(0,40)})`); return null; });
+            if (postRes?.ok) {
+              const postHtml = await postRes.text();
+              if (postHtml.includes('<table') || postHtml.includes('<TABLE')) {
+                popupCache[id] = postHtml;
+                popupOk++;
+                popupFail--;
+                debugLines.push(`popup${id}:post-ok`);
+              } else {
+                debugLines.push(`popup${id}:post-no-table(${postHtml.slice(0,80).replace(/\s+/g,' ')})`);
+              }
+            }
+          }
         }
       }),
     );
