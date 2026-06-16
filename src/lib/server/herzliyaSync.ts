@@ -26,7 +26,9 @@ export type UserCalendarSyncDoc = {
   workerName: string;
   savedAt: number;
   weekStart: string;
-  sessionCookie?: string;     // NEW: browser session cookie for ShowCrew
+  sessionCookie?: string;
+  herzliyaUser?: string;
+  herzliyaPass?: string;
   lastSyncAt?: number;
   lastSyncStatus?: 'success' | 'error' | 'empty';
   lastSyncCount?: number;
@@ -125,10 +127,134 @@ function extractMagicXpaSessionFromHtml(html: string): string {
 }
 
 /**
+ * Attempt automatic login to the Herzliya MagicXPA system using stored credentials.
+ * Tries multiple common login page patterns and returns the session cookie if successful.
+ */
+async function herzliyaLogin(
+  baseOrigin: string,
+  username: string,
+  password: string,
+  debugLines: string[],
+): Promise<string> {
+  const baseOpts: RequestInit = {
+    headers: BASE_HEADERS,
+    signal: AbortSignal.timeout(10000),
+    // @ts-expect-error - Node.js 20
+    rejectUnauthorized: false,
+  };
+
+  const candidates = [
+    `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=Login`,
+    `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB`,
+    `${baseOrigin}/`,
+    `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=Main`,
+  ];
+
+  for (const candidateUrl of candidates) {
+    let html = '';
+    let candidateStatus = 0;
+    try {
+      const resp = await fetch(candidateUrl, baseOpts);
+      candidateStatus = resp.status;
+      html = await resp.text();
+    } catch (e) {
+      debugLines.push(`loginPage:${candidateUrl.slice(-50)},err=${String(e).slice(0, 40)}`);
+      continue;
+    }
+
+    const hasForm = /<form/i.test(html);
+    debugLines.push(`loginPage:${candidateUrl.slice(-50)},s=${candidateStatus},len=${html.length},hasForm=${hasForm}`);
+    if (!hasForm) continue;
+
+    // Parse form action
+    const actionM = html.match(/<form[^>]*action=["']?([^"'\s>]+)/i);
+    const rawAction = actionM?.[1] || '';
+    const fullAction = rawAction.startsWith('http') ? rawAction
+      : rawAction.startsWith('/') ? `${baseOrigin}${rawAction}`
+      : rawAction ? `${baseOrigin}/${rawAction}` : candidateUrl;
+
+    // Collect all <input> fields (name → value)
+    const inputs: Record<string, string> = {};
+    for (const m of html.matchAll(/<input[^>]*>/gi)) {
+      const tag = m[0];
+      const nameM = tag.match(/name=["']([^"']+)["']/i);
+      const valueM = tag.match(/value=["']([^"']*)["']/i);
+      if (nameM) inputs[nameM[1]] = valueM?.[1] ?? '';
+    }
+
+    // Identify username and password fields
+    const fieldNames = Object.keys(inputs);
+    debugLines.push(`loginForm:action=${fullAction.slice(-60)},fields=${fieldNames.join(',').slice(0, 100)}`);
+
+    const userField = fieldNames.find(f => /^(user|username|ctrl1|login|name|שם)/i.test(f))
+      ?? fieldNames.find(f => /user|name|שם|ctrl1/i.test(f));
+    const passField = fieldNames.find(f => /^(pass|password|ctrl2|סיסמ)/i.test(f))
+      ?? fieldNames.find(f => /pass|password|סיסמ|ctrl2/i.test(f));
+
+    if (!userField || !passField || userField === passField) {
+      // Fallback: assume first text-like field = user, second = pass
+      const nonHidden = fieldNames.filter(f => !['hidden', 'submit', 'button'].some(t =>
+        new RegExp(`type=["']${t}`, 'i').test(html.match(new RegExp(`name=["']${f}["'][^>]*>`, 'i'))?.[0] ?? '')));
+      if (nonHidden.length >= 2) {
+        const body = new URLSearchParams(inputs);
+        body.set(nonHidden[0], username);
+        body.set(nonHidden[1], password);
+        debugLines.push(`loginFallback:u=${nonHidden[0]},p=${nonHidden[1]}`);
+        const lr = await fetch(fullAction, {
+          method: 'POST',
+          headers: { ...BASE_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Referer: candidateUrl },
+          body: body.toString(), signal: AbortSignal.timeout(15000),
+          // @ts-expect-error - Node.js 20
+          rejectUnauthorized: false,
+        }).catch(() => null);
+        if (lr) {
+          const ck = extractCookies(lr);
+          debugLines.push(`loginFallbackResult:s=${lr.status},ck=${ck.slice(0, 60)}`);
+          if (ck) return ck;
+        }
+      }
+      continue;
+    }
+
+    const body = new URLSearchParams(inputs);
+    body.set(userField, username);
+    body.set(passField, password);
+
+    try {
+      const lr = await fetch(fullAction, {
+        method: 'POST',
+        headers: { ...BASE_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Referer: candidateUrl },
+        body: body.toString(),
+        signal: AbortSignal.timeout(15000),
+        // @ts-expect-error - Node.js 20
+        rejectUnauthorized: false,
+      });
+      const ck = extractCookies(lr);
+      const lHtml = await lr.text();
+      debugLines.push(`loginResult:s=${lr.status},ck=${ck.slice(0, 60)},hasOpenmd2=${lHtml.includes('openmd2')}`);
+      if (ck) return ck;
+      // If we landed on the schedule page without a cookie, try to extract URL-embedded session
+      if (lHtml.includes('openmd2')) {
+        const embeddedSession = extractMagicXpaSessionFromHtml(lHtml);
+        debugLines.push(`loginEmbeddedSession:${embeddedSession}`);
+      }
+    } catch (e) {
+      debugLines.push(`loginSubmitErr:${String(e).slice(0, 60)}`);
+    }
+  }
+  return '';
+}
+
+/**
  * Fetch and parse a Herzliya schedule URL — personal view + department view + ShowCrew popups.
  * Returns parsed productions with normalized IDs. Does NOT write to Firestore.
  */
-export async function fetchHerzliyaProductions(url: string, providedSessionCookie?: string): Promise<ParsedHerzliyaResult> {
+export async function fetchHerzliyaProductions(
+  url: string,
+  providedSessionCookie?: string,
+  herzliyaUser?: string,
+  herzliyaPass?: string,
+): Promise<ParsedHerzliyaResult> {
   const debugLines: string[] = [];
 
   const deptUrl = new URL(url);
@@ -303,6 +429,12 @@ export async function fetchHerzliyaProductions(url: string, providedSessionCooki
           }
         } catch (e) {
           debugLines.push(`showEmp3Err:${String(e).slice(0, 100)}`);
+        }
+
+        // If still no session cookie but credentials are stored, try programmatic login
+        if (!effectivePopupCookie && herzliyaUser && herzliyaPass) {
+          const loginCookie = await herzliyaLogin(baseOrigin, herzliyaUser, herzliyaPass, debugLines).catch(() => '');
+          if (loginCookie) effectivePopupCookie = loginCookie;
         }
       }
     }
@@ -558,12 +690,18 @@ export async function fetchHerzliyaProductions(url: string, providedSessionCooki
   };
 }
 
-export async function syncHerzliyaUrl(uid: string, url: string, sessionCookie?: string): Promise<SyncResult> {
+export async function syncHerzliyaUrl(
+  uid: string,
+  url: string,
+  sessionCookie?: string,
+  herzliyaUser?: string,
+  herzliyaPass?: string,
+): Promise<SyncResult> {
   const debugLines: string[] = [];
 
   let parsed: ParsedHerzliyaResult;
   try {
-    parsed = await fetchHerzliyaProductions(url, sessionCookie);
+    parsed = await fetchHerzliyaProductions(url, sessionCookie, herzliyaUser, herzliyaPass);
   } catch (err) {
     throw err; // propagate to caller (cron catches it)
   }

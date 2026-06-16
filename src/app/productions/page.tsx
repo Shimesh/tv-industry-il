@@ -278,7 +278,8 @@ function ProductionsContent() {
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [gcalConnecting, setGcalConnecting] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
-  const [herzliyaCookie, setHerzliyaCookie] = useState('');
+  const [herzliyaUser, setHerzliyaUser] = useState('');
+  const [herzliyaPass, setHerzliyaPass] = useState('');
   const [cookieSaveStatus, setCookieSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gcalBulkProgress, setGcalBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [gcalWeekSyncing, setGcalWeekSyncing] = useState<'prev' | 'current' | 'next' | null>(null);
@@ -2404,14 +2405,17 @@ function ProductionsContent() {
 
   // Reload from Firestore
   const handleSaveCookie = async () => {
-    if (!herzliyaCookie.trim() || !user) return;
+    if ((!herzliyaUser.trim() && !herzliyaPass.trim()) || !user) return;
     setCookieSaveStatus('saving');
     try {
       const idToken = await user.getIdToken();
       const res = await fetch('/api/calendar/save-session-cookie', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionCookie: herzliyaCookie.trim() }),
+        body: JSON.stringify({
+          ...(herzliyaUser.trim() ? { herzliyaUser: herzliyaUser.trim() } : {}),
+          ...(herzliyaPass.trim() ? { herzliyaPass: herzliyaPass.trim() } : {}),
+        }),
       });
       if (res.ok) {
         setCookieSaveStatus('saved');
@@ -2562,31 +2566,38 @@ function ProductionsContent() {
                         <ExternalLink className="h-3.5 w-3.5" />
                         ייצוא Outlook / ICS
                       </button>
-                      {/* Herzliya session cookie */}
+                      {/* Herzliya credentials for automatic ShowCrew login */}
                       <div className="border-t pt-3 mt-1" style={{ borderColor: 'var(--theme-border)' }}>
-                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>
-                          Cookie לרצליה (לנתוני צוות)
+                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--theme-text-secondary)' }}>
+                          פרטי כניסה לרצליה (לנתוני צוות)
                         </p>
-                        <p className="text-xs mb-2 leading-4" style={{ color: 'var(--theme-text-secondary)' }}>
-                          1. פתח את לינק הרצליה שלך בדפדפן<br />
-                          2. לחץ על הפקה כלשהי (חלון ShowCrew ייפתח)<br />
-                          3. DevTools (F12) → Network → חפש ShowCrew → Headers → העתק ערך Cookie
-                        </p>
-                        <textarea
-                          value={herzliyaCookie}
-                          onChange={e => setHerzliyaCookie(e.target.value)}
-                          placeholder="הדבק כאן Cookie מהרצליה (DevTools → Network → ShowCrew → Cookie header)"
-                          className="w-full min-h-[60px] p-2 text-xs rounded-xl border bg-transparent resize-none outline-none"
+                        <input
+                          type="text"
+                          value={herzliyaUser}
+                          onChange={e => setHerzliyaUser(e.target.value)}
+                          placeholder="שם משתמש ברצליה"
+                          className="w-full p-2 text-xs rounded-xl border bg-transparent outline-none mb-2"
                           style={{ color: 'var(--theme-text)', borderColor: 'var(--theme-border)', background: 'var(--theme-bg)', direction: 'ltr' }}
                           dir="ltr"
+                          autoComplete="username"
+                        />
+                        <input
+                          type="password"
+                          value={herzliyaPass}
+                          onChange={e => setHerzliyaPass(e.target.value)}
+                          placeholder="סיסמה"
+                          className="w-full p-2 text-xs rounded-xl border bg-transparent outline-none"
+                          style={{ color: 'var(--theme-text)', borderColor: 'var(--theme-border)', background: 'var(--theme-bg)', direction: 'ltr' }}
+                          dir="ltr"
+                          autoComplete="current-password"
                         />
                         <button
                           onClick={() => void handleSaveCookie()}
-                          disabled={!herzliyaCookie.trim() || cookieSaveStatus === 'saving'}
+                          disabled={(!herzliyaUser.trim() && !herzliyaPass.trim()) || cookieSaveStatus === 'saving'}
                           className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                           style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
                         >
-                          {cookieSaveStatus === 'saving' ? 'שומר...' : cookieSaveStatus === 'saved' ? '✅ נשמר' : cookieSaveStatus === 'error' ? '❌ שגיאה' : '🍪 שמור Cookie'}
+                          {cookieSaveStatus === 'saving' ? 'שומר...' : cookieSaveStatus === 'saved' ? '✅ נשמר' : cookieSaveStatus === 'error' ? '❌ שגיאה' : '🔐 שמור פרטי כניסה'}
                         </button>
                       </div>
                     </div>

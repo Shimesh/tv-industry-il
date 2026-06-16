@@ -13,11 +13,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let url: string;
   let workerName: string;
   let sessionCookie: string;
+  let herzliyaUser: string;
+  let herzliyaPass: string;
   try {
-    const body = (await request.json()) as { url?: string; workerName?: string; sessionCookie?: string };
+    const body = (await request.json()) as {
+      url?: string; workerName?: string; sessionCookie?: string;
+      herzliyaUser?: string; herzliyaPass?: string;
+    };
     url = typeof body.url === 'string' ? body.url.trim() : '';
     workerName = typeof body.workerName === 'string' ? body.workerName.trim() : '';
     sessionCookie = typeof body.sessionCookie === 'string' ? body.sessionCookie.trim() : '';
+    herzliyaUser = typeof body.herzliyaUser === 'string' ? body.herzliyaUser.trim() : '';
+    herzliyaPass = typeof body.herzliyaPass === 'string' ? body.herzliyaPass.trim() : '';
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
@@ -32,7 +39,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const userSyncPath = `user_calendar_sync/${authUser.uid}`;
 
-  // Save per-user URL with current week context
   const syncDoc: Partial<UserCalendarSyncDoc> & { uid: string; url: string; workerName: string; savedAt: number; weekStart: string } = {
     uid: authUser.uid,
     url,
@@ -40,12 +46,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     savedAt: Date.now(),
     weekStart: getCurrentWeekStartIsrael(),
     ...(sessionCookie ? { sessionCookie } : {}),
+    ...(herzliyaUser ? { herzliyaUser } : {}),
+    ...(herzliyaPass ? { herzliyaPass } : {}),
   };
   await patchDocument(userSyncPath, syncDoc as unknown as Record<string, string>);
 
-  // Run sync immediately
   try {
-    const result = await syncHerzliyaUrl(authUser.uid, url, sessionCookie || undefined);
+    const result = await syncHerzliyaUrl(
+      authUser.uid, url,
+      sessionCookie || undefined,
+      herzliyaUser || undefined,
+      herzliyaPass || undefined,
+    );
 
     const statusPatch: Partial<UserCalendarSyncDoc> = {
       lastSyncAt: Date.now(),
@@ -56,8 +68,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await patchDocument(userSyncPath, statusPatch as unknown as Record<string, string>);
 
     if (result.status === 'success') {
-      // If redirect resolved to a different (stable) URL, update the saved URL so
-      // the hourly GitHub Action uses it instead of the expired sendwa.html GUID URL.
       if (result.finalUrl) {
         await patchDocument(userSyncPath, { url: result.finalUrl } as unknown as Record<string, string>).catch(() => {});
       }
