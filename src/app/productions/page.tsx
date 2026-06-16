@@ -165,12 +165,12 @@ function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
     // Always clean up crew duplicates within each production first (ShowCrew can list same person twice)
     const cleanP = { ...p, crew: deduplicateCrew(p.crew) };
     if (!cleanP.date) { seen.set(cleanP.id || Math.random().toString(), cleanP); continue; }
-    // Use canonical name (strips draft qualifiers like "(לוז לא סופי)") and endTime
-    // so that a renamed production on the same date merges instead of duplicating.
-    // endTime is more stable than startTime across draft/final schedule revisions.
+    // Use canonical name (strips draft qualifiers like "(לוז לא סופי)") and BOTH
+    // sorted times so that different-shift productions (e.g. 19:00-25:00 vs 25:00-15:00)
+    // are NOT merged even when they share the same max time value.
     const canonName = canonicalProductionName(cleanP.name || '');
     const times = [cleanP.startTime || '', cleanP.endTime || ''].sort();
-    const key = `${canonName}::${cleanP.date}::${times[1]}`;
+    const key = `${canonName}::${cleanP.date}::${times[0]}::${times[1]}`;
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, cleanP);
