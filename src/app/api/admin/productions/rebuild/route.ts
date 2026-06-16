@@ -167,8 +167,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           continue;
         }
 
+        const VACATION_RE = /^(חופש|ביטול|מחלה|שמירה|היעדרות)/;
         for (const prod of productions) {
           if (!prod.id || !prod.date || !prod.name) continue;
+          if (VACATION_RE.test(prod.name)) continue;
           const doc = toGlobalProduction(prod, uid, 'rebuild-herzliya');
           const existing = freshProductionMap.get(prod.id) ?? null;
           freshProductionMap.set(prod.id, mergeGlobalProduction(existing, doc));
@@ -245,7 +247,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   } catch { /* non-critical — log only */ }
 
-  // ── Step 5: Simulate a user's view (optional) ────────────────────────────
+  // ── Step 5: Delete vacation/non-production entries (חופש, ביטול, etc.) ──
+  let deletedVacation = 0;
+  const vacationDeleteErrors: string[] = [];
+  try {
+    type VacationScanDoc = { name?: string; _path?: string };
+    const VACATION_RE_CLEANUP = /^(חופש|ביטול|מחלה|שמירה|היעדרות)/;
+    const weekScanDocs = await runQuery<VacationScanDoc>({
+      from: [{ collectionId: 'global_productions' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: weekStart } } },
+            { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: weekEnd } } },
+          ],
+        },
+      },
+      limit: 1000,
+    });
+    await Promise.allSettled(
+      weekScanDocs
+        .filter(doc => VACATION_RE_CLEANUP.test(doc.name || ''))
+        .map(async (doc) => {
+          const docId = String(doc._path || '').split('/').pop();
+          if (!docId || freshProductionMap.has(docId)) return;
+          try {
+            await deleteDocument(`global_productions/${docId}`);
+            deletedVacation++;
+          } catch (err) {
+            vacationDeleteErrors.push(`${docId}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }),
+    );
+  } catch { /* non-critical */ }
+
+  // ── Step 6: Simulate a user's view (optional) ────────────────────────────
   type SimCrewEntry = { name: string; role: string; phone: string | null; startTime: string; endTime: string };
   type SimProduction = { id: string; name: string; date: string; studio: string; startTime: string; endTime: string; crewCount: number; crew: SimCrewEntry[] };
   let simulation: null | { phone: string; matchedProductions: SimProduction[] } = null;
@@ -290,7 +327,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       written: writtenCount,
       writeErrors: writeErrors.slice(0, 20),
       deletedGeneric,
-      deleteErrors: deleteErrors.slice(0, 5),
+      deletedVacation,
+      deleteErrors: [...deleteErrors, ...vacationDeleteErrors].slice(0, 10),
     },
     elapsed,
     simulation,
