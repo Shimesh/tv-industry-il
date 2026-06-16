@@ -244,9 +244,35 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             if (followHtml.includes('openmd2')) effectivePersonalHtml = followHtml;
           } else if (emp3Html.includes('openmd2')) {
             effectivePersonalHtml = emp3Html;
-            const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
-            const deptResp2 = await fetch(deptUrl2, { ...sendwaFetchOpts, redirect: 'follow' }).catch(() => null);
-            effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
+
+            // Strategy 1: look for an explicit department-view link in the HTML
+            // (e.g. href containing ShowFmp, or onclick with ShowFmp prgname)
+            const deptLinkMatch = emp3Html.match(
+              /(?:href|location\.href)\s*=\s*["']([^"']*ShowFmp[^"']*)["']/i
+            ) || emp3Html.match(
+              /["']([^"']*prgname=ShowFmp[^"']*)["']/i
+            );
+            let deptFetchUrl = '';
+            if (deptLinkMatch) {
+              const raw = deptLinkMatch[1];
+              deptFetchUrl = raw.startsWith('http') ? raw : `${baseOrigin}${raw.startsWith('/') ? '' : '/'}${raw}`;
+              debugLines.push(`deptLink:found=${deptFetchUrl.slice(0, 80)}`);
+            } else {
+              // Strategy 2: add HSELWEBprgnameShowFmp=1 parameter (current approach)
+              deptFetchUrl = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
+              debugLines.push(`deptLink:fallback-param`);
+            }
+
+            const deptResp2 = await fetch(deptFetchUrl, { ...sendwaFetchOpts, redirect: 'follow' }).catch(() => null);
+            if (deptResp2?.ok) {
+              const deptHtml2 = await deptResp2.text();
+              const deptEventCount = (deptHtml2.match(/openmd2\(/g) || []).length;
+              const personalEventCount = (emp3Html.match(/openmd2\(/g) || []).length;
+              debugLines.push(`dept:len=${deptHtml2.length},events=${deptEventCount},personal=${personalEventCount},same=${deptHtml2 === emp3Html}`);
+              effectiveDeptHtml = deptHtml2;
+            } else {
+              debugLines.push(`dept:failed(${deptResp2?.status ?? 'err'})`);
+            }
           }
         } catch (e) {
           debugLines.push(`showEmp3Err:${String(e).slice(0, 100)}`);
@@ -275,13 +301,23 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   }
   debugLines.push(`magicSession:${magicXpaSession || 'none'},popupBase:${effectivePopupBaseUrl.slice(0,60)}`);
 
-  const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
+  const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml || !effectiveDeptHtml;
   const parsed = parseScheduleHTML(effectivePersonalHtml, deptSameAsPersonal ? '' : effectiveDeptHtml);
   debugLines.push(`htmlParse:${parsed.productions.length}`);
 
+  // Combine events from both personal and dept HTML — dept view has ALL department productions
+  const htmlsToScan = [effectivePersonalHtml];
+  if (!deptSameAsPersonal && effectiveDeptHtml.includes('openmd2')) htmlsToScan.push(effectiveDeptHtml);
+
   if (effectivePersonalHtml.includes('openmd2')) {
-    const events = extractHerzliyaEventIds(effectivePersonalHtml);
-    debugLines.push(`events:${events.length},names:${events.slice(0,6).map(e=>e.name.slice(0,25)).join('|')}`);
+    const allEventsByHtml = htmlsToScan.map(h => extractHerzliyaEventIds(h));
+    // Merge: dept events take precedence for production name (dept view has fuller names)
+    const eventMap = new Map<number, { herzliyaId: number; name: string }>();
+    for (const evList of allEventsByHtml) {
+      for (const ev of evList) eventMap.set(ev.herzliyaId, ev);
+    }
+    const events = [...eventMap.values()];
+    debugLines.push(`events:${events.length}(pers=${allEventsByHtml[0].length},dept=${allEventsByHtml[1]?.length ?? 0}),names:${events.slice(0,6).map(e=>e.name.slice(0,25)).join('|')}`);
 
     const nameToId: Record<string, number> = {};
     const idToEventName: Record<number, string> = {};
