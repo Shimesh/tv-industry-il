@@ -162,6 +162,11 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
+    // Show a snippet of sendwa HTML for debugging format
+    const bodyMatch = personalHtml.match(/<body[^>]*>([\s\S]{0,600})/i);
+    const snippet = (bodyMatch ? bodyMatch[1] : personalHtml.slice(0, 600)).replace(/\s+/g, ' ').trim();
+    debugLines.push(`sendwaSnippet:${snippet.slice(0, 400)}`);
+
     const mgrqMatch = personalHtml.match(/https?:\/\/[^"'<\s]+mgrqispi\.dll[^"'<\s]*/i);
     if (mgrqMatch) {
       const mgrqUrl = mgrqMatch[0];
