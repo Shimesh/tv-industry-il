@@ -174,7 +174,14 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       if (a1 && a2 && popupBaseUrl) {
         const showEmp3Url = `${new URL(popupBaseUrl).origin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
         const sendwaFetchOpts: RequestInit = {
-          headers: { ...BASE_HEADERS, Referer: url },
+          headers: {
+            ...BASE_HEADERS,
+            ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+            Referer: url,
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Site': 'same-origin',
+          },
           signal: AbortSignal.timeout(12000),
           // @ts-expect-error - Node.js 20
           rejectUnauthorized: false,
@@ -182,8 +189,12 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
         try {
           const emp3Resp = await fetch(showEmp3Url, sendwaFetchOpts);
+          const ct = emp3Resp.headers.get('content-type') || '';
+          const setCookie = emp3Resp.headers.get('set-cookie') || '';
+          const loc = emp3Resp.headers.get('location') || '';
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},${emp3Html.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${emp3Html.slice(0, 120).replace(/\s+/g, ' ')})`}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,30)},ck=${setCookie.slice(0,30)},loc=${loc.slice(0,40)}`);
+          debugLines.push(`showEmp3body:${emp3Html.slice(0, 200).replace(/\s+/g, ' ')}`);
           if (emp3Html.includes('openmd2')) {
             effectivePersonalHtml = emp3Html;
             const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
