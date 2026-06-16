@@ -116,6 +116,12 @@ function inferCrewBucket(role: string, roleDetail?: string | null): CrewBucket {
   return classification.workArea || classification.department;
 }
 
+function timeToMinutes(t: string): number | null {
+  const parts = (t || '').split(':').map(Number);
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+  return parts[0] * 60 + parts[1];
+}
+
 function enrichCrewWithPhones(
   crew: CrewMember[],
   contactList: { firstName: string; lastName: string; phone?: string; is_consented?: boolean }[],
@@ -315,13 +321,22 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   const directorNames = useMemo(() => new Set(directors.map((d) => d.name)), [directors]);
   const filteredCrew = useMemo(() => {
-    const base = activeDepartment === 'הכל' ? sortedCrew : sortedCrew.filter((member) => member.department === activeDepartment);
+    const prodStartMin = timeToMinutes(production.startTime ?? '');
+    const base = (activeDepartment === 'הכל' ? sortedCrew : sortedCrew.filter((member) => member.department === activeDepartment))
+      .filter((member) => {
+        if (prodStartMin !== null && member.startTime) {
+          const memberStartMin = timeToMinutes(member.startTime);
+          // Exclude crew whose shift starts more than 2 hours before this production's shift
+          if (memberStartMin !== null && memberStartMin < prodStartMin - 120) return false;
+        }
+        return true;
+      });
     // Directors are already shown in the hero box at the top; hide them from the main list to avoid double display.
     if (directors.length > 0 && activeDepartment === 'הכל') {
       return base.filter((m) => !directorNames.has(m.name));
     }
     return base;
-  }, [sortedCrew, activeDepartment, directors, directorNames]);
+  }, [sortedCrew, activeDepartment, directors, directorNames, production.startTime]);
 
   const shareMyDetails = () => {
     const myEntry = sortedCrew.find((member) => member.isCurrentUser);
