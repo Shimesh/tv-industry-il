@@ -172,7 +172,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   // Log raw personalHtml preview for sendwa URLs to understand what server returns
   if (url.includes('sendwa.html')) {
     const hasOpenmd2 = personalHtml.includes('openmd2');
-    debugLines.push(`sendwaHtmlPreview:len=${personalHtml.length},openmd2=${hasOpenmd2},body=${personalHtml.slice(0, 80).replace(/\s+/g, ' ')}`);
+    debugLines.push(`sendwaFull:len=${personalHtml.length},openmd2=${hasOpenmd2},body=${personalHtml.replace(/\s+/g, ' ').slice(0, 1500)}`);
   }
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
     // sendwa.html JS constructs: mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N{a1},-A{a2}
@@ -204,7 +204,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             rejectUnauthorized: false,
           });
           initCookie = extractCookies(initResp) || initCookie;
-          debugLines.push(`initCk:${initCookie.slice(0, 60)}`);
+          debugLines.push(`initCk:s=${initResp.status},ck=${initCookie.slice(0, 60)}`);
         } catch (e) {
           debugLines.push(`initErr:${String(e).slice(0, 60)}`);
         }
@@ -230,6 +230,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           const loc = emp3Resp.headers.get('location') || '';
           // Capture ShowEmp3 session cookie — this is what ShowCrew popup calls need
           const emp3Cookie = extractCookies(emp3Resp);
+          debugLines.push(`emp3Ck:${emp3Cookie.slice(0, 60)}`);
           // If ShowEmp3 sets a cookie, use it; otherwise fall back to initCookie from /Main
           if (emp3Cookie) {
             effectivePopupCookie = emp3Cookie;
@@ -237,7 +238,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
             effectivePopupCookie = initCookie;
           }
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck=${effectivePopupCookie.slice(0,50)}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},popupCk=${effectivePopupCookie.slice(0,60)}`);
           debugLines.push(`showEmp3body:${emp3Html.slice(0, 300).replace(/\s+/g, ' ')}`);
 
           // If redirect, follow manually
