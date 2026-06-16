@@ -129,8 +129,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // ── Step 1: Try Herzliya URLs ────────────────────────────────────────────
   const allUsers = await listDocuments<UserCalendarSyncDoc>('user_calendar_sync').catch(() => []);
-  const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
-  const activeUsers = allUsers.filter(u => u.url?.trim() && eligibleWeekStarts.has(u.weekStart));
+  // Try ALL users with any URL — don't restrict by weekStart, since a URL stored
+  // weeks ago may still be valid (especially for salaried employees like Shagiv).
+  const activeUsers = allUsers.filter(u => u.url?.trim());
 
   const herzliyaResults: Array<{
     uid: string;
