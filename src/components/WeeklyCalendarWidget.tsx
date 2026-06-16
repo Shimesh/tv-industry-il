@@ -95,16 +95,25 @@ function mergeProductions(
   return [...personal, ...extras];
 }
 
+function roundTime30(t: string): string {
+  const [h, m] = (t || '').split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return t;
+  const rm = m < 15 ? 0 : m < 45 ? 30 : 0;
+  const rh = m >= 45 ? h + 1 : h;
+  return `${rh}:${String(rm).padStart(2, '0')}`;
+}
+
 // Robust cross-source dedup: same production can arrive from multiple endpoints
 // with different IDs (personal path vs global sync).
-// Uses canonical name (strips draft qualifiers) and BOTH sorted times so that
-// different-shift productions (e.g. 19:00-25:00 vs 25:00-15:00) are never merged.
+// Uses canonical name (strips draft qualifiers) and BOTH sorted rounded times so that
+// different-shift productions (e.g. 19:00-25:00 vs 25:00-15:00) are never merged,
+// while near-identical start times (13:45 vs 14:00) are treated as one production.
 function deduplicateByIdentity(productions: Production[]): Production[] {
   const seen = new Map<string, Production>();
   for (const prod of productions) {
     if (!prod.date) { seen.set(prod.id || String(Math.random()), prod); continue; }
     const canonName = canonicalProductionName(prod.name || '');
-    const times = [prod.startTime || '', prod.endTime || ''].sort();
+    const times = [roundTime30(prod.startTime || ''), roundTime30(prod.endTime || '')].sort();
     const key = `${canonName}::${prod.date}::${times[0]}::${times[1]}`;
     const cleanCrew = deduplicateCrewEntries(prod.crew ?? []);
     const existing = seen.get(key);

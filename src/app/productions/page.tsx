@@ -93,6 +93,14 @@ type GlobalWeeksResponse = {
   latestWeekId?: string | null;
 };
 
+function roundTime30(t: string): string {
+  const [h, m] = (t || '').split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return t;
+  const rm = m < 15 ? 0 : m < 45 ? 30 : 0;
+  const rh = m >= 45 ? h + 1 : h;
+  return `${rh}:${String(rm).padStart(2, '0')}`;
+}
+
 function normalizeCrewName(name: string) {
   return normalizeName(name) || normalizeContactName(name);
 }
@@ -169,7 +177,7 @@ function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
     // sorted times so that different-shift productions (e.g. 19:00-25:00 vs 25:00-15:00)
     // are NOT merged even when they share the same max time value.
     const canonName = canonicalProductionName(cleanP.name || '');
-    const times = [cleanP.startTime || '', cleanP.endTime || ''].sort();
+    const times = [roundTime30(cleanP.startTime || ''), roundTime30(cleanP.endTime || '')].sort();
     const key = `${canonName}::${cleanP.date}::${times[0]}::${times[1]}`;
     const existing = seen.get(key);
     if (!existing) {
