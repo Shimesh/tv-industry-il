@@ -725,6 +725,7 @@ export function parseManualText(text: string): ParsedSchedule {
       const { studio, remaining } = extractStudio(rest);
       let name = remaining.replace(/^[\s\-–|,.:]+|[\s\-–|,.:]+$/g, '').replace(/\s{2,}/g, ' ').trim();
       if (!name) name = 'הפקה';
+      if (/^(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) continue;
 
       currentProduction = {
         id: generateProductionId(name, currentDate, studio, startTime),
