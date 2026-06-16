@@ -161,6 +161,11 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   // calendar interface. Try to find a link to the real mgrqispi.dll schedule view in the HTML.
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
+  // Log raw personalHtml preview for sendwa URLs to understand what server returns
+  if (url.includes('sendwa.html')) {
+    const hasOpenmd2 = personalHtml.includes('openmd2');
+    debugLines.push(`sendwaHtmlPreview:len=${personalHtml.length},openmd2=${hasOpenmd2},body=${personalHtml.slice(0, 80).replace(/\s+/g, ' ')}`);
+  }
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
     // sendwa.html JS constructs: mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N{a1},-A{a2}
     // where A param format is "{a1}.{a2}" (e.g. "934F-A8FD-...-DB70.2" → a1=GUID, a2="2")
@@ -171,6 +176,7 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
       const parts = sendwaAParam.split('.');
       const a1 = parts[0] ?? '';
       const a2 = parts[1] ?? '';
+      debugLines.push(`sendwaParts:a1len=${a1.length},a2=${a2},pbu=${!!popupBaseUrl}`);
       if (a1 && a2 && popupBaseUrl) {
         const baseOrigin = new URL(popupBaseUrl).origin;
         const showEmp3Url = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=ShowEmp3&arguments=-N${a1},-A${a2}`;
