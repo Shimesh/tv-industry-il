@@ -162,13 +162,43 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectivePersonalHtml = personalHtml;
   let effectiveDeptHtml = deptHtml;
   if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
-    // Show a snippet of sendwa HTML for debugging format
-    const bodyMatch = personalHtml.match(/<body[^>]*>([\s\S]{0,600})/i);
-    const snippet = (bodyMatch ? bodyMatch[1] : personalHtml.slice(0, 600)).replace(/\s+/g, ' ').trim();
-    debugLines.push(`sendwaSnippet:${snippet.slice(0, 400)}`);
+    // sendwa.html is a JS-only page — actual data loaded client-side via the ?A= token.
+    // Extract the A parameter and use it directly as the MagicXPA session to fetch the calendar.
+    const sendwaAParam = (() => { try { return new URL(url).searchParams.get('A'); } catch { return null; } })();
+    if (sendwaAParam && popupBaseUrl) {
+      const session = `-A${sendwaAParam}`;
+      debugLines.push(`sendwaA:${sendwaAParam.slice(0, 40)}`);
+      const tryPrgnames = ['ShowFmp', 'SHOWFMP', 'PersonalSchedule', 'ShowEmpSchedule'];
+      for (const prgname of tryPrgnames) {
+        try {
+          const calUrl = new URL(popupBaseUrl);
+          calUrl.searchParams.set('appname', 'HsILWeb');
+          calUrl.searchParams.set('prgname', prgname);
+          calUrl.searchParams.set('arguments', session);
+          const calResp = await fetch(calUrl.toString(), mainFetchOpts);
+          if (calResp.ok) {
+            const calHtml = await calResp.text();
+            debugLines.push(`${prgname}:${calHtml.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${calHtml.slice(0,80).replace(/\s+/g,' ')})`}`);
+            if (calHtml.includes('openmd2')) {
+              effectivePersonalHtml = calHtml;
+              const deptUrl2 = new URL(popupBaseUrl);
+              deptUrl2.searchParams.set('appname', 'HsILWeb');
+              deptUrl2.searchParams.set('prgname', prgname);
+              deptUrl2.searchParams.set('arguments', session);
+              deptUrl2.searchParams.set('HSELWEBprgnameShowFmp', '1');
+              const deptResp2 = await fetch(deptUrl2.toString(), mainFetchOpts).catch(() => null);
+              effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
+              break;
+            }
+          }
+        } catch (e) {
+          debugLines.push(`${prgname}Err:${String(e).slice(0,40)}`);
+        }
+      }
+    }
 
     const mgrqMatch = personalHtml.match(/https?:\/\/[^"'<\s]+mgrqispi\.dll[^"'<\s]*/i);
-    if (mgrqMatch) {
+    if (!effectivePersonalHtml.includes('openmd2') && mgrqMatch) {
       const mgrqUrl = mgrqMatch[0];
       debugLines.push(`sendwaRedirect:${mgrqUrl.slice(0, 100)}`);
       try {
@@ -187,7 +217,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     }
   }
 
-  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
+  const sendwaA = (() => { try { return url.includes('sendwa.html') ? new URL(url).searchParams.get('A') : null; } catch { return null; } })();
+  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml) || (sendwaA ? `-A${sendwaA}` : '');
   debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
 
   const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
