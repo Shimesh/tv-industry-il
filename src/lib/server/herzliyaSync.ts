@@ -26,6 +26,7 @@ export type UserCalendarSyncDoc = {
   workerName: string;
   savedAt: number;
   weekStart: string;
+  sessionCookie?: string;     // NEW: browser session cookie for ShowCrew
   lastSyncAt?: number;
   lastSyncStatus?: 'success' | 'error' | 'empty';
   lastSyncCount?: number;
@@ -127,7 +128,7 @@ function extractMagicXpaSessionFromHtml(html: string): string {
  * Fetch and parse a Herzliya schedule URL — personal view + department view + ShowCrew popups.
  * Returns parsed productions with normalized IDs. Does NOT write to Firestore.
  */
-export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzliyaResult> {
+export async function fetchHerzliyaProductions(url: string, providedSessionCookie?: string): Promise<ParsedHerzliyaResult> {
   const debugLines: string[] = [];
 
   const deptUrl = new URL(url);
@@ -165,6 +166,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   let effectiveDeptHtml = deptHtml;
   // Cookie used for ShowCrew popup calls — updated with ShowEmp3 session cookie if available
   let effectivePopupCookie = sessionCookie;
+  // Use provided browser session cookie if available (beats any server-side extraction)
+  if (providedSessionCookie) effectivePopupCookie = providedSessionCookie;
   // Base URL for ShowCrew popup calls — for sendwa.html this must be mgrqispi.dll, not sendwa.html
   let effectivePopupBaseUrl = popupBaseUrl;
   // Referer for ShowCrew popup calls — for sendwa users, should be the ShowEmp3 URL
@@ -555,12 +558,12 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   };
 }
 
-export async function syncHerzliyaUrl(uid: string, url: string): Promise<SyncResult> {
+export async function syncHerzliyaUrl(uid: string, url: string, sessionCookie?: string): Promise<SyncResult> {
   const debugLines: string[] = [];
 
   let parsed: ParsedHerzliyaResult;
   try {
-    parsed = await fetchHerzliyaProductions(url);
+    parsed = await fetchHerzliyaProductions(url, sessionCookie);
   } catch (err) {
     throw err; // propagate to caller (cron catches it)
   }

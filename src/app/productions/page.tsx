@@ -278,6 +278,8 @@ function ProductionsContent() {
   const [gcalSyncing, setGcalSyncing] = useState<string | null>(null);
   const [gcalConnecting, setGcalConnecting] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const [herzliyaCookie, setHerzliyaCookie] = useState('');
+  const [cookieSaveStatus, setCookieSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gcalBulkProgress, setGcalBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [gcalWeekSyncing, setGcalWeekSyncing] = useState<'prev' | 'current' | 'next' | null>(null);
   const [calendarEventMap, setCalendarEventMap] = useState<Record<string, string>>({});
@@ -2401,6 +2403,27 @@ function ProductionsContent() {
   // (Test button removed - REST API confirmed working)
 
   // Reload from Firestore
+  const handleSaveCookie = async () => {
+    if (!herzliyaCookie.trim() || !user) return;
+    setCookieSaveStatus('saving');
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/calendar/save-session-cookie', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionCookie: herzliyaCookie.trim() }),
+      });
+      if (res.ok) {
+        setCookieSaveStatus('saved');
+        setTimeout(() => setCookieSaveStatus('idle'), 3000);
+      } else {
+        setCookieSaveStatus('error');
+      }
+    } catch {
+      setCookieSaveStatus('error');
+    }
+  };
+
   const handleReload = async () => {
     if (!currentWeekId) return;
     setLoading(true);
@@ -2539,6 +2562,33 @@ function ProductionsContent() {
                         <ExternalLink className="h-3.5 w-3.5" />
                         ייצוא Outlook / ICS
                       </button>
+                      {/* Herzliya session cookie */}
+                      <div className="border-t pt-3 mt-1" style={{ borderColor: 'var(--theme-border)' }}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-secondary)' }}>
+                          Cookie לרצליה (לנתוני צוות)
+                        </p>
+                        <p className="text-xs mb-2 leading-4" style={{ color: 'var(--theme-text-secondary)' }}>
+                          1. פתח את לינק הרצליה שלך בדפדפן<br />
+                          2. לחץ על הפקה כלשהי (חלון ShowCrew ייפתח)<br />
+                          3. DevTools (F12) → Network → חפש ShowCrew → Headers → העתק ערך Cookie
+                        </p>
+                        <textarea
+                          value={herzliyaCookie}
+                          onChange={e => setHerzliyaCookie(e.target.value)}
+                          placeholder="הדבק כאן Cookie מהרצליה (DevTools → Network → ShowCrew → Cookie header)"
+                          className="w-full min-h-[60px] p-2 text-xs rounded-xl border bg-transparent resize-none outline-none"
+                          style={{ color: 'var(--theme-text)', borderColor: 'var(--theme-border)', background: 'var(--theme-bg)', direction: 'ltr' }}
+                          dir="ltr"
+                        />
+                        <button
+                          onClick={() => void handleSaveCookie()}
+                          disabled={!herzliyaCookie.trim() || cookieSaveStatus === 'saving'}
+                          className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+                        >
+                          {cookieSaveStatus === 'saving' ? 'שומר...' : cookieSaveStatus === 'saved' ? '✅ נשמר' : cookieSaveStatus === 'error' ? '❌ שגיאה' : '🍪 שמור Cookie'}
+                        </button>
+                      </div>
                     </div>
                   </div>
             </>

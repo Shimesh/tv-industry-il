@@ -155,7 +155,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       try {
-        const { productions, debug } = await fetchHerzliyaProductions(url);
+        const storedCookie = (user as Record<string, unknown>).sessionCookie as string | undefined;
+        const { productions, debug } = await fetchHerzliyaProductions(url, storedCookie || undefined);
 
         if (productions.length === 0) {
           herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty', error: debug?.slice(0, 2000) });

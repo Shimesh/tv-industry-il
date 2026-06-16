@@ -12,10 +12,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let url: string;
   let workerName: string;
+  let sessionCookie: string;
   try {
-    const body = (await request.json()) as { url?: string; workerName?: string };
+    const body = (await request.json()) as { url?: string; workerName?: string; sessionCookie?: string };
     url = typeof body.url === 'string' ? body.url.trim() : '';
     workerName = typeof body.workerName === 'string' ? body.workerName.trim() : '';
+    sessionCookie = typeof body.sessionCookie === 'string' ? body.sessionCookie.trim() : '';
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
@@ -31,17 +33,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const userSyncPath = `user_calendar_sync/${authUser.uid}`;
 
   // Save per-user URL with current week context
-  await patchDocument(userSyncPath, {
+  const syncDoc: Partial<UserCalendarSyncDoc> & { uid: string; url: string; workerName: string; savedAt: number; weekStart: string } = {
     uid: authUser.uid,
     url,
     workerName,
     savedAt: Date.now(),
     weekStart: getCurrentWeekStartIsrael(),
-  } as unknown as Record<string, string>);
+    ...(sessionCookie ? { sessionCookie } : {}),
+  };
+  await patchDocument(userSyncPath, syncDoc as unknown as Record<string, string>);
 
   // Run sync immediately
   try {
-    const result = await syncHerzliyaUrl(authUser.uid, url);
+    const result = await syncHerzliyaUrl(authUser.uid, url, sessionCookie || undefined);
 
     const statusPatch: Partial<UserCalendarSyncDoc> = {
       lastSyncAt: Date.now(),
