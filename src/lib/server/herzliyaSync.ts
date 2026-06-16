@@ -193,28 +193,39 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           debugLines.push(`initErr:${String(e).slice(0, 60)}`);
         }
 
-        // Step 2: Fetch ShowEmp3 with session cookie + Referer from sendwa.html
-        const sendwaFetchOpts: RequestInit = {
-          headers: {
-            ...BASE_HEADERS,
-            ...(initCookie ? { Cookie: initCookie } : {}),
-            Referer: `${baseOrigin}/sendwa.html`,
-          },
-          signal: AbortSignal.timeout(12000),
-          // @ts-expect-error - Node.js 20
-          rejectUnauthorized: false,
-        };
+        // Step 2: Fetch ShowEmp3 with redirect:manual to detect redirects
         try {
+          const sendwaFetchOpts: RequestInit = {
+            headers: {
+              ...BASE_HEADERS,
+              ...(initCookie ? { Cookie: initCookie } : {}),
+              Referer: `${baseOrigin}/sendwa.html`,
+            },
+            redirect: 'manual',
+            signal: AbortSignal.timeout(12000),
+            // @ts-expect-error - Node.js 20
+            rejectUnauthorized: false,
+          };
           const emp3Resp = await fetch(showEmp3Url, sendwaFetchOpts);
           const ct = emp3Resp.headers.get('content-type') || '';
+          const loc = emp3Resp.headers.get('location') || '';
           const setCookie2 = emp3Resp.headers.get('set-cookie') || '';
           const emp3Html = await emp3Resp.text();
-          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},ck2=${setCookie2.slice(0,20)}`);
+          debugLines.push(`showEmp3:s=${emp3Resp.status},len=${emp3Html.length},ct=${ct.slice(0,20)},loc=${loc.slice(0,60)},ck2=${setCookie2.slice(0,30)}`);
           debugLines.push(`showEmp3body:${emp3Html.slice(0, 200).replace(/\s+/g, ' ')}`);
-          if (emp3Html.includes('openmd2')) {
+
+          // If redirect, follow manually
+          if ((emp3Resp.status === 301 || emp3Resp.status === 302 || emp3Resp.status === 303) && loc) {
+            const followResp = await fetch(loc.startsWith('http') ? loc : `${baseOrigin}${loc}`, {
+              ...sendwaFetchOpts, redirect: 'follow',
+            });
+            const followHtml = await followResp.text();
+            debugLines.push(`showEmp3follow:s=${followResp.status},len=${followHtml.length},${followHtml.includes('openmd2') ? 'hasOpenmd2' : `noOpenmd2(${followHtml.slice(0,80).replace(/\s+/g,' ')})`}`);
+            if (followHtml.includes('openmd2')) effectivePersonalHtml = followHtml;
+          } else if (emp3Html.includes('openmd2')) {
             effectivePersonalHtml = emp3Html;
             const deptUrl2 = `${showEmp3Url}&HSELWEBprgnameShowFmp=1`;
-            const deptResp2 = await fetch(deptUrl2, sendwaFetchOpts).catch(() => null);
+            const deptResp2 = await fetch(deptUrl2, { ...sendwaFetchOpts, redirect: 'follow' }).catch(() => null);
             effectiveDeptHtml = deptResp2?.ok ? await deptResp2.text() : '';
           }
         } catch (e) {
