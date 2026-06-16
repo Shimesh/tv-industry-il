@@ -99,6 +99,7 @@ async function rebuildFromPersonalSchedules(
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
   // Accept CRON_SECRET (for automated/server calls) or primary-admin Firebase token
   const authHeader = request.headers.get('authorization') ?? '';
   const cronSecret = process.env.CRON_SECRET;
@@ -256,4 +257,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     elapsed,
     simulation,
   });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
