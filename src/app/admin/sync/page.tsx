@@ -539,11 +539,14 @@ export default function SyncPage() {
 
             <div className="space-y-1 text-sm">
               {rebuildResult.userResults.map(r => (
-                <div key={r.uid} className="flex items-center justify-between gap-3 border-b pb-1" style={{ borderColor: 'var(--theme-border)' }}>
-                  <span className="font-medium">{r.workerName}</span>
-                  <span className={r.status === 'parsed' ? 'text-green-400' : r.status === 'error' ? 'text-red-400' : 'text-gray-400'}>
-                    {r.status === 'parsed' ? `${r.productionCount} הפקות` : r.status}
-                  </span>
+                <div key={r.uid} className="flex flex-col gap-0.5 border-b pb-1" style={{ borderColor: 'var(--theme-border)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{r.workerName}</span>
+                    <span className={r.status === 'parsed' ? 'text-green-400' : r.status === 'error' ? 'text-red-400' : 'text-gray-400'}>
+                      {r.status === 'parsed' ? `${r.productionCount} הפקות` : r.status}
+                    </span>
+                  </div>
+                  {r.error && <p className="text-xs text-amber-400 break-all">{r.error}</p>}
                 </div>
               ))}
             </div>

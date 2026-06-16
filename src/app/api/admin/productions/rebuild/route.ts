@@ -155,10 +155,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       try {
-        const { productions } = await fetchHerzliyaProductions(url);
+        const { productions, debug } = await fetchHerzliyaProductions(url);
 
         if (productions.length === 0) {
-          herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty' });
+          herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty', error: debug?.slice(0, 300) });
           continue;
         }
 
