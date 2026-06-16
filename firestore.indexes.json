@@ -1,6 +1,13 @@
 {
   "indexes": [
     {
+      "collectionGroup": "productions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "global_productions",
       "queryScope": "COLLECTION",
       "fields": [
