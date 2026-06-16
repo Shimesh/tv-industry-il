@@ -158,7 +158,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const { productions, debug } = await fetchHerzliyaProductions(url);
 
         if (productions.length === 0) {
-          herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty', error: debug?.slice(0, 300) });
+          herzliyaResults.push({ uid, workerName: user.workerName || uid, status: 'empty', error: debug?.slice(0, 2000) });
           continue;
         }
 
