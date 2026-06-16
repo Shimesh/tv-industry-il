@@ -447,7 +447,7 @@ function StandingsTables({ standings }: { standings: WorldCupStanding[] }) {
                         <td className="text-center font-bold text-emerald-400">{row.won}</td>
                         <td className="text-center">{row.drawn}</td>
                         <td className="text-center text-red-400/70">{row.lost}</td>
-                        <td className="text-center tabular-nums" dir="ltr">{row.goalsFor}:{row.goalsAgainst}</td>
+                        <td className="text-center tabular-nums" dir="ltr">{row.goalsAgainst}:{row.goalsFor}</td>
                         <td className="px-3 text-center font-black text-[#D4AF37]">{row.points}</td>
                       </motion.tr>
                     ))}
