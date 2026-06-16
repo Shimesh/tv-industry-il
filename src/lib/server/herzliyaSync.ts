@@ -157,15 +157,40 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
   const popupBaseUrl = htmlBaseUrl || finalUrl;
   debugLines.push(`popupBaseUrl:${popupBaseUrl.slice(0, 80)}`);
 
-  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(personalHtml);
+  // If the URL is a sendwa.html (WhatsApp-share format), it doesn't have the MagicXPA
+  // calendar interface. Try to find a link to the real mgrqispi.dll schedule view in the HTML.
+  let effectivePersonalHtml = personalHtml;
+  let effectiveDeptHtml = deptHtml;
+  if (url.includes('sendwa.html') && !personalHtml.includes('openmd2')) {
+    const mgrqMatch = personalHtml.match(/https?:\/\/[^"'<\s]+mgrqispi\.dll[^"'<\s]*/i);
+    if (mgrqMatch) {
+      const mgrqUrl = mgrqMatch[0];
+      debugLines.push(`sendwaRedirect:${mgrqUrl.slice(0, 100)}`);
+      try {
+        const [mgrqResp, mgrqDeptResp] = await Promise.all([
+          fetch(mgrqUrl, mainFetchOpts),
+          fetch(mgrqUrl.includes('ShowFmp') ? mgrqUrl : (() => { const u = new URL(mgrqUrl); u.searchParams.set('HSELWEBprgnameShowFmp', '1'); return u.toString(); })(), mainFetchOpts).catch(() => null),
+        ]);
+        if (mgrqResp.ok) {
+          effectivePersonalHtml = await mgrqResp.text();
+          effectiveDeptHtml = mgrqDeptResp?.ok ? await mgrqDeptResp.text() : '';
+          debugLines.push(`sendwaHtml:${effectivePersonalHtml.includes('openmd2') ? 'hasOpenmd2' : 'noOpenmd2'}`);
+        }
+      } catch (e) {
+        debugLines.push(`sendwaErr:${String(e).slice(0, 60)}`);
+      }
+    }
+  }
+
+  const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
   debugLines.push(`magicSession:${magicXpaSession || 'none'}`);
 
-  const deptSameAsPersonal = deptHtml === personalHtml;
-  const parsed = parseScheduleHTML(personalHtml, deptSameAsPersonal ? '' : deptHtml);
+  const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
+  const parsed = parseScheduleHTML(effectivePersonalHtml, deptSameAsPersonal ? '' : effectiveDeptHtml);
   debugLines.push(`htmlParse:${parsed.productions.length}`);
 
-  if (personalHtml.includes('openmd2')) {
-    const events = extractHerzliyaEventIds(personalHtml);
+  if (effectivePersonalHtml.includes('openmd2')) {
+    const events = extractHerzliyaEventIds(effectivePersonalHtml);
     debugLines.push(`events:${events.length}`);
 
     const nameToId: Record<string, number> = {};
@@ -180,8 +205,8 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
     }
 
     const calendarDates: string[] = [];
-    const firstEventPos = personalHtml.indexOf('openmd2');
-    const headerSection = firstEventPos > 0 ? personalHtml.slice(0, firstEventPos) : personalHtml.slice(0, 3000);
+    const firstEventPos = effectivePersonalHtml.indexOf('openmd2');
+    const headerSection = firstEventPos > 0 ? effectivePersonalHtml.slice(0, firstEventPos) : effectivePersonalHtml.slice(0, 3000);
     for (const m of headerSection.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)) {
       const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
       if (!calendarDates.includes(iso)) calendarDates.push(iso);
