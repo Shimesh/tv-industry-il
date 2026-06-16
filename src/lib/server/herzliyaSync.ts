@@ -327,7 +327,11 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
 
     debugLines.push(`popupOk:${popupOk} popupFail:${popupFail}`);
 
-    if (parsed.productions.length === 0) {
+    // Also rebuild from events when parseScheduleHTML found only generic "הפקה" names
+    // (this happens with ShowEmp3 HTML which has openmd2 but different name format)
+    const allGenericNames = parsed.productions.length > 0 && parsed.productions.every(p => p.name === 'הפקה');
+    if (parsed.productions.length === 0 || allGenericNames) {
+      if (allGenericNames) parsed.productions.splice(0);
       const seenIds = new Set<number>();
       let builtIdx = 0;
       for (const event of events) {
@@ -349,14 +353,17 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
           startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
         }));
+        // Derive production start/end from crew shift times (Herzliya: endTime=shiftStart, startTime=shiftEnd)
+        const shiftStarts = crew.map(c => c.endTime).filter(Boolean).sort();
+        const shiftEnds = crew.map(c => c.startTime).filter(Boolean).sort();
         parsed.productions.push({
           id: String(event.herzliyaId),
           name,
           studio,
           date,
           day: getHebrewDay(date),
-          startTime: '',
-          endTime: '',
+          startTime: shiftEnds.length ? shiftEnds[shiftEnds.length - 1] : '',
+          endTime: shiftStarts.length ? shiftStarts[0] : '',
           status: 'scheduled',
           crew,
           herzliyaId: event.herzliyaId,
