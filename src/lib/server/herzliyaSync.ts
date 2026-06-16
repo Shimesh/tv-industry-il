@@ -101,14 +101,24 @@ function extractMagicXpaSession(str: string): string {
 function extractMagicXpaSessionFromHtml(html: string): string {
   // Common patterns where Magic XPA embeds the session in the HTML:
   // "arguments=-A{sess}-N"+id  or  "ShowCrew&arguments=-A{sess}"
+  // Session may be alphanumeric only, or may include = signs (base64-like)
   const patterns = [
-    /arguments=-A([a-zA-Z0-9]{6,})/,
-    /ShowCrew[^"'<]{0,60}-A([a-zA-Z0-9]{6,})/,
-    /-A([a-zA-Z0-9]{8,})-N/,
+    // Literal -A{session}-N pattern (most common in openmd2 function body)
+    /-A([a-zA-Z0-9=+/]{8,})-N/,
+    // In URL arguments string: arguments=-A{session}
+    /arguments=-A([a-zA-Z0-9=+/]{6,})/,
+    // ShowCrew URL with -A{session}
+    /ShowCrew[^"'<]{0,80}-A([a-zA-Z0-9=+/]{6,})/,
+    // Variable-based: var sess="ABC"; ... -A" + sess + "-N
+    /['"]([a-zA-Z0-9=+/]{8,})['"]\s*\+?\s*['"]?-N/,
   ];
   for (const p of patterns) {
     const m = html.match(p);
-    if (m) return `-A${m[1]}`;
+    if (m && m[1]) {
+      // Reject pure date strings (all digits, length 6-8) like "20062026" or "2"
+      if (/^\d+$/.test(m[1])) continue;
+      return `-A${m[1]}`;
+    }
   }
   return '';
 }
@@ -257,6 +267,12 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
 
   // For sendwa.html URLs, session must come from the ShowEmp3 response HTML, not the A token
   const magicXpaSession = extractMagicXpaSession(finalUrl) || extractMagicXpaSessionFromHtml(effectivePersonalHtml);
+  // Debug: show the openmd2 function definition to understand session embedding format
+  const openmd2DefIdx = effectivePersonalHtml.indexOf('openmd2');
+  if (openmd2DefIdx >= 0) {
+    const start = Math.max(0, openmd2DefIdx - 10);
+    debugLines.push(`openmd2def:${effectivePersonalHtml.slice(start, start + 300).replace(/\s+/g, ' ')}`);
+  }
   debugLines.push(`magicSession:${magicXpaSession || 'none'},popupBase:${effectivePopupBaseUrl.slice(0,60)}`);
 
   const deptSameAsPersonal = effectiveDeptHtml === effectivePersonalHtml;
