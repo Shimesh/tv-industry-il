@@ -193,17 +193,32 @@ export async function fetchHerzliyaProductions(url: string): Promise<ParsedHerzl
         debugLines.push(`showEmp3Url:${showEmp3Url.slice(0, 120)}`);
         popupReferer = showEmp3Url;
 
-        // Step 1: Hit the main app to get a MagicXPA session cookie
+        // Step 1: Try multiple Herzliya entry points to establish a session cookie
         let initCookie = sessionCookie || '';
+        const initBaseOpts: RequestInit = {
+          headers: BASE_HEADERS,
+          signal: AbortSignal.timeout(8000),
+          // @ts-expect-error - Node.js 20
+          rejectUnauthorized: false,
+        };
         try {
+          // Try root URL first — some MagicXPA setups set session cookie at root
+          const rootResp = await fetch(baseOrigin + '/', initBaseOpts);
+          const rootCk = extractCookies(rootResp);
+          if (rootCk) initCookie = rootCk;
+          debugLines.push(`rootCk:s=${rootResp.status},ck=${rootCk.slice(0, 60)}`);
+        } catch (e) {
+          debugLines.push(`rootErr:${String(e).slice(0, 40)}`);
+        }
+        try {
+          // Try DLL with appname=HsILWEB (no prgname) — may init session
           const initUrl = `${baseOrigin}/magicscripts/mgrqispi.dll?appname=HsILWEB&prgname=Main`;
           const initResp = await fetch(initUrl, {
-            headers: BASE_HEADERS,
-            signal: AbortSignal.timeout(8000),
-            // @ts-expect-error - Node.js 20
-            rejectUnauthorized: false,
+            ...initBaseOpts,
+            headers: { ...BASE_HEADERS, ...(initCookie ? { Cookie: initCookie } : {}) },
           });
-          initCookie = extractCookies(initResp) || initCookie;
+          const mainCk = extractCookies(initResp);
+          if (mainCk) initCookie = mainCk;
           debugLines.push(`initCk:s=${initResp.status},ck=${initCookie.slice(0, 60)}`);
         } catch (e) {
           debugLines.push(`initErr:${String(e).slice(0, 60)}`);
