@@ -804,9 +804,14 @@ export async function syncHerzliyaUrl(
   // same production, different ID and slightly different name.
   const syncedIds = new Set(productions.map(p => p.id));
   const syncDates = productions.map(p => p.date).filter(Boolean).sort();
+  // Use full-week range so disown covers all 7 days, not only days with personal productions
+  const scanWeekStart = getCurrentWeekStartIsrael();
+  const _scanWeekEndDate = new Date(`${scanWeekStart}T12:00:00Z`);
+  _scanWeekEndDate.setUTCDate(_scanWeekEndDate.getUTCDate() + 6);
+  const scanWeekEnd = _scanWeekEndDate.toISOString().split('T')[0];
   if (syncDates.length > 0) {
-    const minDate = syncDates[0];
-    const maxDate = syncDates[syncDates.length - 1];
+    const minDate = scanWeekStart;
+    const maxDate = scanWeekEnd;
     const VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
 
     // Returns true when names refer to the same production (one is a prefix of the other)
@@ -860,9 +865,15 @@ export async function syncHerzliyaUrl(
             const updatedShadowKeys = (doc.crew_shadow_keys ?? []).filter(
               (k) => !k.startsWith(`${workerNorm}::`),
             );
-            const updatedPhones = (doc.crew_phones ?? []).filter(
-              (p) => !updatedCrewList.some((m) => (m as unknown as { normalizedPhone?: string }).normalizedPhone === p),
+            // Collect normalizedPhone values of the removed crew entries so we can
+            // also remove them from crew_phones (previous logic was inverted — kept removed phone)
+            const removedNormPhones = new Set<string>(
+              crewList
+                .filter((m) => (m as unknown as { name?: string }).name?.trim().toLowerCase().replace(/\s+/g, ' ') === workerNorm)
+                .map((m) => (m as unknown as { normalizedPhone?: string }).normalizedPhone)
+                .filter((p): p is string => Boolean(p))
             );
+            const updatedPhones = (doc.crew_phones ?? []).filter((p) => !removedNormPhones.has(p));
             console.log(`[herzliyaSync] disown-name ${uid} from ${docId} (${doc.name})`);
             await patchDocument(`global_productions/${docId}`, {
               crew_list: updatedCrewList,
@@ -949,8 +960,8 @@ export async function syncHerzliyaUrl(
               op: 'AND',
               filters: [
                 { fieldFilter: { field: { fieldPath: 'crew_phones' }, op: 'ARRAY_CONTAINS', value: { stringValue: phone } } },
-                { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: syncDates[0] } } },
-                { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: syncDates[syncDates.length - 1] } } },
+                { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: scanWeekStart } } },
+                { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: scanWeekEnd } } },
               ],
             },
           },
