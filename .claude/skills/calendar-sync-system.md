@@ -99,18 +99,20 @@ id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId
 
 ## 5. Vacation Filter — All Locations
 
-Pattern: `/^(חופש|ביטול|מחלה|שמירה|היעדרות)/i`
+Pattern: `/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`
+
+Broad pattern: catches vacation keyword at start OR after a separator such as " - " (e.g. "צלם - חופש עח שישי"). Previously used `/^.../` which missed role-prefixed names.
 
 | # | File | Line | Path |
 |---|------|------|------|
-| 1 | herzliyaSync.ts | ~629 | Event-based path |
-| 2 | productionScheduleParser.ts | ~728 | parseManualText |
-| 3 | productionScheduleParser.ts | ~871 | parseHerzliyaHTMLServer strategy 1 |
-| 4 | productionScheduleParser.ts | ~901 | parseHerzliyaHTMLServer strategy 2 |
+| 1 | herzliyaSync.ts | ~631 | Event-based path (Path B) |
+| 2 | productionScheduleParser.ts | ~728 | parseManualText (Path C) |
+| 3 | productionScheduleParser.ts | ~871 | parseHerzliyaHTMLServer strategy 1 (Path A) |
+| 4 | productionScheduleParser.ts | ~901 | parseHerzliyaHTMLServer strategy 2 (Path A fallback) |
 | 5 | rebuild/route.ts | ~170 | Safety net before writing to freshProductionMap |
 | 6 | rebuild/route.ts | ~250 | Cleanup: deletes existing vacation entries from global_productions by date range |
 
-**Important**: resync (`/api/calendar/resync` → `syncHerzliyaUrl`) does NOT run the Firestore cleanup step. Vacation entries in global_productions survive until the next admin rebuild. The resync only prevents ADDING new vacation entries.
+**Resync also cleans up:** `syncHerzliyaUrl` now runs a date-range scan after writing and deletes any vacation-named entries in `global_productions` that are not in the current sync batch (same logic as rebuild Step 5).
 
 ---
 
@@ -135,21 +137,21 @@ File: `src/lib/server/herzliyaSync.ts` lines 252–725
 ---
 
 ## 7. Process: `syncHerzliyaUrl`
-File: `src/lib/server/herzliyaSync.ts` lines 727–808
+File: `src/lib/server/herzliyaSync.ts` lines 727–858
 
 **Trigger:** `/api/calendar/save-sync-url` POST, `/api/calendar/resync` POST, `/api/cron/sync-calendar` GET
 
 **Steps:**
 1. Call `fetchHerzliyaProductions(url, ...credentials, workerName)`
 2. Create audit snapshot in `calendar_sync_snapshots/{runId}`
-3. For each production:
-   a. Read existing `global_productions/{id}`
-   b. Record before/after in snapshot entries
+3. For each production: read existing `global_productions/{id}`, record before/after in snapshot
 4. Write merged productions via `toGlobalProduction()` + `mergeGlobalProduction()` + `patchDocument`
-5. Update `user_calendar_sync/{uid}` with `lastSyncAt`, `lastSyncStatus`, `lastSyncCount`
+5. **Post-write cleanup** — single date-range scan of `global_productions` for the synced date window:
+   - **Vacation cleanup:** delete any doc whose name matches vacation regex and is NOT in the current sync batch
+   - **Slug-ID dedup:** for any non-numeric-ID doc whose name is a prefix-match of a freshly synced production (same date) → merge its crew into the numeric-ID entry via `mergeGlobalProduction`, then delete the slug doc
 6. Background: `syncContactsFromSavedProductions()`
 
-**Does NOT:** delete vacation entries, delete stale productions, update lastSyncAt for the UI's "last sync" display (that's in the week API).
+**Slug-ID dedup detail:** `nameSimilar(a, b)` returns true when one name starts-with the other and shortest is ≥3 chars. This catches "אסתטיקה" (old slug entry) vs "אסתטיקה 360" (new herzliyaId entry). Crew from the old entry is merged into the new one before deletion so no data is lost.
 
 **Fallback:** If error → patch `lastSyncStatus: 'error'` and propagate.
 
@@ -208,7 +210,7 @@ Files: `src/app/productions/page.tsx` handleReload, `src/app/api/calendar/resync
 
 **Fallback:** If resync fails, continues to step 5-7 (shows old data).
 
-**Does NOT:** delete vacation entries or stale productions (only rebuild does).
+**Cleanup included:** resync now deletes vacation entries and slug-ID duplicates for the synced date range (same as rebuild). The only thing resync does NOT do is delete productions that belong to OTHER users and are no longer in Herzliya.
 
 ---
 
@@ -304,8 +306,8 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Duplicate production in UI | Two different IDs in global_productions (herzliyaId vs generateProductionId) | nameToId lookup in enrichment loop failed; fix name normalization |
-| Vacation entry persists after resync | resync doesn't delete; only rebuild does | Run admin rebuild OR add cleanup to syncHerzliyaUrl |
+| Duplicate production in UI | Two different IDs in global_productions (herzliyaId vs generateProductionId) | syncHerzliyaUrl now runs name-similarity scan after write and merges+deletes slug entries |
+| Vacation entry persists after resync | Fixed: syncHerzliyaUrl now runs Firestore cleanup for the synced date range | If still visible, run admin rebuild (covers all users' date ranges) |
 | User appears in wrong production | Partial name match too loose | `isProductionAssignedToUser`: only partial-match when user's target is single-word |
 | Production has only 1 crew member | No ShowCrew session → workerName only | Get valid session for that user's sendwa URL |
 | "הפקה" generic name overwrites real name | `mergeGlobalProduction` name logic | Fixed: preserve non-generic name over "הפקה" |
@@ -330,10 +332,10 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 ## 19. Safe Editing Rules
 
 1. **Never change ID assignment logic** without verifying it produces `String(herzliyaId)` — any deviation creates duplicates.
-2. **Always add vacation filter** (`/^(חופש|ביטול|מחלה|שמירה|היעדרות)/i`) to ALL new parsing code paths.
+2. **Always add vacation filter** (`/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`) to ALL new parsing code paths. Use the broad pattern — `/^.../` misses role-prefixed names like "צלם - חופש עח שישי".
 3. **mergeGlobalProduction is additive** — it only adds crew, never removes. To fix bad data, run rebuild (which replaces).
 4. **deduplicateProductionsByIdentity** relies on times matching within 30min. Don't change roundTime30 rounding without testing all split-shift scenarios.
-5. **resync does NOT clean up** vacation entries or stale productions. If cleanup needed → rebuild.
+5. **resync now cleans up** vacation entries and slug-ID duplicates for the synced date range. For cross-user stale data (other users' productions no longer in Herzliya) → need admin rebuild.
 6. **personalEventIds gate** must be maintained when modifying the event-based path. Without it, workerName fallback spreads user to all dept productions.
 7. **crew_phones and crew_shadow_keys** must be flat arrays (for Firestore ARRAY_CONTAINS). Never store as nested objects.
 8. **ID consistency test**: after any change to fetchHerzliyaProductions, verify that the same Herzliya event produces identical IDs when fetched by two different users.
