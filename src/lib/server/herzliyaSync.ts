@@ -14,7 +14,7 @@ import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
 import { normalizePhone } from '@/lib/crewNormalization';
 import { getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
-import { getLinkedProductionIdentity, normalizePhoneForIdentity } from '@/lib/server/identityLink';
+import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
@@ -906,7 +906,10 @@ export async function syncHerzliyaUrl(
       try {
         const identity = await getLinkedProductionIdentity({ uid, phoneNumber: verifiedPhone ?? null } as Parameters<typeof getLinkedProductionIdentity>[0]);
         for (const p of identity.phones) {
-          const norm = normalizePhoneForIdentity(p);
+          // Use normalizePhone (crewNormalization) — produces "0XXXXXXXXX" (10-digit)
+          // which matches the format stored in crew_phones by toGlobalProduction.
+          // normalizePhoneForIdentity produces 9-digit without leading 0 — DOES NOT MATCH.
+          const norm = normalizePhone(p);
           if (norm) disownPhones.add(norm);
         }
       } catch { /* non-critical */ }
