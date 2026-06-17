@@ -13,10 +13,16 @@
 Herzliya (MagicXPA)          Firestore                     Frontend
 ────────────────────         ─────────────────────────     ─────────────────
 ShowEmp3 (personal)  ──┐     global_productions/{id}  ──→  productions page
-ShowFmp  (dept)      ──┼──→  user_calendar_sync/{uid}      widget
-ShowCrew (popup)     ──┘     productions/{uid}/weeks/…      admin panel
-sendwa.html (GUID)           calendar_sync_snapshots/
+ShowFmp/ShowEmp6     ──┼──→  user_calendar_sync/{uid}      widget
+  (dept, ,-Atrue)   ──┤     productions/{uid}/weeks/…      admin panel
+ShowCrew (popup)     ──┤     calendar_sync_snapshots/
+sendwa.html (GUID)   ──┘     scheduleRequests/          ←── paste message
+                              userSchedules/{uid}/weeks/
 ```
+
+**Two sync paths:**
+- **API path** (`herzliyaSync.ts`): triggered by save-sync-url / resync button / hourly cron
+- **GitHub Action path** (`functions/calendar-sync.cjs`): triggered by user pasting a message (creates `scheduleRequests` doc)
 
 ---
 
@@ -332,7 +338,51 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 
 ---
 
-## 17. Common Bugs & Root Causes
+## 17. GitHub Action Paste Flow
+Files: `.github/workflows/fetch-schedule.yml`, `functions/calendar-sync.cjs`, `scripts/fetch-schedules.js`
+
+**Trigger:** User pastes a WhatsApp message containing their Herzliya sendwa URL → frontend writes to `scheduleRequests/{docId}` with `status: 'pending'`. GitHub Action runs every 5 min and picks up pending docs.
+
+**Key difference from API path:** Runs in GitHub Actions (Node.js + Puppeteer with real Chromium). The API path uses server-side HTML parsing with no browser. This path does TRUE browser automation.
+
+**Steps in `fetchSchedule(browser, url)`:**
+
+1. Open Puppeteer page → navigate to sendwa URL → waits for calendar cells
+2. Extract schedule from **personal page** (ShowEmp3): `schedule.productions[]`
+   - Each event: `herzliyaId`, `name`, `date`, `startTime`, `endTime`, `crew[]`, `isCurrentUserShift`
+3. Load **department page** (same URL, prgname → ShowEmp6, append `,-Atrue`):
+   - Extracts ALL dept events including `herzliyaId` from onclick attrs
+   - Enriches personal productions with dept crew (existing behavior)
+4. **NEW — Full department popup fetch**: for EACH dept event with `herzliyaId`:
+   - Calls `POPUP_EVAL_FN` via `departmentContext.evaluate()` → opens `openmd2(id)` popup
+   - Extracts crew table with phones
+   - Stores in `schedule.allDepartmentProductions[]`
+5. Personal popup fetch: for each personal production, opens popup via `context.evaluate(POPUP_EVAL_FN, herzliyaId)` (ShowEmp3 page)
+
+**`POPUP_EVAL_FN`** (module-level const, line 288):
+Browser-side async function that calls `openmd2(hId)`, waits for crew table popup, snapshots all table rows. Returns `{ tables[], studio, title, invalid, reason }`. If `openmd2` is not defined → returns `{ reason: 'openmd2_missing' }` (graceful fallback).
+
+**`saveSchedule(schedule, userId, workerName)`:**
+1. Saves personal productions to `productions/{uid}/weeks/{weekId}/productions`
+2. Saves personal productions to `global_productions` with `{merge: true}`
+3. **NEW** — saves `schedule.allDepartmentProductions` to `global_productions`:
+   - Skips productions already saved in step 2 (same prodId)
+   - If crew has phone numbers → `batch.set(ref, data)` **REPLACE** (removes stale crew)
+   - If no phones → `batch.set(ref, data, {merge: true})` **MERGE** (preserves other users' data)
+   - Vacation entries (DEPT_VACATION_RE) skipped
+
+**ShowEmp6 herzliyaId availability:**
+The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If ShowEmp6 doesn't expose them (`herzliyaId = 0`), popup fetch is skipped for that event — it's saved with BR-parsed crew only (no phones, MERGE semantics). The personal productions are unaffected either way.
+
+**Consequences of paste:** 
+- ALL ~34 dept productions written to global_productions (not just the 5 personal ones)
+- If ShowCrew session is alive: full crew + phones for all → REPLACE semantics
+- If session expired: names only from BR parsing → MERGE semantics
+- Production IDs: `String(herzliyaId)` if available, else `createVisibleProductionId(name, date, studio, startTime)`
+
+---
+
+## 18. Common Bugs & Root Causes (was 17)
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
@@ -348,7 +398,7 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 
 ---
 
-## 18. Button → Action Map
+## 19. Button → Action Map
 
 | Button | Location | What it calls | What it does |
 |--------|----------|---------------|--------------|
@@ -360,7 +410,7 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 
 ---
 
-## 19. Safe Editing Rules
+## 20. Safe Editing Rules
 
 1. **Never change ID assignment logic** without verifying it produces `String(herzliyaId)` — any deviation creates duplicates.
 2. **Always add vacation filter** (`/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`) to ALL new parsing code paths. Use the broad pattern — `/^.../` misses role-prefixed names like "צלם - חופש עח שישי".
