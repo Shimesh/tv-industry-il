@@ -589,6 +589,46 @@ export async function fetchHerzliyaProductions(
 
     debugLines.push(`popupOk:${popupOk} popupFail:${popupFail}`);
 
+    // Auto-login retry: if ALL ShowCrew calls failed and stored credentials exist,
+    // re-authenticate and retry — covers the common case of an expired session cookie.
+    if (popupOk === 0 && popupFail > 0 && herzliyaUser && herzliyaPass) {
+      try {
+        const autoLoginBase = (() => { try { return new URL(effectivePopupBaseUrl).origin; } catch { return ''; } })();
+        if (autoLoginBase) {
+          const newCookie = await herzliyaLogin(autoLoginBase, herzliyaUser, herzliyaPass, debugLines);
+          if (newCookie) {
+            debugLines.push(`autoLogin:ok,retryingCrew`);
+            const retryOpts: RequestInit = {
+              headers: {
+                ...BASE_HEADERS,
+                'X-Requested-With': 'XMLHttpRequest',
+                Accept: '*/*',
+                Cookie: newCookie,
+                Referer: popupReferer,
+              },
+              // @ts-expect-error - Node.js 20
+              rejectUnauthorized: false,
+            };
+            await Promise.allSettled(
+              uniqueIds.map(async (id) => {
+                if (popupCache[id]) return; // already succeeded in first round
+                const retryUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
+                const res = await fetch(retryUrl, { ...retryOpts, signal: AbortSignal.timeout(12000) }).catch(() => null);
+                if (res?.ok) {
+                  const html = await res.text();
+                  if (html.includes('<table') || html.includes('<TABLE')) {
+                    popupCache[id] = html;
+                    popupOk++;
+                  }
+                }
+              })
+            );
+            debugLines.push(`autoLogin-retry:ok=${popupOk}`);
+          }
+        }
+      } catch (e) { debugLines.push(`autoLogin-retry-err:${String(e).slice(0, 60)}`); }
+    }
+
     // Enrich crew for productions that came from parseScheduleHTML (real names, no ShowCrew crew yet)
     // popupCache is populated for ALL events — use it to add crew to ANY parsed production with herzliyaId
     if (Object.keys(popupCache).length > 0) {
