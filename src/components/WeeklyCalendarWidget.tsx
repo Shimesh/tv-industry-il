@@ -158,7 +158,53 @@ function deduplicateByIdentity(productions: Production[]): Production[] {
       });
     }
   }
-  return [...Array.from(byStart.values()), ...noStart];
+  const pass2 = [...Array.from(byStart.values()), ...noStart];
+
+  // Pass 3: merge "(לוז לא סופי)" draft entries with confirmed counterparts (same canonName+date)
+  const DRAFT_RE = /\s*\(לוז לא סופי\)/g;
+  const nonDraftByKey = new Map<string, Production>();
+  const draftEntries: Production[] = [];
+  for (const p of pass2) {
+    if (/\(לוז לא סופי\)/.test(p.name || '')) {
+      draftEntries.push(p);
+    } else {
+      const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+      nonDraftByKey.set(k, p);
+    }
+  }
+  if (draftEntries.length === 0) return pass2;
+
+  const absorbedDraftIds = new Set<string>();
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    const nonDraft = nonDraftByKey.get(k);
+    absorbedDraftIds.add(draft.id || '');
+    if (nonDraft) {
+      nonDraftByKey.set(k, {
+        ...nonDraft,
+        studio: nonDraft.studio || draft.studio,
+        crew: deduplicateCrewEntries([...(nonDraft.crew ?? []), ...(draft.crew ?? [])]),
+        isCurrentUserShift: nonDraft.isCurrentUserShift || draft.isCurrentUserShift,
+      });
+    } else {
+      nonDraftByKey.set(k, { ...draft, name: (draft.name || '').replace(DRAFT_RE, '').trim() });
+    }
+  }
+
+  const pass3: Production[] = [];
+  for (const p of pass2) {
+    if (absorbedDraftIds.has(p.id || '')) continue;
+    const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+    pass3.push(nonDraftByKey.get(k) || p);
+  }
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    if (!pass2.some((p) => !absorbedDraftIds.has(p.id || '') && `${canonicalProductionName(p.name || '')}::${p.date || ''}` === k)) {
+      const stripped = nonDraftByKey.get(k);
+      if (stripped) pass3.push(stripped);
+    }
+  }
+  return pass3;
 }
 
 function getMyRole(production: Production, displayName: string, phone: string): string {
@@ -216,7 +262,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
 
         <div className="max-h-[50vh] overflow-y-auto divide-y" style={{ borderColor: 'var(--theme-border)' }}>
           {productions.map((production) => {
-            const mine = isMyProduction(production, displayName, phone);
+            const mine = production.isCurrentUserShift;
             const myRole = mine ? getMyRole(production, displayName, phone) : '';
             return (
               <div key={production.id} className="px-4 py-3" style={mine ? { background: 'color-mix(in srgb, var(--theme-warning) 12%, transparent)' } : undefined}>
@@ -395,7 +441,20 @@ export default function WeeklyCalendarWidget() {
       const afterGlobal = mergeProductions(personalProds, globalProds, curDisplayName, curPhone);
       const afterPhone = mergeProductions(afterGlobal, myPhoneProds, curDisplayName, curPhone);
       const afterProfile = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
-      const merged = deduplicateByIdentity(afterProfile);
+
+      // Authoritatively determine "my shift" using only confirmed sources (personal schedule,
+      // phone match, profile match). Name-only matching against global crew_list is unreliable —
+      // stale Firestore entries (from old sync bugs) cause false positives.
+      const confirmedIds = new Set([
+        ...personalProds.map((p) => p.id),
+        ...myPhoneProds.map((p) => p.id),
+        ...myProfileProds.map((p) => p.id),
+      ].filter(Boolean) as string[]);
+
+      const merged = deduplicateByIdentity(afterProfile).map((p) => ({
+        ...p,
+        isCurrentUserShift: confirmedIds.has(p.id ?? ''),
+      }));
 
       setProductions(merged);
       if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
@@ -404,12 +463,7 @@ export default function WeeklyCalendarWidget() {
       saveToCache(weekId, merged);
 
       setMyProductionDates(
-        new Set(
-          merged
-            .filter((p) => isMyProduction(p, curDisplayName, curPhone))
-            .map((p) => p.date)
-            .filter(Boolean),
-        ),
+        new Set(merged.filter((p) => p.isCurrentUserShift).map((p) => p.date).filter(Boolean)),
       );
     };
 
@@ -428,6 +482,7 @@ export default function WeeklyCalendarWidget() {
   const byDate = useMemo(() => {
     return (productions ?? []).reduce<Record<string, Production[]>>((acc, production) => {
       if (!production.date) return acc;
+      if (/^טכנאי\s+תורן/i.test(production.name || '')) return acc;
       if (!acc[production.date]) acc[production.date] = [];
       acc[production.date].push(production);
       return acc;
@@ -546,8 +601,8 @@ export default function WeeklyCalendarWidget() {
             const dayProds = byDate[dateStr] ?? [];
             const isMyDay = myShiftDays.has(dateStr);
             const isPast = mounted && dateStr < todayStr;
-            const myProdsToday = dayProds.filter((production) => isMyProduction(production, displayName, phone));
-            const otherProdsToday = dayProds.filter((production) => !isMyProduction(production, displayName, phone));
+            const myProdsToday = dayProds.filter((production) => production.isCurrentUserShift);
+            const otherProdsToday = dayProds.filter((production) => !production.isCurrentUserShift);
 
             return (
               <button

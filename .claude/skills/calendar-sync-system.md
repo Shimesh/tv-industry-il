@@ -103,13 +103,15 @@ id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId
 
 ---
 
-## 5. Vacation Filter — All Locations
+## 5. Vacation / Duty-Role Filter — All Locations
 
-Pattern: `/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`
+Pattern: `/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות|טכנאי\s+תורן)/i`
 
-Broad pattern: catches vacation keyword at start OR after a separator such as " - " (e.g. "צלם - חופש עח שישי"). Previously used `/^.../` which missed role-prefixed names.
+Broad pattern: catches the keyword at start OR after a separator such as " - " (e.g. "צלם - חופש עח שישי"). Previously used `/^.../` which missed role-prefixed names.
 
-| # | File | Line | Path |
+**"טכנאי תורן"** is a duty-role entry that appears in the department schedule but is NOT a production. It must be excluded at every filter point:
+
+| # | File | Line | What is filtered |
 |---|------|------|------|
 | 1 | herzliyaSync.ts | ~631 | Event-based path (Path B) |
 | 2 | productionScheduleParser.ts | ~728 | parseManualText (Path C) |
@@ -117,6 +119,9 @@ Broad pattern: catches vacation keyword at start OR after a separator such as " 
 | 4 | productionScheduleParser.ts | ~901 | parseHerzliyaHTMLServer strategy 2 (Path A fallback) |
 | 5 | rebuild/route.ts | ~170 | Safety net before writing to freshProductionMap |
 | 6 | rebuild/route.ts | ~250 | Cleanup: deletes existing vacation entries from global_productions by date range |
+| 7 | calendar-sync.cjs `DEPT_VACATION_RE` | ~800 | GitHub Action dept loop — blocks "טכנאי תורן" from being written to global_productions |
+| 8 | productions/page.tsx `visibleProductions` | ~1442 | Client-side: `/^טכנאי\s+תורן/i` filter before render |
+| 9 | WeeklyCalendarWidget.tsx `byDate` | ~428 | Widget client-side: same regex before grouping by day |
 
 **Resync also cleans up:** `syncHerzliyaUrl` now runs a date-range scan after writing and deletes any vacation-named entries in `global_productions` that are not in the current sync batch (same logic as rebuild Step 5).
 
@@ -279,7 +284,7 @@ Merges TWO GlobalProductionDocs (existing + incoming):
 ## 13. `deduplicateProductionsByIdentity` (productions page) + `deduplicateByIdentity` (widget)
 Files: `src/app/productions/page.tsx` lines 174–, `src/components/WeeklyCalendarWidget.tsx` lines 106–
 
-**Both functions use the same two-pass logic. They are NOT shared — each file has its own copy. Any change to dedup logic must be applied to BOTH.**
+**Both functions use the same three-pass logic. They are NOT shared — each file has its own copy. Any change to dedup logic must be applied to BOTH.**
 
 ### Pass 1 — time-based key
 Key: `canonicalProductionName(name) :: date :: sorted(roundTime30(startTime), roundTime30(endTime))`
@@ -296,9 +301,17 @@ Key: `canonicalProductionName(name) :: date :: roundTime30(startTime)`
 - Takes the LATER endTime and unions crew from both entries
 - Productions with different start times are never merged by Pass 2
 
+### Pass 3 — draft deduplication `(לוז לא סופי)`
+Key: `canonicalProductionName(name) :: date` (ignoring time entirely)
+- Merges a `(לוז לא סופי)` draft entry into its confirmed counterpart when canonName+date match (times often differ between draft and final schedule)
+- If a confirmed counterpart exists: crew is merged into it, draft name/times discarded
+- If NO confirmed counterpart: draft entry is kept but the `(לוז לא סופי)` qualifier is stripped from the display name
+- Uses `DRAFT_RE = /\s*\(לוז לא סופי\)/g`
+
 **Safe editing rules for dedup:**
 - Never remove Pass 1 — it protects split-shift shows
 - Never remove Pass 2 — it fixes slug-vs-numeric-ID duplicates
+- Never remove Pass 3 — it prevents duplicate cards for "אסנהיים" + "אסנהיים (לוז לא סופי)"
 - Always edit BOTH files when changing dedup logic
 
 ---
@@ -369,7 +382,7 @@ Browser-side async function that calls `openmd2(hId)`, waits for crew table popu
    - Skips productions already saved in step 2 (same prodId)
    - If crew has phone numbers → `batch.set(ref, data)` **REPLACE** (removes stale crew)
    - If no phones → `batch.set(ref, data, {merge: true})` **MERGE** (preserves other users' data)
-   - Vacation entries (DEPT_VACATION_RE) skipped
+   - Vacation entries (DEPT_VACATION_RE) skipped — pattern includes `טכנאי\s+תורן` so duty-role entries are never written
 
 **ShowEmp6 herzliyaId availability:**
 The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If ShowEmp6 doesn't expose them (`herzliyaId = 0`), popup fetch is skipped for that event — it's saved with BR-parsed crew only (no phones, MERGE semantics). The personal productions are unaffected either way.
@@ -399,6 +412,10 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | Progress banner hidden during Action wait | `{fetchProgress && loading && ...}` — `setLoading(false)` is called before `submitScheduleRequest` in URL path → banner always hidden | Fixed (v2.8.143): removed `loading &&` guard |
 | Pasted text disappears from textarea | `handlePaste` only called `setText()` inside the `if (info.url \|\| info.weekStart)` block → controlled component reverted to empty | Fixed (v2.8.143): `setText(pastedText)` called unconditionally; detection card shown when name found even without URL |
 | No warning when pasted message has no URL | Detection card didn't appear at all if no URL/dates | Fixed (v2.8.143): show card when worker name detected; display amber warning + disable submit button |
+| "אסנהיים" + "אסנהיים (לוז לא סופי)" appear as two separate cards | Two Firestore docs with same canonName+date but different startTimes (draft uses approximate times) → passes 1 and 2 don't catch this | Fixed (v2.8.144): Pass 3 in deduplicateProductionsByIdentity and deduplicateByIdentity merges draft into confirmed counterpart, or strips qualifier if no counterpart |
+| "טכנאי תורן" appears as a production card | Duty-role entry from dept schedule written to global_productions; no client filter | Fixed (v2.8.144): DEPT_VACATION_RE in calendar-sync.cjs now blocks it server-side; visibleProductions and byDate filter it client-side |
+| User still appears in מונדיאל (or other stale production) | global_productions not updated after crew was wrongly assigned; MERGE semantics preserved stale data | Fixed (v2.8.144): personal batch in calendar-sync.cjs now uses REPLACE (not MERGE) when crew has phone numbers — clears stale entries on next paste |
+| Widget shows stale/wrong productions after calendar page was updated | WeeklyCalendarWidget.tsx had only 2-pass dedup and no טכנאי תורן filter | Fixed (v2.8.144): widget now has Pass 3 draft-merge and byDate exclusion for טכנאי תורן |
 
 ---
 
