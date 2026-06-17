@@ -255,15 +255,30 @@ Merges TWO GlobalProductionDocs (existing + incoming):
 
 ---
 
-## 13. `deduplicateProductionsByIdentity` (client-side)
-File: `src/app/productions/page.tsx` lines 174–205
+## 13. `deduplicateProductionsByIdentity` (productions page) + `deduplicateByIdentity` (widget)
+Files: `src/app/productions/page.tsx` lines 174–, `src/components/WeeklyCalendarWidget.tsx` lines 106–
 
-**Key:** `canonicalProductionName(name) :: date :: sorted(roundTime30(startTime), roundTime30(endTime))`
+**Both functions use the same two-pass logic. They are NOT shared — each file has its own copy. Any change to dedup logic must be applied to BOTH.**
+
+### Pass 1 — time-based key
+Key: `canonicalProductionName(name) :: date :: sorted(roundTime30(startTime), roundTime30(endTime))`
 - Strips draft qualifiers from name
 - Rounds times to 30-min slots to absorb minor differences
 - Keeps entry with MORE crew, merges all crew together
+- Intentionally keeps different-shift shows separate (19:00-25:00 vs 25:00-15:00)
 
-**Fails when:** Two entries have meaningfully different times (e.g. 16:00-25:00 vs 15:00-23:00) for the same production. Both remain visible. This is intentional for split-shift shows.
+### Pass 2 — startTime-only key (catches same-production duplicate IDs)
+Key: `canonicalProductionName(name) :: date :: roundTime30(startTime)`
+- Merges two entries that share name+date+startTime but have different endTimes
+- **Root cause it fixes:** same production in Firestore with two IDs (slug-ID "אסתטיקה" and numeric-ID "אסתטיקה 360") having slightly different recorded endTimes (17:30 vs 19:30) → Pass 1 doesn't merge them → Pass 2 does
+- Studio guard: only merges when studios are compatible (same or one is empty)
+- Takes the LATER endTime and unions crew from both entries
+- Productions with different start times are never merged by Pass 2
+
+**Safe editing rules for dedup:**
+- Never remove Pass 1 — it protects split-shift shows
+- Never remove Pass 2 — it fixes slug-vs-numeric-ID duplicates
+- Always edit BOTH files when changing dedup logic
 
 ---
 
