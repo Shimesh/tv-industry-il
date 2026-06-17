@@ -156,8 +156,12 @@ function isProductionAssignedToUser(production: Production, names: string[]): bo
       if (crewMember.name === name) return true;
       const crewParts = crewMember.name.trim().split(/\s+/);
       const nameParts = name.trim().split(/\s+/);
+      // Only partial-match when the USER's target name is a single word (e.g. "ירון").
+      // A single-word crew entry (e.g. "ירון" in ShowCrew) must NOT match a full user name
+      // like "ירון אורבך" — that would cause false positives when other people named "ירון"
+      // work on the same production.
       return (
-        (crewParts.length === 1 || nameParts.length === 1) &&
+        nameParts.length === 1 &&
         crewParts[0] === nameParts[0] &&
         crewParts[0].length >= 2
       );
@@ -588,9 +592,21 @@ function ProductionsContent() {
       const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
       const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
       const afterProfile = mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
+
+      // Productions from phone/profile queries are definitively this user's — force isCurrentUserShift.
+      // Without this, a production added first via globalRes (name didn't match → isCurrentUserShift=false)
+      // would keep isCurrentUserShift=false even after phoneRes confirms the phone match.
+      const confirmedIds = new Set([
+        ...(phoneRes.productions ?? []).map(p => p.id),
+        ...(profileRes.productions ?? []).map(p => p.id),
+      ]);
+      const withConfirmed = afterProfile.map(p =>
+        confirmedIds.has(p.id) ? { ...p, isCurrentUserShift: true } : p
+      );
+
       // Final dedup: same event can arrive from personal path AND from Herzliya global sync
       // with different IDs — merge them by (name, date, startTime) to eliminate visual duplicates
-      return deduplicateProductionsByIdentity(afterProfile);
+      return deduplicateProductionsByIdentity(withConfirmed);
     } catch (error) {
       console.error('[loadExistingWeek] Error:', error);
       return [];
