@@ -1368,12 +1368,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       };
     });
     const globalHerzliyaId = prod.herzliyaId || existingGlobal.herzliyaId;
-    // When the fresh ShowCrew popup returned real crew with phones, write ONLY that fresh crew
-    // (crewList, not mergedCrewList). mergedCrewList merges existing Firestore crew with fresh —
-    // if the existing crew had a stale entry (e.g. user was once assigned then removed) the merge
-    // would preserve it even under REPLACE mode. Using crewList directly evicts stale entries.
-    const freshHasPhones = crewList.some((m) => m.normalizedPhone);
-    const finalCrewList = freshHasPhones ? crewList : mergedCrewList;
+    // Always merge fresh crew into existing accumulated crew from all users' syncs.
+    // The disown step (below) removes stale personal entries — no REPLACE needed here.
+    const finalCrewList = mergedCrewList;
     const globalFields = {
       id: prodId,
       name: prod.name || existingGlobal.name || '',
@@ -1395,11 +1392,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       sourceWeekPath: `${userProductionsRoot}/${weekId}`,
       lastSyncSnapshotId: snapshot.runId,
     };
-    if (freshHasPhones) {
-      batch.set(globalRef, globalFields); // REPLACE: fresh popup crew is source of truth
-    } else {
-      batch.set(globalRef, globalFields, { merge: true }); // MERGE: preserve other sources
-    }
+    batch.set(globalRef, globalFields, { merge: true }); // MERGE: accumulate crew across all users' syncs
   }
 
   for (const [prodId, existingPersonal] of snapshot.existingPersonalById) {
@@ -1511,11 +1504,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         lastUpdatedBy: userId,
         sourceWeekPath: `${userProductionsRoot}/${weekId}`,
       };
-      if (hasPhones) {
-        deptBatch.set(globalRef, globalData); // REPLACE: fresh popup crew removes stale entries
-      } else {
-        deptBatch.set(globalRef, globalData, { merge: true }); // MERGE: preserve other sources
-      }
+      deptBatch.set(globalRef, globalData, { merge: true }); // MERGE: accumulate crew across syncs
       deptBatchCount++;
       if (deptBatchCount >= 400) await commitDeptBatch();
     }
@@ -1588,6 +1577,51 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       if (disownCount > 0) {
         await disownBatch.commit();
         console.log(`Disowned user from ${disownCount} stale global_productions.`);
+      }
+    }
+
+    // Name-based disown: catch entries where the user appears by name only (no phone in crew_phones).
+    // The profileRes API query does name matching in crew_list — stale name entries cause productions
+    // to appear highlighted even after phone disown.
+    const workerNormName = normalizeName(schedule.workerName || requestedWorkerName || '');
+    if (workerNormName) {
+      const weekDocs = await db.collection('global_productions')
+        .where('date', '>=', schedule.weekStart)
+        .where('date', '<=', schedule.weekEnd)
+        .get();
+
+      const myProdIdSetForName = new Set(myProductionIds);
+      const nameBatch = db.batch();
+      let nameDisownCount = 0;
+
+      for (const doc of weekDocs.docs) {
+        if (myProdIdSetForName.has(doc.id)) continue;
+        const data = doc.data();
+        const crewList = data.crew_list || [];
+        const hasNameOnly = crewList.some(
+          (m) => normalizeName(m.name || '') === workerNormName && !m.normalizedPhone,
+        );
+        if (!hasNameOnly) continue;
+
+        const updatedCrewList = crewList.filter(
+          (m) => !(normalizeName(m.name || '') === workerNormName && !m.normalizedPhone),
+        );
+        const updatedShadowKeys = (data.crew_shadow_keys || []).filter(
+          (k) => !k.startsWith(`${workerNormName}::`),
+        );
+        nameBatch.update(doc.ref, {
+          crew_list: updatedCrewList,
+          crew_shadow_keys: updatedShadowKeys,
+          lastUpdatedAt: new Date().toISOString(),
+          lastUpdatedBy: `disown-name:${userId}`,
+        });
+        nameDisownCount++;
+        console.log(`Disowning (name-only) ${userId} from stale production: ${doc.id} (${data.name || '?'})`);
+      }
+
+      if (nameDisownCount > 0) {
+        await nameBatch.commit();
+        console.log(`Name-based disown: removed from ${nameDisownCount} stale global_productions.`);
       }
     }
   } catch (disownError) {

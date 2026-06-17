@@ -841,6 +841,37 @@ export async function syncHerzliyaUrl(
           return;
         }
 
+        // Case 3: name-based disown — remove this worker's name from stale productions.
+        // The profileRes API query matches by name in crew_list; if the user's name remains
+        // (even without a phone) it causes the production to appear as their shift.
+        // Must run before Case 2's numeric-ID early-return so it covers all IDs.
+        if (workerName) {
+          const workerNorm = workerName.trim().toLowerCase().replace(/\s+/g, ' ');
+          const crewList = doc.crew_list ?? [];
+          const hasWorkerByName = crewList.some(
+            (m) => (m as unknown as { name?: string }).name?.trim().toLowerCase().replace(/\s+/g, ' ') === workerNorm,
+          );
+          if (hasWorkerByName) {
+            const updatedCrewList = crewList.filter(
+              (m) => (m as unknown as { name?: string }).name?.trim().toLowerCase().replace(/\s+/g, ' ') !== workerNorm,
+            );
+            const updatedShadowKeys = (doc.crew_shadow_keys ?? []).filter(
+              (k) => !k.startsWith(`${workerNorm}::`),
+            );
+            const updatedPhones = (doc.crew_phones ?? []).filter(
+              (p) => !updatedCrewList.some((m) => (m as unknown as { normalizedPhone?: string }).normalizedPhone === p),
+            );
+            console.log(`[herzliyaSync] disown-name ${uid} from ${docId} (${doc.name})`);
+            await patchDocument(`global_productions/${docId}`, {
+              crew_list: updatedCrewList,
+              crew_phones: updatedPhones,
+              crew_shadow_keys: updatedShadowKeys,
+              lastUpdatedAt: new Date().toISOString(),
+              lastUpdatedBy: `disown-name:${uid}`,
+            } as unknown as Record<string, string>).catch(() => {});
+          }
+        }
+
         // Case 2: slug-ID entry that duplicates a freshly synced numeric-ID entry.
         // Only slug IDs contain hyphens; numeric IDs are all digits.
         if (/^\d+$/.test(docId)) return; // numeric ID, not a slug duplicate

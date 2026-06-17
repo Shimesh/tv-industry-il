@@ -442,13 +442,12 @@ export default function WeeklyCalendarWidget() {
       const afterPhone = mergeProductions(afterGlobal, myPhoneProds, curDisplayName, curPhone);
       const afterProfile = mergeProductions(afterPhone, myProfileProds, curDisplayName, curPhone);
 
-      // Authoritatively determine "my shift" using only confirmed sources (personal schedule,
-      // phone match, profile match). Name-only matching against global crew_list is unreliable —
-      // stale Firestore entries (from old sync bugs) cause false positives.
+      // Authoritatively determine "my shift" using only phone-verified or personal-schedule sources.
+      // profileRes (myProfileProds) uses name-based matching which causes false positives: a stale
+      // crew_list entry with the user's name highlights productions they no longer work on.
       const confirmedIds = new Set([
         ...personalProds.map((p) => p.id),
         ...myPhoneProds.map((p) => p.id),
-        ...myProfileProds.map((p) => p.id),
       ].filter(Boolean) as string[]);
 
       const merged = deduplicateByIdentity(afterProfile).map((p) => ({

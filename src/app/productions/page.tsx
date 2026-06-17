@@ -683,13 +683,13 @@ function ProductionsContent() {
       const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
       const afterProfile = mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
 
-      // Authoritatively set isCurrentUserShift: personal schedule + phone + profile = confirmed mine.
-      // Global week extras start with isCurrentUserShift=false (name-only matches are unreliable —
-      // stale Firestore crew entries cause false positives like appearing in productions not assigned to).
+      // Authoritatively set isCurrentUserShift: personal schedule + phone-confirmed global only.
+      // profileRes uses name-based matching which causes false positives: if the user's name is still
+      // in crew_list of a production they no longer work on (stale data), it gets highlighted as theirs.
+      // Only phone-verified (crew_phones query) or personal-Firestore productions are trusted as "mine".
       const confirmedIds = new Set([
         ...userProds.map(p => p.id),
         ...(phoneRes.productions ?? []).map(p => p.id),
-        ...(profileRes.productions ?? []).map(p => p.id),
       ].filter(Boolean));
       const withConfirmed = afterProfile.map(p =>
         confirmedIds.has(p.id ?? '') ? { ...p, isCurrentUserShift: true } : { ...p, isCurrentUserShift: false }
