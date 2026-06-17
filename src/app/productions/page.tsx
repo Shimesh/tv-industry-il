@@ -2294,7 +2294,7 @@ function ProductionsContent() {
       // Raw HTML from clipboard (Herzliya page Ctrl+A Ctrl+C)
       if (rawHtml) {
         if (url || rawHtmlHasHerzliyaUrl) {
-          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+          setFetchProgress({ step: 'connecting', message: 'שולח את לוח השידורים לעיבוד מלא ברקע...' });
           setLoading(false);
           const sourceText = manualText || rawHtml || url || '';
           await submitScheduleRequest(sourceText);
@@ -2302,7 +2302,7 @@ function ProductionsContent() {
         }
         if (isHerzliyaHTML(rawHtml)) {
           // Full Herzliya page HTML pasted without URL — parse directly
-          setFetchProgress({ step: 'parsing', message: 'מנתח לוח הרצליה...' });
+          setFetchProgress({ step: 'parsing', message: 'מנתח לוח השידורים...' });
           const herzliyaParsed = parseHerzliyaHTML(rawHtml);
           if (herzliyaParsed.productions.length > 0) {
             setFetchProgress({ step: 'done', message: `נמצאו ${herzliyaParsed.productions.length} הפקות` });
@@ -2315,7 +2315,7 @@ function ProductionsContent() {
       // Manual text input (no URL detected)
       if (manualText && !url) {
         if (isHerzliyaHTML(manualText) || manualTextHasUrl) {
-          setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+          setFetchProgress({ step: 'connecting', message: 'שולח את לוח השידורים לעיבוד מלא ברקע...' });
           setLoading(false);
           await submitScheduleRequest(manualText);
           return;
@@ -2402,14 +2402,14 @@ function ProductionsContent() {
       // many hsil.acc.co.il links (in form actions, hrefs) that would otherwise
       // trigger the Puppeteer path which cannot access the page from GitHub servers.
       if (isHerzliyaHTML(html)) {
-        setFetchProgress({ step: 'parsing', message: 'מנתח לוח הרצליה...' });
+        setFetchProgress({ step: 'parsing', message: 'מנתח לוח השידורים...' });
         const herzliyaParsed = parseHerzliyaHTML(html);
         if (herzliyaParsed.productions.length > 0) {
           setFetchProgress({ step: 'done', message: `נמצאו ${herzliyaParsed.productions.length} הפקות` });
           await processSchedule(herzliyaParsed);
           return;
         }
-        setStatusMessage('לא הצלחתי לחלץ הפקות מה-HTML. נסה ללחוץ Ctrl+A ו-Ctrl+C על דף הרצליה ולהדביק שוב.');
+        setStatusMessage('לא הצלחתי לחלץ הפקות מה-HTML. נסה ללחוץ Ctrl+A ו-Ctrl+C על דף השידורים ולהדביק שוב.');
         setFetchProgress({ step: 'error', message: 'לא נמצאו הפקות' });
         return;
       }
@@ -2417,7 +2417,7 @@ function ProductionsContent() {
       // Plain text with a Herzliya URL (WhatsApp message) — use Puppeteer via GitHub Action
       const hasHerzliyaUrl = /https?:\/\/[^\s"']*hsil\.acc\.co\.il[^\s"']*/i.test(html);
       if (hasHerzliyaUrl) {
-        setFetchProgress({ step: 'connecting', message: 'שולח את לוח הרצליה לעיבוד מלא ברקע...' });
+        setFetchProgress({ step: 'connecting', message: 'שולח את לוח השידורים לעיבוד מלא ברקע...' });
         setLoading(false);
         await submitScheduleRequest(html);
         return;
@@ -3052,7 +3052,7 @@ function ScheduleRequestStatus({
 }) {
   const steps = [
     { id: 1, text: 'ההודעה התקבלה', icon: '✅' },
-    { id: 2, text: 'מתחבר לשרת הרצליה...', icon: '🔗' },
+    { id: 2, text: 'מתחבר לשרת השידורים...', icon: '🔗' },
     { id: 3, text: 'קורא לוח שידורים', icon: '📋' },
     { id: 4, text: 'מעבד נתוני צוות', icon: '👥' },
     { id: 5, text: 'שומר ביומן', icon: '💾' },
@@ -3150,7 +3150,7 @@ function ManualFallback({ onSubmit, loading }: { onSubmit: (html: string) => voi
     }}>
       <div className="mb-3">
         <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--theme-text)' }}>
-          לא הצלחתי להתחבר לשרת הרצליה
+          לא הצלחתי להתחבר לשרת השידורים
         </h3>
         <div className="text-xs space-y-1" style={{ color: 'var(--theme-text-secondary)' }}>
           <p>אנא בצע את הצעדים הבאים:</p>

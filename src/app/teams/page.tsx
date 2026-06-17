@@ -419,7 +419,7 @@ function TeamsContent() {
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="לדוגמה: צוות הרצליה"
+                    placeholder="לדוגמה: צוות שידורים"
                     maxLength={50}
                     autoFocus
                     className="w-full px-4 py-3 rounded-xl text-sm text-[var(--theme-text)] placeholder-[var(--theme-text-secondary)] outline-none transition-all focus:ring-2 focus:ring-[var(--theme-accent)]/40"

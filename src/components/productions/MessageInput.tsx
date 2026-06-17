@@ -138,7 +138,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
 
   // Detected source label
   const detectedSource = detected?.rawHtml
-    ? '📋 זיהיתי לוח הרצליה מהלוח'
+    ? '📋 זיהיתי לוח השידורים מהלוח'
     : detected?.url
       ? 'זיהיתי הודעת לוח עבודה'
       : detected?.workerName
@@ -217,7 +217,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
             )}
             {detected.rawHtml && (
               <div className="flex items-center gap-2 text-xs px-2 py-1 rounded-lg bg-green-500/10 text-green-400">
-                <span>✨ זוהה HTML של לוח הרצליה - פרסינג מדויק</span>
+                <span>✨ זוהה HTML של לוח השידורים - פרסינג מדויק</span>
               </div>
             )}
           </div>

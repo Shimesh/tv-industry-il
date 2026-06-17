@@ -395,6 +395,10 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | Crew not merging across users | Production ID mismatch | Ensure herzliyaId assignment in enrichment loop covers all name formats |
 | phone-matched production not highlighted | `isCurrentUserShift` not set | `confirmedIds` post-merge step forces it true for phoneRes+profileRes |
 | User appears in all dept productions (ShowFmp) | workerName fallback ran for dept-only events | Fixed: `personalEventIds` gate prevents it |
+| Calendar didn't update after paste (user saw nothing) | `firestoreRestWrite` was fire-and-forget → `docId` stayed `''` → polling guard `if (!docId) return` skipped every tick → `applyLoadedProductions` never called | Fixed (v2.8.143): `firestoreRestWrite` is now `await`-ed before polling starts |
+| Progress banner hidden during Action wait | `{fetchProgress && loading && ...}` — `setLoading(false)` is called before `submitScheduleRequest` in URL path → banner always hidden | Fixed (v2.8.143): removed `loading &&` guard |
+| Pasted text disappears from textarea | `handlePaste` only called `setText()` inside the `if (info.url \|\| info.weekStart)` block → controlled component reverted to empty | Fixed (v2.8.143): `setText(pastedText)` called unconditionally; detection card shown when name found even without URL |
+| No warning when pasted message has no URL | Detection card didn't appear at all if no URL/dates | Fixed (v2.8.143): show card when worker name detected; display amber warning + disable submit button |
 
 ---
 
@@ -410,7 +414,18 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 
 ---
 
-## 20. Safe Editing Rules
+## 20. UI Text Policy
+
+**Do NOT write "הרצליה" in any user-facing UI string** — use neutral alternatives:
+- "לוח השידורים" instead of "לוח הרצליה"
+- "שרת השידורים" instead of "שרת הרצליה"
+- "לוח ההפקות" or "שידורים" as generic terms
+
+The word "הרצליה" may appear in code (variable names, regex patterns, comments, `isHerzliyaHTML`, `rawHtmlHasHerzliyaUrl`) — that is fine. It must NOT appear in `setFetchProgress`, `setStatusMessage`, button labels, or placeholder text in the productions, teams, or any other user-facing page.
+
+---
+
+## 21. Safe Editing Rules
 
 1. **Never change ID assignment logic** without verifying it produces `String(herzliyaId)` — any deviation creates duplicates.
 2. **Always add vacation filter** (`/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`) to ALL new parsing code paths. Use the broad pattern — `/^.../` misses role-prefixed names like "צלם - חופש עח שישי".
