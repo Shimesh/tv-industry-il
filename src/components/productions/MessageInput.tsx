@@ -79,13 +79,15 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
       return;
     }
 
-    // Normal text handling
+    // Normal text handling — always show the pasted text; detect info regardless
     if (pastedText.trim()) {
       const info = detectInfo(pastedText);
-      if (info.url || info.weekStart) {
+      setText(pastedText);
+      setError(null);
+      if (info.url || info.weekStart || info.workerName) {
         setDetected(info);
-        setText(pastedText);
-        setError(null);
+      } else {
+        setDetected(null);
       }
     }
   };
@@ -94,7 +96,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
     setText(value);
     if (value.trim().length > 10) {
       const info = detectInfo(value);
-      if (info.url || info.weekStart) {
+      if (info.url || info.weekStart || info.workerName) {
         setDetected(info);
         setError(null);
       } else {
@@ -139,7 +141,11 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
     ? '📋 זיהיתי לוח הרצליה מהלוח'
     : detected?.url
       ? 'זיהיתי הודעת לוח עבודה'
-      : 'זיהיתי תוכן לוח עבודה';
+      : detected?.workerName
+        ? `זיהיתי שם: ${detected.workerName}`
+        : 'זיהיתי תוכן לוח עבודה';
+
+  const hasNoUrl = detected && !detected.url && !detected.rawHtml;
 
   return (
     <div className="space-y-3">
@@ -216,6 +222,13 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
             )}
           </div>
 
+          {hasNoUrl && (
+            <div className="flex items-center gap-2 text-xs mb-3 p-2 rounded-lg bg-amber-500/10 text-amber-400">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>ההודעה לא מכילה לינק ללוח העבודה. כדי לטעון הפקות — הדבק הודעת WhatsApp עם לינק לרצליה.</span>
+            </div>
+          )}
+
           {existingWeekId && detected.weekStart && (
             <div className="flex items-center gap-2 text-xs mb-3 p-2 rounded-lg bg-amber-500/10 text-amber-400">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -226,7 +239,7 @@ export default function MessageInput({ onFetch, loading, existingWeekId, fetchPr
           <div className="flex gap-2">
             <button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || !!hasNoUrl}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50"
               style={{
                 background: 'linear-gradient(135deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 80%, #6366f1))',

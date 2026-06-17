@@ -1300,17 +1300,19 @@ function ProductionsContent() {
     try {
       const idToken = await user.getIdToken();
 
-      // Write scheduleRequests doc + trigger GitHub Action in background (legacy fallback path)
+      // Write scheduleRequests doc for GitHub Action to pick up
       let docId = '';
-      firestoreRestWrite('scheduleRequests', {
-        userId: user.uid,
-        workerName: extractedWorkerName,
-        url: urlMatch[0],
-        weekStart: normalizedDateLabels?.[0] || '',
-        weekEnd: normalizedDateLabels?.[1] || '',
-        status: 'pending',
-        createdAt: 'SERVER_TIMESTAMP',
-      }).then(id => { docId = id; }).catch(() => {});
+      try {
+        docId = await firestoreRestWrite('scheduleRequests', {
+          userId: user.uid,
+          workerName: extractedWorkerName,
+          url: urlMatch[0],
+          weekStart: normalizedDateLabels?.[0] || '',
+          weekEnd: normalizedDateLabels?.[1] || '',
+          status: 'pending',
+          createdAt: 'SERVER_TIMESTAMP',
+        });
+      } catch { /* will fall back to API-only path */ }
 
       fetch('/api/trigger-action', {
         method: 'POST',
@@ -2868,7 +2870,7 @@ function ProductionsContent() {
       )}
 
       {/* Fetch progress indicator */}
-      {fetchProgress && loading && (
+      {fetchProgress && (
         <div className="mb-4 px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{
           background: 'var(--theme-bg-secondary)',
           border: '1px solid var(--theme-border)',
