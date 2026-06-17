@@ -201,7 +201,38 @@ function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
       });
     }
   }
-  return Array.from(seen.values());
+
+  // Second pass: merge productions that share name+date+startTime but differ only in endTime.
+  // This catches the common case where the same production session has two Firestore entries
+  // with slightly different recorded end times (e.g. 17:30 vs 19:30 for "אסתטיקה 360").
+  // Productions with different start times are never merged here (different shifts stay separate).
+  const pass1 = Array.from(seen.values());
+  const byStart = new Map<string, Production>();
+  const noStart: Production[] = [];
+  for (const p of pass1) {
+    if (!p.date || !p.startTime) { noStart.push(p); continue; }
+    const sk = `${canonicalProductionName(p.name || '')}::${p.date}::${roundTime30(p.startTime)}`;
+    const ex = byStart.get(sk);
+    if (!ex) {
+      byStart.set(sk, p);
+    } else {
+      // Only merge when studios are compatible (same studio or one is empty)
+      const studioOk = !ex.studio || !p.studio || ex.studio === p.studio;
+      if (!studioOk) { byStart.set(sk + '::' + (p.studio || p.id), p); continue; }
+      const base = p.crew.length >= ex.crew.length ? p : ex;
+      const other = p.crew.length >= ex.crew.length ? ex : p;
+      // Keep the later end time (longer session is more accurate)
+      const laterEnd = (base.endTime || '') > (other.endTime || '') ? base.endTime : other.endTime;
+      byStart.set(sk, {
+        ...base,
+        studio: base.studio || other.studio,
+        endTime: laterEnd,
+        crew: deduplicateCrew([...base.crew, ...other.crew]),
+        isCurrentUserShift: base.isCurrentUserShift || other.isCurrentUserShift,
+      });
+    }
+  }
+  return [...Array.from(byStart.values()), ...noStart];
 }
 
 // Merge global productions into the user's own set; extras get isCurrentUserShift re-evaluated
