@@ -174,9 +174,24 @@ File: `src/app/api/admin/productions/rebuild/route.ts`
 - `rebuildFromPersonalSchedules(weekStart, weekEnd)` from Firestore
 - Unions crew from all users for same production ID
 
-**Step 3 — Write:**
-- PATCH all `freshProductionMap` entries to `global_productions/{id}`
+**Step 3 — Write (smart REPLACE/MERGE):**
+- For each entry in `freshProductionMap`:
+  - If **any crew member has a phone_number** (i.e., real ShowCrew data was fetched) → **REPLACE**: write `enriched` directly to Firestore. This removes stale crew entries (e.g., user incorrectly added by old workerName bug).
+  - If **no phone numbers** (all crew from workerName fallback, session expired) → **MERGE**: read existing doc from Firestore, call `mergeGlobalProduction(existing, enriched)`, write result. This preserves crew accumulated from other users.
 - Set `lastUpdatedAt=now`, `lastUpdatedBy='rebuild'`
+
+```typescript
+const hasShowCrewData = (enriched.crew_list ?? []).some(c =>
+  (c as { phone_number?: string }).phone_number?.trim()
+);
+let finalDoc: GlobalProductionDoc;
+if (hasShowCrewData) {
+  finalDoc = enriched; // REPLACE — removes stale entries
+} else {
+  const existingDoc = await getDocument<GlobalProductionDoc>(`global_productions/${id}`).catch(() => null);
+  finalDoc = existingDoc ? mergeGlobalProduction(existingDoc, enriched) : enriched; // MERGE
+}
+```
 
 **Step 4 — Delete generic "הפקה":**
 - Query `global_productions` where `name == 'הפקה'`
@@ -323,7 +338,8 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 |---------|-----------|-----|
 | Duplicate production in UI | Two different IDs in global_productions (herzliyaId vs generateProductionId) | syncHerzliyaUrl now runs name-similarity scan after write and merges+deletes slug entries |
 | Vacation entry persists after resync | Fixed: syncHerzliyaUrl now runs Firestore cleanup for the synced date range | If still visible, run admin rebuild (covers all users' date ranges) |
-| User appears in wrong production | Partial name match too loose | `isProductionAssignedToUser`: only partial-match when user's target is single-word |
+| User appears in wrong production (partial match) | Partial name match too loose | `isProductionAssignedToUser`: only partial-match when user's target is single-word |
+| User appears in wrong production (stale crew) | Old workerName bug (before personalEventIds gate) added user to dept-only productions; data persists via MERGE | Run admin rebuild — it will REPLACE crew if ShowCrew returns phone data, cleaning up the stale entry |
 | Production has only 1 crew member | No ShowCrew session → workerName only | Get valid session for that user's sendwa URL |
 | "הפקה" generic name overwrites real name | `mergeGlobalProduction` name logic | Fixed: preserve non-generic name over "הפקה" |
 | Crew not merging across users | Production ID mismatch | Ensure herzliyaId assignment in enrichment loop covers all name formats |
@@ -348,7 +364,7 @@ File: `src/app/api/cron/sync-calendar/route.ts`
 
 1. **Never change ID assignment logic** without verifying it produces `String(herzliyaId)` — any deviation creates duplicates.
 2. **Always add vacation filter** (`/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i`) to ALL new parsing code paths. Use the broad pattern — `/^.../` misses role-prefixed names like "צלם - חופש עח שישי".
-3. **mergeGlobalProduction is additive** — it only adds crew, never removes. To fix bad data, run rebuild (which replaces).
+3. **mergeGlobalProduction is additive** — it only adds crew, never removes. To fix bad data, run rebuild (which REPLACEs when real ShowCrew data is available, or MERGEs when only workerName fallback was used).
 4. **deduplicateProductionsByIdentity** relies on times matching within 30min. Don't change roundTime30 rounding without testing all split-shift scenarios.
 5. **resync now cleans up** vacation entries and slug-ID duplicates for the synced date range. For cross-user stale data (other users' productions no longer in Herzliya) → need admin rebuild.
 6. **personalEventIds gate** must be maintained when modifying the event-based path. Without it, workerName fallback spreads user to all dept productions.
