@@ -158,7 +158,53 @@ function deduplicateByIdentity(productions: Production[]): Production[] {
       });
     }
   }
-  return [...Array.from(byStart.values()), ...noStart];
+  const pass2 = [...Array.from(byStart.values()), ...noStart];
+
+  // Pass 3: merge "(לוז לא סופי)" draft entries with confirmed counterparts (same canonName+date)
+  const DRAFT_RE = /\s*\(לוז לא סופי\)/g;
+  const nonDraftByKey = new Map<string, Production>();
+  const draftEntries: Production[] = [];
+  for (const p of pass2) {
+    if (/\(לוז לא סופי\)/.test(p.name || '')) {
+      draftEntries.push(p);
+    } else {
+      const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+      nonDraftByKey.set(k, p);
+    }
+  }
+  if (draftEntries.length === 0) return pass2;
+
+  const absorbedDraftIds = new Set<string>();
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    const nonDraft = nonDraftByKey.get(k);
+    absorbedDraftIds.add(draft.id || '');
+    if (nonDraft) {
+      nonDraftByKey.set(k, {
+        ...nonDraft,
+        studio: nonDraft.studio || draft.studio,
+        crew: deduplicateCrewEntries([...(nonDraft.crew ?? []), ...(draft.crew ?? [])]),
+        isCurrentUserShift: nonDraft.isCurrentUserShift || draft.isCurrentUserShift,
+      });
+    } else {
+      nonDraftByKey.set(k, { ...draft, name: (draft.name || '').replace(DRAFT_RE, '').trim() });
+    }
+  }
+
+  const pass3: Production[] = [];
+  for (const p of pass2) {
+    if (absorbedDraftIds.has(p.id || '')) continue;
+    const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+    pass3.push(nonDraftByKey.get(k) || p);
+  }
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    if (!pass2.some((p) => !absorbedDraftIds.has(p.id || '') && `${canonicalProductionName(p.name || '')}::${p.date || ''}` === k)) {
+      const stripped = nonDraftByKey.get(k);
+      if (stripped) pass3.push(stripped);
+    }
+  }
+  return pass3;
 }
 
 function getMyRole(production: Production, displayName: string, phone: string): string {
@@ -428,6 +474,7 @@ export default function WeeklyCalendarWidget() {
   const byDate = useMemo(() => {
     return (productions ?? []).reduce<Record<string, Production[]>>((acc, production) => {
       if (!production.date) return acc;
+      if (/^טכנאי\s+תורן/i.test(production.name || '')) return acc;
       if (!acc[production.date]) acc[production.date] = [];
       acc[production.date].push(production);
       return acc;
