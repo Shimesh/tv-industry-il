@@ -483,6 +483,8 @@ export async function fetchHerzliyaProductions(
 
   if (effectivePersonalHtml.includes('openmd2')) {
     const allEventsByHtml = htmlsToScan.map(h => extractHerzliyaEventIds(h));
+    // Track which IDs come from the personal schedule — workerName fallback only applies to these
+    const personalEventIds = new Set(allEventsByHtml[0].map(e => e.herzliyaId));
     // Merge: dept events take precedence for production name (dept view has fuller names)
     const eventMap = new Map<number, { herzliyaId: number; name: string }>();
     for (const evList of allEventsByHtml) {
@@ -650,10 +652,11 @@ export async function fetchHerzliyaProductions(
           name: pc.name, role: pc.role, roleDetail: '', phone: pc.phone,
           startTime: pc.startTime, endTime: pc.endTime, isCurrentUser: false,
         }));
-        // If ShowCrew failed and we know the worker's name, add them as crew.
-        // The rebuild merges crew from all users — this ensures the syncing user
-        // appears on their own productions even without a popup session.
-        if (crew.length === 0 && workerName) {
+        // If ShowCrew failed and we know the worker's name, add them as crew —
+        // BUT only for productions that are in their personal schedule (ShowEmp3),
+        // not for dept-only events from ShowFmp. Otherwise every user would be
+        // incorrectly added to all productions in their department.
+        if (crew.length === 0 && workerName && personalEventIds.has(event.herzliyaId)) {
           crew.push({ name: workerName, role: rawRole, roleDetail: '', phone: '', startTime: '', endTime: '', isCurrentUser: true });
         }
         // Derive production start/end from crew shift times (Herzliya: endTime=shiftStart, startTime=shiftEnd)
