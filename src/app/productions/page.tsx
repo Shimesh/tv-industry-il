@@ -310,7 +310,9 @@ function mergeGlobalProductions(
     .filter((p) => p.id && !userIds.has(p.id))
     .map((p) => ({
       ...p,
-      isCurrentUserShift: isCrewMatch(p.crew ?? [], currentUserDisplayName),
+      // Don't name-match here — confirmedIds (phone/profile) below is the authoritative source.
+      // Name-only match causes stale Firestore entries (old workerName bugs) to be shown as "mine".
+      isCurrentUserShift: false,
     }));
   return [...enriched, ...extras];
 }
@@ -681,15 +683,16 @@ function ProductionsContent() {
       const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
       const afterProfile = mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
 
-      // Productions from phone/profile queries are definitively this user's — force isCurrentUserShift.
-      // Without this, a production added first via globalRes (name didn't match → isCurrentUserShift=false)
-      // would keep isCurrentUserShift=false even after phoneRes confirms the phone match.
+      // Authoritatively set isCurrentUserShift: personal schedule + phone + profile = confirmed mine.
+      // Global week extras start with isCurrentUserShift=false (name-only matches are unreliable —
+      // stale Firestore crew entries cause false positives like appearing in productions not assigned to).
       const confirmedIds = new Set([
+        ...userProds.map(p => p.id),
         ...(phoneRes.productions ?? []).map(p => p.id),
         ...(profileRes.productions ?? []).map(p => p.id),
-      ]);
+      ].filter(Boolean));
       const withConfirmed = afterProfile.map(p =>
-        confirmedIds.has(p.id) ? { ...p, isCurrentUserShift: true } : p
+        confirmedIds.has(p.id ?? '') ? { ...p, isCurrentUserShift: true } : { ...p, isCurrentUserShift: false }
       );
 
       // Final dedup: same event can arrive from personal path AND from Herzliya global sync

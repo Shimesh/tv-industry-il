@@ -1368,10 +1368,12 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       };
     });
     const globalHerzliyaId = prod.herzliyaId || existingGlobal.herzliyaId;
-    // If the merged crew has phone numbers it came from a fresh ShowCrew popup — REPLACE so that
-    // stale entries added by old bugs are evicted. Without phones we fall back to MERGE so we
-    // don't accidentally discard crew contributed by other sync sources.
-    const hasPhones = mergedCrewList.some((m) => m.normalizedPhone);
+    // When the fresh ShowCrew popup returned real crew with phones, write ONLY that fresh crew
+    // (crewList, not mergedCrewList). mergedCrewList merges existing Firestore crew with fresh —
+    // if the existing crew had a stale entry (e.g. user was once assigned then removed) the merge
+    // would preserve it even under REPLACE mode. Using crewList directly evicts stale entries.
+    const freshHasPhones = crewList.some((m) => m.normalizedPhone);
+    const finalCrewList = freshHasPhones ? crewList : mergedCrewList;
     const globalFields = {
       id: prodId,
       name: prod.name || existingGlobal.name || '',
@@ -1385,16 +1387,16 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       crewSource: prod.departmentEnriched
         ? 'department'
         : existingGlobal.crewSource || (prod.popupParsed ? 'popup' : 'fallback'),
-      crew_list: mergedCrewList,
-      crew_phones: [...new Set(mergedCrewList.map((member) => member.normalizedPhone).filter(Boolean))],
-      crew_shadow_keys: [...new Set(mergedCrewList.map((member) => member.shadowKey).filter(Boolean))],
+      crew_list: finalCrewList,
+      crew_phones: [...new Set(finalCrewList.map((member) => member.normalizedPhone).filter(Boolean))],
+      crew_shadow_keys: [...new Set(finalCrewList.map((member) => member.shadowKey).filter(Boolean))],
       lastUpdatedAt: new Date().toISOString(),
       lastUpdatedBy: userId,
       sourceWeekPath: `${userProductionsRoot}/${weekId}`,
       lastSyncSnapshotId: snapshot.runId,
     };
-    if (hasPhones) {
-      batch.set(globalRef, globalFields); // REPLACE: fresh popup crew removes stale entries
+    if (freshHasPhones) {
+      batch.set(globalRef, globalFields); // REPLACE: fresh popup crew is source of truth
     } else {
       batch.set(globalRef, globalFields, { merge: true }); // MERGE: preserve other sources
     }
