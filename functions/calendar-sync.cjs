@@ -735,6 +735,9 @@ async function fetchSchedule(browser, url) {
           const day = weekDays[dayIndex];
           if (!day) return;
           Array.from(cell.querySelectorAll('.event, .sat')).forEach((eventDiv) => {
+            const onclickRaw = eventDiv.getAttribute('onclick') || '';
+            const idMatchRaw = onclickRaw.match(/openmd2\((\d+)\)/);
+            const herzliyaId = idMatchRaw ? parseInt(idMatchRaw[1], 10) : 0;
             const nameFont = eventDiv.querySelector('font[color="red"], font[color="RED"]');
             const name = (nameFont?.textContent || '').replace(/\s+/g, ' ').trim();
             if (!name) return;
@@ -755,13 +758,16 @@ async function fetchSchedule(browser, url) {
                 endTime: match[4],
               });
             }
-            if (!crew.length) return;
+            if (!crew.length && !herzliyaId) return;
+            const evText = (eventDiv.textContent || '').replace(/\s+/g, ' ').trim();
+            const evTimeMatch = evText.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
             events.push({
+              herzliyaId,
               name,
               date: day.isoDate,
               day: day.dayName,
-              startTime: crew[0].startTime,
-              endTime: crew[0].endTime,
+              startTime: crew[0]?.startTime || (evTimeMatch ? evTimeMatch[1] : ''),
+              endTime: crew[0]?.endTime || (evTimeMatch ? evTimeMatch[2] : ''),
               crew,
             });
           });
@@ -790,6 +796,56 @@ async function fetchSchedule(browser, url) {
         production.departmentEnriched = true;
         departmentEnrichedCount++;
       }
+      // Fetch ShowCrew popups for ALL department productions and write to global_productions
+      const DEPT_VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
+      const allDepartmentProductions = [];
+      const deptEvalCtx = async (fn, ...args) => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            return await departmentContext.evaluate(fn, ...args);
+          } catch (err) {
+            if (!isContextLostError(err) || attempt === 2) throw err;
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+        throw new Error('dept ctx eval failed');
+      };
+      let deptPopupSuccess = 0;
+      let deptPopupFail = 0;
+      for (const deptProd of departmentEvents) {
+        if (DEPT_VACATION_RE.test(deptProd.name)) continue;
+        const prodEntry = {
+          ...deptProd,
+          status: 'scheduled',
+          isCurrentUserShift: false,
+          departmentEnriched: true,
+          popupParsed: false,
+        };
+        if (deptProd.herzliyaId) {
+          try {
+            const deptPopupSnapshot = await deptEvalCtx(POPUP_EVAL_FN, deptProd.herzliyaId);
+            const deptDetailed = parsePopupSnapshot(deptProd, deptPopupSnapshot);
+            if (deptDetailed?.crew?.length) {
+              prodEntry.crew = deptDetailed.crew.map((m) => ({ ...m, phone: normalizePhone(m.phone) }));
+              if (deptDetailed.studio) prodEntry.studio = deptDetailed.studio;
+              prodEntry.popupParsed = true;
+              deptPopupSuccess++;
+              console.log(`  [dept] ${deptProd.name}: ${prodEntry.crew.length} crew via popup`);
+            } else {
+              deptPopupFail++;
+              console.log(`  [dept] ${deptProd.name}: popup empty, BR crew=${deptProd.crew.length}`);
+            }
+          } catch (err) {
+            console.warn(`  [dept] popup error for ${deptProd.name}:`, err.message);
+            deptPopupFail++;
+          }
+          await new Promise((r) => setTimeout(r, 40));
+        }
+        allDepartmentProductions.push(prodEntry);
+      }
+      console.log(`Dept full sync: ${deptPopupSuccess} popup, ${deptPopupFail} fallback, ${allDepartmentProductions.length} total`);
+      schedule.allDepartmentProductions = allDepartmentProductions;
+
       console.log('Department events parsed:', departmentEvents.length);
       console.log('Department crew enrichment:', departmentEnrichedCount + '/' + schedule.productions.length);
     } catch (error) {
@@ -819,219 +875,7 @@ async function fetchSchedule(browser, url) {
         prod.name,
       );
 
-      const evaluateCrewFromPopup = async () =>
-        evaluateWithContext(async (hId) => {
-        const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-        const isVisible = (el) => {
-          if (!el) return false;
-          const rect = el.getBoundingClientRect();
-          if (rect.width < 30 || rect.height < 30) return false;
-          const style = window.getComputedStyle(el);
-          return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-        };
-        const closePopup = () => {
-          const closeBtn =
-            document.querySelector('.close') ||
-            document.querySelector('.modal-close') ||
-            document.querySelector('[onclick*="close"]') ||
-            document.querySelector('button[class*="close"]');
-          if (closeBtn) closeBtn.click();
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-        };
-
-        const getVisibleTables = () =>
-          Array.from(document.querySelectorAll('table')).filter((table) => {
-            const rect = table.getBoundingClientRect();
-            return rect.width > 30 && rect.height > 30;
-          });
-        const getModalTitle = (root) => {
-          if (!root) return '';
-          const selectors = ['.modal-title', '.popup-title', '[class*="title"]', 'font[color="red"]'];
-          for (const selector of selectors) {
-            const candidates = Array.from(root.querySelectorAll(selector)).filter(isVisible);
-            const best = candidates
-              .map((el) => cleanText(el.textContent || ''))
-              .filter(Boolean)
-              .sort((a, b) => b.length - a.length)[0];
-            if (best) return best;
-          }
-          return '';
-        };
-        const getModalFingerprint = (root) => {
-          if (!root) return '';
-          return cleanText(root.textContent || '').slice(0, 400);
-        };
-        const getActiveModalRoot = () => {
-          const titleCandidates = Array.from(
-            document.querySelectorAll('.modal-title, .popup-title, [class*="title"], font[color="red"]'),
-          ).filter(isVisible);
-
-          let best = null;
-          let bestScore = -1;
-
-          for (const titleEl of titleCandidates) {
-            let node = titleEl;
-            for (let depth = 0; depth < 8 && node; depth++) {
-              const parent = node.parentElement;
-              if (!parent) break;
-              node = parent;
-              if (!isVisible(node)) continue;
-
-              const rect = node.getBoundingClientRect();
-              if (rect.width < 220 || rect.height < 120) continue;
-
-              const tableCount = node.querySelectorAll('table').length;
-              if (!tableCount) continue;
-
-              const titleText = getModalTitle(node);
-              const closeExists =
-                !!node.querySelector('.close, .modal-close, [onclick*="close"], button[class*="close"]');
-              const zIndex = Number(window.getComputedStyle(node).zIndex || 0) || 0;
-              const score =
-                tableCount * 4000 +
-                rect.width * rect.height +
-                (titleText ? 3000 : 0) +
-                (closeExists ? 1500 : 0) +
-                zIndex;
-
-              if (score > bestScore) {
-                best = node;
-                bestScore = score;
-              }
-            }
-          }
-
-          return best;
-        };
-
-        const scoreTable = (table) => {
-          const text = cleanText(table.textContent || '');
-          const rowsCount = table.querySelectorAll('tr').length;
-          if (rowsCount < 3) return -1;
-          const headerText = cleanText(table.querySelector('tr')?.textContent || '');
-          const headerHits = [/שם/u, /תפקיד/u, /נייד|טלפון/u, /שעות/u].reduce(
-            (sum, re) => (re.test(headerText) ? sum + 1 : sum),
-            0,
-          );
-          const phones = (text.match(/(?:\+?972[-\s.]?)?0?(?:[2-9]\d|5\d)[-\s.]?\d{3}[-\s.]?\d{4}/g) || []).length;
-          const times = (text.match(/\d{1,2}:\d{2}\s*[-\u2013\u2014]\s*\d{1,2}:\d{2}/g) || []).length;
-          return rowsCount * 2 + phones * 3 + times * 2 + headerHits * 8;
-        };
-
-        const snapshotTable = (table) => ({
-          score: scoreTable(table),
-          rows: Array.from(table.querySelectorAll('tr')).map((row) =>
-            Array.from(row.querySelectorAll('th,td')).map((cell) => cleanText(cell.textContent || '')),
-          ),
-        });
-
-        if (typeof openmd2 !== 'function') {
-          return { tables: [], studio: '', title: '', invalid: true, reason: 'openmd2_missing' };
-        }
-
-        const previousRoot = getActiveModalRoot();
-        const previousFingerprint = getModalFingerprint(previousRoot);
-
-        closePopup();
-        await new Promise((r) => setTimeout(r, 120));
-        openmd2(hId);
-
-        const deadline = Date.now() + 3000;
-        const snapshotBySignature = new Map();
-        let activeModalRoot = null;
-        let bestCombined = -1;
-        let lastImprovementAt = Date.now();
-        while (Date.now() < deadline) {
-          const modalRoot = getActiveModalRoot();
-          if (modalRoot) {
-            const fingerprint = getModalFingerprint(modalRoot);
-            if (!previousFingerprint || fingerprint !== previousFingerprint) {
-              activeModalRoot = modalRoot;
-            }
-          }
-          const rootForParsing = activeModalRoot || modalRoot;
-          const modalTables = rootForParsing
-            ? Array.from(rootForParsing.querySelectorAll('table')).filter((table) => {
-              const rect = table.getBoundingClientRect();
-              return rect.width > 30 && rect.height > 30;
-            })
-            : [];
-          const tables = modalTables.length ? modalTables : getVisibleTables();
-          for (const table of tables) {
-            const score = scoreTable(table);
-            if (score < 6) continue;
-            const snapshot = snapshotTable(table);
-            const rowsCount = snapshot.rows.filter((row) => row.length >= 3).length;
-            if (rowsCount === 0) continue;
-            const combined = score + rowsCount * 5;
-            const signature = JSON.stringify(snapshot.rows);
-            const existing = snapshotBySignature.get(signature);
-            if (!existing || combined > existing.combined) {
-              snapshotBySignature.set(signature, {
-                ...snapshot,
-                combined,
-              });
-              if (combined > bestCombined) {
-                bestCombined = combined;
-                lastImprovementAt = Date.now();
-              }
-            }
-          }
-          const strongCount = Array.from(snapshotBySignature.values()).filter((entry) => entry.combined >= 20).length;
-          const stableForMs = Date.now() - lastImprovementAt;
-          if (strongCount >= 1 && stableForMs >= 700) break;
-          await new Promise((r) => setTimeout(r, 120));
-        }
-
-        const collectedSnapshots = Array.from(snapshotBySignature.values())
-          .sort((a, b) => b.combined - a.combined)
-          .map(({ combined, ...snapshot }) => snapshot);
-
-        const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
-        const studioMatchTitle = titleText.match(/(?:\u05d0\u05d5\u05dc\u05e4\u05df|studio|st\.?)\s*(\d+\w?)/i);
-        let studio = studioMatchTitle ? studioMatchTitle[0] : '';
-
-        // If title doesn't have studio, scan ALL table rows in the page.
-        // Reasoning:
-        //   - collectedSnapshots only has high-scoring crew tables (score>=6, rows>=3)
-        //   - The ShowCrew header table has 1 row [name, studio, date, time] \u2192 score<6 \u2192 filtered out
-        //   - activeModalRoot may be null when popup has no .modal-title/font[color="red"]
-        // So we scan document-level rows and look for a standalone location cell.
-        // Popup header format: [production name, location/studio, date, time]
-        // Calendar event names embed location inside a longer name \u2192 dateIdx < 2 there.
-        if (!studio) {
-          const allPageRows = Array.from(document.querySelectorAll('table tr'));
-          for (const row of allPageRows) {
-            const cells = Array.from(row.querySelectorAll('td,th'))
-              .map((c) => cleanText(c.textContent || ''))
-              .filter((c) => c.length > 0);
-            // Prefer exact standalone "\u05d0\u05d5\u05dc\u05e4\u05df N" / "\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5 N" cell
-            const exactStudio = cells.find((c) => /^(?:\u05d0\u05d5\u05dc\u05e4\u05df|\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5|studio)\s*\d+\w?$/i.test(c));
-            if (exactStudio) { studio = exactStudio; break; }
-            // Fallback: cell before date (DD/MM/YYYY) when row has [name, location, date, ...]
-            // dateIdx>=2 ensures there are 2+ cells before the date (name + location).
-            // Skip short Hebrew label words (e.g. "\u05e9\u05dd", "\u05ea\u05d0\u05e8\u05d9\u05da") but accept named locations.
-            const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
-            if (dateIdx >= 2 && cells[dateIdx - 1]) {
-              const candidate = cells[dateIdx - 1];
-              if (!/^[\u05d0-\u05ea]{2,5}$/.test(candidate)) {
-                studio = candidate;
-                break;
-              }
-            }
-          }
-        }
-
-        closePopup();
-
-        return {
-          tables: collectedSnapshots,
-          studio,
-          title: titleText,
-          invalid: !collectedSnapshots.length,
-          reason: collectedSnapshots.length ? '' : 'no_tables',
-        };
-        }, prod.herzliyaId);
+      const evaluateCrewFromPopup = async () => evaluateWithContext(POPUP_EVAL_FN, prod.herzliyaId);
 
       const popupSnapshot = await evaluateCrewFromPopup();
       const detailed = parsePopupSnapshot(prod, popupSnapshot);
@@ -1593,6 +1437,79 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     } catch (error) {
       console.warn('Failed deleting popup snapshot:', error.message);
     }
+  }
+
+  // Save all department productions to global_productions (not personal schedules)
+  if (Array.isArray(schedule.allDepartmentProductions) && schedule.allDepartmentProductions.length) {
+    const personalProdIds = new Set(
+      schedule.productions.map((p) => String(p.herzliyaId || createVisibleProductionId(p))),
+    );
+    console.log(`Saving ${schedule.allDepartmentProductions.length} dept productions to global_productions (${personalProdIds.size} personal already saved)...`);
+    let deptBatch = db.batch();
+    let deptBatchCount = 0;
+    const commitDeptBatch = async () => {
+      if (!deptBatchCount) return;
+      await deptBatch.commit();
+      deptBatch = db.batch();
+      deptBatchCount = 0;
+    };
+    const userProductionsRoot = getUserProductionsRoot(userId);
+    for (const prod of schedule.allDepartmentProductions) {
+      const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));
+      if (personalProdIds.has(prodId)) continue; // already saved in main batch
+      const normalizedProductionName = String(prod.name || '').replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
+      const crewList = (prod.crew || [])
+        .filter((member) => {
+          const key = `${member.name || ''}-${member.role || member.roleDetail || ''}`
+            .replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
+          return key !== normalizedProductionName;
+        })
+        .map((member) => {
+          const normalizedPhone = normalizePhone(member.phone);
+          const normalizedCrewName = normalizeName(member.name || '');
+          const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || '');
+          return {
+            name: member.name || '',
+            profession: member.role || member.roleDetail || '',
+            phone_number: normalizedPhone,
+            startTime: member.startTime || '',
+            endTime: member.endTime || '',
+            normalizedPhone,
+            shadowKey: !normalizedPhone && normalizedCrewName
+              ? `${normalizedCrewName}::${normalizedCrewRole}`
+              : null,
+          };
+        });
+      const hasPhones = crewList.some((m) => m.phone_number);
+      const globalRef = db.doc(`global_productions/${prodId}`);
+      const globalData = {
+        id: prodId,
+        name: prod.name || '',
+        studio: prod.studio || '',
+        date: prod.date || '',
+        day: prod.day || getHebrewDay(prod.date),
+        startTime: prod.startTime || '',
+        endTime: prod.endTime || '',
+        status: prod.status || 'scheduled',
+        ...(prod.herzliyaId ? { herzliyaId: prod.herzliyaId } : {}),
+        crewSource: prod.popupParsed ? 'popup' : 'department',
+        crew_list: crewList,
+        crew_phones: [...new Set(crewList.map((m) => m.normalizedPhone).filter(Boolean))],
+        crew_shadow_keys: [...new Set(crewList.map((m) => m.shadowKey).filter(Boolean))],
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedBy: userId,
+        sourceWeekPath: `${userProductionsRoot}/${weekId}`,
+      };
+      if (hasPhones) {
+        deptBatch.set(globalRef, globalData); // REPLACE: fresh popup crew removes stale entries
+      } else {
+        deptBatch.set(globalRef, globalData, { merge: true }); // MERGE: preserve other sources
+      }
+      deptBatchCount++;
+      if (deptBatchCount >= 400) await commitDeptBatch();
+    }
+    await commitDeptBatch();
+    console.log('Dept global_productions save complete.');
   }
 }
 
