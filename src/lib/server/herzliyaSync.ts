@@ -794,31 +794,29 @@ export async function syncHerzliyaUrl(
     appliedAt: new Date().toISOString(),
   });
 
-  // Remove stale generateProductionId-based entries superseded by herzliyaId-based ones.
-  // When a sync writes e.g. global_productions/12345, any old slug-ID entry for the
-  // same name+date (created before herzliyaId was available) becomes an orphan duplicate.
-  await Promise.allSettled(
-    productions
-      .filter(p => /^\d+$/.test(p.id))
-      .map(async (p) => {
-        const oldId = generateProductionId(p.name, p.date, p.studio, p.startTime);
-        if (oldId && oldId !== p.id) {
-          await deleteDocument(`global_productions/${oldId}`).catch(() => {});
-        }
-      }),
-  );
-
-  // Clean up stale vacation entries in global_productions for the synced date range.
-  // Resync only adds/merges — without this step old חופש/ביטול entries persist forever.
+  // Single date-range scan: clean up vacation entries AND slug-ID duplicates.
+  // Vacation entries persist between resyncs since we only add/merge.
+  // Slug-ID duplicates occur when an older entry used generateProductionId("אסתטיקה",...)
+  // but the fresh sync writes to a numeric herzliyaId ("12345") for "אסתטיקה 360" —
+  // same production, different ID and slightly different name.
   const syncedIds = new Set(productions.map(p => p.id));
   const syncDates = productions.map(p => p.date).filter(Boolean).sort();
   if (syncDates.length > 0) {
     const minDate = syncDates[0];
     const maxDate = syncDates[syncDates.length - 1];
     const VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
+
+    // Returns true when names refer to the same production (one is a prefix of the other)
+    const nameSimilar = (a: string, b: string): boolean => {
+      if (!a || !b) return false;
+      const shorter = a.length <= b.length ? a : b;
+      const longer = a.length <= b.length ? b : a;
+      return shorter.length >= 3 && longer.startsWith(shorter);
+    };
+
     try {
-      type VacDoc = { name?: string; _path?: string };
-      const vacDocs = await runQuery<VacDoc>({
+      type RangeDoc = GlobalProductionDoc & { _path?: string };
+      const rangeDocs = await runQuery<RangeDoc>({
         from: [{ collectionId: 'global_productions' }],
         where: {
           compositeFilter: {
@@ -831,15 +829,33 @@ export async function syncHerzliyaUrl(
         },
         limit: 500,
       });
-      await Promise.allSettled(
-        vacDocs
-          .filter(doc => VACATION_RE.test(doc.name || ''))
-          .map(async (doc) => {
-            const docId = String(doc._path || '').split('/').pop();
-            if (!docId || syncedIds.has(docId)) return;
-            await deleteDocument(`global_productions/${docId}`).catch(() => {});
-          }),
-      );
+
+      await Promise.allSettled(rangeDocs.map(async (doc) => {
+        const docId = String(doc._path || '').split('/').pop() || '';
+        if (!docId || syncedIds.has(docId)) return;
+
+        // Case 1: vacation entry → delete
+        if (VACATION_RE.test(doc.name || '')) {
+          await deleteDocument(`global_productions/${docId}`).catch(() => {});
+          return;
+        }
+
+        // Case 2: slug-ID entry that duplicates a freshly synced numeric-ID entry.
+        // Only slug IDs contain hyphens; numeric IDs are all digits.
+        if (/^\d+$/.test(docId)) return; // numeric ID, not a slug duplicate
+        const matchedProd = productions.find(
+          p => p.date === doc.date && nameSimilar(p.name, doc.name || ''),
+        );
+        if (!matchedProd) return;
+
+        // Merge slug entry's accumulated crew into the numeric-ID entry before deleting
+        const numericDoc = await getDocument<GlobalProductionDoc>(`global_productions/${matchedProd.id}`).catch(() => null);
+        if (numericDoc) {
+          const merged = mergeGlobalProduction(doc as GlobalProductionDoc, numericDoc);
+          await patchDocument(`global_productions/${matchedProd.id}`, merged as unknown as Record<string, string>).catch(() => {});
+        }
+        await deleteDocument(`global_productions/${docId}`).catch(() => {});
+      }));
     } catch { /* non-critical */ }
   }
 
