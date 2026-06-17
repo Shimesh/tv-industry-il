@@ -1,6 +1,6 @@
 
 
-const CACHE_NAME = 'tv-industry-il-v2.8.147';
+const CACHE_NAME = 'tv-industry-il-v2.8.148';
 
 const STATIC_ASSETS = [
   '/manifest.json',

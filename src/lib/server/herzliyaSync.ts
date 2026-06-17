@@ -733,6 +733,7 @@ export async function syncHerzliyaUrl(
   herzliyaUser?: string,
   herzliyaPass?: string,
   workerName?: string,
+  verifiedPhone?: string,
 ): Promise<SyncResult> {
   const debugLines: string[] = [];
 
@@ -896,9 +897,13 @@ export async function syncHerzliyaUrl(
   // or MERGE-semantics accumulation (e.g. user once appeared in מונדיאל then was removed).
   if (syncDates.length > 0) {
     try {
-      const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
-      const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
-      let disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
+      // verifiedPhone from Firebase Auth is the most reliable source (no profile lookup needed)
+      let disownPhone = verifiedPhone ? normalizePhone(verifiedPhone) : null;
+      if (!disownPhone) {
+        const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
+        const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
+        disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
+      }
 
       // Fallback: scan synced productions' crew to find this worker's phone
       if (!disownPhone && workerName) {
