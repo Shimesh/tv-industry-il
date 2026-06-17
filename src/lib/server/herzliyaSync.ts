@@ -11,6 +11,7 @@ import {
 } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
+import { normalizePhone } from '@/lib/crewNormalization';
 import { getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import type { Production, CrewMember } from '@/lib/productionDiff';
@@ -856,6 +857,51 @@ export async function syncHerzliyaUrl(
         }
         await deleteDocument(`global_productions/${docId}`).catch(() => {});
       }));
+    } catch { /* non-critical */ }
+  }
+
+  // Disown step: remove user's phone from productions for this week where they are
+  // NOT personally scheduled. Fixes stale crew_phones left over from old assignments
+  // or MERGE-semantics accumulation (e.g. user once appeared in מונדיאל then was removed).
+  if (syncDates.length > 0) {
+    try {
+      const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
+      const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
+      const disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
+
+      if (disownPhone) {
+        type PhoneDoc = GlobalProductionDoc & { _path?: string };
+        const staleDocs = await runQuery<PhoneDoc>({
+          from: [{ collectionId: 'global_productions' }],
+          where: {
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                { fieldFilter: { field: { fieldPath: 'crew_phones' }, op: 'ARRAY_CONTAINS', value: { stringValue: disownPhone } } },
+                { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: syncDates[0] } } },
+                { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: syncDates[syncDates.length - 1] } } },
+              ],
+            },
+          },
+          limit: 200,
+        });
+
+        await Promise.allSettled(staleDocs.map(async (doc) => {
+          const docId = String(doc._path || '').split('/').pop() || '';
+          if (!docId || syncedIds.has(docId)) return;
+          const updatedCrewList = (doc.crew_list ?? []).filter(
+            (m) => (m as unknown as { normalizedPhone?: string }).normalizedPhone !== disownPhone,
+          );
+          const updatedPhones = (doc.crew_phones ?? []).filter((p) => p !== disownPhone);
+          console.log(`[herzliyaSync] disown ${uid} from stale production ${docId} (${doc.name})`);
+          await patchDocument(`global_productions/${docId}`, {
+            crew_list: updatedCrewList,
+            crew_phones: updatedPhones,
+            lastUpdatedAt: new Date().toISOString(),
+            lastUpdatedBy: `disown:${uid}`,
+          } as unknown as Record<string, string>).catch(() => {});
+        }));
+      }
     } catch { /* non-critical */ }
   }
 
