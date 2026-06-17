@@ -49,7 +49,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await patchDocument(userSyncPath, statusPatch as unknown as Record<string, string>).catch(() => {});
 
     if (result.status === 'success') {
-      return NextResponse.json({ ok: true, count: result.count, debug: result.debug });
+      const names = (result.studios ?? []).map(s => s.name).filter(Boolean);
+      return NextResponse.json({ ok: true, count: result.count, names, debug: result.debug });
     }
     return NextResponse.json({
       ok: false,

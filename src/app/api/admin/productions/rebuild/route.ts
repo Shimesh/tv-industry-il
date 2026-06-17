@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listDocuments, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
+import { listDocuments, getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import {
   fetchHerzliyaProductions,
   getCurrentWeekStartIsrael,
@@ -195,7 +195,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     personalStats = { docsScanned, usersFound: usersFound.size };
   }
 
-  // ── Step 3: Write to Firestore (REPLACE semantics) ───────────────────────
+  // ── Step 3: Write to Firestore (MERGE semantics) ────────────────────────
+  // Always merge with existing data so crew accumulated from previous syncs is
+  // preserved when ShowCrew sessions are expired (avoids 12-crew → 1-crew regression).
   const writeErrors: string[] = [];
   let writtenCount = 0;
   const rebuildAt = new Date().toISOString();
@@ -209,7 +211,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           lastUpdatedBy: 'rebuild',
           sourceWeekPath: `rebuild-${dataSource}`,
         };
-        await patchDocument(`global_productions/${id}`, enriched as unknown as Record<string, string>);
+        const existingDoc = await getDocument<GlobalProductionDoc>(`global_productions/${id}`).catch(() => null);
+        const finalDoc = existingDoc ? mergeGlobalProduction(existingDoc, enriched) : enriched;
+        await patchDocument(`global_productions/${id}`, finalDoc as unknown as Record<string, string>);
         writtenCount++;
       } catch (err) {
         writeErrors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);

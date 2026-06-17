@@ -2426,15 +2426,22 @@ function ProductionsContent() {
     try {
       const token = await user?.getIdToken().catch(() => '');
       if (token) {
-        setStatusMessage('מסנכרן עם הרצליה...');
+        setStatusMessage('מסנכרן...');
         const syncRes = await fetch('/api/calendar/resync', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => null);
         if (syncRes?.ok) {
-          const syncData = await syncRes.json().catch(() => ({})) as { ok?: boolean; count?: number; reason?: string };
+          const syncData = await syncRes.json().catch(() => ({})) as { ok?: boolean; count?: number; names?: string[]; reason?: string };
           if (syncData.ok) {
-            setStatusMessage(`עודכנו ${syncData.count ?? 0} הפקות`);
+            const names = syncData.names ?? [];
+            if (names.length === 0) {
+              setStatusMessage('עודכן');
+            } else if (names.length <= 3) {
+              setStatusMessage(`עודכן: ${names.join(', ')}`);
+            } else {
+              setStatusMessage(`עודכן: ${names.slice(0, 3).join(', ')} ועוד ${names.length - 3}`);
+            }
           } else if (syncData.reason === 'no_url') {
             setStatusMessage('טוען מהשרת...');
           }
