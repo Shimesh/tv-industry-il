@@ -2434,9 +2434,9 @@ function ProductionsContent() {
         if (syncRes?.ok) {
           const syncData = await syncRes.json().catch(() => ({})) as { ok?: boolean; count?: number; reason?: string };
           if (syncData.ok) {
-            setStatusMessage(`סונכרנו ${syncData.count ?? 0} הפקות מהרצליה`);
+            setStatusMessage(`עודכנו ${syncData.count ?? 0} הפקות`);
           } else if (syncData.reason === 'no_url') {
-            setStatusMessage('אין URL מסונכרן — טוען מהשרת');
+            setStatusMessage('טוען מהשרת...');
           }
           // update lastSyncAt display
           setLastSyncAt(Date.now());
@@ -2451,7 +2451,7 @@ function ProductionsContent() {
       if (existing.length > 0) {
         setProductions(existing);
         productionsByWeekRef.current.set(currentWeekId, existing);
-        setStatusMessage(prev => (prev ?? '').startsWith('סונכרנו') ? prev : 'נטען מחדש מהשרת');
+        setStatusMessage(prev => (prev ?? '').startsWith('עודכנו') ? prev : 'נטען מחדש מהשרת');
       }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
