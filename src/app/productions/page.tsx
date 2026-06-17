@@ -2421,12 +2421,37 @@ function ProductionsContent() {
   const handleReload = async () => {
     if (!currentWeekId) return;
     setLoading(true);
+
+    // Step 1: If user has a Herzliya URL registered, re-sync it now
     try {
+      const token = await user?.getIdToken().catch(() => '');
+      if (token) {
+        setStatusMessage('מסנכרן עם הרצליה...');
+        const syncRes = await fetch('/api/calendar/resync', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null);
+        if (syncRes?.ok) {
+          const syncData = await syncRes.json().catch(() => ({})) as { ok?: boolean; count?: number; reason?: string };
+          if (syncData.ok) {
+            setStatusMessage(`סונכרנו ${syncData.count ?? 0} הפקות מהרצליה`);
+          } else if (syncData.reason === 'no_url') {
+            setStatusMessage('אין URL מסונכרן — טוען מהשרת');
+          }
+          // update lastSyncAt display
+          setLastSyncAt(Date.now());
+        }
+      }
+    } catch { /* non-critical — still reload */ }
+
+    // Step 2: Reload from Firestore (picks up fresh global_productions data)
+    try {
+      productionsByWeekRef.current.delete(currentWeekId); // clear cache so loadExistingWeek re-fetches
       const existing = await loadExistingWeek(currentWeekId);
       if (existing.length > 0) {
         setProductions(existing);
         productionsByWeekRef.current.set(currentWeekId, existing);
-        setStatusMessage('נטען מחדש מהשרת');
+        setStatusMessage(prev => (prev ?? '').startsWith('סונכרנו') ? prev : 'נטען מחדש מהשרת');
       }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
