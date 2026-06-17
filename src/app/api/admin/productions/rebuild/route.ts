@@ -195,9 +195,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     personalStats = { docsScanned, usersFound: usersFound.size };
   }
 
-  // ── Step 3: Write to Firestore (MERGE semantics) ────────────────────────
-  // Always merge with existing data so crew accumulated from previous syncs is
-  // preserved when ShowCrew sessions are expired (avoids 12-crew → 1-crew regression).
+  // ── Step 3: Write to Firestore (smart REPLACE / MERGE) ──────────────────
+  // When the fresh data has real ShowCrew phone numbers → REPLACE (removes stale
+  // entries like a person incorrectly added via old workerName bug).
+  // When fresh data has only workerName-only crew (no phones = session expired)
+  // → MERGE with existing so accumulated crew isn't wiped to 1 person.
   const writeErrors: string[] = [];
   let writtenCount = 0;
   const rebuildAt = new Date().toISOString();
@@ -211,8 +213,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           lastUpdatedBy: 'rebuild',
           sourceWeekPath: `rebuild-${dataSource}`,
         };
-        const existingDoc = await getDocument<GlobalProductionDoc>(`global_productions/${id}`).catch(() => null);
-        const finalDoc = existingDoc ? mergeGlobalProduction(existingDoc, enriched) : enriched;
+        const hasShowCrewData = (enriched.crew_list ?? []).some(c => (c as { phone_number?: string }).phone_number?.trim());
+        let finalDoc: GlobalProductionDoc;
+        if (hasShowCrewData) {
+          // Fresh ShowCrew data available — use it directly (REPLACE crew)
+          finalDoc = enriched;
+        } else {
+          // Sessions expired, only workerName crew — merge to preserve existing crew
+          const existingDoc = await getDocument<GlobalProductionDoc>(`global_productions/${id}`).catch(() => null);
+          finalDoc = existingDoc ? mergeGlobalProduction(existingDoc, enriched) : enriched;
+        }
         await patchDocument(`global_productions/${id}`, finalDoc as unknown as Record<string, string>);
         writtenCount++;
       } catch (err) {
