@@ -168,7 +168,8 @@ Both `save-sync-url` and `resync` routes pass `authUser.phoneNumber || undefined
 6. **Disown step** — remove user's phone from stale productions (productions where user's phone appears but they are NOT personally scheduled):
    - Collect all known phones via `getLinkedProductionIdentity(authUser)` — aggregates from `users/{uid}`, `profiles/{profileId}`, `industry_people/{profileId}`, `contacts/{linkedContactId}`. Also tries `verifiedPhone` and `users/{uid}.phone` directly.
    - Crew fallback: if still no phone found, scan synced productions' crew for an entry matching `workerName` to find the phone
-   - For each found phone: query `global_productions` by `crew_phones ARRAY_CONTAINS phone` + date range → remove ALL the user's known phones from those docs' `crew_list` and `crew_phones`
+   - For each found phone: query `global_productions` by `crew_phones ARRAY_CONTAINS phone` + **full week date range** (`scanWeekStart` to `scanWeekEnd`) → remove ALL the user's known phones from those docs' `crew_list` and `crew_phones`
+   - **Date range is the FULL week** (Sun–Sat via `getCurrentWeekStartIsrael()` + 6 days), NOT just the exact dates of synced productions. Critical: if user only synced Mon+Wed but stale production is on Fri, the old narrow range would miss it.
    - **Why `getLinkedProductionIdentity`:** `authUser.phoneNumber` is null for Google-authenticated users (phone_number only in phone-auth tokens). Profile-linked phone is the reliable source.
 7. Background: `syncContactsFromSavedProductions()`
 
@@ -435,6 +436,8 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | Disown step doesn't remove stale phone after resync | `users/{uid}.phone` empty + `authUser.phoneNumber` null for Google-auth users | Fixed (v2.8.150): disown now uses `getLinkedProductionIdentity()` to collect phones from ALL linked sources (profiles, industry_people, contacts). Runs query for each phone found. |
 | Dept batch overwrites crew from other users | `{ merge: true }` in Firestore only prevents field deletion, still replaces the `crew_list` array | Fixed (v2.8.149): dept batch in calendar-sync.cjs pre-fetches existing global docs and uses `mergeCrewPreservingExisting()` before writing — same approach as personal batch |
 | Personal batch REPLACE wiped accumulated crew | REPLACE semantics (when freshHasPhones) discarded crew written by other users | Fixed (v2.8.147+): personal batch always uses MERGE + JS-level `mergeCrewPreservingExisting()`. Disown step handles cleanup of stale personal entries instead |
+| מונדיאל/stale production still highlighted after resync | Case 3 (name-based disown) phone filter was INVERTED: `filter(p => !updatedCrewList.some(m => m.normalizedPhone === p))` kept the removed worker's phone and removed all others. Phone remained in `crew_phones` → `phoneRes` query still found production → still highlighted | Fixed (v2.8.152): filter now extracts `normalizedPhone` of removed crew entries and removes exactly those phones from `crew_phones` |
+| Disown misses productions on days user has no Ashheim shift | Date range for disown/cleanup used exact sync dates (e.g. Mon+Wed), missing stale production on Tue/Thu/Fri | Fixed (v2.8.152): date range scan and phone-based disown now use full 7-day week range (`scanWeekStart` to `scanWeekEnd`) instead of `syncDates[0]..syncDates[last]` |
 
 ---
 
