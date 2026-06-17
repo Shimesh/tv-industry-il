@@ -1458,43 +1458,58 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       deptBatchCount = 0;
     };
     const userProductionsRoot = getUserProductionsRoot(userId);
+
+    // Pre-fetch existing global docs so we can merge crew at the JS level.
+    // Firestore { merge: true } only prevents other top-level fields from being
+    // deleted — it still replaces the crew_list array entirely. Pre-fetching and
+    // merging in JS is the only way to accumulate crew across multiple users' syncs.
+    const deptProdIdsList = schedule.allDepartmentProductions
+      .map((p) => String(p.herzliyaId || createVisibleProductionId(p)))
+      .filter((id) => !personalProdIds.has(id));
+    const existingDeptGlobalById = new Map();
+    for (const prodId of deptProdIdsList) {
+      const snap = await db.doc(`global_productions/${prodId}`).get();
+      if (snap.exists) existingDeptGlobalById.set(prodId, snap.data());
+    }
+
     for (const prod of schedule.allDepartmentProductions) {
       const prodId = String(prod.herzliyaId || createVisibleProductionId(prod));
       if (personalProdIds.has(prodId)) continue; // already saved in main batch
       const normalizedProductionName = String(prod.name || '').replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
-      const crewList = (prod.crew || [])
+      const incomingCrewList = (prod.crew || [])
         .filter((member) => {
           const key = `${member.name || ''}-${member.role || member.roleDetail || ''}`
             .replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
           return key !== normalizedProductionName;
-        })
-        .map((member) => {
-          const normalizedPhone = normalizePhone(member.phone);
-          const normalizedCrewName = normalizeName(member.name || '');
-          const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || '');
-          return {
-            name: member.name || '',
-            profession: member.role || member.roleDetail || '',
-            phone_number: normalizedPhone,
-            startTime: member.startTime || '',
-            endTime: member.endTime || '',
-            normalizedPhone,
-            shadowKey: !normalizedPhone && normalizedCrewName
-              ? `${normalizedCrewName}::${normalizedCrewRole}`
-              : null,
-          };
         });
-      const hasPhones = crewList.some((m) => m.phone_number);
+      const existingDeptGlobal = existingDeptGlobalById.get(prodId) || {};
+      const existingDeptCrewList = Array.isArray(existingDeptGlobal.crew_list) ? existingDeptGlobal.crew_list : [];
+      const crewList = mergeCrewPreservingExisting(existingDeptCrewList, incomingCrewList).map((member) => {
+        const normalizedPhone = normalizePhone(member.phone || member.phone_number);
+        const normalizedCrewName = normalizeName(member.name || '');
+        const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
+        return {
+          name: member.name || '',
+          profession: member.role || member.roleDetail || member.profession || '',
+          phone_number: normalizedPhone,
+          startTime: member.startTime || '',
+          endTime: member.endTime || '',
+          normalizedPhone,
+          shadowKey: !normalizedPhone && normalizedCrewName
+            ? `${normalizedCrewName}::${normalizedCrewRole}`
+            : null,
+        };
+      });
       const globalRef = db.doc(`global_productions/${prodId}`);
       const globalData = {
         id: prodId,
-        name: prod.name || '',
-        studio: prod.studio || '',
+        name: prod.name || existingDeptGlobal.name || '',
+        studio: prod.studio || existingDeptGlobal.studio || '',
         date: prod.date || '',
         day: prod.day || getHebrewDay(prod.date),
-        startTime: prod.startTime || '',
-        endTime: prod.endTime || '',
-        status: prod.status || 'scheduled',
+        startTime: prod.startTime || existingDeptGlobal.startTime || '',
+        endTime: prod.endTime || existingDeptGlobal.endTime || '',
+        status: prod.status || existingDeptGlobal.status || 'scheduled',
         ...(prod.herzliyaId ? { herzliyaId: prod.herzliyaId } : {}),
         crewSource: prod.popupParsed ? 'popup' : 'department',
         crew_list: crewList,
@@ -1504,7 +1519,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         lastUpdatedBy: userId,
         sourceWeekPath: `${userProductionsRoot}/${weekId}`,
       };
-      deptBatch.set(globalRef, globalData, { merge: true }); // MERGE: accumulate crew across syncs
+      deptBatch.set(globalRef, globalData, { merge: true });
       deptBatchCount++;
       if (deptBatchCount >= 400) await commitDeptBatch();
     }
