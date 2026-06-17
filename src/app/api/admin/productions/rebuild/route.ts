@@ -167,7 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           continue;
         }
 
-        const VACATION_RE = /^(חופש|ביטול|מחלה|שמירה|היעדרות)/;
+        const VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
         for (const prod of productions) {
           if (!prod.id || !prod.date || !prod.name) continue;
           if (VACATION_RE.test(prod.name)) continue;
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const vacationDeleteErrors: string[] = [];
   try {
     type VacationScanDoc = { name?: string; _path?: string };
-    const VACATION_RE_CLEANUP = /^(חופש|ביטול|מחלה|שמירה|היעדרות)/;
+    const VACATION_RE_CLEANUP = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
     const weekScanDocs = await runQuery<VacationScanDoc>({
       from: [{ collectionId: 'global_productions' }],
       where: {

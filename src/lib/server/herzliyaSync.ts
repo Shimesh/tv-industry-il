@@ -11,7 +11,7 @@ import {
 } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
-import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
@@ -628,7 +628,8 @@ export async function fetchHerzliyaProductions(
         let name = studioM ? nameNoRole.replace(studioM[0], '').replace(/\s{2,}/g, ' ').trim() : nameNoRole;
 
         // Skip vacation/non-production entries (חופש, ביטול, מחלה, etc.)
-        if (/^(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) {
+        // Broad pattern: catch vacation keyword at start OR after a separator (role prefix case)
+        if (/(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i.test(name)) {
           debugLines.push(`skipVacation:id=${event.herzliyaId},name=${name.slice(0, 30)}`);
           continue;
         }
@@ -792,6 +793,55 @@ export async function syncHerzliyaUrl(
     status: 'applied',
     appliedAt: new Date().toISOString(),
   });
+
+  // Remove stale generateProductionId-based entries superseded by herzliyaId-based ones.
+  // When a sync writes e.g. global_productions/12345, any old slug-ID entry for the
+  // same name+date (created before herzliyaId was available) becomes an orphan duplicate.
+  await Promise.allSettled(
+    productions
+      .filter(p => /^\d+$/.test(p.id))
+      .map(async (p) => {
+        const oldId = generateProductionId(p.name, p.date, p.studio, p.startTime);
+        if (oldId && oldId !== p.id) {
+          await deleteDocument(`global_productions/${oldId}`).catch(() => {});
+        }
+      }),
+  );
+
+  // Clean up stale vacation entries in global_productions for the synced date range.
+  // Resync only adds/merges — without this step old חופש/ביטול entries persist forever.
+  const syncedIds = new Set(productions.map(p => p.id));
+  const syncDates = productions.map(p => p.date).filter(Boolean).sort();
+  if (syncDates.length > 0) {
+    const minDate = syncDates[0];
+    const maxDate = syncDates[syncDates.length - 1];
+    const VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
+    try {
+      type VacDoc = { name?: string; _path?: string };
+      const vacDocs = await runQuery<VacDoc>({
+        from: [{ collectionId: 'global_productions' }],
+        where: {
+          compositeFilter: {
+            op: 'AND',
+            filters: [
+              { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: minDate } } },
+              { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: maxDate } } },
+            ],
+          },
+        },
+        limit: 500,
+      });
+      await Promise.allSettled(
+        vacDocs
+          .filter(doc => VACATION_RE.test(doc.name || ''))
+          .map(async (doc) => {
+            const docId = String(doc._path || '').split('/').pop();
+            if (!docId || syncedIds.has(docId)) return;
+            await deleteDocument(`global_productions/${docId}`).catch(() => {});
+          }),
+      );
+    } catch { /* non-critical */ }
+  }
 
   void syncContactsFromSavedProductions(true).catch(() => {});
 
