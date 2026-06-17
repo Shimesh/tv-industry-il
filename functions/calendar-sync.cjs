@@ -1522,6 +1522,59 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     await commitDeptBatch();
     console.log('Dept global_productions save complete.');
   }
+
+  // Disown step: remove user's phone from every global_production for this week
+  // where they are NOT personally scheduled. Handles stale entries that accumulate via
+  // MERGE semantics when the user was once assigned then removed, or via old sync bugs.
+  try {
+    const userProfileDoc = await db.doc(`users/${userId}`).get();
+    const rawPhone = userProfileDoc.exists ? (userProfileDoc.data()?.phone || '') : '';
+    const workerNormalizedPhone = rawPhone ? normalizePhone(rawPhone) : null;
+
+    if (workerNormalizedPhone) {
+      const phoneQuery = await db.collection('global_productions')
+        .where('crew_phones', 'array-contains', workerNormalizedPhone)
+        .get();
+
+      const myProdIdSet = new Set(myProductionIds);
+      const workerNormName = normalizeName(schedule.workerName || requestedWorkerName || '');
+      const disownBatch = db.batch();
+      let disownCount = 0;
+
+      for (const doc of phoneQuery.docs) {
+        if (myProdIdSet.has(doc.id)) continue; // user is genuinely in this production
+        const data = doc.data();
+        // Only process productions in the current sync's date window
+        if (data.date < schedule.weekStart || data.date > schedule.weekEnd) continue;
+
+        const updatedCrewList = (data.crew_list || []).filter(
+          (m) => m.normalizedPhone !== workerNormalizedPhone,
+        );
+        const updatedPhones = (data.crew_phones || []).filter(
+          (p) => p !== workerNormalizedPhone,
+        );
+        const updatedShadowKeys = (data.crew_shadow_keys || []).filter(
+          (k) => !k.startsWith(`${workerNormName}::`),
+        );
+        disownBatch.update(doc.ref, {
+          crew_list: updatedCrewList,
+          crew_phones: updatedPhones,
+          crew_shadow_keys: updatedShadowKeys,
+          lastUpdatedAt: new Date().toISOString(),
+          lastUpdatedBy: `disown:${userId}`,
+        });
+        disownCount++;
+        console.log(`Disowning ${userId} from stale production: ${doc.id} (${data.name || '?'})`);
+      }
+
+      if (disownCount > 0) {
+        await disownBatch.commit();
+        console.log(`Disowned user from ${disownCount} stale global_productions.`);
+      }
+    }
+  } catch (disownError) {
+    console.warn('Disown step failed (non-fatal):', disownError?.message);
+  }
 }
 
 function cleanSnapshotText(value) {
