@@ -283,6 +283,133 @@ function normalizeProductionLookup(value) {
     .trim();
 }
 
+// Browser-side function: opens openmd2 popup and captures crew table snapshot.
+// Must be a module-level const so it can be reused for both personal and department page contexts.
+const POPUP_EVAL_FN = async (hId) => {
+  const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const isVisible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 30 || rect.height < 30) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  };
+  const closePopup = () => {
+    const closeBtn = document.querySelector('.close') || document.querySelector('.modal-close') || document.querySelector('[onclick*="close"]') || document.querySelector('button[class*="close"]');
+    if (closeBtn) closeBtn.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  };
+  const getVisibleTables = () => Array.from(document.querySelectorAll('table')).filter((table) => {
+    const rect = table.getBoundingClientRect();
+    return rect.width > 30 && rect.height > 30;
+  });
+  const getModalTitle = (root) => {
+    if (!root) return '';
+    const selectors = ['.modal-title', '.popup-title', '[class*="title"]', 'font[color="red"]'];
+    for (const selector of selectors) {
+      const candidates = Array.from(root.querySelectorAll(selector)).filter(isVisible);
+      const best = candidates.map((el) => cleanText(el.textContent || '')).filter(Boolean).sort((a, b) => b.length - a.length)[0];
+      if (best) return best;
+    }
+    return '';
+  };
+  const getModalFingerprint = (root) => { if (!root) return ''; return cleanText(root.textContent || '').slice(0, 400); };
+  const getActiveModalRoot = () => {
+    const titleCandidates = Array.from(document.querySelectorAll('.modal-title, .popup-title, [class*="title"], font[color="red"]')).filter(isVisible);
+    let best = null; let bestScore = -1;
+    for (const titleEl of titleCandidates) {
+      let node = titleEl;
+      for (let depth = 0; depth < 8 && node; depth++) {
+        const parent = node.parentElement;
+        if (!parent) break;
+        node = parent;
+        if (!isVisible(node)) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.width < 220 || rect.height < 120) continue;
+        const tableCount = node.querySelectorAll('table').length;
+        if (!tableCount) continue;
+        const titleText = getModalTitle(node);
+        const closeExists = !!node.querySelector('.close, .modal-close, [onclick*="close"], button[class*="close"]');
+        const zIndex = Number(window.getComputedStyle(node).zIndex || 0) || 0;
+        const score = tableCount * 4000 + rect.width * rect.height + (titleText ? 3000 : 0) + (closeExists ? 1500 : 0) + zIndex;
+        if (score > bestScore) { best = node; bestScore = score; }
+      }
+    }
+    return best;
+  };
+  const scoreTable = (table) => {
+    const text = cleanText(table.textContent || '');
+    const rowsCount = table.querySelectorAll('tr').length;
+    if (rowsCount < 3) return -1;
+    const headerText = cleanText(table.querySelector('tr')?.textContent || '');
+    const headerHits = [/שם/u, /תפקיד/u, /נייד|טלפון/u, /שעות/u].reduce((sum, re) => (re.test(headerText) ? sum + 1 : sum), 0);
+    const phones = (text.match(/(?:\+?972[-\s.]?)?0?(?:[2-9]\d|5\d)[-\s.]?\d{3}[-\s.]?\d{4}/g) || []).length;
+    const times = (text.match(/\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}/g) || []).length;
+    return rowsCount * 2 + phones * 3 + times * 2 + headerHits * 8;
+  };
+  const snapshotTable = (table) => ({
+    score: scoreTable(table),
+    rows: Array.from(table.querySelectorAll('tr')).map((row) => Array.from(row.querySelectorAll('th,td')).map((cell) => cleanText(cell.textContent || ''))),
+  });
+  if (typeof openmd2 !== 'function') {
+    return { tables: [], studio: '', title: '', invalid: true, reason: 'openmd2_missing' };
+  }
+  const previousRoot = getActiveModalRoot();
+  const previousFingerprint = getModalFingerprint(previousRoot);
+  closePopup();
+  await new Promise((r) => setTimeout(r, 120));
+  openmd2(hId);
+  const deadline = Date.now() + 3000;
+  const snapshotBySignature = new Map();
+  let activeModalRoot = null; let bestCombined = -1; let lastImprovementAt = Date.now();
+  while (Date.now() < deadline) {
+    const modalRoot = getActiveModalRoot();
+    if (modalRoot) {
+      const fingerprint = getModalFingerprint(modalRoot);
+      if (!previousFingerprint || fingerprint !== previousFingerprint) { activeModalRoot = modalRoot; }
+    }
+    const rootForParsing = activeModalRoot || modalRoot;
+    const modalTables = rootForParsing ? Array.from(rootForParsing.querySelectorAll('table')).filter((table) => { const rect = table.getBoundingClientRect(); return rect.width > 30 && rect.height > 30; }) : [];
+    const tables = modalTables.length ? modalTables : getVisibleTables();
+    for (const table of tables) {
+      const score = scoreTable(table);
+      if (score < 6) continue;
+      const snapshot = snapshotTable(table);
+      const rowsCount = snapshot.rows.filter((row) => row.length >= 3).length;
+      if (rowsCount === 0) continue;
+      const combined = score + rowsCount * 5;
+      const signature = JSON.stringify(snapshot.rows);
+      const existing = snapshotBySignature.get(signature);
+      if (!existing || combined > existing.combined) {
+        snapshotBySignature.set(signature, { ...snapshot, combined });
+        if (combined > bestCombined) { bestCombined = combined; lastImprovementAt = Date.now(); }
+      }
+    }
+    const strongCount = Array.from(snapshotBySignature.values()).filter((entry) => entry.combined >= 20).length;
+    if (strongCount >= 1 && Date.now() - lastImprovementAt >= 700) break;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  const collectedSnapshots = Array.from(snapshotBySignature.values()).sort((a, b) => b.combined - a.combined).map(({ combined, ...snapshot }) => snapshot);
+  const titleText = getModalTitle(activeModalRoot || getActiveModalRoot());
+  const studioMatchTitle = titleText.match(/(?:אולפן|studio|st\.?)\s*(\d+\w?)/i);
+  let studio = studioMatchTitle ? studioMatchTitle[0] : '';
+  if (!studio) {
+    const allPageRows = Array.from(document.querySelectorAll('table tr'));
+    for (const row of allPageRows) {
+      const cells = Array.from(row.querySelectorAll('td,th')).map((c) => cleanText(c.textContent || '')).filter((c) => c.length > 0);
+      const exactStudio = cells.find((c) => /^(?:אולפן|סטודיו|studio)\s*\d+\w?$/i.test(c));
+      if (exactStudio) { studio = exactStudio; break; }
+      const dateIdx = cells.findIndex((c) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(c));
+      if (dateIdx >= 2 && cells[dateIdx - 1]) {
+        const candidate = cells[dateIdx - 1];
+        if (!/^[א-ת]{2,5}$/.test(candidate)) { studio = candidate; break; }
+      }
+    }
+  }
+  closePopup();
+  return { tables: collectedSnapshots, studio, title: titleText, invalid: !collectedSnapshots.length, reason: collectedSnapshots.length ? '' : 'no_tables' };
+};
+
 async function fetchSchedule(browser, url) {
   const page = await browser.newPage();
   const snapshotDir = path.join(os.tmpdir(), 'tv-industry-il-schedule-snapshots');
