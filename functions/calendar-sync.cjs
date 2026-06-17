@@ -797,7 +797,7 @@ async function fetchSchedule(browser, url) {
         departmentEnrichedCount++;
       }
       // Fetch ShowCrew popups for ALL department productions and write to global_productions
-      const DEPT_VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות)/i;
+      const DEPT_VACATION_RE = /(^|[-–\s/|,])(חופש|ביטול|מחלה|שמירה|היעדרות|טכנאי\s+תורן)/i;
       const allDepartmentProductions = [];
       const deptEvalCtx = async (fn, ...args) => {
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -1368,7 +1368,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       };
     });
     const globalHerzliyaId = prod.herzliyaId || existingGlobal.herzliyaId;
-    batch.set(globalRef, {
+    // If the merged crew has phone numbers it came from a fresh ShowCrew popup — REPLACE so that
+    // stale entries added by old bugs are evicted. Without phones we fall back to MERGE so we
+    // don't accidentally discard crew contributed by other sync sources.
+    const hasPhones = mergedCrewList.some((m) => m.normalizedPhone);
+    const globalFields = {
       id: prodId,
       name: prod.name || existingGlobal.name || '',
       studio: prod.studio || existingGlobal.studio || '',
@@ -1388,7 +1392,12 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       lastUpdatedBy: userId,
       sourceWeekPath: `${userProductionsRoot}/${weekId}`,
       lastSyncSnapshotId: snapshot.runId,
-    }, { merge: true });
+    };
+    if (hasPhones) {
+      batch.set(globalRef, globalFields); // REPLACE: fresh popup crew removes stale entries
+    } else {
+      batch.set(globalRef, globalFields, { merge: true }); // MERGE: preserve other sources
+    }
   }
 
   for (const [prodId, existingPersonal] of snapshot.existingPersonalById) {

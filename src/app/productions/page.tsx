@@ -232,7 +232,64 @@ function deduplicateProductionsByIdentity(prods: Production[]): Production[] {
       });
     }
   }
-  return [...Array.from(byStart.values()), ...noStart];
+  const pass2 = [...Array.from(byStart.values()), ...noStart];
+
+  // Third pass: merge "(לוז לא סופי)" draft entries with their non-draft counterparts.
+  // Two productions may share the same canonName+date but have different startTimes (e.g. 13:30
+  // vs 14:00) because the draft schedule uses approximate times. Merge draft into non-draft when
+  // canonName and date match (ignoring startTime). If no non-draft counterpart exists, keep the
+  // draft entry but strip the qualifier from its display name.
+  const DRAFT_RE = /\s*\(לוז לא סופי\)/g;
+  const nonDraftByKey = new Map<string, Production>(); // key: canonName::date
+  const draftEntries: Production[] = [];
+  for (const p of pass2) {
+    if (/\(לוז לא סופי\)/.test(p.name || '')) {
+      draftEntries.push(p);
+    } else {
+      const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+      nonDraftByKey.set(k, p);
+    }
+  }
+
+  if (draftEntries.length === 0) return pass2;
+
+  // Track which draft ids were absorbed (either merged or renamed)
+  const absorbedDraftIds = new Set<string>();
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    const nonDraft = nonDraftByKey.get(k);
+    absorbedDraftIds.add(draft.id || '');
+    if (nonDraft) {
+      // Merge draft crew into the non-draft entry; keep non-draft name and times
+      nonDraftByKey.set(k, {
+        ...nonDraft,
+        studio: nonDraft.studio || draft.studio,
+        crew: deduplicateCrew([...nonDraft.crew, ...draft.crew]),
+        isCurrentUserShift: nonDraft.isCurrentUserShift || draft.isCurrentUserShift,
+      });
+    } else {
+      // No non-draft counterpart — strip qualifier, keep entry under cleaned name
+      nonDraftByKey.set(k, { ...draft, name: (draft.name || '').replace(DRAFT_RE, '').trim() });
+    }
+  }
+
+  // Build pass3: keep non-draft entries (updated via nonDraftByKey) + stripped orphan drafts
+  const pass3: Production[] = [];
+  for (const p of pass2) {
+    if (absorbedDraftIds.has(p.id || '')) continue; // skip original draft rows
+    const k = `${canonicalProductionName(p.name || '')}::${p.date || ''}`;
+    pass3.push(nonDraftByKey.get(k) || p); // may be enriched with merged draft crew
+  }
+  // Append drafts that had no non-draft counterpart (now stripped of qualifier)
+  for (const draft of draftEntries) {
+    const k = `${canonicalProductionName(draft.name || '')}::${draft.date || ''}`;
+    if (!pass2.some((p) => !absorbedDraftIds.has(p.id || '') && `${canonicalProductionName(p.name || '')}::${p.date || ''}` === k)) {
+      const stripped = nonDraftByKey.get(k);
+      if (stripped) pass3.push(stripped);
+    }
+  }
+
+  return pass3;
 }
 
 // Merge global productions into the user's own set; extras get isCurrentUserShift re-evaluated
@@ -1442,6 +1499,7 @@ function ProductionsContent() {
   const visibleProductions = useMemo(() => {
     return productions.filter((production) => (
       production.date >= renderedRange.start && production.date <= renderedRange.end
+      && !/^טכנאי\s+תורן/i.test(production.name || '')
     ));
   }, [productions, renderedRange]);
 
