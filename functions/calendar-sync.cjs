@@ -1529,7 +1529,25 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
   try {
     const userProfileDoc = await db.doc(`users/${userId}`).get();
     const rawPhone = userProfileDoc.exists ? (userProfileDoc.data()?.phone || '') : '';
-    const workerNormalizedPhone = rawPhone ? normalizePhone(rawPhone) : null;
+    let workerNormalizedPhone = rawPhone ? normalizePhone(rawPhone) : null;
+
+    // Fallback: scan personal productions' crew for this worker's phone
+    if (!workerNormalizedPhone) {
+      const normWorkerForFallback = normalizeName(schedule.workerName || requestedWorkerName || '');
+      let foundFallbackPhone = false;
+      for (const prod of (schedule.productions || [])) {
+        if (foundFallbackPhone) break;
+        for (const member of (prod.crew || [])) {
+          if (normalizeName(member.name || '') === normWorkerForFallback && member.phone) {
+            const p = normalizePhone(member.phone);
+            if (p) { workerNormalizedPhone = p; foundFallbackPhone = true; break; }
+          }
+        }
+      }
+      if (workerNormalizedPhone) {
+        console.log(`Disown step: found worker phone from crew data (not profile): ${workerNormalizedPhone}`);
+      }
+    }
 
     if (workerNormalizedPhone) {
       const phoneQuery = await db.collection('global_productions')

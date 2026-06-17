@@ -867,7 +867,26 @@ export async function syncHerzliyaUrl(
     try {
       const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
       const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
-      const disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
+      let disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
+
+      // Fallback: scan synced productions' crew to find this worker's phone
+      if (!disownPhone && workerName) {
+        const normWorkerForFallback = workerName.trim().toLowerCase().replace(/\s+/g, ' ');
+        let foundFallbackPhone = false;
+        for (const prod of productions) {
+          if (foundFallbackPhone) break;
+          for (const member of (prod.crew ?? [])) {
+            const memberNorm = (member.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            if (memberNorm === normWorkerForFallback && member.phone) {
+              const p = normalizePhone(member.phone);
+              if (p) { disownPhone = p; foundFallbackPhone = true; break; }
+            }
+          }
+        }
+        if (disownPhone) {
+          console.log(`[herzliyaSync] disown fallback: found phone from crew data: ${disownPhone}`);
+        }
+      }
 
       if (disownPhone) {
         type PhoneDoc = GlobalProductionDoc & { _path?: string };
