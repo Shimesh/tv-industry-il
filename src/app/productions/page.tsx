@@ -2489,8 +2489,10 @@ function ProductionsContent() {
       if (existing.length > 0) {
         setProductions(existing);
         productionsByWeekRef.current.set(currentWeekId, existing);
-        setStatusMessage(prev => (prev ?? '').startsWith('עודכנו') ? prev : 'נטען מחדש מהשרת');
+        setStatusMessage(prev => (prev ?? '').startsWith('עודכן') ? prev : 'נטען מחדש מהשרת');
       }
+      // Bust widget cache so home page shows fresh data immediately
+      try { localStorage.removeItem('productions_global_widget_cache_v3'); } catch { /* ignore */ }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
     }

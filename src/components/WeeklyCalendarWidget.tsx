@@ -277,17 +277,24 @@ export default function WeeklyCalendarWidget() {
       if (Date.now() - lastFetchStartedAt.current < 5 * 60 * 1000) return;
       setRefreshNonce((value) => value + 1);
     };
+    const forceRefresh = () => setRefreshNonce((value) => value + 1);
     const intervalId = window.setInterval(requestRefresh, 5 * 60 * 1000);
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') requestRefresh();
     };
+    // Force-refresh when productions page clears the cache after a manual resync
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'productions_global_widget_cache_v3' && e.newValue === null) forceRefresh();
+    };
 
     window.addEventListener('focus', requestRefresh);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('storage', handleStorage);
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener('focus', requestRefresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
