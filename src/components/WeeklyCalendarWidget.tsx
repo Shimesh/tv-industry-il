@@ -105,9 +105,8 @@ function roundTime30(t: string): string {
 
 // Robust cross-source dedup: same production can arrive from multiple endpoints
 // with different IDs (personal path vs global sync).
-// Uses canonical name (strips draft qualifiers) and BOTH sorted rounded times so that
-// different-shift productions (e.g. 19:00-25:00 vs 25:00-15:00) are never merged,
-// while near-identical start times (13:45 vs 14:00) are treated as one production.
+// Pass 1: canonical name + BOTH sorted rounded times (keeps different shifts separate).
+// Pass 2: same name + date + startTime regardless of endTime (merges duplicate Firestore entries).
 function deduplicateByIdentity(productions: Production[]): Production[] {
   const seen = new Map<string, Production>();
   for (const prod of productions) {
@@ -133,7 +132,33 @@ function deduplicateByIdentity(productions: Production[]): Production[] {
       });
     }
   }
-  return Array.from(seen.values());
+
+  // Pass 2: merge entries that share name+date+startTime but differ only in endTime
+  const pass1 = Array.from(seen.values());
+  const byStart = new Map<string, Production>();
+  const noStart: Production[] = [];
+  for (const p of pass1) {
+    if (!p.date || !p.startTime) { noStart.push(p); continue; }
+    const sk = `${canonicalProductionName(p.name || '')}::${p.date}::${roundTime30(p.startTime)}`;
+    const ex = byStart.get(sk);
+    if (!ex) {
+      byStart.set(sk, p);
+    } else {
+      const studioOk = !ex.studio || !p.studio || ex.studio === p.studio;
+      if (!studioOk) { byStart.set(sk + '::' + (p.studio || p.id), p); continue; }
+      const base = (p.crew?.length ?? 0) >= (ex.crew?.length ?? 0) ? p : ex;
+      const other = base === p ? ex : p;
+      const laterEnd = (base.endTime || '') > (other.endTime || '') ? base.endTime : other.endTime;
+      byStart.set(sk, {
+        ...base,
+        studio: base.studio || other.studio,
+        endTime: laterEnd,
+        crew: deduplicateCrewEntries([...(base.crew ?? []), ...(other.crew ?? [])]),
+        isCurrentUserShift: base.isCurrentUserShift || other.isCurrentUserShift,
+      });
+    }
+  }
+  return [...Array.from(byStart.values()), ...noStart];
 }
 
 function getMyRole(production: Production, displayName: string, phone: string): string {
