@@ -14,6 +14,7 @@ import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
 import { normalizePhone } from '@/lib/crewNormalization';
 import { getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
+import { getLinkedProductionIdentity, normalizePhoneForIdentity } from '@/lib/server/identityLink';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
@@ -897,34 +898,46 @@ export async function syncHerzliyaUrl(
   // or MERGE-semantics accumulation (e.g. user once appeared in מונדיאל then was removed).
   if (syncDates.length > 0) {
     try {
-      // verifiedPhone from Firebase Auth is the most reliable source (no profile lookup needed)
-      let disownPhone = verifiedPhone ? normalizePhone(verifiedPhone) : null;
-      if (!disownPhone) {
-        const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
-        const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
-        disownPhone = rawPhone ? normalizePhone(rawPhone) : null;
-      }
+      // Collect all known phones for this user from every linked source.
+      // getLinkedProductionIdentity aggregates from: Firebase Auth token, users/{uid},
+      // profiles/{profileId}, industry_people/{profileId}, contacts/{linkedContactId}.
+      // This is necessary for Google-auth users where phoneNumber is not in the token.
+      const disownPhones = new Set<string>();
+      try {
+        const identity = await getLinkedProductionIdentity({ uid, phoneNumber: verifiedPhone ?? null } as Parameters<typeof getLinkedProductionIdentity>[0]);
+        for (const p of identity.phones) {
+          const norm = normalizePhoneForIdentity(p);
+          if (norm) disownPhones.add(norm);
+        }
+      } catch { /* non-critical */ }
 
-      // Fallback: scan synced productions' crew to find this worker's phone
-      if (!disownPhone && workerName) {
+      // Also try verifiedPhone and users/{uid}.phone directly as extra safety
+      if (verifiedPhone) {
+        const p = normalizePhone(verifiedPhone);
+        if (p) disownPhones.add(p);
+      }
+      const userProfile = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
+      const rawPhone = userProfile?.phone || userProfile?.normalizedPhone || '';
+      if (rawPhone) { const p = normalizePhone(rawPhone); if (p) disownPhones.add(p); }
+
+      // Crew fallback: scan synced productions' crew to find this worker's phone by name
+      if (disownPhones.size === 0 && workerName) {
         const normWorkerForFallback = workerName.trim().toLowerCase().replace(/\s+/g, ' ');
-        let foundFallbackPhone = false;
         for (const prod of productions) {
-          if (foundFallbackPhone) break;
           for (const member of (prod.crew ?? [])) {
             const memberNorm = (member.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
             if (memberNorm === normWorkerForFallback && member.phone) {
               const p = normalizePhone(member.phone);
-              if (p) { disownPhone = p; foundFallbackPhone = true; break; }
+              if (p) { disownPhones.add(p); break; }
             }
           }
+          if (disownPhones.size > 0) break;
         }
-        if (disownPhone) {
-          console.log(`[herzliyaSync] disown fallback: found phone from crew data: ${disownPhone}`);
-        }
+        if (disownPhones.size > 0) console.log(`[herzliyaSync] disown fallback: found phone from crew data`);
       }
 
-      if (disownPhone) {
+      // Run disown query for each known phone — Firestore ARRAY_CONTAINS only supports one value per query
+      for (const phone of disownPhones) {
         type PhoneDoc = GlobalProductionDoc & { _path?: string };
         const staleDocs = await runQuery<PhoneDoc>({
           from: [{ collectionId: 'global_productions' }],
@@ -932,23 +945,24 @@ export async function syncHerzliyaUrl(
             compositeFilter: {
               op: 'AND',
               filters: [
-                { fieldFilter: { field: { fieldPath: 'crew_phones' }, op: 'ARRAY_CONTAINS', value: { stringValue: disownPhone } } },
+                { fieldFilter: { field: { fieldPath: 'crew_phones' }, op: 'ARRAY_CONTAINS', value: { stringValue: phone } } },
                 { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: syncDates[0] } } },
                 { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: syncDates[syncDates.length - 1] } } },
               ],
             },
           },
           limit: 200,
-        });
+        }).catch(() => [] as PhoneDoc[]);
 
         await Promise.allSettled(staleDocs.map(async (doc) => {
           const docId = String(doc._path || '').split('/').pop() || '';
           if (!docId || syncedIds.has(docId)) return;
+          // Remove all of the user's known phones from this production's crew
           const updatedCrewList = (doc.crew_list ?? []).filter(
-            (m) => (m as unknown as { normalizedPhone?: string }).normalizedPhone !== disownPhone,
+            (m) => !disownPhones.has((m as unknown as { normalizedPhone?: string }).normalizedPhone ?? ''),
           );
-          const updatedPhones = (doc.crew_phones ?? []).filter((p) => p !== disownPhone);
-          console.log(`[herzliyaSync] disown ${uid} from stale production ${docId} (${doc.name})`);
+          const updatedPhones = (doc.crew_phones ?? []).filter((p) => !disownPhones.has(p));
+          console.log(`[herzliyaSync] disown ${uid} (${[...disownPhones].join(',')}) from stale production ${docId} (${doc.name})`);
           await patchDocument(`global_productions/${docId}`, {
             crew_list: updatedCrewList,
             crew_phones: updatedPhones,
