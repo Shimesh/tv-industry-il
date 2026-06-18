@@ -286,63 +286,72 @@ export function extractStudioFromPopup(html: string): string {
 
 /**
  * Parse the Herzliya popup HTML (openmd2 detail modal) to extract full crew list.
- * The popup is a table with columns: phone, name, role, time.
+ * Table columns (fixed): שעות(0) | תפקיד(1) | שם(2) | פרטים(3) | נייד(4)
  */
 export function parseHerzliyaPopupHtml(html: string): Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> {
-  if (!html || typeof DOMParser === 'undefined') return parseHerzliyaPopupText(html);
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const rows = doc.querySelectorAll('tr');
-  const crew: Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> = [];
-
-  rows.forEach(row => {
-    const cells = row.querySelectorAll('td');
-    if (cells.length < 2) return;
-
-    // Try to identify columns by content pattern
-    const texts = Array.from(cells).map(c => c.textContent?.trim() || '');
-
-    // Heuristic: find the cell with a Hebrew name (2+ Hebrew chars)
-    const nameIdx = texts.findIndex(t => /[א-ת]{2,}/.test(t) && t.length >= 2);
-    if (nameIdx === -1) return;
-
-    const name = texts[nameIdx];
-    const role = texts[nameIdx + 1] || '';
-    const phone = texts.find(t => /^0\d{8,9}$/.test(t.replace(/[-\s]/g, ''))) || '';
-    const times = texts.flatMap(t => t.match(/\d{1,2}:\d{2}/g) || []);
-    const [startTime, endTime] = times.length >= 2 ? [times[0], times[1]] : [times[0] || '', ''];
-
-    if (name.length >= 2) {
-      crew.push({ name, role: role.replace(/\d{1,2}:\d{2}.*/g, '').trim(), phone: phone.replace(/[-\s]/g, ''), startTime, endTime });
-    }
-  });
-
-  return crew;
+  // Always use text-based parser — DOMParser is unavailable server-side (Node.js)
+  return parseHerzliyaPopupText(html);
 }
 
-/** Fallback: parse popup text (server-side, no DOMParser) */
+/** Parse popup HTML in Node.js and browser using header-detected column positions */
 function parseHerzliyaPopupText(html: string): Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> {
   const crew: Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> = [];
+  if (!html) return crew;
+
+  // Convert table markup to tab-delimited rows; preserve empty cells for column alignment
   const text = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, '\t')
+    .replace(/<\/th>/gi, '\t')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .trim();
+    .replace(/&nbsp;/g, ' ');
 
-  for (const line of text.split('\n')) {
-    const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
-    if (parts.length < 2) continue;
-    const phoneIdx = parts.findIndex(p => /^0\d{8,9}$/.test(p.replace(/[-\s]/g, '')));
-    const nameIdx = parts.findIndex(p => /[א-ת]{2,}/.test(p));
-    if (nameIdx === -1) continue;
-    const name = parts[nameIdx];
-    const role = parts[nameIdx + 1] && !/\d{1,2}:\d{2}/.test(parts[nameIdx + 1]) ? parts[nameIdx + 1] : '';
-    const phone = phoneIdx !== -1 ? parts[phoneIdx].replace(/[-\s]/g, '') : '';
-    const times = parts.flatMap(p => p.match(/\d{1,2}:\d{2}/g) || []);
-    crew.push({ name, role, phone, startTime: times[0] || '', endTime: times[1] || '' });
+  // Keep empty cells (no filter) so column indices stay stable across rows
+  const rows = text.split('\n')
+    .map(line => line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()))
+    .filter(r => r.some(p => p.length > 0));
+
+  // Detect header row: look for "שם" (name col) and "נייד" (phone col)
+  // Default matches known fixed structure: שעות(0) | תפקיד(1) | שם(2) | פרטים(3) | נייד(4)
+  let timeCol = 0, roleCol = 1, nameCol = 2, phoneCol = 4;
+  for (const row of rows) {
+    const shmIdx = row.indexOf('שם');
+    const nayadIdx = row.indexOf('נייד');
+    if (shmIdx !== -1 && nayadIdx !== -1) {
+      nameCol = shmIdx;
+      phoneCol = nayadIdx;
+      roleCol = Math.max(0, shmIdx - 1);
+      timeCol = Math.max(0, roleCol - 1);
+      break;
+    }
+  }
+
+  for (const parts of rows) {
+    // Skip the header row
+    if (parts.includes('שם') && parts.includes('נייד')) continue;
+    if (parts.length <= nameCol) continue;
+
+    const name = parts[nameCol];
+    // Must be Hebrew text (at least 2 Hebrew characters)
+    if (!name || !/[א-ת]{2,}/.test(name)) continue;
+
+    const role = roleCol < parts.length ? parts[roleCol] : '';
+    const phoneRaw = phoneCol < parts.length ? parts[phoneCol] : '';
+    let phone = phoneRaw.replace(/[-\s]/g, '');
+    // Fallback: scan all cells for a phone number when column value doesn't match
+    if (!/^0\d{8,9}$/.test(phone)) {
+      const found = parts.find(p => /^0\d{8,9}$/.test(p.replace(/[-\s]/g, '')));
+      phone = found ? found.replace(/[-\s]/g, '') : '';
+    }
+
+    // Extract times from time column; fall back to scanning all cells
+    const timeStr = timeCol < parts.length ? parts[timeCol] : '';
+    const colTimes = timeStr.match(/\d{1,2}:\d{2}/g) || [];
+    const allTimes = colTimes.length >= 1 ? colTimes : parts.flatMap(p => p.match(/\d{1,2}:\d{2}/g) || []);
+    const [startTime, endTime] = allTimes.length >= 2 ? [allTimes[0], allTimes[1]] : [allTimes[0] || '', ''];
+
+    crew.push({ name, role, phone, startTime, endTime });
   }
   return crew;
 }

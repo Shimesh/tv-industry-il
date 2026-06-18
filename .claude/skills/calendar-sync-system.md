@@ -77,6 +77,22 @@ id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId
 
 ## 4. Data Parsing Paths
 
+### ShowCrew popup HTML format
+Table structure returned by `ShowCrew` / `openmd2(id)`:
+```
+Column index:  0        1        2      3         4
+Header row:    שעות   | תפקיד | שם   | פרטים  | נייד
+Data row ex:   14:00-05:30 | צילום | ירון אורבך | | 054-760-3436
+```
+**CRITICAL**: First Hebrew cell in a row is the ROLE (תפקיד), NOT the name (שם). Old code that used `findIndex(p => /[א-ת]{2,}/)` always returned the role column. Fixed in v2.8.161 via header-row column detection.
+
+`parseHerzliyaPopupHtml` always delegates to `parseHerzliyaPopupText` (DOMParser unavailable in Node.js). `parseHerzliyaPopupText` now:
+1. Replaces `</th>` → `\t` (in addition to `</td>`) so header cells are tab-delimited
+2. Preserves empty cells (no `filter(Boolean)`) so column indices stay stable when a cell is empty
+3. Scans all rows for one where `row.indexOf('שם') !== -1 && row.indexOf('נייד') !== -1` — those are the header row
+4. Uses detected column positions (nameCol, roleCol, phoneCol, timeCol) for all data rows
+5. Phone fallback: scans all cells if column value doesn't match `/^0\d{8,9}$/`
+
 ### Path A: `parseScheduleHTML` (browser DOMParser or regex server-side)
 - Called by: `fetchHerzliyaProductions` with `effectivePersonalHtml` + optional `effectiveDeptHtml`
 - Creates productions with: `generateProductionId` ID initially, then enrichment loop assigns `String(herzliyaId)`
@@ -448,6 +464,8 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | sendwa.html with embedded openmd2: only 5-6 personal productions get ShowCrew, not all 41 dept | sendwa.html that has openmd2 directly in HTML skipped the sendwa-specific branch (line 309 condition `!personalHtml.includes('openmd2')` false). deptUrl = sendwa + ignored param → deptHtml = personalHtml. effectivePopupBaseUrl = sendwa URL (wrong for ShowCrew). | Fixed (v2.8.156): new block after sendwa branch — extracts employee GUID from embedded JS regex `/ShowEmp[36]&arguments=-N([0-9A-Fa-f-]{20,50})/i`, constructs ShowEmp6 URL, fetches dept view. Also always sets `effectivePopupBaseUrl = mgrqispi.dll` for sendwa URLs. |
 | User highlighted in ALL dept productions after ShowEmp6 enabled (false positive) | ShowEmp6 fetches 41 dept productions, all 41 go into `syncedIds = new Set(productions.map(p => p.id))`. Disown step skips all of them (`if syncedIds.has(docId) return`). If ShowCrew for any dept production includes the user's phone (even if wrong assignment in source), their phone is added and disown never removes it. | Fixed (v2.8.157): `syncedIds` now computed from `personalHerzliyaIds` only. Dept-only productions (not in user's personal sendwa schedule) are NOT in syncedIds → disown runs for them → phone removed after each sync. Immediate one-time patch via `GET /api/admin/disown-user?uid=<uid>&secret=<secret>`. |
 | ShowCrew popup returns no data — only worker themselves appears (freelancer sendwa) | Primary ShowCrew URL built with `appname=HsILWEB` (wrong case). Confirmed appname for this server is `HsILWeb`. For freelancer sendwa pages, `magicXpaSession = ''` (no session token in HTML or URL). Fallback to `buildHerzliyaPopupUrl()` (correct appname) was gated by `if (magicXpaSession)` → never ran. Result: all popup calls fail silently, only workerName fallback crew appears. | Fixed (v2.8.159): when `magicXpaSession` is empty → use `buildHerzliyaPopupUrl()` directly as primary (appname=HsILWeb). Removed `if (magicXpaSession)` guard from fallback — fallback now always runs if URL differs. Cookie from fetching sendwa.html is sufficient for ShowCrew on same server. |
+| Widget not highlighted orange / crew_phones empty even when ShowCrew succeeds | When ShowCrew fails, workerName fallback crew entry has `phone: ''`. `crew_phones` stays empty → widget query returns nothing. `verifiedPhone` from Firebase auth is null for Google-only users. | Fixed (v2.8.160): `syncHerzliyaUrl` now fetches user phone from `users/{uid}` and `profiles/{uid}` after parsing. Enriches any crew entry with `phone=''` where `name === workerName || isCurrentUser === true`. |
+| Crew list shows wrong names — roles appear as names, names appear as roles | `parseHerzliyaPopupText` (always used server-side, DOMParser=undefined in Node.js) found the first Hebrew cell as "name" using `findIndex(p => /[א-ת]{2,}/)`. But column 1 (תפקיד/role) is always Hebrew and comes before column 2 (שם/name). Result: role="ירון אורבך", name="צילום". phones were correct. | Fixed (v2.8.161): `parseHerzliyaPopupText` now detects the header row (row containing "שם" AND "נייד"), records column indices (nameCol, roleCol, phoneCol, timeCol), and uses those for all data rows. Also handles `</th>` tags and preserves empty cells so column positions don't shift. |
 
 ---
 
