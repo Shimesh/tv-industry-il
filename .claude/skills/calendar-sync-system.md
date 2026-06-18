@@ -134,16 +134,17 @@ File: `src/lib/server/herzliyaSync.ts` lines 252–725
 
 **Steps:**
 1. Fetch `personalHtml` (url) + `deptHtml` (url + `&HSELWEBprgnameShowFmp=1`) in parallel
-2. If `sendwa.html` URL: extract GUID → build ShowEmp3 URL → try to get session cookie (root init, then ShowEmp3 response cookie)
-3. If still no session and credentials stored: try `herzliyaLogin()` (MagicXPA form login)
-4. Extract `magicXpaSession` from HTML
-5. Build `events` by merging `extractHerzliyaEventIds(personalHtml)` + `extractHerzliyaEventIds(deptHtml)`. Track `personalEventIds` (personal only) for workerName fallback gate.
-6. Fetch ShowCrew for all unique herzliyaIds in parallel → `popupCache`
-7. Enrichment loop: for each prod from parseScheduleHTML, add popup crew + assign herzliyaId
-8. If all productions generic (Path B): build from events with popup crew
-9. Final ID assignment: `prod.herzliyaId ? String(prod.herzliyaId) : generateProductionId(...)`
+2. If `sendwa.html` URL AND personalHtml has **no** openmd2: extract GUID from URL A param → build ShowEmp3 URL → try to get session cookie (root init, then ShowEmp3 response cookie)
+3. **NEW (v2.8.156)** If `sendwa.html` URL AND personalHtml **does** have openmd2 (productions embedded, no session needed): extract employee GUID from embedded JS (`ShowEmp6&arguments=-N{GUID}`) → build ShowEmp6 URL → fetch dept view → set `effectiveDeptHtml`. Also always sets `effectivePopupBaseUrl = mgrqispi.dll` (not sendwa.html) so ShowCrew calls go to the right endpoint.
+4. If still no session and credentials stored: try `herzliyaLogin()` (MagicXPA form login)
+5. Extract `magicXpaSession` from HTML
+6. Build `events` by merging `extractHerzliyaEventIds(personalHtml)` + `extractHerzliyaEventIds(deptHtml)`. Track `personalHerzliyaIds: number[]` (personal only) — used for: workerName fallback gate + `syncedIds` scoping in `syncHerzliyaUrl`.
+7. Fetch ShowCrew for all unique herzliyaIds in parallel → `popupCache`
+8. Enrichment loop: for each prod from parseScheduleHTML, add popup crew + assign herzliyaId
+9. If all productions generic (Path B): build from events with popup crew
+10. Final ID assignment: `prod.herzliyaId ? String(prod.herzliyaId) : generateProductionId(...)`
 
-**Returns:** `{ productions[], debug: string, finalUrl? }`
+**Returns:** `{ productions[], debug: string, finalUrl?, personalHerzliyaIds: number[] }`
 
 ---
 
@@ -157,21 +158,23 @@ File: `src/lib/server/herzliyaSync.ts` lines 729–990
 Both `save-sync-url` and `resync` routes pass `authUser.phoneNumber || undefined` as `verifiedPhone`. The cron route passes `undefined`.
 
 **Steps:**
-1. Call `fetchHerzliyaProductions(url, ...credentials, workerName)`
+1. Call `fetchHerzliyaProductions(url, ...credentials, workerName)` → returns productions + `personalHerzliyaIds`
 2. Create audit snapshot in `calendar_sync_snapshots/{runId}`
 3. For each production: read existing `global_productions/{id}`, record before/after in snapshot
-4. Write merged productions via `toGlobalProduction()` + `mergeGlobalProduction()` + `patchDocument`
+4. Write ALL productions (personal + dept) via `toGlobalProduction()` + `mergeGlobalProduction()` + `patchDocument`
 5. **Post-write cleanup** — single date-range scan of `global_productions` for the synced date window:
    - **Vacation cleanup:** delete any doc whose name matches vacation regex and is NOT in the current sync batch
    - **Name-based disown (Case 3):** for any doc NOT in syncedIds, if `workerName` matches a crew entry by name → remove that name entry from `crew_list`/`crew_shadow_keys`/`crew_phones`. Runs **before** Case 2 to cover all IDs including numeric herzliyaIds.
    - **Slug-ID dedup (Case 2):** for any non-numeric-ID doc whose name is a prefix-match of a freshly synced production (same date) → merge crew into numeric-ID entry via `mergeGlobalProduction`, then delete slug doc
-6. **Disown step** — remove user's phone from stale productions (productions where user's phone appears but they are NOT personally scheduled):
+6. **NEW (v2.8.157) `syncedIds` scoping**: `syncedIds` contains ONLY productions from the user's PERSONAL schedule (`personalHerzliyaIds`), NOT dept-only productions from ShowEmp6. Productions without herzliyaId (slug-ID from parseScheduleHTML) are always included (they come from personal HTML). This is critical: if all dept productions were in syncedIds, the disown step would skip them and the user's phone would remain in crew_phones for productions they're not personally scheduled for.
+
+7. **Disown step** — remove user's phone from stale productions (productions where user's phone appears but they are NOT personally scheduled):
    - Collect all known phones via `getLinkedProductionIdentity(authUser)` — aggregates from `users/{uid}`, `profiles/{profileId}`, `industry_people/{profileId}`, `contacts/{linkedContactId}`. Also tries `verifiedPhone` and `users/{uid}.phone` directly.
    - Crew fallback: if still no phone found, scan synced productions' crew for an entry matching `workerName` to find the phone
    - For each found phone: query `global_productions` by `crew_phones ARRAY_CONTAINS phone` + **full week date range** (`scanWeekStart` to `scanWeekEnd`) → remove ALL the user's known phones from those docs' `crew_list` and `crew_phones`
    - **Date range is the FULL week** (Sun–Sat via `getCurrentWeekStartIsrael()` + 6 days), NOT just the exact dates of synced productions. Critical: if user only synced Mon+Wed but stale production is on Fri, the old narrow range would miss it.
    - **Why `getLinkedProductionIdentity`:** `authUser.phoneNumber` is null for Google-authenticated users (phone_number only in phone-auth tokens). Profile-linked phone is the reliable source.
-7. Background: `syncContactsFromSavedProductions()`
+8. Background: `syncContactsFromSavedProductions()`
 
 **Slug-ID dedup detail:** `nameSimilar(a, b)` returns true when one name starts-with the other and shortest is ≥3 chars.
 
@@ -438,6 +441,8 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | Personal batch REPLACE wiped accumulated crew | REPLACE semantics (when freshHasPhones) discarded crew written by other users | Fixed (v2.8.147+): personal batch always uses MERGE + JS-level `mergeCrewPreservingExisting()`. Disown step handles cleanup of stale personal entries instead |
 | מונדיאל/stale production still highlighted after resync | Case 3 (name-based disown) phone filter was INVERTED: `filter(p => !updatedCrewList.some(m => m.normalizedPhone === p))` kept the removed worker's phone and removed all others. Phone remained in `crew_phones` → `phoneRes` query still found production → still highlighted | Fixed (v2.8.152): filter now extracts `normalizedPhone` of removed crew entries and removes exactly those phones from `crew_phones` |
 | Disown misses productions on days user has no Ashheim shift | Date range for disown/cleanup used exact sync dates (e.g. Mon+Wed), missing stale production on Tue/Thu/Fri | Fixed (v2.8.152): date range scan and phone-based disown now use full 7-day week range (`scanWeekStart` to `scanWeekEnd`) instead of `syncDates[0]..syncDates[last]` |
+| sendwa.html with embedded openmd2: only 5-6 personal productions get ShowCrew, not all 41 dept | sendwa.html that has openmd2 directly in HTML skipped the sendwa-specific branch (line 309 condition `!personalHtml.includes('openmd2')` false). deptUrl = sendwa + ignored param → deptHtml = personalHtml. effectivePopupBaseUrl = sendwa URL (wrong for ShowCrew). | Fixed (v2.8.156): new block after sendwa branch — extracts employee GUID from embedded JS regex `/ShowEmp[36]&arguments=-N([0-9A-Fa-f-]{20,50})/i`, constructs ShowEmp6 URL, fetches dept view. Also always sets `effectivePopupBaseUrl = mgrqispi.dll` for sendwa URLs. |
+| User highlighted in ALL dept productions after ShowEmp6 enabled (false positive) | ShowEmp6 fetches 41 dept productions, all 41 go into `syncedIds = new Set(productions.map(p => p.id))`. Disown step skips all of them (`if syncedIds.has(docId) return`). If ShowCrew for any dept production includes the user's phone (even if wrong assignment in source), their phone is added and disown never removes it. | Fixed (v2.8.157): `syncedIds` now computed from `personalHerzliyaIds` only. Dept-only productions (not in user's personal sendwa schedule) are NOT in syncedIds → disown runs for them → phone removed after each sync. Immediate one-time patch via `GET /api/admin/disown-user?uid=<uid>&secret=<secret>`. |
 
 ---
 
@@ -450,6 +455,10 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | הרץ שנוי (admin panel) | admin panel | POST /api/admin/productions/rebuild | Full rebuild: all users, all steps, vacation cleanup |
 | הרץ (per-user in admin) | admin panel | POST /api/calendar/resync for specific user | Single-user resync |
 | Google Calendar שמור לינק | productions page | POST /api/google/calendar | Saves Google Calendar URL |
+
+**Admin one-time utilities:**
+- `GET /api/admin/disown-user?uid=<UID>&secret=<ADMIN_SECRET>` — removes user's phone from ALL `global_productions` crew_phones for the current week. Use when a user's phone is stuck in productions they're not scheduled for. The user's next normal sync will re-add them to their legitimate productions (protected by personalHerzliyaIds gate).
+- `GET /api/admin/cleanup-productions?secret=<s>` — deletes draft-qualifier productions superseded by clean versions.
 
 ---
 
@@ -474,3 +483,5 @@ The word "הרצליה" may appear in code (variable names, regex patterns, comm
 6. **personalEventIds gate** must be maintained when modifying the event-based path. Without it, workerName fallback spreads user to all dept productions.
 7. **crew_phones and crew_shadow_keys** must be flat arrays (for Firestore ARRAY_CONTAINS). Never store as nested objects.
 8. **ID consistency test**: after any change to fetchHerzliyaProductions, verify that the same Herzliya event produces identical IDs when fetched by two different users.
+9. **`syncedIds` must use `personalHerzliyaIds` only** — never include all productions. If you add new production sources (ShowEmp6, dept fetches), those productions must NOT be in syncedIds, otherwise disown never runs for them and users get false-positive highlights in productions they're not personally scheduled for.
+10. **github action vs HTTP sync distinction**: `calendar-sync.cjs` uses CSS class `.sat` to identify personal events (`isCurrentUserShift`) — dept events from ShowEmp6 have class `.event` and are never marked personal. `herzliyaSync.ts` uses `personalHerzliyaIds` for the same gate. Both must be maintained independently — they are NOT shared code.

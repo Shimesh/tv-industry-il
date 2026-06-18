@@ -41,6 +41,7 @@ export type ParsedHerzliyaResult = {
   productions: Production[];
   debug: string;
   finalUrl?: string;
+  personalHerzliyaIds?: number[];
 };
 
 export function getCurrentWeekStartIsrael(): string {
@@ -548,10 +549,16 @@ export async function fetchHerzliyaProductions(
   const htmlsToScan = [effectivePersonalHtml];
   if (!deptSameAsPersonal && effectiveDeptHtml.includes('openmd2')) htmlsToScan.push(effectiveDeptHtml);
 
+  // Track personal herzliyaIds so syncedIds can be scoped to personal schedule only.
+  // Dept-only productions (from ShowEmp6) must NOT be in syncedIds — otherwise disown skips them,
+  // and the user's phone stays in crew_phones for productions they're not personally scheduled for.
+  let personalHerzliyaIds: number[] = [];
+
   if (effectivePersonalHtml.includes('openmd2')) {
     const allEventsByHtml = htmlsToScan.map(h => extractHerzliyaEventIds(h));
     // Track which IDs come from the personal schedule — workerName fallback only applies to these
     const personalEventIds = new Set(allEventsByHtml[0].map(e => e.herzliyaId));
+    personalHerzliyaIds = [...personalEventIds];
     // Merge: dept events take precedence for production name (dept view has fuller names)
     const eventMap = new Map<number, { herzliyaId: number; name: string }>();
     for (const evList of allEventsByHtml) {
@@ -829,6 +836,7 @@ export async function fetchHerzliyaProductions(
     productions,
     debug: debugLines.join(' | '),
     finalUrl: finalUrl !== url ? finalUrl : undefined,
+    personalHerzliyaIds,
   };
 }
 
@@ -907,7 +915,13 @@ export async function syncHerzliyaUrl(
   // Slug-ID duplicates occur when an older entry used generateProductionId("אסתטיקה",...)
   // but the fresh sync writes to a numeric herzliyaId ("12345") for "אסתטיקה 360" —
   // same production, different ID and slightly different name.
-  const syncedIds = new Set(productions.map(p => p.id));
+  // Only protect PERSONAL productions from disown — dept-only productions (from ShowEmp6)
+  // are NOT in the user's personal schedule, so disown must be allowed to run for them.
+  // Without this, the user's phone stays in crew_phones for dept productions they don't work on.
+  const personalIdSet = new Set((parsed.personalHerzliyaIds ?? []).map(String));
+  const syncedIds = personalIdSet.size > 0
+    ? new Set(productions.filter(p => !p.herzliyaId || personalIdSet.has(String(p.herzliyaId))).map(p => p.id))
+    : new Set(productions.map(p => p.id));
   const syncDates = productions.map(p => p.date).filter(Boolean).sort();
   // Use full-week range so disown covers all 7 days, not only days with personal productions
   const scanWeekStart = getCurrentWeekStartIsrael();
