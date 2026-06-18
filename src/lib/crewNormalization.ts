@@ -46,6 +46,10 @@ export function buildCrewIdentity(
   const normalizedPhone = normalizePhone(input.phone);
 
   if (!normalizedName || normalizedName.length < 2) {
+    // If name is too short/empty but phone is valid, use phone as identity so crew entry is preserved
+    if (normalizedPhone) {
+      return { normalizedName, normalizedPhone, identityKey: normalizedPhone };
+    }
     return { normalizedName, normalizedPhone, identityKey: null };
   }
 
