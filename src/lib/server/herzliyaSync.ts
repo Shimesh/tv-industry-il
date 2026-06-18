@@ -443,6 +443,71 @@ export async function fetchHerzliyaProductions(
     }
   }
 
+  // sendwa.html with embedded openmd2: extract employee GUID and fetch ShowEmp6 (dept view).
+  // When sendwa.html has productions directly in HTML (no session needed to view), the dept-view
+  // ShowEmp6 URL must be constructed from the GUID embedded in the page's JavaScript.
+  if (url.includes('sendwa.html') && effectivePersonalHtml.includes('openmd2')) {
+    // Derive mgrqispi.dll base URL from the sendwa.html URL (sendwa.html is in /magicscripts/)
+    const sendwaMgrqBase = (() => {
+      try {
+        const u = new URL(url);
+        return `${u.protocol}//${u.host}/magicscripts/mgrqispi.dll`;
+      } catch { return ''; }
+    })();
+    if (sendwaMgrqBase) {
+      // Always fix popup base URL so ShowCrew calls go to mgrqispi.dll, not sendwa.html
+      effectivePopupBaseUrl = sendwaMgrqBase;
+      // Extract employee GUID from JS: ShowEmp6&arguments=-N{GUID},-A{DDMMYYYY},-Atrue
+      const guidMatch = effectivePersonalHtml.match(/ShowEmp[36]&arguments=-N([0-9A-Fa-f-]{20,50})/i);
+      if (guidMatch) {
+        const empGuid = guidMatch[1];
+        // Use current week's Sunday date in DDMMYYYY format (Israeli week = Sun-Sat)
+        const now = new Date();
+        const daysToSun = now.getUTCDay();
+        const weekSun = new Date(now);
+        weekSun.setUTCDate(now.getUTCDate() - daysToSun);
+        const dateStr =
+          String(weekSun.getUTCDate()).padStart(2, '0') +
+          String(weekSun.getUTCMonth() + 1).padStart(2, '0') +
+          String(weekSun.getUTCFullYear());
+        const showEmp6Url = `${sendwaMgrqBase}?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
+        debugLines.push(`sendwaEmp6:guid=${empGuid.slice(0, 20)},date=${dateStr}`);
+        const personalCount = (effectivePersonalHtml.match(/openmd2\(/g) || []).length;
+        const tryEmp6 = async (cookie: string) => {
+          try {
+            const r = await fetch(showEmp6Url, {
+              headers: { ...BASE_HEADERS, ...(cookie ? { Cookie: cookie } : {}), Referer: url },
+              signal: AbortSignal.timeout(12000),
+              // @ts-expect-error - Node.js 20
+              rejectUnauthorized: false,
+            });
+            const h = r.ok ? await r.text() : '';
+            const cnt = (h.match(/openmd2\(/g) || []).length;
+            debugLines.push(`sendwaEmp6:s=${r.status},events=${cnt}`);
+            if (h.includes('openmd2') && cnt > personalCount) {
+              effectiveDeptHtml = h;
+              return true;
+            }
+          } catch (e) { debugLines.push(`sendwaEmp6err:${String(e).slice(0, 60)}`); }
+          return false;
+        };
+        const ok = await tryEmp6(effectivePopupCookie || sessionCookie);
+        if (!ok && herzliyaUser && herzliyaPass) {
+          const sendwaOrigin = (() => { try { return new URL(url).origin; } catch { return ''; } })();
+          if (sendwaOrigin) {
+            const loginCk = await herzliyaLogin(sendwaOrigin, herzliyaUser, herzliyaPass, debugLines).catch(() => '');
+            if (loginCk) {
+              effectivePopupCookie = loginCk;
+              await tryEmp6(loginCk);
+            }
+          }
+        }
+      } else {
+        debugLines.push(`sendwaEmp6:noGuid`);
+      }
+    }
+  }
+
   const popupFetchOpts: RequestInit = {
     headers: {
       ...BASE_HEADERS,
