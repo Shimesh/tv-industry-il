@@ -873,6 +873,28 @@ export async function syncHerzliyaUrl(
 
   const productions = parsed.productions;
 
+  // When ShowCrew fails, workerName fallback crew entries have phone=''.
+  // This leaves crew_phones=[] so the widget can't highlight the user's shifts.
+  // Fix: enrich those entries with the user's verified phone (from profile or verifiedPhone param).
+  const userProfileForPhone = await getDocument<{ phone?: string; normalizedPhone?: string }>(`users/${uid}`).catch(() => null);
+  const profileDocForPhone = !userProfileForPhone?.phone && !userProfileForPhone?.normalizedPhone
+    ? await getDocument<{ phone?: string; normalizedPhone?: string }>(`profiles/${uid}`).catch(() => null)
+    : null;
+  const workerPhoneNorm = normalizePhone(
+    verifiedPhone || userProfileForPhone?.phone || userProfileForPhone?.normalizedPhone
+    || profileDocForPhone?.phone || profileDocForPhone?.normalizedPhone || ''
+  );
+  if (workerPhoneNorm && workerName) {
+    for (const prod of productions) {
+      for (const c of prod.crew) {
+        if (!c.phone && (c.name === workerName || c.isCurrentUser)) {
+          c.phone = workerPhoneNorm;
+        }
+      }
+    }
+    debugLines.push(`workerPhoneEnrich:${workerPhoneNorm}`);
+  }
+
   const snapshotRunId = `${Date.now()}-${uid.slice(0, 10)}-http`;
   await patchDocument(`calendar_sync_snapshots/${snapshotRunId}`, {
     runId: snapshotRunId,
