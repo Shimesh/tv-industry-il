@@ -1060,13 +1060,15 @@ function validateScheduleForWrite(schedule) {
 function mergeCrewPreservingExisting(existingCrew, incomingCrew) {
   const merged = new Map();
   const byNameAndRole = new Map();
+  const byName = new Map();
   const put = (member, incoming) => {
     if (!member || !member.name) return;
     const normalizedPhone = normalizePhone(member.phone || member.phone_number);
     const normalizedCrewName = normalizeName(member.name || '');
     const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
     const nameAndRoleKey = `${normalizedCrewName}::${normalizedCrewRole}`;
-    const existingKey = byNameAndRole.get(nameAndRoleKey);
+    const existingKey = byNameAndRole.get(nameAndRoleKey)
+      || (!normalizedPhone ? byName.get(normalizedCrewName) : undefined);
     const key = existingKey || normalizedPhone || nameAndRoleKey;
     if (!key) return;
     const previous = merged.get(key) || {};
@@ -1082,6 +1084,7 @@ function mergeCrewPreservingExisting(existingCrew, incomingCrew) {
       ...(incoming ? { observedAt: new Date().toISOString() } : {}),
     });
     byNameAndRole.set(nameAndRoleKey, key);
+    if (!normalizedPhone) byName.set(normalizedCrewName, key);
   };
 
   for (const member of existingCrew || []) put(member, false);

@@ -37,13 +37,17 @@ function mergeCrewLists(
 ): GlobalProductionCrewEntry[] {
   const byIdentity = new Map<string, GlobalProductionCrewEntry>();
   const byNameAndRole = new Map<string, string>();
+  const byName = new Map<string, string>();
 
   for (const entry of [...existing, ...incoming]) {
     const normalizedPhone = normalizePhone(entry.normalizedPhone || entry.phone_number);
     const normalizedName = normalizeName(entry.name || '');
     const normalizedRole = normalizeRole(entry.profession || '');
     const nameAndRoleIdentity = `${normalizedName}::${normalizedRole}`;
-    const identity = byNameAndRole.get(nameAndRoleIdentity) || normalizedPhone || nameAndRoleIdentity;
+    const identity = byNameAndRole.get(nameAndRoleIdentity)
+      || (!normalizedPhone ? byName.get(normalizedName) : undefined)
+      || normalizedPhone
+      || nameAndRoleIdentity;
     if (!identity) continue;
     const previous = byIdentity.get(identity);
     byIdentity.set(identity, {
@@ -58,6 +62,7 @@ function mergeCrewLists(
         : entry.shadowKey || previous?.shadowKey || `${normalizedName}::${normalizedRole}`,
     });
     byNameAndRole.set(nameAndRoleIdentity, identity);
+    if (!normalizedPhone) byName.set(normalizedName, identity);
   }
 
   return Array.from(byIdentity.values());
@@ -105,7 +110,7 @@ function crewKey(entry: GlobalProductionCrewEntry): string {
 
   const name = normalizeName(entry.name || '');
   const role = normalizeRole(entry.profession || '');
-  return role ? `name-role:${name}::${role}` : `name:${name}`;
+  return `name:${name}${role ? `::${role}` : ''}`;
 }
 
 function mergeCrewEntry(
@@ -137,11 +142,15 @@ export function mergeGlobalProductionDocs(
   if (!existing) return incoming;
 
   const crewByKey = new Map<string, GlobalProductionCrewEntry>();
+  const noPhoneByName = new Map<string, string>();
   for (const entry of [...(existing.crew_list ?? []), ...(incoming.crew_list ?? [])]) {
-    const key = crewKey(entry);
+    const phone = normalizePhone(entry.phone_number || entry.normalizedPhone || null);
+    const name = normalizeName(entry.name || '');
+    const key = !phone && noPhoneByName.has(name) ? noPhoneByName.get(name)! : crewKey(entry);
     if (!key || key === 'name:') continue;
     const current = crewByKey.get(key);
     crewByKey.set(key, current ? mergeCrewEntry(current, entry) : entry);
+    if (!phone) noPhoneByName.set(name, key);
   }
 
   const crewList = Array.from(crewByKey.values());
