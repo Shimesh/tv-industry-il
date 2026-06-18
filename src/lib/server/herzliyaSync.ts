@@ -587,13 +587,19 @@ export async function fetchHerzliyaProductions(
     await Promise.allSettled(
       uniqueIds.map(async (id) => {
         let popupUrl = '';
-        try {
-          const u = new URL(effectivePopupBaseUrl);
-          u.searchParams.set('appname', 'HsILWEB');
-          u.searchParams.set('prgname', 'ShowCrew');
-          u.searchParams.set('arguments', magicXpaSession ? `${magicXpaSession}-N${id}` : `-N${id}`);
-          popupUrl = u.toString();
-        } catch {
+        if (magicXpaSession) {
+          // Session-token path (ShowEmp3 / non-sendwa): session must prefix the id argument
+          try {
+            const u = new URL(effectivePopupBaseUrl);
+            u.searchParams.set('appname', 'HsILWEB');
+            u.searchParams.set('prgname', 'ShowCrew');
+            u.searchParams.set('arguments', `${magicXpaSession}-N${id}`);
+            popupUrl = u.toString();
+          } catch {
+            popupUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
+          }
+        } else {
+          // No session token (sendwa.html freelancer): use confirmed appname=HsILWeb URL pattern
           popupUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
         }
         if (!popupUrl) return;
@@ -607,8 +613,8 @@ export async function fetchHerzliyaProductions(
             } else {
               debugLines.push(`popup${id}:no-table(${html.slice(0,80).replace(/\s+/g,' ')})`);
               popupFail++;
-              if (magicXpaSession) {
-                const fallbackUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
+              const fallbackUrl = buildHerzliyaPopupUrl(effectivePopupBaseUrl, id);
+              if (fallbackUrl && fallbackUrl !== popupUrl) {
                 const res2 = await fetch(fallbackUrl, popupFetchOpts).catch(() => null);
                 if (res2?.ok) {
                   const html2 = await res2.text();
