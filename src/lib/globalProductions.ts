@@ -99,6 +99,62 @@ export function mergeGlobalProduction(
   };
 }
 
+function crewKey(entry: GlobalProductionCrewEntry): string {
+  const phone = normalizePhone(entry.phone_number || entry.normalizedPhone || null);
+  if (phone) return `phone:${phone}`;
+
+  const name = normalizeName(entry.name || '');
+  const role = normalizeRole(entry.profession || '');
+  return role ? `name-role:${name}::${role}` : `name:${name}`;
+}
+
+function mergeCrewEntry(
+  existing: GlobalProductionCrewEntry,
+  incoming: GlobalProductionCrewEntry,
+): GlobalProductionCrewEntry {
+  const phone = normalizePhone(incoming.phone_number || incoming.normalizedPhone || existing.phone_number || existing.normalizedPhone || null);
+  const name = normalizeName(existing.name || incoming.name || '');
+  const profession = existing.profession || incoming.profession || '';
+  const shadowKey = phone
+    ? null
+    : existing.shadowKey || incoming.shadowKey || (name ? `${name}::${normalizeRole(profession)}` : null);
+
+  return {
+    name: existing.name || incoming.name || name,
+    profession,
+    phone_number: phone,
+    startTime: existing.startTime || incoming.startTime || '',
+    endTime: existing.endTime || incoming.endTime || '',
+    normalizedPhone: phone,
+    shadowKey,
+  };
+}
+
+export function mergeGlobalProductionDocs(
+  existing: GlobalProductionDoc | null | undefined,
+  incoming: GlobalProductionDoc,
+): GlobalProductionDoc {
+  if (!existing) return incoming;
+
+  const crewByKey = new Map<string, GlobalProductionCrewEntry>();
+  for (const entry of [...(existing.crew_list ?? []), ...(incoming.crew_list ?? [])]) {
+    const key = crewKey(entry);
+    if (!key || key === 'name:') continue;
+    const current = crewByKey.get(key);
+    crewByKey.set(key, current ? mergeCrewEntry(current, entry) : entry);
+  }
+
+  const crewList = Array.from(crewByKey.values());
+
+  return {
+    ...existing,
+    ...incoming,
+    crew_list: crewList,
+    crew_phones: Array.from(new Set(crewList.map((member) => normalizePhone(member.phone_number || member.normalizedPhone)).filter((phone): phone is string => Boolean(phone)))),
+    crew_shadow_keys: Array.from(new Set(crewList.map((member) => member.shadowKey).filter((key): key is string => Boolean(key)))),
+  };
+}
+
 export function toGlobalProduction(
   prod: Production,
   uploaderUid: string,

@@ -1,6 +1,8 @@
 const { main } = require('../functions/calendar-sync.cjs');
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Fatal sync error:', error);
+    process.exit(1);
+  });
+}

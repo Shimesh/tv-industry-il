@@ -25,6 +25,12 @@ const db = getFirestore();
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid) => `productions/${uid}/weeks`;
 const AUTO_SYNC_SAVED_CALENDARS = process.env.SYNC_SAVED_CALENDARS === '1';
+const WINDOWS_BROWSER_PATHS = [
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+];
 
 function getCurrentWeekStartIsrael() {
   const israelDate = new Intl.DateTimeFormat('en-CA', {
@@ -44,6 +50,12 @@ function getPreviousWeekStart(weekStart) {
   return date.toISOString().split('T')[0];
 }
 
+function getNextWeekStart(weekStart) {
+  const date = new Date(`${weekStart}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 7);
+  return date.toISOString().split('T')[0];
+}
+
 // Replace the embedded date in a Herzliya URL (format: ?A=UUID,DDMMYYYY)
 // with a date inside the given ISO week so we always fetch the current week.
 function urlForWeek(url, weekStart) {
@@ -52,6 +64,15 @@ function urlForWeek(url, weekStart) {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const yyyy = String(d.getUTCFullYear());
   return url.replace(/,\d{8}(\b|$)/, `,${dd}${mm}${yyyy}`);
+}
+
+async function getBrowserExecutablePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (process.platform === 'win32') {
+    const localBrowser = WINDOWS_BROWSER_PATHS.find((browserPath) => fs.existsSync(browserPath));
+    if (localBrowser) return localBrowser;
+  }
+  return chromium.executablePath();
 }
 
 function normalizeName(name) {
@@ -1915,7 +1936,8 @@ async function main() {
     console.log('Checking saved calendar URLs for hourly sync...');
     const currentWeekStart = getCurrentWeekStartIsrael();
     const previousWeekStart = getPreviousWeekStart(currentWeekStart);
-    const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
+    const nextWeekStart = getNextWeekStart(currentWeekStart);
+    const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart, nextWeekStart]);
     const savedSnap = await db.collection('user_calendar_sync').get();
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const savedCalendars = savedSnap.docs
@@ -1929,7 +1951,7 @@ async function main() {
 
     console.log(
       `Found ${savedCalendars.length} eligible saved calendars `
-      + `(${previousWeekStart}, ${currentWeekStart})`,
+      + `(${previousWeekStart}, ${currentWeekStart}, ${nextWeekStart})`,
     );
     if (!savedCalendars.length) {
       console.log('No eligible saved calendars found — nothing to sync, exiting cleanly.');
@@ -1946,7 +1968,7 @@ async function main() {
         '--disable-extensions',
       ],
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
+      executablePath: await getBrowserExecutablePath(),
       headless: true,
     });
 
@@ -1957,8 +1979,8 @@ async function main() {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
-          // Always fetch the current week regardless of the date embedded in the saved URL
-          const urlToFetch = urlForWeek(saved.url, currentWeekStart);
+          const targetWeekStart = eligibleWeekStarts.has(saved.weekStart) ? saved.weekStart : currentWeekStart;
+          const urlToFetch = urlForWeek(saved.url, targetWeekStart);
           console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
           let schedule = null;
           let lastErr = null;
@@ -2062,7 +2084,7 @@ async function main() {
       '--disable-extensions',
     ],
     defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
+      executablePath: await getBrowserExecutablePath(),
     headless: true,
   });
 

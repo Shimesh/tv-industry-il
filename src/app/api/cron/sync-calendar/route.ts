@@ -82,18 +82,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const currentWeekStart = getCurrentWeekStartIsrael();
   const previousWeekStart = getPreviousWeekStart(currentWeekStart);
+  const nextWeekStart = (() => {
+    const date = new Date(`${currentWeekStart}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + 7);
+    return date.toISOString().split('T')[0];
+  })();
   const allUsers = await listDocuments<UserCalendarSyncDoc>('user_calendar_sync').catch(() => []);
 
   // A schedule pasted on Saturday can describe the week beginning the next day.
   // Keep the previous week's saved URL eligible through the current week rollover.
-  const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart]);
+  const eligibleWeekStarts = new Set([previousWeekStart, currentWeekStart, nextWeekStart]);
   const activeUsers = allUsers.filter(u => u.url?.trim() && eligibleWeekStarts.has(u.weekStart));
   const skippedUsers = allUsers.filter(u => u.url?.trim() && !eligibleWeekStarts.has(u.weekStart));
 
   if (skippedUsers.length > 0) {
     console.log(
       `[sync-calendar] skipping ${skippedUsers.length} users with stale weekStart `
-      + `(eligible: ${previousWeekStart}, ${currentWeekStart})`,
+      + `(eligible: ${previousWeekStart}, ${currentWeekStart}, ${nextWeekStart})`,
     );
   }
 
