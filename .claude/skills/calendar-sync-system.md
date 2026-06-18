@@ -140,6 +140,10 @@ File: `src/lib/server/herzliyaSync.ts` lines 252–725
 5. Extract `magicXpaSession` from HTML
 6. Build `events` by merging `extractHerzliyaEventIds(personalHtml)` + `extractHerzliyaEventIds(deptHtml)`. Track `personalHerzliyaIds: number[]` (personal only) — used for: workerName fallback gate + `syncedIds` scoping in `syncHerzliyaUrl`.
 7. Fetch ShowCrew for all unique herzliyaIds in parallel → `popupCache`
+   - **Primary URL** (when `magicXpaSession` exists): `appname=HsILWEB&prgname=ShowCrew&arguments={session}-N{id}` (session-token path)
+   - **Primary URL** (when no `magicXpaSession`): `buildHerzliyaPopupUrl()` → `appname=HsILWeb&prgname=ShowCrew&arguments=-N{id}` (confirmed URL for freelancer sendwa)
+   - **Fallback** (when primary returns no table): always tries `buildHerzliyaPopupUrl()` if URL differs from primary
+   - **Auto-login retry** (when all popups fail + credentials stored): re-authenticates, retries all failed IDs
 8. Enrichment loop: for each prod from parseScheduleHTML, add popup crew + assign herzliyaId
 9. If all productions generic (Path B): build from events with popup crew
 10. Final ID assignment: `prod.herzliyaId ? String(prod.herzliyaId) : generateProductionId(...)`
@@ -443,6 +447,7 @@ The code tries to extract `openmd2(\d+)` from onclick attrs in ShowEmp6. If Show
 | Disown misses productions on days user has no Ashheim shift | Date range for disown/cleanup used exact sync dates (e.g. Mon+Wed), missing stale production on Tue/Thu/Fri | Fixed (v2.8.152): date range scan and phone-based disown now use full 7-day week range (`scanWeekStart` to `scanWeekEnd`) instead of `syncDates[0]..syncDates[last]` |
 | sendwa.html with embedded openmd2: only 5-6 personal productions get ShowCrew, not all 41 dept | sendwa.html that has openmd2 directly in HTML skipped the sendwa-specific branch (line 309 condition `!personalHtml.includes('openmd2')` false). deptUrl = sendwa + ignored param → deptHtml = personalHtml. effectivePopupBaseUrl = sendwa URL (wrong for ShowCrew). | Fixed (v2.8.156): new block after sendwa branch — extracts employee GUID from embedded JS regex `/ShowEmp[36]&arguments=-N([0-9A-Fa-f-]{20,50})/i`, constructs ShowEmp6 URL, fetches dept view. Also always sets `effectivePopupBaseUrl = mgrqispi.dll` for sendwa URLs. |
 | User highlighted in ALL dept productions after ShowEmp6 enabled (false positive) | ShowEmp6 fetches 41 dept productions, all 41 go into `syncedIds = new Set(productions.map(p => p.id))`. Disown step skips all of them (`if syncedIds.has(docId) return`). If ShowCrew for any dept production includes the user's phone (even if wrong assignment in source), their phone is added and disown never removes it. | Fixed (v2.8.157): `syncedIds` now computed from `personalHerzliyaIds` only. Dept-only productions (not in user's personal sendwa schedule) are NOT in syncedIds → disown runs for them → phone removed after each sync. Immediate one-time patch via `GET /api/admin/disown-user?uid=<uid>&secret=<secret>`. |
+| ShowCrew popup returns no data — only worker themselves appears (freelancer sendwa) | Primary ShowCrew URL built with `appname=HsILWEB` (wrong case). Confirmed appname for this server is `HsILWeb`. For freelancer sendwa pages, `magicXpaSession = ''` (no session token in HTML or URL). Fallback to `buildHerzliyaPopupUrl()` (correct appname) was gated by `if (magicXpaSession)` → never ran. Result: all popup calls fail silently, only workerName fallback crew appears. | Fixed (v2.8.159): when `magicXpaSession` is empty → use `buildHerzliyaPopupUrl()` directly as primary (appname=HsILWeb). Removed `if (magicXpaSession)` guard from fallback — fallback now always runs if URL differs. Cookie from fetching sendwa.html is sufficient for ShowCrew on same server. |
 
 ---
 
