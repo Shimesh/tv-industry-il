@@ -413,11 +413,6 @@ function ProductionsContent() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [navLoading, setNavLoading] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
-  const [syncConfig, setSyncConfig] = useState<{ url: string; workerName?: string; herzliyaUser?: string } | null>(null);
-  const [showCredModal, setShowCredModal] = useState(false);
-  const [credUser, setCredUser] = useState('');
-  const [credPass, setCredPass] = useState('');
-  const [credSaving, setCredSaving] = useState(false);
   // Infinite scroll state for list view
   const [listViewExtraWeeks, setListViewExtraWeeks] = useState(0);
   const [loadingMoreList, setLoadingMoreList] = useState(false);
@@ -1788,48 +1783,6 @@ function ProductionsContent() {
     return () => { cancelled = true; };
   }, [user]);
 
-  // Load stored sync config (url + credentials) so credentials modal is pre-filled
-  useEffect(() => {
-    if (!user) return;
-    firestoreRestRead(`user_calendar_sync/${user.uid}`)
-      .then(data => {
-        if (data?.url) {
-          setSyncConfig({
-            url: data.url as string,
-            workerName: (data.workerName as string) || undefined,
-            herzliyaUser: (data.herzliyaUser as string) || undefined,
-          });
-          setCredUser((data.herzliyaUser as string) || '');
-        }
-      }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid]);
-
-  const handleSaveCredentials = async () => {
-    if (!user || !syncConfig?.url) return;
-    setCredSaving(true);
-    try {
-      const token = await user.getIdToken();
-      await fetch('/api/calendar/save-sync-url', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: syncConfig.url,
-          workerName: syncConfig.workerName || '',
-          herzliyaUser: credUser,
-          herzliyaPass: credPass,
-        }),
-      });
-      setSyncConfig(prev => prev ? { ...prev, herzliyaUser: credUser } : prev);
-      setShowCredModal(false);
-      setCredPass('');
-      setStatusMessage('פרטי ההתחברות נשמרו');
-    } catch {
-      setStatusMessage('שגיאה בשמירת הגדרות');
-    }
-    setCredSaving(false);
-  };
-
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
@@ -2772,16 +2725,6 @@ function ProductionsContent() {
               📤 שתף שבוע
             </button>
           )}
-          {syncConfig?.url && (
-            <button
-              onClick={() => setShowCredModal(true)}
-              title="הגדרות חיבור לשרת"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:bg-[var(--theme-accent-glow)]"
-              style={{ color: syncConfig.herzliyaUser ? 'var(--theme-accent)' : 'var(--theme-text-secondary)' }}
-            >
-              <LockKeyhole className="w-3.5 h-3.5" />
-            </button>
-          )}
           {currentWeekId && (
             <button
               onClick={handleReload}
@@ -3152,63 +3095,6 @@ function ProductionsContent() {
         </div>
       )}
 
-      {/* Credentials modal */}
-      {showCredModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.7)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowCredModal(false); }}
-        >
-          <div className="w-full max-w-md rounded-2xl p-5 space-y-4" style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-                פרטי התחברות לשרת השידורים
-              </h3>
-              <button onClick={() => setShowCredModal(false)}>
-                <X className="w-4 h-4" style={{ color: 'var(--theme-text-secondary)' }} />
-              </button>
-            </div>
-            <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              כשהסשן פג תוקפו, המערכת תתחבר אוטומטית ותמשוך את כל אנשי הצוות.
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--theme-text-secondary)' }}>שם משתמש</label>
-                <input
-                  type="text"
-                  value={credUser}
-                  onChange={e => setCredUser(e.target.value)}
-                  placeholder="שם המשתמש שלך בשרת"
-                  dir="ltr"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--theme-text-secondary)' }}>סיסמה</label>
-                <input
-                  type="password"
-                  value={credPass}
-                  onChange={e => setCredPass(e.target.value)}
-                  placeholder="הסיסמה שלך בשרת"
-                  dir="ltr"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--theme-bg)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
-                  onKeyDown={e => e.key === 'Enter' && handleSaveCredentials()}
-                />
-              </div>
-            </div>
-            <button
-              onClick={handleSaveCredentials}
-              disabled={credSaving || !credUser.trim()}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 80%, #6366f1))' }}
-            >
-              {credSaving ? 'שומר...' : 'שמור פרטי התחברות'}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
