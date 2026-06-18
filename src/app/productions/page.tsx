@@ -377,6 +377,9 @@ function ProductionsContent() {
   const [calendarEventMap, setCalendarEventMap] = useState<Record<string, string>>({});
   const [calendarMapLoaded, setCalendarMapLoaded] = useState(false);
   const [calendarMenuMsg, setCalendarMenuMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [herzliyaCredUser, setHerzliyaCredUser] = useState('');
+  const [herzliyaCredPass, setHerzliyaCredPass] = useState('');
+  const [credSaving, setCredSaving] = useState(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
   const [weekStart, setWeekStart] = useState('');
@@ -2676,6 +2679,69 @@ function ProductionsContent() {
                           חיבור Google Calendar
                         </button>
                       )}
+                      {/* Herzliya credentials — needed for server-side ShowCrew (crew list) access */}
+                      <div className="border-t pt-3 mt-1" style={{ borderColor: 'var(--theme-border)' }}>
+                        <div className="text-xs font-semibold mb-2" style={{ color: 'var(--theme-text-secondary)' }}>
+                          פרטי התחברות לשרת השידורים
+                        </div>
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            placeholder="שם משתמש"
+                            value={herzliyaCredUser}
+                            onChange={e => setHerzliyaCredUser(e.target.value)}
+                            autoComplete="username"
+                            className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                            style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)', border: '1px solid var(--theme-border)' }}
+                            dir="ltr"
+                          />
+                          <input
+                            type="password"
+                            placeholder="סיסמה"
+                            value={herzliyaCredPass}
+                            onChange={e => setHerzliyaCredPass(e.target.value)}
+                            autoComplete="current-password"
+                            className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                            style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)', border: '1px solid var(--theme-border)' }}
+                            dir="ltr"
+                          />
+                          <button
+                            disabled={credSaving || !herzliyaCredUser || !herzliyaCredPass}
+                            onClick={async () => {
+                              setCredSaving(true);
+                              try {
+                                const tok = await user?.getIdToken();
+                                const r = await fetch('/api/calendar/save-session-cookie', {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ herzliyaUser: herzliyaCredUser, herzliyaPass: herzliyaCredPass }),
+                                });
+                                const d = await r.json() as { ok?: boolean };
+                                if (d.ok) {
+                                  setCalendarMenuMsg({ text: 'פרטים נשמרו. לחץ רענן לטעינת הצוות', ok: true });
+                                  setHerzliyaCredUser('');
+                                  setHerzliyaCredPass('');
+                                } else {
+                                  setCalendarMenuMsg({ text: 'שגיאה בשמירת הפרטים', ok: false });
+                                }
+                              } catch {
+                                setCalendarMenuMsg({ text: 'שגיאת רשת', ok: false });
+                              } finally {
+                                setCredSaving(false);
+                              }
+                            }}
+                            className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-white disabled:opacity-50"
+                            style={{ background: 'linear-gradient(to left, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 70%, #a855f7))' }}
+                          >
+                            {credSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                            שמור פרטים
+                          </button>
+                        </div>
+                        <p className="mt-1.5 text-[10px]" style={{ color: 'var(--theme-text-secondary)', opacity: 0.7 }}>
+                          פרטים אלה מאפשרים לשרת לשלוף את רשימת הצוות עבורך
+                        </p>
+                      </div>
+
                       <button
                         onClick={exportOutlookIcs}
                         className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold"
