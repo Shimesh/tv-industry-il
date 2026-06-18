@@ -1952,6 +1952,7 @@ async function main() {
 
     let successCount = 0;
     let productionCount = 0;
+    let licenseFailCount = 0;
     try {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
@@ -1959,7 +1960,26 @@ async function main() {
           // Always fetch the current week regardless of the date embedded in the saved URL
           const urlToFetch = urlForWeek(saved.url, currentWeekStart);
           console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
-          const schedule = await fetchSchedule(browser, urlToFetch);
+          let schedule = null;
+          let lastErr = null;
+          // Retry once on license errors — server may free a slot within 20s
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              schedule = await fetchSchedule(browser, urlToFetch);
+              lastErr = null;
+              break;
+            } catch (fetchErr) {
+              lastErr = fetchErr;
+              const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+              if (msg.includes('no free license slot') && attempt === 0) {
+                console.log(`License busy for ${saved.uid}, waiting 25s then retrying...`);
+                await new Promise(r => setTimeout(r, 25000));
+              } else {
+                break;
+              }
+            }
+          }
+          if (lastErr) throw lastErr;
           if (!schedule || !schedule.productions.length) {
             throw new Error('No productions found in saved Herzliya calendar');
           }
@@ -1977,13 +1997,19 @@ async function main() {
           console.log(`Hourly sync saved ${schedule.productions.length} productions for ${saved.uid}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          const isLicense = message.includes('no free license slot');
+          if (isLicense) licenseFailCount++;
           console.error(`Hourly sync failed for ${saved.uid}:`, message);
           await syncRef.set({
             lastSyncAt: Date.now(),
-            lastSyncStatus: 'error',
+            lastSyncStatus: isLicense ? 'license_busy' : 'error',
             lastSyncCount: 0,
             lastSyncError: message.slice(0, 300),
           }, { merge: true });
+        }
+        // Brief pause between users to avoid hammering the Herzliya server
+        if (savedCalendars.indexOf(saved) < savedCalendars.length - 1) {
+          await new Promise(r => setTimeout(r, 3000));
         }
       }
     } finally {
@@ -2001,6 +2027,12 @@ async function main() {
       + `${productionCount} productions`,
     );
     if (successCount === 0) {
+      const allLicense = licenseFailCount === savedCalendars.length;
+      if (allLicense) {
+        // Transient — Herzliya server busy. Exit cleanly; next 5-min run will retry.
+        console.log('All failures were Herzliya license-busy errors — will retry on next scheduled run.');
+        return;
+      }
       throw new Error('Hourly saved-calendar sync did not update any calendars');
     }
     return;
