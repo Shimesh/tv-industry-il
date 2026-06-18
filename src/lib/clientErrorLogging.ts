@@ -2,10 +2,11 @@
 
 import type { ErrorInfo } from 'react';
 import { auth } from '@/lib/firebase';
+import packageJson from '../../package.json';
 
 
 
-const APP_VERSION = '2.8.164';
+const APP_VERSION = packageJson.version;
 
 const RECENT_ERROR_TTL_MS = 60_000;
 const recentErrors = new Map<string, number>();

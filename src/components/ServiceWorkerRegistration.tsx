@@ -13,6 +13,8 @@ export function ServiceWorkerRegistration() {
     // cross-reload cooldown window.
     const SW_RELOAD_KEY = 'sw-reloaded-at';
     const SW_RELOAD_COOLDOWN_MS = 15_000;
+    const SW_UPDATE_CHECK_KEY = 'sw-last-update-check';
+    const SW_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
     let refreshing = false;
     const handleControllerChange = () => {
@@ -49,7 +51,12 @@ export function ServiceWorkerRegistration() {
           });
         });
 
-        // Proactively check for a new SW version on every load
+        // Check for a new SW version, but do not force a network update on every app entry.
+        try {
+          const last = parseInt(localStorage.getItem(SW_UPDATE_CHECK_KEY) || '0', 10);
+          if (Date.now() - last < SW_UPDATE_CHECK_INTERVAL_MS) return;
+          localStorage.setItem(SW_UPDATE_CHECK_KEY, String(Date.now()));
+        } catch {}
         void registration.update();
       })
       .catch((error) => {

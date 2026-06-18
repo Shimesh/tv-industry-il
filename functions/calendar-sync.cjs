@@ -1289,7 +1289,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     }
     const incomingCrew = sanitizeCrewForFirestore(sourceCrew);
     const cleanCrew = sanitizeCrewForFirestore(
-      mergeCrewPreservingExisting(existingPersonal.crew || [], incomingCrew),
+      prod.popupParsed || prod.departmentEnriched
+        ? incomingCrew
+        : mergeCrewPreservingExisting(existingPersonal.crew || [], incomingCrew),
     );
     const previousShiftRemovalObservations = Number(existingPersonal.shiftRemovalObservations || 0);
     const incomingIsCurrentUserShift = !!prod.isCurrentUserShift;
@@ -1376,7 +1378,10 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           return parsedAsNameRole !== normalizedProductionName;
         })
       : [];
-    const mergedCrewList = mergeCrewPreservingExisting(existingCrewList, crewList).map((member) => {
+    const sourceGlobalCrewList = prod.popupParsed || prod.departmentEnriched
+      ? crewList
+      : mergeCrewPreservingExisting(existingCrewList, crewList);
+    const mergedCrewList = sourceGlobalCrewList.map((member) => {
       const normalizedPhone = normalizePhone(member.phone || member.phone_number);
       const normalizedCrewName = normalizeName(member.name || '');
       const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
@@ -1508,10 +1513,13 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           const key = `${member.name || ''}-${member.role || member.roleDetail || ''}`
             .replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim().toLowerCase();
           return key !== normalizedProductionName;
-        });
+      });
       const existingDeptGlobal = existingDeptGlobalById.get(prodId) || {};
       const existingDeptCrewList = Array.isArray(existingDeptGlobal.crew_list) ? existingDeptGlobal.crew_list : [];
-      const crewList = mergeCrewPreservingExisting(existingDeptCrewList, incomingCrewList).map((member) => {
+      const sourceDeptCrewList = prod.popupParsed || prod.departmentEnriched
+        ? incomingCrewList
+        : mergeCrewPreservingExisting(existingDeptCrewList, incomingCrewList);
+      const crewList = sourceDeptCrewList.map((member) => {
         const normalizedPhone = normalizePhone(member.phone || member.phone_number);
         const normalizedCrewName = normalizeName(member.name || '');
         const normalizedCrewRole = normalizeRole(member.role || member.roleDetail || member.profession || '');
