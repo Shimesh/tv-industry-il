@@ -471,7 +471,7 @@ export async function fetchHerzliyaProductions(
           String(weekSun.getUTCDate()).padStart(2, '0') +
           String(weekSun.getUTCMonth() + 1).padStart(2, '0') +
           String(weekSun.getUTCFullYear());
-        const showEmp6Url = `${sendwaMgrqBase}?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
+        const showEmp6Url = `${sendwaMgrqBase}?appname=HsILWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
         debugLines.push(`sendwaEmp6:guid=${empGuid.slice(0, 20)},date=${dateStr}`);
         const personalCount = (effectivePersonalHtml.match(/openmd2\(/g) || []).length;
         const tryEmp6 = async (cookie: string) => {
