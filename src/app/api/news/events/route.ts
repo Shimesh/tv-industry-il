@@ -387,10 +387,15 @@ function parseExplicitFutureDate(text: string): ParsedFutureDate | null {
   const timeMatch = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
   const time = timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : null;
 
-  const numericDate = text.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/);
+  const numericDate = text.match(/\b(\d{1,2})([./])(\d{1,2})(?:[./](\d{2,4}))?\b/);
   if (numericDate) {
-    const year = numericDate[3] ? Number(numericDate[3].length === 2 ? `20${numericDate[3]}` : numericDate[3]) : null;
-    const iso = buildJerusalemIso(Number(numericDate[1]), Number(numericDate[2]), year, time);
+    const separator = numericDate[2];
+    const yearText = numericDate[4];
+    if (separator === '.' && !yearText && !hasDateContext(text, numericDate.index ?? 0, numericDate[0].length)) {
+      return null;
+    }
+    const year = yearText ? Number(yearText.length === 2 ? `20${yearText}` : yearText) : null;
+    const iso = buildJerusalemIso(Number(numericDate[1]), Number(numericDate[3]), year, time);
     if (iso) return { iso, time };
   }
 
@@ -407,9 +412,43 @@ function parseExplicitFutureDate(text: string): ParsedFutureDate | null {
   return null;
 }
 
-function includesAny(text: string, keywords: string[]): boolean {
+function hasDateContext(text: string, index: number, length: number): boolean {
+  const before = text.slice(Math.max(0, index - 24), index).toLowerCase();
+  const after = text.slice(index + length, index + length + 24).toLowerCase();
+  const context = `${before} ${after}`;
+  return [
+    'בתאריך',
+    'תאריך',
+    'ביום',
+    'יתקיים',
+    'תתקיים',
+    'ייערך',
+    'תיערך',
+    'יפתח',
+    'תיפתח',
+    'בין התאריכים',
+  ].some((marker) => context.includes(marker));
+}
+
+function isHebrewLetter(char: string): boolean {
+  return /^[\u0590-\u05ff]$/u.test(char);
+}
+
+function hasKeyword(text: string, keyword: string): boolean {
   const lower = text.toLowerCase();
-  return keywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+  const needle = keyword.toLowerCase();
+  let index = lower.indexOf(needle);
+  while (index >= 0) {
+    const before = index > 0 ? lower[index - 1] : '';
+    const after = index + needle.length < lower.length ? lower[index + needle.length] : '';
+    if (!isHebrewLetter(before) && !isHebrewLetter(after)) return true;
+    index = lower.indexOf(needle, index + needle.length);
+  }
+  return false;
+}
+
+function includesAny(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => hasKeyword(text, keyword));
 }
 
 function isLikelyEvent(text: string, source: EventSource, futureDate: ParsedFutureDate | null): boolean {
