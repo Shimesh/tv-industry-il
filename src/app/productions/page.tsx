@@ -317,6 +317,11 @@ function mergeGlobalProductions(
   return [...enriched, ...extras];
 }
 
+function isConfirmedPersonalShift(production: Production): boolean {
+  const staleCandidate = (production as Production & { missingCandidate?: unknown }).missingCandidate === true;
+  return production.isCurrentUserShift === true && !staleCandidate;
+}
+
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
   const { addNotification } = useNotifications();
@@ -689,7 +694,7 @@ function ProductionsContent() {
       // in crew_list of a production they no longer work on (stale data), it gets highlighted as theirs.
       // Only phone-verified (crew_phones query) or personal-Firestore productions are trusted as "mine".
       const confirmedIds = new Set([
-        ...userProds.map(p => p.id),
+        ...userProds.filter(isConfirmedPersonalShift).map(p => p.id),
         ...(phoneRes.productions ?? []).map(p => p.id),
       ].filter(Boolean));
       const withConfirmed = afterProfile.map(p =>
@@ -1547,10 +1552,10 @@ function ProductionsContent() {
         reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
         // Save to localStorage cache for instant next load
         try {
-          const raw = localStorage.getItem('productions_cache_v2');
+          const raw = localStorage.getItem('productions_cache_v3');
           const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
           cache[weekId] = { data: prods, savedAt: Date.now() };
-          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+          localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
         } catch { /* ignore */ }
         return;
       }
@@ -1578,10 +1583,10 @@ function ProductionsContent() {
         reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
         // Save to localStorage cache for instant next load
         try {
-          const raw = localStorage.getItem('productions_cache_v2');
+          const raw = localStorage.getItem('productions_cache_v3');
           const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
           cache[latestWeekId] = { data: latestProds, savedAt: Date.now() };
-          localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+          localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
         } catch { /* ignore */ }
         return;
       }
@@ -1856,7 +1861,7 @@ function ProductionsContent() {
 
     // Instantly show cached data while Firestore loads in background
     try {
-      const raw = localStorage.getItem('productions_cache_v2');
+      const raw = localStorage.getItem('productions_cache_v3');
       if (raw) {
         const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
         const now = new Date();
@@ -1923,12 +1928,12 @@ function ProductionsContent() {
 
         // Evict both from localStorage
         try {
-          const raw = localStorage.getItem('productions_cache_v2');
+          const raw = localStorage.getItem('productions_cache_v3');
           if (raw) {
             const cache = JSON.parse(raw) as Record<string, unknown>;
             delete cache[thisWeekId];
             delete cache[nextWeekId];
-            localStorage.setItem('productions_cache_v2', JSON.stringify(cache));
+            localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
           }
         } catch { /* ignore */ }
 
@@ -2577,7 +2582,7 @@ function ProductionsContent() {
         setStatusMessage(prev => (prev ?? '').startsWith('עודכן') ? prev : 'נטען מחדש מהשרת');
       }
       // Bust widget cache so home page shows fresh data immediately
-      try { localStorage.removeItem('productions_global_widget_cache_v3'); } catch { /* ignore */ }
+      try { localStorage.removeItem('productions_global_widget_cache_v4'); } catch { /* ignore */ }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
     }

@@ -8,7 +8,7 @@ import { normalizeName, normalizePhone, deduplicateCrewEntries } from '@/lib/cre
 import type { Production } from '@/lib/productionDiff';
 import { canonicalProductionName } from '@/lib/productionDiff';
 
-const CACHE_KEY = 'productions_global_widget_cache_v3';
+const CACHE_KEY = 'productions_global_widget_cache_v4';
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes — keeps data fresh across page navigations
 const DAY_NAMES = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -68,6 +68,11 @@ function saveToCache(weekId: string, productions: Production[]) {
   } catch {
     // Cache is an optimization only.
   }
+}
+
+function isConfirmedPersonalShift(production: Production): boolean {
+  const staleCandidate = (production as Production & { missingCandidate?: unknown }).missingCandidate === true;
+  return production.isCurrentUserShift === true && !staleCandidate;
 }
 
 function isMyProduction(production: Production, displayName: string, phone: string): boolean {
@@ -355,7 +360,7 @@ export default function WeeklyCalendarWidget() {
     };
     // Force-refresh when productions page clears the cache after a manual resync
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'productions_global_widget_cache_v3' && e.newValue === null) forceRefresh();
+      if (e.key === CACHE_KEY && e.newValue === null) forceRefresh();
     };
 
     window.addEventListener('focus', requestRefresh);
@@ -446,7 +451,7 @@ export default function WeeklyCalendarWidget() {
       // profileRes (myProfileProds) uses name-based matching which causes false positives: a stale
       // crew_list entry with the user's name highlights productions they no longer work on.
       const confirmedIds = new Set([
-        ...personalProds.map((p) => p.id),
+        ...personalProds.filter(isConfirmedPersonalShift).map((p) => p.id),
         ...myPhoneProds.map((p) => p.id),
       ].filter(Boolean) as string[]);
 
