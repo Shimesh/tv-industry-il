@@ -43,7 +43,7 @@ type ChatMessage = {
 };
 
 type StageFilter = 'all' | 'group' | 'knockout' | 'final';
-type SectionTab = 'matches' | 'standings' | 'venues' | 'stats' | 'teams';
+type SectionTab = 'matches' | 'bracket' | 'standings' | 'venues' | 'stats' | 'teams';
 
 function formatIsraelTime(isoDate: string): string {
   return new Date(isoDate).toLocaleString('he-IL', {
@@ -355,6 +355,262 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
         </div>
       </div>
     </CollapsibleCard>
+  );
+}
+
+function getMatchWinner(match: WorldCupMatch): 'home' | 'away' | null {
+  if (match.status !== 'finished' || match.homeScore == null || match.awayScore == null) return null;
+  if (match.homeScore > match.awayScore) return 'home';
+  if (match.awayScore > match.homeScore) return 'away';
+  return null;
+}
+
+function BracketTeamRow({ team, score, winner }: { team: WorldCupTeam; score: number | null; winner: boolean }) {
+  return (
+    <div
+      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 ${winner ? 'bg-[#D4AF37]/18 text-[#D4AF37]' : 'text-[var(--theme-text)]'}`}
+    >
+      <span className="text-lg leading-none">{team.flag}</span>
+      <span className="min-w-0 flex-1 truncate text-xs font-black">{team.nameHe}</span>
+      <span className="min-w-[22px] rounded-md bg-black/25 px-1.5 py-0.5 text-center text-xs font-black tabular-nums" dir="ltr">
+        {score ?? '-'}
+      </span>
+    </div>
+  );
+}
+
+function BracketMatchCard({
+  match,
+  venues,
+  accent = 'normal',
+  onSelect,
+  onDetail,
+}: {
+  match?: WorldCupMatch;
+  venues: WorldCupVenue[];
+  accent?: 'normal' | 'final' | 'semi';
+  onSelect: (match: WorldCupMatch) => void;
+  onDetail: (match: WorldCupMatch) => void;
+}) {
+  if (!match) {
+    return (
+      <div className="min-h-[132px] rounded-2xl border border-dashed border-white/10 bg-white/[0.025] p-3 text-center text-xs text-[var(--theme-text-secondary)]">
+        משחק ייקבע בהמשך
+      </div>
+    );
+  }
+
+  const venue = venues.find((candidate) => candidate.id === match.venueId);
+  const winner = getMatchWinner(match);
+  const isLive = match.status === 'live';
+  const isFinal = accent === 'final';
+
+  return (
+    <motion.button
+      layout
+      whileHover={{ y: -2, scale: isFinal ? 1.015 : 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => { onSelect(match); onDetail(match); }}
+      className={`relative w-full overflow-hidden rounded-2xl border text-right transition-all ${isFinal ? 'p-4' : 'p-3'}`}
+      style={{
+        borderColor: isFinal ? 'rgba(212,175,55,.55)' : isLive ? 'rgba(239,68,68,.55)' : 'var(--theme-border)',
+        background: isFinal
+          ? 'linear-gradient(145deg, rgba(212,175,55,.20), rgba(0,32,70,.92) 46%, rgba(6,69,35,.88))'
+          : accent === 'semi'
+          ? 'linear-gradient(145deg, rgba(212,175,55,.10), rgba(255,255,255,.035))'
+          : 'linear-gradient(145deg, rgba(255,255,255,.06), rgba(255,255,255,.025))',
+        boxShadow: isFinal ? '0 18px 48px rgba(212,175,55,.18)' : undefined,
+      }}
+    >
+      {isLive && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 bg-red-500/10"
+          animate={{ opacity: [0.15, 0.35, 0.15] }}
+          transition={{ duration: 1.6, repeat: Infinity }}
+        />
+      )}
+      <div className="relative mb-2 flex items-center justify-between gap-2">
+        <span className="rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-black text-[#D4AF37]">
+          משחק {match.matchNumber}
+        </span>
+        <span className={`text-[10px] font-bold ${isLive ? 'text-red-400' : 'text-[var(--theme-text-secondary)]'}`}>
+          {match.status === 'scheduled' ? formatIsraelTime(match.kickoff) : statusLabel(match)}
+        </span>
+      </div>
+      <div className="relative space-y-1.5">
+        <BracketTeamRow team={match.homeTeam} score={match.homeScore} winner={winner === 'home'} />
+        <BracketTeamRow team={match.awayTeam} score={match.awayScore} winner={winner === 'away'} />
+      </div>
+      <div className="relative mt-2 flex items-center justify-between gap-2 text-[10px] text-[var(--theme-text-secondary)]">
+        <span className="truncate">{venue?.nameHe ?? 'אצטדיון ייקבע'}</span>
+        <span className="shrink-0 rounded-full bg-white/7 px-2 py-0.5">{stageLabel(match.stage)}</span>
+      </div>
+    </motion.button>
+  );
+}
+
+function BracketColumn({
+  title,
+  matches,
+  venues,
+  accent,
+  onSelect,
+  onDetail,
+}: {
+  title: string;
+  matches: Array<WorldCupMatch | undefined>;
+  venues: WorldCupVenue[];
+  accent?: 'semi';
+  onSelect: (match: WorldCupMatch) => void;
+  onDetail: (match: WorldCupMatch) => void;
+}) {
+  return (
+    <div className="w-[232px] shrink-0">
+      <div className="mb-3 flex items-center justify-between gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+        <span className="text-xs font-black text-white">{title}</span>
+        <span className="text-[10px] font-bold text-[#D4AF37]">{matches.filter(Boolean).length}</span>
+      </div>
+      <div className="space-y-3">
+        {matches.map((match, index) => (
+          <BracketMatchCard
+            key={match?.id ?? `${title}-${index}`}
+            match={match}
+            venues={venues}
+            accent={accent}
+            onSelect={onSelect}
+            onDetail={onDetail}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GroupSnapshot({ standings }: { standings: WorldCupStanding[] }) {
+  const groups = useMemo(() => {
+    return standings.reduce<Record<string, WorldCupStanding[]>>((acc, row) => {
+      acc[row.group] = [...(acc[row.group] ?? []), row].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst));
+      return acc;
+    }, {});
+  }, [standings]);
+
+  return (
+    <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+      {Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([group, rows]) => (
+        <div key={group} className="rounded-2xl border border-white/10 bg-black/18 p-2.5">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-black text-[#D4AF37]">בית {group}</span>
+            <span className="text-[10px] text-white/45">עולות</span>
+          </div>
+          <div className="space-y-1">
+            {rows.slice(0, 3).map((row, index) => (
+              <div key={row.team.id} className="flex items-center gap-1.5 rounded-lg bg-white/[0.035] px-2 py-1 text-[11px]">
+                <span className={`h-5 w-5 rounded-full text-center text-[10px] font-black leading-5 ${index < 2 ? 'bg-emerald-400/18 text-emerald-300' : 'bg-[#D4AF37]/14 text-[#D4AF37]'}`}>
+                  {index + 1}
+                </span>
+                <span>{row.team.flag}</span>
+                <span className="min-w-0 flex-1 truncate font-bold text-[var(--theme-text)]">{row.team.nameHe}</span>
+                <span className="font-black text-[#D4AF37]">{row.points}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TournamentBracket({
+  matches,
+  standings,
+  venues,
+  updatedAt,
+  onSelect,
+  onDetail,
+}: {
+  matches: WorldCupMatch[];
+  standings: WorldCupStanding[];
+  venues: WorldCupVenue[];
+  updatedAt: string;
+  onSelect: (match: WorldCupMatch) => void;
+  onDetail: (match: WorldCupMatch) => void;
+}) {
+  const byNumber = useMemo(() => new Map(matches.map((match) => [match.matchNumber, match])), [matches]);
+  const pick = (numbers: number[]) => numbers.map((number) => byNumber.get(number));
+  const finalMatch = byNumber.get(104);
+  const nextKnockout = useMemo(() => {
+    const now = Date.now();
+    return matches
+      .filter((match) => isKnockout(match.stage) && match.status === 'scheduled' && Date.parse(match.kickoff) >= now)
+      .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0];
+  }, [matches]);
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-[#D4AF37]/25 bg-[#061323] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
+      <div className="relative overflow-hidden px-4 py-5 sm:px-5">
+        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'linear-gradient(90deg, rgba(212,175,55,.16) 1px, transparent 1px), linear-gradient(rgba(212,175,55,.10) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(212,175,55,.22),transparent_42%)]" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/35 bg-black/25 px-3 py-1 text-xs font-black text-[#D4AF37]">
+              <Trophy className="h-4 w-4" />
+              עץ טורניר חי
+            </div>
+            <h2 className="text-2xl font-black text-white sm:text-3xl">מבתים ועד הגמר</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-white/62">
+              כל שלבי מונדיאל 2026 במקום אחד: בתים, 32 האחרונות, שמינית, רבע, חצי והגמר בניו יורק ניו ג׳רזי.
+            </p>
+          </div>
+          <div className="grid gap-2 text-xs sm:grid-cols-3 lg:min-w-[430px]">
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-white/45">עודכן</div>
+              <div className="font-black text-[#D4AF37]" dir="ltr">{new Date(updatedAt).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem' })}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-white/45">משחק נוקאאוט הבא</div>
+              <div className="truncate font-black text-white">{nextKnockout ? `#${nextKnockout.matchNumber} · ${formatIsraelTime(nextKnockout.kickoff)}` : 'ייקבע'}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-white/45">משחק הגמר</div>
+              <div className="font-black text-white">19.07 · MetLife</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative mt-5">
+          <GroupSnapshot standings={standings} />
+        </div>
+
+        <div className="relative mt-5 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+          <div className="flex min-w-[2140px] items-center justify-center gap-4 px-1">
+            <BracketColumn title="32 האחרונות" matches={pick([73, 74, 75, 76, 77, 78, 79, 80])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="שמינית גמר" matches={pick([89, 90, 91, 92])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="רבע גמר" matches={pick([97, 98])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="חצי גמר" matches={pick([101])} venues={venues} accent="semi" onSelect={onSelect} onDetail={onDetail} />
+            <div className="w-[300px] shrink-0">
+              <div className="mb-3 flex justify-center">
+                <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-[#D4AF37]/50 bg-[#D4AF37]/15 shadow-[0_0_50px_rgba(212,175,55,.22)]">
+                  <Trophy className="h-10 w-10 text-[#D4AF37]" />
+                  <motion.span
+                    className="absolute inset-0 rounded-full border border-[#D4AF37]/35"
+                    animate={{ scale: [1, 1.18, 1], opacity: [0.8, 0.1, 0.8] }}
+                    transition={{ duration: 2.5, repeat: Infinity }}
+                  />
+                </div>
+              </div>
+              <BracketMatchCard match={finalMatch} venues={venues} accent="final" onSelect={onSelect} onDetail={onDetail} />
+              <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-center text-xs text-white/55">
+                האלופה תעלה כאן אוטומטית כשיתעדכנו תוצאות חצאי הגמר.
+              </div>
+            </div>
+            <BracketColumn title="חצי גמר" matches={pick([102])} venues={venues} accent="semi" onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="רבע גמר" matches={pick([99, 100])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="שמינית גמר" matches={pick([93, 94, 95, 96])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="32 האחרונות" matches={pick([81, 82, 83, 84, 85, 86, 87, 88])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2452,6 +2708,7 @@ function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
 
 function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (v: SectionTab) => void }) {
   const tabs: { key: SectionTab; label: string; icon: typeof Trophy }[] = [
+    { key: 'bracket', label: 'עץ', icon: Trophy },
     { key: 'matches', label: 'משחקים', icon: CalendarDays },
     { key: 'teams', label: 'נבחרות', icon: Users },
     { key: 'standings', label: 'טבלאות', icon: ShieldCheck },
@@ -2569,6 +2826,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
 
   const sectionRefs = {
     matches: useRef<HTMLDivElement>(null),
+    bracket: useRef<HTMLDivElement>(null),
     standings: useRef<HTMLDivElement>(null),
     venues: useRef<HTMLDivElement>(null),
     stats: useRef<HTMLDivElement>(null),
@@ -2666,6 +2924,16 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
                 </div>
               )}
             </CollapsibleCard>
+            <div ref={sectionRefs.bracket}>
+              <TournamentBracket
+                matches={matches}
+                standings={standings}
+                venues={venues}
+                updatedAt={updatedAt}
+                onSelect={setSelectedMatch}
+                onDetail={setMatchDetail}
+              />
+            </div>
             <div ref={sectionRefs.matches}>
               <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
             </div>
