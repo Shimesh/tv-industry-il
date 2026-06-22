@@ -1289,7 +1289,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     }
     const incomingCrew = sanitizeCrewForFirestore(sourceCrew);
     const cleanCrew = sanitizeCrewForFirestore(
-      prod.popupParsed || prod.departmentEnriched
+      prod.popupParsed
         ? incomingCrew
         : mergeCrewPreservingExisting(existingPersonal.crew || [], incomingCrew),
     );
@@ -1325,7 +1325,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       lastUpdatedAt: new Date().toISOString(),
       popupParsed: !!prod.popupParsed,
       departmentEnriched: !!prod.departmentEnriched,
-      crewSource: prod.departmentEnriched ? 'department' : prod.popupParsed ? 'popup' : 'fallback',
+      crewSource: prod.popupParsed ? 'popup' : prod.departmentEnriched ? 'department' : 'fallback',
       parseQuality: schedule.parseStats,
       crew: cleanCrew,
       lastSyncSnapshotId: snapshot.runId,
@@ -1378,7 +1378,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
           return parsedAsNameRole !== normalizedProductionName;
         })
       : [];
-    const sourceGlobalCrewList = prod.popupParsed || prod.departmentEnriched
+    const sourceGlobalCrewList = prod.popupParsed
       ? crewList
       : mergeCrewPreservingExisting(existingCrewList, crewList);
     const mergedCrewList = sourceGlobalCrewList.map((member) => {
@@ -1411,9 +1411,9 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       endTime: prod.endTime || existingGlobal.endTime || '',
       status: prod.status || existingGlobal.status || 'scheduled',
       ...(globalHerzliyaId ? { herzliyaId: globalHerzliyaId } : {}),
-      crewSource: prod.departmentEnriched
-        ? 'department'
-        : existingGlobal.crewSource || (prod.popupParsed ? 'popup' : 'fallback'),
+      crewSource: prod.popupParsed
+        ? 'popup'
+        : existingGlobal.crewSource || (prod.departmentEnriched ? 'department' : 'fallback'),
       crew_list: finalCrewList,
       crew_phones: [...new Set(finalCrewList.map((member) => member.normalizedPhone).filter(Boolean))],
       crew_shadow_keys: [...new Set(finalCrewList.map((member) => member.shadowKey).filter(Boolean))],
@@ -1516,9 +1516,11 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
       });
       const existingDeptGlobal = existingDeptGlobalById.get(prodId) || {};
       const existingDeptCrewList = Array.isArray(existingDeptGlobal.crew_list) ? existingDeptGlobal.crew_list : [];
-      const sourceDeptCrewList = prod.popupParsed || prod.departmentEnriched
+      const sourceDeptCrewList = prod.popupParsed
         ? incomingCrewList
-        : mergeCrewPreservingExisting(existingDeptCrewList, incomingCrewList);
+        : existingDeptGlobal.crewSource === 'popup'
+          ? existingDeptCrewList
+          : [];
       const crewList = sourceDeptCrewList.map((member) => {
         const normalizedPhone = normalizePhone(member.phone || member.phone_number);
         const normalizedCrewName = normalizeName(member.name || '');
@@ -1546,7 +1548,7 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
         endTime: prod.endTime || existingDeptGlobal.endTime || '',
         status: prod.status || existingDeptGlobal.status || 'scheduled',
         ...(prod.herzliyaId ? { herzliyaId: prod.herzliyaId } : {}),
-        crewSource: prod.popupParsed ? 'popup' : 'department',
+        crewSource: prod.popupParsed ? 'popup' : (existingDeptGlobal.crewSource || 'department'),
         crew_list: crewList,
         crew_phones: [...new Set(crewList.map((m) => m.normalizedPhone).filter(Boolean))],
         crew_shadow_keys: [...new Set(crewList.map((m) => m.shadowKey).filter(Boolean))],

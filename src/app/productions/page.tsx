@@ -328,7 +328,7 @@ function isConfirmedPersonalShift(production: Production): boolean {
   return production.isCurrentUserShift === true && !staleCandidate;
 }
 
-const PRODUCTIONS_CACHE_KEY = 'productions_cache_v4';
+const PRODUCTIONS_CACHE_KEY = 'productions_cache_v5';
 type CalendarAccessMode = ReturnType<typeof resolveCalendarAccessMode>;
 
 function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): string {
@@ -2644,7 +2644,7 @@ function ProductionsContent() {
         setStatusMessage(prev => (prev ?? '').startsWith('עודכן') ? prev : 'נטען מחדש מהשרת');
       }
       // Bust widget cache so home page shows fresh data immediately
-      try { localStorage.removeItem('productions_global_widget_cache_v4'); } catch { /* ignore */ }
+      try { localStorage.removeItem('productions_global_widget_cache_v5'); } catch { /* ignore */ }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
     }

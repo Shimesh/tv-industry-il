@@ -74,7 +74,7 @@ export function mergeGlobalProduction(
 ): GlobalProductionDoc {
   if (!existing) return incoming;
 
-  const incomingAuthoritative = incoming.crewSource === 'popup' || incoming.crewSource === 'department';
+  const incomingAuthoritative = incoming.crewSource === 'popup';
   const crewList = incomingAuthoritative
     ? incoming.crew_list ?? []
     : mergeCrewLists(existing.crew_list, incoming.crew_list);
@@ -100,10 +100,9 @@ export function mergeGlobalProduction(
     crew_list: crewList,
     crew_phones: Array.from(crewPhones),
     crew_shadow_keys: Array.from(crewShadowKeys),
-    crewSource:
-      incoming.crewSource === 'department' || existing.crewSource !== 'department'
-        ? incoming.crewSource || existing.crewSource
-        : existing.crewSource,
+    crewSource: incoming.crewSource === 'popup'
+      ? 'popup'
+      : existing.crewSource || incoming.crewSource,
   };
 }
 
@@ -144,7 +143,7 @@ export function mergeGlobalProductionDocs(
 ): GlobalProductionDoc {
   if (!existing) return incoming;
 
-  if (incoming.crewSource === 'popup' || incoming.crewSource === 'department') {
+  if (incoming.crewSource === 'popup') {
     return {
       ...existing,
       ...incoming,
@@ -173,6 +172,9 @@ export function mergeGlobalProductionDocs(
     crew_list: crewList,
     crew_phones: Array.from(new Set(crewList.map((member) => normalizePhone(member.phone_number || member.normalizedPhone)).filter((phone): phone is string => Boolean(phone)))),
     crew_shadow_keys: Array.from(new Set(crewList.map((member) => member.shadowKey).filter((key): key is string => Boolean(key)))),
+    crewSource: incoming.crewSource === 'popup'
+      ? 'popup'
+      : existing.crewSource || incoming.crewSource,
   };
 }
 
@@ -234,9 +236,9 @@ export function toGlobalProduction(
     lastUpdatedAt: prod.lastUpdatedAt || new Date().toISOString(),
     lastUpdatedBy: uploaderUid,
     sourceWeekPath,
-    crewSource: (prod as Production & { crewSource?: string; popupParsed?: boolean; departmentEnriched?: boolean }).crewSource
-      || ((prod as Production & { popupParsed?: boolean; departmentEnriched?: boolean }).departmentEnriched ? 'department' : undefined)
-      || ((prod as Production & { popupParsed?: boolean; departmentEnriched?: boolean }).popupParsed ? 'popup' : undefined),
+    crewSource: ((prod as Production & { popupParsed?: boolean }).popupParsed ? 'popup' : undefined)
+      || (prod as Production & { crewSource?: string }).crewSource
+      || ((prod as Production & { departmentEnriched?: boolean }).departmentEnriched ? 'department' : undefined),
   };
 }
 
