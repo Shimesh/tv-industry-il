@@ -309,6 +309,20 @@ function mergeGlobalProductions(
   const enriched = userProds.map((p) => {
     const g = p.id ? globalById.get(p.id) : undefined;
     if (!g) return p;
+    const globalCrewSource = (g as Production & { crewSource?: string }).crewSource;
+    const personalCrewSource = (p as Production & { crewSource?: string }).crewSource;
+    if (globalCrewSource === 'popup' && personalCrewSource !== 'popup') {
+      return {
+        ...p,
+        name: p.name || g.name,
+        studio: g.studio || p.studio || '',
+        startTime: g.startTime || p.startTime || '',
+        endTime: g.endTime || p.endTime || '',
+        crew: g.crew,
+        crewSource: 'popup',
+        popupParsed: true,
+      } as Production;
+    }
     return { ...p, studio: p.studio || g.studio || '' };
   });
   const userIds = new Set(userProds.map((p) => p.id));
@@ -328,7 +342,7 @@ function isConfirmedPersonalShift(production: Production): boolean {
   return production.isCurrentUserShift === true && !staleCandidate;
 }
 
-const PRODUCTIONS_CACHE_KEY = 'productions_cache_v5';
+const PRODUCTIONS_CACHE_KEY = 'productions_cache_v6';
 type CalendarAccessMode = ReturnType<typeof resolveCalendarAccessMode>;
 
 function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): string {
@@ -2644,7 +2658,7 @@ function ProductionsContent() {
         setStatusMessage(prev => (prev ?? '').startsWith('עודכן') ? prev : 'נטען מחדש מהשרת');
       }
       // Bust widget cache so home page shows fresh data immediately
-      try { localStorage.removeItem('productions_global_widget_cache_v5'); } catch { /* ignore */ }
+      try { localStorage.removeItem('productions_global_widget_cache_v6'); } catch { /* ignore */ }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');
     }
