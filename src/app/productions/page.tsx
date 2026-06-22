@@ -28,7 +28,12 @@ import {
   normalizeName,
   normalizeRole,
 } from '@/lib/crewNormalization';
-import { resolveCalendarAccessMode, type CalendarPreviewMode } from '@/lib/calendarAccess';
+import {
+  CALENDAR_PREVIEW_CHANGED_EVENT,
+  CALENDAR_PREVIEW_STORAGE_KEY,
+  resolveCalendarAccessMode,
+  type CalendarPreviewMode,
+} from '@/lib/calendarAccess';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
@@ -331,7 +336,7 @@ function ProductionsContent() {
   const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showTeamSelector, setShowTeamSelector] = useState(false);
-  const [adminCalendarPreviewMode, setAdminCalendarPreviewMode] = useState<CalendarPreviewMode>('policy');
+  const [adminCalendarPreviewMode, setAdminCalendarPreviewMode] = useState<CalendarPreviewMode>('full');
 
   // Initialize team from URL query param
   useEffect(() => {
@@ -356,8 +361,29 @@ function ProductionsContent() {
   }, []);
 
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || null;
-  const effectiveCalendarMode = selectedTeamId ? 'full' : resolveCalendarAccessMode(profile, adminCalendarPreviewMode);
+  const effectiveCalendarMode = selectedTeamId
+    ? 'full'
+    : resolveCalendarAccessMode(profile, profile?.siteRole === 'admin' ? adminCalendarPreviewMode : 'policy');
   const canUseAdminCalendarPreview = profile?.siteRole === 'admin' && !selectedTeamId;
+  const setSharedAdminCalendarPreviewMode = useCallback((mode: CalendarPreviewMode) => {
+    setAdminCalendarPreviewMode(mode);
+    try {
+      window.localStorage.setItem(CALENDAR_PREVIEW_STORAGE_KEY, mode);
+      window.dispatchEvent(new CustomEvent(CALENDAR_PREVIEW_CHANGED_EVENT, { detail: mode }));
+    } catch {
+      // Preview persistence is best-effort only.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (profile?.siteRole !== 'admin') return;
+    try {
+      const saved = window.localStorage.getItem(CALENDAR_PREVIEW_STORAGE_KEY);
+      if (saved === 'personal' || saved === 'full') setAdminCalendarPreviewMode(saved);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [profile?.siteRole]);
 
   const handleTeamChange = (teamId: string | null) => {
     setSelectedTeamId(teamId);
@@ -648,7 +674,10 @@ function ProductionsContent() {
       const token = await user.getIdToken().catch(() => '');
 
       const currentProfile = profileRef.current;
-      const calendarMode = resolveCalendarAccessMode(currentProfile, adminCalendarPreviewMode);
+      const calendarMode = resolveCalendarAccessMode(
+        currentProfile,
+        currentProfile?.siteRole === 'admin' ? adminCalendarPreviewMode : 'policy',
+      );
       const canLoadFullCalendar = calendarMode === 'full';
       const normalizedPhone = normalizePhone(currentProfile?.phone || '');
       const profileIdentityId = currentProfile?.profileId || (currentProfile?.linkedContactId ? String(currentProfile.linkedContactId) : '');
@@ -2860,18 +2889,17 @@ function ProductionsContent() {
               מצב פעיל: {effectiveCalendarMode === 'full' ? 'יומן מלא' : 'יומן אישי לפרילנסר'}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-1 rounded-lg p-1" style={{ background: 'var(--theme-bg)' }}>
+          <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: 'var(--theme-bg)' }}>
             {([
-              { value: 'policy' as const, label: 'רגיל' },
-              { value: 'full' as const, label: 'מלא' },
-              { value: 'personal' as const, label: 'אישי' },
+              { value: 'full' as const, label: 'יומן מלא' },
+              { value: 'personal' as const, label: 'תצוגת פרילנסר' },
             ]).map((option) => {
               const active = adminCalendarPreviewMode === option.value;
               return (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setAdminCalendarPreviewMode(option.value)}
+                  onClick={() => setSharedAdminCalendarPreviewMode(option.value)}
                   className="rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
                   style={{
                     background: active ? 'var(--theme-accent)' : 'transparent',

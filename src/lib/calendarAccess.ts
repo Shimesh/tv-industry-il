@@ -1,6 +1,9 @@
 export type CalendarEmploymentType = 'employee' | 'freelancer';
 export type CalendarPreviewMode = 'policy' | 'full' | 'personal';
 
+export const CALENDAR_PREVIEW_STORAGE_KEY = 'tv-calendar-preview-mode';
+export const CALENDAR_PREVIEW_CHANGED_EVENT = 'tv-calendar-preview-mode-changed';
+
 export type CalendarAccessProfile = {
   siteRole?: string | null;
   calendarEmploymentType?: string | null;

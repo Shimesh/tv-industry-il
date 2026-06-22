@@ -5,6 +5,12 @@ import Link from 'next/link';
 import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeName, normalizePhone, deduplicateCrewEntries } from '@/lib/crewNormalization';
+import {
+  CALENDAR_PREVIEW_CHANGED_EVENT,
+  CALENDAR_PREVIEW_STORAGE_KEY,
+  resolveCalendarAccessMode,
+  type CalendarPreviewMode,
+} from '@/lib/calendarAccess';
 import type { Production } from '@/lib/productionDiff';
 import { canonicalProductionName } from '@/lib/productionDiff';
 
@@ -44,13 +50,17 @@ function getWeekLabel(days: string[]): string {
   return `${firstDay} ${MONTHS[firstMonth - 1]} - ${lastDay} ${MONTHS[lastMonth - 1]}`;
 }
 
-function loadFromCache(weekId: string): Production[] | null {
+function cacheWeekKey(weekId: string, calendarMode: 'full' | 'personal'): string {
+  return `${weekId}:${calendarMode}`;
+}
+
+function loadFromCache(weekId: string, calendarMode: 'full' | 'personal'): Production[] | null {
   try {
     if (typeof window === 'undefined') return null;
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
-    const entry = cache[weekId];
+    const entry = cache[cacheWeekKey(weekId, calendarMode)];
     if (!entry || Date.now() - entry.savedAt > CACHE_TTL) return null;
     return entry.data;
   } catch {
@@ -58,12 +68,12 @@ function loadFromCache(weekId: string): Production[] | null {
   }
 }
 
-function saveToCache(weekId: string, productions: Production[]) {
+function saveToCache(weekId: string, calendarMode: 'full' | 'personal', productions: Production[]) {
   try {
     if (typeof window === 'undefined') return;
     const raw = localStorage.getItem(CACHE_KEY);
     const cache = raw ? JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }> : {};
-    cache[weekId] = { data: productions, savedAt: Date.now() };
+    cache[cacheWeekKey(weekId, calendarMode)] = { data: productions, savedAt: Date.now() };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
     // Cache is an optimization only.
@@ -331,6 +341,7 @@ export default function WeeklyCalendarWidget() {
   const [popupDate, setPopupDate] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [adminPreviewMode, setAdminPreviewMode] = useState<CalendarPreviewMode>('full');
   const lastFetchStartedAt = useRef(0);
   // In-memory cache per session — mirrors the productions page's productionsByWeekRef pattern
   const sessionCache = useRef<Map<string, Production[]>>(new Map());
@@ -338,6 +349,7 @@ export default function WeeklyCalendarWidget() {
   const displayName = profile?.crewName || profile?.displayName || user?.displayName || '';
   const phone = profile?.phone ?? '';
   const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
+  const effectiveCalendarMode = resolveCalendarAccessMode(profile, profile?.siteRole === 'admin' ? adminPreviewMode : 'policy');
 
   // Keep profile fields in refs so the fetch effect always uses current values
   // without re-triggering a full re-fetch when profile loads after initial user auth
@@ -347,6 +359,31 @@ export default function WeeklyCalendarWidget() {
   useEffect(() => { displayNameRef.current = displayName; }, [displayName]);
   useEffect(() => { phoneRef.current = phone; }, [phone]);
   useEffect(() => { profileIdentityIdRef.current = profileIdentityId; }, [profileIdentityId]);
+
+  useEffect(() => {
+    if (profile?.siteRole !== 'admin') return;
+    const readMode = () => {
+      try {
+        const saved = window.localStorage.getItem(CALENDAR_PREVIEW_STORAGE_KEY);
+        if (saved === 'personal' || saved === 'full') setAdminPreviewMode(saved);
+      } catch {
+        // Ignore storage failures.
+      }
+    };
+    const handlePreviewChanged = (event: Event) => {
+      const detail = (event as CustomEvent<CalendarPreviewMode>).detail;
+      if (detail === 'personal' || detail === 'full') {
+        sessionCache.current.clear();
+        setProductions(null);
+        setMyProductionDates(null);
+        setAdminPreviewMode(detail);
+        setRefreshNonce((value) => value + 1);
+      }
+    };
+    readMode();
+    window.addEventListener(CALENDAR_PREVIEW_CHANGED_EVENT, handlePreviewChanged);
+    return () => window.removeEventListener(CALENDAR_PREVIEW_CHANGED_EVENT, handlePreviewChanged);
+  }, [profile?.siteRole]);
 
   useEffect(() => {
     const requestRefresh = () => {
@@ -361,6 +398,13 @@ export default function WeeklyCalendarWidget() {
     // Force-refresh when productions page clears the cache after a manual resync
     const handleStorage = (e: StorageEvent) => {
       if (e.key === CACHE_KEY && e.newValue === null) forceRefresh();
+      if (e.key === CALENDAR_PREVIEW_STORAGE_KEY && (e.newValue === 'personal' || e.newValue === 'full')) {
+        sessionCache.current.clear();
+        setProductions(null);
+        setMyProductionDates(null);
+        setAdminPreviewMode(e.newValue);
+        forceRefresh();
+      }
     };
 
     window.addEventListener('focus', requestRefresh);
@@ -380,10 +424,11 @@ export default function WeeklyCalendarWidget() {
     const weekId = getWeekId(nextDays[0]);
     // Serve in-memory session cache instantly (survives week navigation like the productions page),
     // then fall back to localStorage, then show null while the network fetch runs.
-    const inMemory = sessionCache.current.get(weekId);
-    setProductions(inMemory ?? loadFromCache(weekId));
+    const cacheKey = cacheWeekKey(weekId, effectiveCalendarMode);
+    const inMemory = sessionCache.current.get(cacheKey);
+    setProductions(inMemory ?? loadFromCache(weekId, effectiveCalendarMode));
     setMyProductionDates(null);
-  }, [weekOffset]);
+  }, [weekOffset, effectiveCalendarMode]);
 
   useEffect(() => {
     if (!user) return;
@@ -404,7 +449,7 @@ export default function WeeklyCalendarWidget() {
       const normalizedPhone = normalizePhone(curPhone) ?? '';
 
       const [globalPayload, personalPayload, myPayload, profilePayload] = await Promise.all([
-        fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+        fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}&viewMode=${effectiveCalendarMode}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
@@ -463,8 +508,8 @@ export default function WeeklyCalendarWidget() {
       setProductions(merged);
       if (typeof globalPayload.lastSyncAt === 'number') setLastSyncAt(globalPayload.lastSyncAt);
       // Write to both caches so subsequent navigations are instant
-      sessionCache.current.set(weekId, merged);
-      saveToCache(weekId, merged);
+      sessionCache.current.set(cacheWeekKey(weekId, effectiveCalendarMode), merged);
+      saveToCache(weekId, effectiveCalendarMode, merged);
 
       setMyProductionDates(
         new Set(merged.filter((p) => p.isCurrentUserShift).map((p) => p.date).filter(Boolean)),
@@ -492,7 +537,7 @@ export default function WeeklyCalendarWidget() {
     };
   // displayName/phone/profileIdentityId are in refs — no need in dep array; avoids a double fetch
   // when profile loads after initial user auth
-  }, [days, user, refreshNonce]);
+  }, [days, user, refreshNonce, effectiveCalendarMode]);
 
   const todayStr = toDateStr(new Date());
   const byDate = useMemo(() => {
