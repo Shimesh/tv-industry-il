@@ -328,6 +328,13 @@ function isConfirmedPersonalShift(production: Production): boolean {
   return production.isCurrentUserShift === true && !staleCandidate;
 }
 
+const PRODUCTIONS_CACHE_KEY = 'productions_cache_v4';
+type CalendarAccessMode = ReturnType<typeof resolveCalendarAccessMode>;
+
+function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): string {
+  return `${weekId}:${mode}`;
+}
+
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
   const { addNotification } = useNotifications();
@@ -1607,10 +1614,10 @@ function ProductionsContent() {
         reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
         // Save to localStorage cache for instant next load
         try {
-          const raw = localStorage.getItem('productions_cache_v3');
+          const raw = localStorage.getItem(PRODUCTIONS_CACHE_KEY);
           const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
-          cache[weekId] = { data: prods, savedAt: Date.now() };
-          localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
+          cache[getProductionsCacheKey(weekId, effectiveCalendarMode)] = { data: prods, savedAt: Date.now() };
+          localStorage.setItem(PRODUCTIONS_CACHE_KEY, JSON.stringify(cache));
         } catch { /* ignore */ }
         return;
       }
@@ -1638,16 +1645,16 @@ function ProductionsContent() {
         reloadDoneRef.current = true; // signal: period-load useEffect can skip this cycle
         // Save to localStorage cache for instant next load
         try {
-          const raw = localStorage.getItem('productions_cache_v3');
+          const raw = localStorage.getItem(PRODUCTIONS_CACHE_KEY);
           const cache = raw ? JSON.parse(raw) as Record<string, { data: unknown; savedAt: number }> : {};
-          cache[latestWeekId] = { data: latestProds, savedAt: Date.now() };
-          localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
+          cache[getProductionsCacheKey(latestWeekId, effectiveCalendarMode)] = { data: latestProds, savedAt: Date.now() };
+          localStorage.setItem(PRODUCTIONS_CACHE_KEY, JSON.stringify(cache));
         } catch { /* ignore */ }
         return;
       }
     } catch (error) {
     }
-  }, [user, profile, loadExistingWeek, restListDocs, fetchGlobalWeekIds]);
+  }, [user, profile, effectiveCalendarMode, loadExistingWeek, restListDocs, fetchGlobalWeekIds]);
 
   // Load productions for a date range (multiple weeks from Firestore)
   const loadProductionsForPeriod = useCallback(async (
@@ -1916,14 +1923,14 @@ function ProductionsContent() {
 
     // Instantly show cached data while Firestore loads in background
     try {
-      const raw = localStorage.getItem('productions_cache_v3');
+      const raw = localStorage.getItem(PRODUCTIONS_CACHE_KEY);
       if (raw) {
         const cache = JSON.parse(raw) as Record<string, { data: Production[]; savedAt: number }>;
         const now = new Date();
         const sunday = new Date(now);
         sunday.setDate(now.getDate() - now.getDay());
         const weekId = getWeekId(toLocalDate(sunday));
-        const entry = cache[weekId];
+        const entry = cache[getProductionsCacheKey(weekId, effectiveCalendarMode)];
         if (entry && Date.now() - entry.savedAt < 30 * 60 * 1000 && entry.data.length > 0) {
           productionsByWeekRef.current.set(weekId, entry.data);
           setProductions(entry.data);
@@ -1947,7 +1954,7 @@ function ProductionsContent() {
     };
 
     checkPending();
-  }, [user, handleReloadLatest]);
+  }, [user, effectiveCalendarMode, handleReloadLatest]);
 
   // Keep a ref to currentDate so the hourly interval can access it without restarting
   const currentDateRef = useRef(currentDate);
@@ -1983,12 +1990,12 @@ function ProductionsContent() {
 
         // Evict both from localStorage
         try {
-          const raw = localStorage.getItem('productions_cache_v3');
+          const raw = localStorage.getItem(PRODUCTIONS_CACHE_KEY);
           if (raw) {
             const cache = JSON.parse(raw) as Record<string, unknown>;
-            delete cache[thisWeekId];
-            delete cache[nextWeekId];
-            localStorage.setItem('productions_cache_v3', JSON.stringify(cache));
+            delete cache[getProductionsCacheKey(thisWeekId, effectiveCalendarMode)];
+            delete cache[getProductionsCacheKey(nextWeekId, effectiveCalendarMode)];
+            localStorage.setItem(PRODUCTIONS_CACHE_KEY, JSON.stringify(cache));
           }
         } catch { /* ignore */ }
 
@@ -2020,7 +2027,7 @@ function ProductionsContent() {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user, handleReloadLatest, loadExistingWeek]);
+  }, [user, effectiveCalendarMode, handleReloadLatest, loadExistingWeek]);
 
   // ===== AI-Powered Parse =====
   const handleAIParse = useCallback(async (text: string): Promise<ParsedSchedule | null> => {
