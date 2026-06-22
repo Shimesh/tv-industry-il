@@ -4,7 +4,9 @@ import type { Production, CrewMember } from '@/lib/productionDiff';
 export interface GlobalProductionCrewEntry {
   name: string;
   profession: string;
+  role?: string;
   phone_number: string | null;
+  phone?: string | null;
   startTime: string;
   endTime: string;
   normalizedPhone: string | null;
@@ -43,10 +45,11 @@ function mergeCrewLists(
     const normalizedPhone = normalizePhone(entry.normalizedPhone || entry.phone_number);
     const normalizedName = normalizeName(entry.name || '');
     const normalizedRole = normalizeRole(entry.profession || '');
+    const timeKey = `${entry.startTime || ''}::${entry.endTime || ''}`;
     const nameAndRoleIdentity = `${normalizedName}::${normalizedRole}`;
     const identity = byNameAndRole.get(nameAndRoleIdentity)
       || (!normalizedPhone ? byName.get(normalizedName) : undefined)
-      || normalizedPhone
+      || (normalizedPhone ? `${normalizedPhone}::${normalizedRole}::${timeKey}` : null)
       || nameAndRoleIdentity;
     if (!identity) continue;
     const previous = byIdentity.get(identity);
@@ -194,7 +197,12 @@ export function toGlobalProduction(
     const normPhone = normalizePhone(member.phone);
     const normName = normalizeName(member.name || '');
     const normRole = normalizeRole(member.role || '');
-    const dedupKey = normPhone ?? `${normName}::${normRole || member.role || ''}`;
+    const dedupKey = [
+      normPhone || normName,
+      normRole || member.role || '',
+      member.startTime || '',
+      member.endTime || '',
+    ].join('::');
     if (dedupKey && seenCrewKeys.has(dedupKey)) continue;
     if (dedupKey) seenCrewKeys.add(dedupKey);
 
@@ -245,16 +253,16 @@ export function toGlobalProduction(
 export function fromGlobalProduction(doc: GlobalProductionDoc): Production {
   const crew: CrewMember[] = (doc.crew_list ?? []).map((entry) => ({
     name: entry.name,
-    role: entry.profession,
-    roleDetail: entry.profession,
-    phone: entry.phone_number,
-    startTime: entry.startTime,
-    endTime: entry.endTime,
+    role: entry.profession || entry.role || '',
+    roleDetail: entry.profession || entry.role || '',
+    phone: entry.phone_number || entry.phone || null,
+    startTime: entry.startTime || '',
+    endTime: entry.endTime || '',
     normalizedName: normalizeName(entry.name),
-    normalizedPhone: entry.normalizedPhone,
-    identityKey: entry.normalizedPhone
-      ? `${normalizeName(entry.name)}::${entry.normalizedPhone}`
-      : normalizeName(entry.name),
+    normalizedPhone: entry.normalizedPhone || normalizePhone(entry.phone_number || entry.phone || ''),
+    identityKey: entry.normalizedPhone || normalizePhone(entry.phone_number || entry.phone || '')
+      ? `${normalizeName(entry.name)}::${entry.normalizedPhone || normalizePhone(entry.phone_number || entry.phone || '')}::${entry.profession || entry.role || ''}::${entry.startTime || ''}::${entry.endTime || ''}`
+      : `${normalizeName(entry.name)}::${entry.profession || entry.role || ''}::${entry.startTime || ''}::${entry.endTime || ''}`,
   }));
 
   return {

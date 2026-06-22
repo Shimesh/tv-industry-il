@@ -14,16 +14,20 @@ function getDirectorNames(crew: CrewMember[]): string[] {
     .filter(Boolean);
 }
 
-// Quick crew dedup by normalized name
 function getUniqueCrewCount(crew: Production['crew']): number {
   const seen = new Set<string>();
   for (const c of crew) {
-    const name = c.name
+    const name = (c.name || '')
       .replace(/^(צילום|סאונד|תאורה|הפקה|טכני|CCU|VTR|ניתוב|כתוביות|טלפרומפטר):\s*/i, '')
       .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase();
-    if (name.length >= 2) seen.add(name);
+    const role = (c.roleDetail || c.role || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const start = (c.startTime || '').trim();
+    const end = (c.endTime || '').trim();
+    const phone = (c.phone || c.normalizedPhone || '').replace(/\D/g, '');
+    const key = [phone || name, role, start, end].filter(Boolean).join('::');
+    if (key) seen.add(key);
   }
   return seen.size;
 }
