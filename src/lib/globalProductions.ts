@@ -74,7 +74,10 @@ export function mergeGlobalProduction(
 ): GlobalProductionDoc {
   if (!existing) return incoming;
 
-  const crewList = mergeCrewLists(existing.crew_list, incoming.crew_list);
+  const incomingAuthoritative = incoming.crewSource === 'popup' || incoming.crewSource === 'department';
+  const crewList = incomingAuthoritative
+    ? incoming.crew_list ?? []
+    : mergeCrewLists(existing.crew_list, incoming.crew_list);
   const crewPhones = new Set<string>();
   const crewShadowKeys = new Set<string>();
   for (const entry of crewList) {
@@ -140,6 +143,15 @@ export function mergeGlobalProductionDocs(
   incoming: GlobalProductionDoc,
 ): GlobalProductionDoc {
   if (!existing) return incoming;
+
+  if (incoming.crewSource === 'popup' || incoming.crewSource === 'department') {
+    return {
+      ...existing,
+      ...incoming,
+      crew_phones: Array.from(new Set((incoming.crew_list ?? []).map((member) => normalizePhone(member.phone_number || member.normalizedPhone)).filter((phone): phone is string => Boolean(phone)))),
+      crew_shadow_keys: Array.from(new Set((incoming.crew_list ?? []).map((member) => member.shadowKey).filter((key): key is string => Boolean(key)))),
+    };
+  }
 
   const crewByKey = new Map<string, GlobalProductionCrewEntry>();
   const noPhoneByName = new Map<string, string>();
@@ -222,6 +234,9 @@ export function toGlobalProduction(
     lastUpdatedAt: prod.lastUpdatedAt || new Date().toISOString(),
     lastUpdatedBy: uploaderUid,
     sourceWeekPath,
+    crewSource: (prod as Production & { crewSource?: string; popupParsed?: boolean; departmentEnriched?: boolean }).crewSource
+      || ((prod as Production & { popupParsed?: boolean; departmentEnriched?: boolean }).departmentEnriched ? 'department' : undefined)
+      || ((prod as Production & { popupParsed?: boolean; departmentEnriched?: boolean }).popupParsed ? 'popup' : undefined),
   };
 }
 

@@ -714,6 +714,8 @@ export async function fetchHerzliyaProductions(
         if (!prod.herzliyaId || !popupCache[prod.herzliyaId]) continue;
         const addCrew = parseHerzliyaPopupHtml(popupCache[prod.herzliyaId]);
         if (addCrew.length === 0) continue;
+        (prod as Production & { crewSource?: string; popupParsed?: boolean }).crewSource = 'popup';
+        (prod as Production & { crewSource?: string; popupParsed?: boolean }).popupParsed = true;
         const existingNames = new Set(prod.crew.map(c => c.name));
         for (const pc of addCrew) {
           if (pc.name && !existingNames.has(pc.name)) {
@@ -794,6 +796,8 @@ export async function fetchHerzliyaProductions(
           status: 'scheduled',
           crew,
           herzliyaId: event.herzliyaId,
+          crewSource: popupHtml ? 'popup' : undefined,
+          popupParsed: Boolean(popupHtml),
         } as Production);
       }
       debugLines.push(`builtFromEvents:${parsed.productions.length},skipped:${skippedGeneric}`);
@@ -809,6 +813,8 @@ export async function fetchHerzliyaProductions(
 
       if (!herzliyaId || !popupCache[herzliyaId]) continue;
       const popupHtml = popupCache[herzliyaId];
+      (prod as Production & { crewSource?: string; popupParsed?: boolean }).crewSource = 'popup';
+      (prod as Production & { crewSource?: string; popupParsed?: boolean }).popupParsed = true;
 
       const popupStudio = extractStudioFromPopup(popupHtml);
       if (popupStudio) prod.studio = popupStudio;
@@ -832,11 +838,18 @@ export async function fetchHerzliyaProductions(
     }
   }
 
-  const productions = parsed.productions.map(prod => ({
-    ...prod,
-    id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(prod.name, prod.date, prod.studio, prod.startTime)),
-    day: prod.day || getHebrewDay(prod.date),
-  }));
+  const productions = parsed.productions.map(prod => {
+    const cleanName = cleanHerzliyaProductionName(prod.name || '');
+    const popupParsed = Boolean((prod as Production & { popupParsed?: boolean }).popupParsed);
+    return {
+      ...prod,
+      name: cleanName,
+      id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(cleanName, prod.date, prod.studio, prod.startTime)),
+      day: prod.day || getHebrewDay(prod.date),
+      crewSource: (prod as Production & { crewSource?: string }).crewSource || (popupParsed ? 'popup' : undefined),
+      popupParsed,
+    };
+  });
 
   return {
     productions,
@@ -844,6 +857,18 @@ export async function fetchHerzliyaProductions(
     finalUrl: finalUrl !== url ? finalUrl : undefined,
     personalHerzliyaIds,
   };
+}
+
+function cleanHerzliyaProductionName(name: string): string {
+  const normalized = name.replace(/\s+/g, ' ').trim();
+  if (!normalized.includes('+')) {
+    return splitHerzliyaRole(normalized).name;
+  }
+  const parts = normalized.split(/\s*\+\s*/).filter(Boolean);
+  if (parts.length === 0) return normalized;
+  const [first, ...rest] = parts;
+  const firstClean = splitHerzliyaRole(first).name;
+  return [firstClean, ...rest].filter(Boolean).join(' + ');
 }
 
 export async function syncHerzliyaUrl(
