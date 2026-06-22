@@ -18,7 +18,16 @@ import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
 export type SyncResult =
-  | { status: 'success'; count: number; studios?: Array<{ name: string; studio: string }>; debug?: string; finalUrl?: string }
+  | {
+      status: 'success';
+      count: number;
+      studios?: Array<{ name: string; studio: string }>;
+      debug?: string;
+      finalUrl?: string;
+      fullCalendarDetected?: boolean;
+      personalProductionCount?: number;
+      departmentProductionCount?: number;
+    }
   | { status: 'empty'; debug?: string }
   | { status: 'error'; error: string };
 
@@ -42,6 +51,9 @@ export type ParsedHerzliyaResult = {
   debug: string;
   finalUrl?: string;
   personalHerzliyaIds?: number[];
+  fullCalendarDetected?: boolean;
+  personalProductionCount?: number;
+  departmentProductionCount?: number;
 };
 
 export function getCurrentWeekStartIsrael(): string {
@@ -553,12 +565,16 @@ export async function fetchHerzliyaProductions(
   // Dept-only productions (from ShowEmp6) must NOT be in syncedIds — otherwise disown skips them,
   // and the user's phone stays in crew_phones for productions they're not personally scheduled for.
   let personalHerzliyaIds: number[] = [];
+  let personalProductionCount = 0;
+  let departmentProductionCount = 0;
 
   if (effectivePersonalHtml.includes('openmd2')) {
     const allEventsByHtml = htmlsToScan.map(h => extractHerzliyaEventIds(h));
     // Track which IDs come from the personal schedule — workerName fallback only applies to these
     const personalEventIds = new Set(allEventsByHtml[0].map(e => e.herzliyaId));
     personalHerzliyaIds = [...personalEventIds];
+    personalProductionCount = allEventsByHtml[0]?.length ?? 0;
+    departmentProductionCount = allEventsByHtml[1]?.length ?? 0;
     // Merge: dept events take precedence for production name (dept view has fuller names)
     const eventMap = new Map<number, { herzliyaId: number; name: string }>();
     for (const evList of allEventsByHtml) {
@@ -856,6 +872,9 @@ export async function fetchHerzliyaProductions(
     debug: debugLines.join(' | '),
     finalUrl: finalUrl !== url ? finalUrl : undefined,
     personalHerzliyaIds,
+    personalProductionCount,
+    departmentProductionCount,
+    fullCalendarDetected: departmentProductionCount > personalProductionCount,
   };
 }
 
@@ -897,6 +916,9 @@ export async function syncHerzliyaUrl(
   }
 
   const productions = parsed.productions;
+  const fullCalendarDetected = parsed.fullCalendarDetected === true;
+  const personalProductionCount = parsed.personalProductionCount ?? 0;
+  const departmentProductionCount = parsed.departmentProductionCount ?? 0;
 
   // When ShowCrew fails, workerName fallback crew entries have phone=''.
   // This leaves crew_phones=[] so the widget can't highlight the user's shifts.
@@ -1165,11 +1187,24 @@ export async function syncHerzliyaUrl(
   const studioSummary = productions.map(p => `${p.name}→"${p.studio}"`).join(', ');
   console.log('[herzliyaSync] saved', productions.length, '| studios:', studioSummary, '| debug:', parsed.debug);
 
+  if (fullCalendarDetected) {
+    await patchDocument(`users/${uid}`, {
+      calendarEmploymentType: 'employee',
+      calendarEmploymentDetectedAt: new Date().toISOString(),
+      calendarEmploymentDetectedBy: 'herzliya-full-calendar-sync',
+      calendarEmploymentDetectionPersonalCount: personalProductionCount,
+      calendarEmploymentDetectionDepartmentCount: departmentProductionCount,
+    } as unknown as Record<string, string>).catch(() => {});
+  }
+
   return {
     status: 'success',
     count: productions.length,
     studios: productions.map(p => ({ name: p.name, studio: p.studio })),
     debug: parsed.debug,
     finalUrl: parsed.finalUrl,
+    fullCalendarDetected,
+    personalProductionCount,
+    departmentProductionCount,
   };
 }

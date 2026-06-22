@@ -1438,10 +1438,22 @@ function ProductionsContent() {
           body: JSON.stringify({ url: urlMatch[0], workerName: extractedWorkerName }),
         });
         if (syncResp.ok) {
-          const syncData = await syncResp.json() as { ok: boolean; synced?: boolean; count?: number; reason?: string; studios?: Array<{ name: string; studio: string }>; debug?: string };
+          const syncData = await syncResp.json() as {
+            ok: boolean;
+            synced?: boolean;
+            count?: number;
+            reason?: string;
+            studios?: Array<{ name: string; studio: string }>;
+            debug?: string;
+            fullCalendarDetected?: boolean;
+            calendarEmploymentType?: 'employee';
+          };
           console.log('[save-sync-url] response:', JSON.stringify(syncData));
           if (syncData.ok && syncData.synced) {
             syncedViaApi = true;
+            if (syncData.fullCalendarDetected && syncData.calendarEmploymentType === 'employee') {
+              await updateUserProfile({ calendarEmploymentType: 'employee' });
+            }
             await applyLoadedProductions();
             const studioInfo = syncData.studios?.map(s => s.studio).filter(Boolean).join(', ');
             setStatusMessage(studioInfo ? `נטענו ${syncData.count} הפקות | אולפן: ${studioInfo}` : `נטענו ${syncData.count} הפקות (אין מידע על אולפן)`);

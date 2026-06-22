@@ -1560,6 +1560,16 @@ async function saveSchedule(schedule, userId, requestedWorkerName) {
     }
     await commitDeptBatch();
     console.log('Dept global_productions save complete.');
+    if (schedule.allDepartmentProductions.length > personalProdIds.size) {
+      await db.doc(`users/${userId}`).set({
+        calendarEmploymentType: 'employee',
+        calendarEmploymentDetectedAt: new Date().toISOString(),
+        calendarEmploymentDetectedBy: 'herzliya-github-action-full-calendar',
+        calendarEmploymentDetectionPersonalCount: personalProdIds.size,
+        calendarEmploymentDetectionDepartmentCount: schedule.allDepartmentProductions.length,
+      }, { merge: true });
+      console.log(`Auto-marked ${userId} as employee after full department calendar upload.`);
+    }
   }
 
   // Disown step: remove user's phone from every global_production for this week

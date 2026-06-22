@@ -73,7 +73,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (result.finalUrl) {
         await patchDocument(userSyncPath, { url: result.finalUrl } as unknown as Record<string, string>).catch(() => {});
       }
-      return NextResponse.json({ ok: true, synced: true, count: result.count, studios: result.studios, debug: result.debug });
+      if (result.fullCalendarDetected) {
+        await patchDocument(`users/${authUser.uid}`, {
+          calendarEmploymentType: 'employee',
+          calendarEmploymentDetectedAt: new Date().toISOString(),
+          calendarEmploymentDetectedBy: 'herzliya-full-calendar-upload',
+          calendarEmploymentDetectionPersonalCount: result.personalProductionCount ?? 0,
+          calendarEmploymentDetectionDepartmentCount: result.departmentProductionCount ?? result.count,
+        } as unknown as Record<string, string>).catch(() => {});
+      }
+      return NextResponse.json({
+        ok: true,
+        synced: true,
+        count: result.count,
+        studios: result.studios,
+        debug: result.debug,
+        fullCalendarDetected: result.fullCalendarDetected === true,
+        calendarEmploymentType: result.fullCalendarDetected ? 'employee' : undefined,
+      });
     }
     return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error', debug: (result as { debug?: string }).debug });
   } catch (err) {
