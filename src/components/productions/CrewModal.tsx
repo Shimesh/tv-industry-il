@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { classifyContactRole, normalizeContactName } from '@/lib/contactsUtils';
 import { deduplicateCrewEntries, normalizeName, normalizePhone } from '@/lib/crewNormalization';
-import { type CrewMember, type Production, formatDateShort } from '@/lib/productionDiff';
+import { type CrewMember, type Production, formatDateShort, getHebrewDay } from '@/lib/productionDiff';
 
 interface CrewModalProps {
   production: Production;
@@ -235,6 +235,9 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
   const { contacts } = useAppData();
   const { user } = useAuth();
   const { contactIdToUserId, nameToUserId } = useContactUserMap();
+  const displayDay = production.day && !production.day.includes('?')
+    ? production.day
+    : getHebrewDay(production.date);
 
   const rawDeduped = deduplicateCrewEntries(production.crew);
   const normalizedContacts = contacts.filter((contact): contact is { id: string | number; firstName: string; lastName: string; phone?: string; is_consented?: boolean } =>
@@ -345,7 +348,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
     const text = [
       `*${production.name}*`,
-      `${production.day} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
+      `${displayDay} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
       production.studio ? `${production.studio}` : '',
       '',
       '*הפרטים שלי:*',
@@ -365,7 +368,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
     const text = [
       `*${production.name}*`,
-      `${production.day} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
+      `${displayDay} ${formatDateShort(production.date)} | ${production.startTime}-${production.endTime}`,
       production.studio ? `${production.studio}` : '',
       '',
       `*צוות (${sortedCrew.length}):*`,
@@ -560,7 +563,7 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-white/60">
-                <span>{production.day} {formatDateShort(production.date)}</span>
+                <span>{displayDay} {formatDateShort(production.date)}</span>
               </div>
             </div>
 
