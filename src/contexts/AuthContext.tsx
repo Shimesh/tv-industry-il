@@ -16,6 +16,7 @@ import { auth, db } from '@/lib/firebase';
 import { can, hasRole, type Permission, type UserRole } from '@/lib/permissions';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
 import { normalizeApprovalStatus, type UserApprovalStatus } from '@/lib/userApproval';
+import { normalizeCalendarEmploymentType, type CalendarEmploymentType } from '@/lib/calendarAccess';
 
 export interface UserProfile {
   uid: string;
@@ -60,6 +61,8 @@ export interface UserProfile {
   lastSeen?: number | null;
   googleCalendarConnected?: boolean;
   googleCalendarEmail?: string | null;
+  calendarEmploymentType?: CalendarEmploymentType;
+  calendarFullAccess?: boolean;
 }
 
 type ProfileSource = 'server' | 'cache' | 'fallback';
@@ -228,6 +231,8 @@ function normalizeUserProfile(raw: Record<string, unknown> | null, firebaseUser:
     showPhone: typeof raw.showPhone === 'boolean' ? raw.showPhone : undefined,
     encryptionPublicKey: typeof raw.encryptionPublicKey === 'string' ? raw.encryptionPublicKey : undefined,
     crewName: typeof raw.crewName === 'string' ? raw.crewName : undefined,
+    calendarEmploymentType: normalizeCalendarEmploymentType(raw.calendarEmploymentType),
+    calendarFullAccess: raw.calendarFullAccess === true,
   };
 }
 

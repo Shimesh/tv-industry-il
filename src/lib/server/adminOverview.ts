@@ -10,6 +10,7 @@ import { getRecentSystemEvents, getUsageSnapshot } from '@/lib/server/adminTelem
 import { getFirebaseAdminAuth } from '@/lib/server/firebaseAdmin';
 import { getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import { normalizeProfessionalFields } from '@/lib/professionalFields';
+import { normalizeCalendarEmploymentType } from '@/lib/calendarAccess';
 
 type RawUser = {
   id: string;
@@ -36,6 +37,8 @@ type RawUser = {
   linkedUids?: unknown;
   fcmTokens?: unknown;
   webPushSubscriptions?: unknown;
+  calendarEmploymentType?: string | null;
+  calendarFullAccess?: boolean | null;
 };
 
 type RawContact = {
@@ -269,6 +272,8 @@ function toAdminUserSummary(raw: RawUser): AdminUserSummary {
     loginMethods: inferLoginMethods([raw]),
     hasPush: (Array.isArray(raw.fcmTokens) && raw.fcmTokens.length > 0) ||
       (Array.isArray(raw.webPushSubscriptions) && raw.webPushSubscriptions.length > 0),
+    calendarEmploymentType: normalizeCalendarEmploymentType(raw.calendarEmploymentType),
+    calendarFullAccess: raw.calendarFullAccess === true,
   };
 }
 
@@ -326,6 +331,8 @@ function toUnifiedAdminUserSummary(group: RawUser[]): AdminUserSummary {
       (Array.isArray(user.fcmTokens) && (user.fcmTokens as unknown[]).length > 0) ||
       (Array.isArray(user.webPushSubscriptions) && (user.webPushSubscriptions as unknown[]).length > 0)
     ),
+    calendarEmploymentType: group.some((user) => normalizeCalendarEmploymentType(user.calendarEmploymentType) === 'employee') ? 'employee' : 'freelancer',
+    calendarFullAccess: group.some((user) => user.calendarFullAccess === true),
   };
 }
 

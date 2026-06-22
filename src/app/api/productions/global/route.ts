@@ -17,6 +17,7 @@ import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
+import { hasFullCalendarAccess } from '@/lib/calendarAccess';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -151,6 +152,14 @@ export async function GET(request: NextRequest) {
   const identity = profileId ? await getLinkedProductionIdentity(authUser) : null;
   const normalizedPhone = phone ? normalizePhone(phone) : null;
   const queryKey = normalizedPhone || shadowKey || null;
+  const userDoc = await getDocument<Record<string, unknown>>(`users/${authUser.uid}`).catch(() => null);
+  const canQueryFullCalendar = hasFullCalendarAccess(userDoc);
+
+  if (!queryKey && !profileId && !canQueryFullCalendar) {
+    return NextResponse.json({ success: true, count: 0, productions: [], calendarMode: 'personal' }, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0' },
+    });
+  }
 
   try {
     const dateFilters = [

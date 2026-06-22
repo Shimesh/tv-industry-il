@@ -58,18 +58,24 @@ export async function POST(request: NextRequest) {
     role?: string;
     roles?: string[];
     forceContactId?: string;
+    calendarEmploymentType?: 'employee' | 'freelancer';
+    calendarFullAccess?: boolean;
   };
 
   if (!body.uid) return NextResponse.json({ error: 'uid required' }, { status: 400 });
 
   const now = new Date().toISOString();
-  const userPatch: Record<string, string | null | string[]> = { updatedAt: now };
+  const userPatch: Record<string, string | boolean | null | string[]> = { updatedAt: now };
   if (body.displayName !== undefined) userPatch.displayName = body.displayName;
   if (body.phone !== undefined) userPatch.phone = body.phone;
   if (body.department !== undefined) userPatch.department = body.department;
   if (body.departments !== undefined) userPatch.departments = body.departments;
   if (body.role !== undefined) userPatch.role = body.role;
   if (body.roles !== undefined) userPatch.roles = body.roles;
+  if (body.calendarEmploymentType === 'employee' || body.calendarEmploymentType === 'freelancer') {
+    userPatch.calendarEmploymentType = body.calendarEmploymentType;
+  }
+  if (body.calendarFullAccess !== undefined) userPatch.calendarFullAccess = body.calendarFullAccess === true;
   if (body.forceContactId) userPatch.linkedContactId = body.forceContactId;
   Object.assign(userPatch, normalizeProfessionalFields(userPatch));
 

@@ -28,6 +28,7 @@ import {
   normalizeName,
   normalizeRole,
 } from '@/lib/crewNormalization';
+import { resolveCalendarAccessMode, type CalendarPreviewMode } from '@/lib/calendarAccess';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
 import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
@@ -330,6 +331,7 @@ function ProductionsContent() {
   const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showTeamSelector, setShowTeamSelector] = useState(false);
+  const [adminCalendarPreviewMode, setAdminCalendarPreviewMode] = useState<CalendarPreviewMode>('policy');
 
   // Initialize team from URL query param
   useEffect(() => {
@@ -354,6 +356,8 @@ function ProductionsContent() {
   }, []);
 
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || null;
+  const effectiveCalendarMode = selectedTeamId ? 'full' : resolveCalendarAccessMode(profile, adminCalendarPreviewMode);
+  const canUseAdminCalendarPreview = profile?.siteRole === 'admin' && !selectedTeamId;
 
   const handleTeamChange = (teamId: string | null) => {
     setSelectedTeamId(teamId);
@@ -446,6 +450,12 @@ function ProductionsContent() {
   // Profile ref — lets loadExistingWeek read the latest profile without being in its dep array
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => {
+    productionsByWeekRef.current.clear();
+    reloadDoneRef.current = false;
+    setProductions([]);
+    setSummaryProductions([]);
+  }, [effectiveCalendarMode]);
   // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
@@ -638,6 +648,8 @@ function ProductionsContent() {
       const token = await user.getIdToken().catch(() => '');
 
       const currentProfile = profileRef.current;
+      const calendarMode = resolveCalendarAccessMode(currentProfile, adminCalendarPreviewMode);
+      const canLoadFullCalendar = calendarMode === 'full';
       const normalizedPhone = normalizePhone(currentProfile?.phone || '');
       const profileIdentityId = currentProfile?.profileId || (currentProfile?.linkedContactId ? String(currentProfile.linkedContactId) : '');
 
@@ -651,7 +663,7 @@ function ProductionsContent() {
               .catch(() => ({ productions: [] as Production[] }))
           : Promise.resolve({ productions: [] as Production[] }),
         token
-          ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}`, {
+          ? fetch(`/api/productions/week?weekStart=${weekStart}&weekEnd=${weekEnd}&viewMode=${calendarMode}`, {
               headers: { Authorization: `Bearer ${token}` },
               cache: 'no-store',
             })
@@ -685,7 +697,9 @@ function ProductionsContent() {
       const displayName = currentProfile?.crewName || currentProfile?.displayName || user.displayName || '';
 
       // Merge legacy global (name-based), phone matches, then linked profile matches.
-      const afterLegacy = mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName);
+      const afterLegacy = canLoadFullCalendar
+        ? mergeGlobalProductions(userProds, globalRes.productions ?? [], displayName)
+        : userProds;
       const afterPhone = mergeGlobalProductions(afterLegacy, phoneRes.productions ?? [], displayName);
       const afterProfile = mergeGlobalProductions(afterPhone, profileRes.productions ?? [], displayName);
 
@@ -708,7 +722,7 @@ function ProductionsContent() {
       console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [user, selectedTeamId, restListDocs, parseProductionDocs]);
+  }, [user, selectedTeamId, restListDocs, parseProductionDocs, adminCalendarPreviewMode]);
 
   const fetchGlobalWeekIds = useCallback(async (): Promise<string[]> => {
     if (!user || selectedTeamId) return [];
@@ -2831,6 +2845,44 @@ function ProductionsContent() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {canUseAdminCalendarPreview && (
+        <div
+          className="mb-4 flex flex-col gap-2 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
+          dir="rtl"
+        >
+          <div className="min-w-0">
+            <div className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>בדיקת תצוגת יומן</div>
+            <div className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+              מצב פעיל: {effectiveCalendarMode === 'full' ? 'יומן מלא' : 'יומן אישי לפרילנסר'}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1 rounded-lg p-1" style={{ background: 'var(--theme-bg)' }}>
+            {([
+              { value: 'policy' as const, label: 'רגיל' },
+              { value: 'full' as const, label: 'מלא' },
+              { value: 'personal' as const, label: 'אישי' },
+            ]).map((option) => {
+              const active = adminCalendarPreviewMode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setAdminCalendarPreviewMode(option.value)}
+                  className="rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
+                  style={{
+                    background: active ? 'var(--theme-accent)' : 'transparent',
+                    color: active ? 'white' : 'var(--theme-text-secondary)',
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

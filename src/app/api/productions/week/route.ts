@@ -4,6 +4,7 @@ import { fromGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProd
 import { splitHerzliyaRole } from '@/lib/productionScheduleParser';
 import { recordRouteMetric } from '@/lib/server/adminTelemetry';
 import { runQuery, getDocument } from '@/lib/server/firestoreAdminRest';
+import { resolveCalendarAccessMode, type CalendarPreviewMode } from '@/lib/calendarAccess';
 
 type CalendarSyncDoc = {
   lastSyncAt?: number;
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const weekStart = searchParams.get('weekStart');
   const weekEnd = searchParams.get('weekEnd');
+  const requestedViewMode = searchParams.get('viewMode');
 
   if (!weekStart || !weekEnd) {
     return NextResponse.json({ error: 'weekStart and weekEnd are required' }, { status: 400 });
@@ -32,8 +34,35 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [docs, userSyncDoc, systemSyncDoc] = await Promise.all([
-      runQuery<GlobalProductionDoc>({
+    const [userDoc, userSyncDoc, systemSyncDoc] = await Promise.all([
+      getDocument<Record<string, unknown>>(`users/${authUser.uid}`).catch(() => null),
+      getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() => null),
+      getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
+    ]);
+
+    const previewMode: CalendarPreviewMode =
+      userDoc?.siteRole === 'admin' && (requestedViewMode === 'full' || requestedViewMode === 'personal')
+        ? requestedViewMode
+        : 'policy';
+    const calendarMode = resolveCalendarAccessMode(userDoc, previewMode);
+    const lastSyncAt = userSyncDoc?.lastSyncAt ?? systemSyncDoc?.lastSyncAt ?? null;
+    const lastSyncStatus = userSyncDoc?.lastSyncStatus ?? systemSyncDoc?.lastSyncStatus ?? null;
+
+    if (calendarMode !== 'full') {
+      recordRouteMetric({ route: '/api/productions/week', ok: true, statusCode: 200 }).catch(() => {});
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        productions: [],
+        calendarMode,
+        lastSyncAt,
+        lastSyncStatus,
+      }, {
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0' },
+      });
+    }
+
+    const docs = await runQuery<GlobalProductionDoc>({
       from: [{ collectionId: 'global_productions' }],
       where: {
         compositeFilter: {
@@ -56,11 +85,8 @@ export async function GET(request: NextRequest) {
           ],
         },
       },
-        limit: 500,
-      }),
-      getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() => null),
-      getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
-    ]);
+      limit: 500,
+    });
 
     // Dedup by Firestore ID (handles re-uploads of the same document)
     const byId = new Map<string, GlobalProductionDoc>();
@@ -110,16 +136,13 @@ export async function GET(request: NextRequest) {
       ...noHerzliyaId.map(cleanDoc),
     ].map(fromGlobalProduction);
 
-    // Prefer the user's own last sync time; fall back to the global system sync timestamp
-    const lastSyncAt = userSyncDoc?.lastSyncAt ?? systemSyncDoc?.lastSyncAt ?? null;
-    const lastSyncStatus = userSyncDoc?.lastSyncStatus ?? systemSyncDoc?.lastSyncStatus ?? null;
-
     recordRouteMetric({ route: '/api/productions/week', ok: true, statusCode: 200 }).catch(() => {});
 
     return NextResponse.json({
       success: true,
       count: productions.length,
       productions,
+      calendarMode,
       lastSyncAt,
       lastSyncStatus,
     }, {

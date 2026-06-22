@@ -29,6 +29,8 @@ export type AdminUserSummary = {
   phone: string | null;
   loginMethods: AdminLoginMethod[];
   hasPush: boolean;
+  calendarEmploymentType: 'employee' | 'freelancer';
+  calendarFullAccess: boolean;
 };
 
 export type CountBucket = {

@@ -713,6 +713,8 @@ export default function AdminPage() {
     customRole: string;
     forceContactId: string;
     linkedContactId: string | null;
+    calendarEmploymentType: 'employee' | 'freelancer';
+    calendarFullAccess: boolean;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [insightDrilldown, setInsightDrilldown] = useState<'tour' | 'profile' | 'consent' | 'push' | null>(null);
@@ -842,6 +844,8 @@ export default function AdminPage() {
           department: stringArray(editModal.departments)[0] || '',
           role: stringArray(editModal.roles)[0] || '',
           forceContactId: editModal.forceContactId || undefined,
+          calendarEmploymentType: editModal.calendarEmploymentType,
+          calendarFullAccess: editModal.calendarFullAccess,
         }),
       });
       showToast('ok', 'הפרופיל עודכן');
@@ -1954,6 +1958,8 @@ export default function AdminPage() {
                                   customRole: '',
                                   forceContactId: '',
                                   linkedContactId: entry.linkedContactId ? String(entry.linkedContactId) : null,
+                                  calendarEmploymentType: entry.calendarEmploymentType,
+                                  calendarFullAccess: entry.calendarFullAccess,
                                 });
                               }}
                               className="text-xs text-gray-500 hover:text-gray-200 underline underline-offset-1"
@@ -2992,7 +2998,7 @@ export default function AdminPage() {
     {editModal && createPortal(
       <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4">
         <div
-          className="w-full max-w-md rounded-xl p-6 shadow-xl"
+          className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl p-6 shadow-xl"
           style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
         >
           <h3 className="mb-4 text-lg font-bold" style={{ color: 'var(--theme-text-primary)' }}>
@@ -3128,6 +3134,31 @@ export default function AdminPage() {
                 </button>
               </div>
             </label>
+            <div className="flex flex-col gap-2 rounded-lg p-3 text-xs" style={{ background: 'var(--theme-bg-primary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-secondary)' }}>
+              <div className="font-semibold" style={{ color: 'var(--theme-text-primary)' }}>הרשאות יומן הפקות</div>
+              <label className="flex flex-col gap-1">
+                סוג עובד
+                <select
+                  value={editModal.calendarEmploymentType}
+                  onChange={(e) => setEditModal((m) => m && { ...m, calendarEmploymentType: e.target.value === 'employee' ? 'employee' : 'freelancer' })}
+                  dir="rtl"
+                  className="rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                >
+                  <option value="freelancer">פרילנסר - יומן אישי בלבד</option>
+                  <option value="employee">שכיר - יומן מלא</option>
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--theme-bg-secondary)' }}>
+                <span className="leading-5">לפתוח יומן מלא גם אם המשתמש פרילנסר</span>
+                <input
+                  type="checkbox"
+                  checked={editModal.calendarFullAccess}
+                  onChange={(e) => setEditModal((m) => m && { ...m, calendarFullAccess: e.target.checked })}
+                  className="h-4 w-4 accent-purple-500"
+                />
+              </label>
+            </div>
             {editModal.linkedContactId && (() => {
               const linked = availableContacts.find((c) => c.id === editModal.linkedContactId);
               const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : editModal.linkedContactId;
