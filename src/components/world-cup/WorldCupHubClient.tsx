@@ -538,11 +538,22 @@ function TournamentBracket({
   const byNumber = useMemo(() => new Map(matches.map((match) => [match.matchNumber, match])), [matches]);
   const pick = (numbers: number[]) => numbers.map((number) => byNumber.get(number));
   const finalMatch = byNumber.get(104);
+  const finalVenue = finalMatch ? venues.find((candidate) => candidate.id === finalMatch.venueId) : undefined;
+  const bracketScrollRef = useRef<HTMLDivElement>(null);
   const nextKnockout = useMemo(() => {
     const now = Date.now();
     return matches
       .filter((match) => isKnockout(match.stage) && match.status === 'scheduled' && Date.parse(match.kickoff) >= now)
       .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0];
+  }, [matches]);
+
+  useEffect(() => {
+    const scroller = bracketScrollRef.current;
+    if (!scroller || !window.matchMedia('(min-width: 1024px)').matches) return;
+
+    requestAnimationFrame(() => {
+      scroller.scrollLeft = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) / 2);
+    });
   }, [matches]);
 
   return (
@@ -572,7 +583,9 @@ function TournamentBracket({
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
               <div className="text-white/45">משחק הגמר</div>
-              <div className="font-black text-white">19.07 · MetLife</div>
+              <div className="truncate font-black text-white">
+                {finalMatch ? `19.07 · ${finalVenue?.nameHe ?? 'אצטדיון הגמר'}` : 'ייקבע'}
+              </div>
             </div>
           </div>
         </div>
@@ -581,7 +594,7 @@ function TournamentBracket({
           <GroupSnapshot standings={standings} />
         </div>
 
-        <div data-testid="world-cup-bracket-scroll" className="relative mt-5 min-w-0 max-w-full overflow-x-auto pb-2" dir="ltr" style={{ scrollbarWidth: 'thin' }}>
+        <div ref={bracketScrollRef} data-testid="world-cup-bracket-scroll" className="relative mt-5 min-w-0 max-w-full overflow-x-auto pb-2" dir="ltr" style={{ scrollbarWidth: 'thin' }}>
           <div className="flex w-max min-w-[2140px] items-center justify-center gap-4 px-1">
             <BracketColumn title="32 האחרונות" matches={pick([73, 74, 75, 76, 77, 78, 79, 80])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="שמינית גמר" matches={pick([89, 90, 91, 92])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
@@ -2924,22 +2937,22 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
                 </div>
               )}
             </CollapsibleCard>
-            <div ref={sectionRefs.bracket} className="min-w-0">
-              <TournamentBracket
-                matches={matches}
-                standings={standings}
-                venues={venues}
-                updatedAt={updatedAt}
-                onSelect={setSelectedMatch}
-                onDetail={setMatchDetail}
-              />
-            </div>
-            <div ref={sectionRefs.matches}>
-              <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
-            </div>
           </div>
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6 xl:col-start-2 xl:row-start-1">
             <WorldCupChat match={featureMatch} />
+          </div>
+          <div ref={sectionRefs.bracket} className="min-w-0 xl:col-span-2">
+            <TournamentBracket
+              matches={matches}
+              standings={standings}
+              venues={venues}
+              updatedAt={updatedAt}
+              onSelect={setSelectedMatch}
+              onDetail={setMatchDetail}
+            />
+          </div>
+          <div ref={sectionRefs.matches} className="xl:col-span-2">
+            <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
           </div>
         </div>
 
