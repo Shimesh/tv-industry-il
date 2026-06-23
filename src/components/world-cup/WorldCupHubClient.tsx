@@ -465,7 +465,7 @@ function BracketColumn({
   onDetail: (match: WorldCupMatch) => void;
 }) {
   return (
-    <div className="w-[232px] shrink-0">
+    <div className="w-[232px] shrink-0" dir="rtl">
       <div className="mb-3 flex items-center justify-between gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
         <span className="text-xs font-black text-white">{title}</span>
         <span className="text-[10px] font-bold text-[#D4AF37]">{matches.filter(Boolean).length}</span>
@@ -495,7 +495,7 @@ function GroupSnapshot({ standings }: { standings: WorldCupStanding[] }) {
   }, [standings]);
 
   return (
-    <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([group, rows]) => (
         <div key={group} className="rounded-2xl border border-white/10 bg-black/18 p-2.5">
           <div className="mb-2 flex items-center justify-between">
@@ -546,8 +546,8 @@ function TournamentBracket({
   }, [matches]);
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-[#D4AF37]/25 bg-[#061323] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
-      <div className="relative overflow-hidden px-4 py-5 sm:px-5">
+    <section data-testid="world-cup-bracket" className="min-w-0 w-full max-w-full overflow-hidden rounded-3xl border border-[#D4AF37]/25 bg-[#061323] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
+      <div className="relative min-w-0 overflow-hidden px-4 py-5 sm:px-5">
         <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'linear-gradient(90deg, rgba(212,175,55,.16) 1px, transparent 1px), linear-gradient(rgba(212,175,55,.10) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(212,175,55,.22),transparent_42%)]" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -581,13 +581,13 @@ function TournamentBracket({
           <GroupSnapshot standings={standings} />
         </div>
 
-        <div className="relative mt-5 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-          <div className="flex min-w-[2140px] items-center justify-center gap-4 px-1">
+        <div data-testid="world-cup-bracket-scroll" className="relative mt-5 min-w-0 max-w-full overflow-x-auto pb-2" dir="ltr" style={{ scrollbarWidth: 'thin' }}>
+          <div className="flex w-max min-w-[2140px] items-center justify-center gap-4 px-1">
             <BracketColumn title="32 האחרונות" matches={pick([73, 74, 75, 76, 77, 78, 79, 80])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="שמינית גמר" matches={pick([89, 90, 91, 92])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="רבע גמר" matches={pick([97, 98])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="חצי גמר" matches={pick([101])} venues={venues} accent="semi" onSelect={onSelect} onDetail={onDetail} />
-            <div className="w-[300px] shrink-0">
+            <div className="w-[300px] shrink-0" dir="rtl">
               <div className="mb-3 flex justify-center">
                 <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-[#D4AF37]/50 bg-[#D4AF37]/15 shadow-[0_0_50px_rgba(212,175,55,.22)]">
                   <Trophy className="h-10 w-10 text-[#D4AF37]" />
@@ -2905,8 +2905,8 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           )}
         </AnimatePresence>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
-          <div className="space-y-6">
+        <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-w-0 space-y-6">
             <CollapsibleCard icon={Tv} title="שידור ישיר · כאן 11" subtitle={`${featureMatch.homeTeam.flag} ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe} ${featureMatch.awayTeam.flag}`} defaultOpen className="overflow-hidden">
               <div className="p-3">
                 <VideoPlayer channel={kan11} stream={streamConfigs.kan11} onNext={() => {}} onPrev={() => {}} currentProgram={`מונדיאל 2026 · ${featureMatch.homeTeam.nameHe} - ${featureMatch.awayTeam.nameHe}`} initialMuted />
@@ -2924,7 +2924,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
                 </div>
               )}
             </CollapsibleCard>
-            <div ref={sectionRefs.bracket}>
+            <div ref={sectionRefs.bracket} className="min-w-0">
               <TournamentBracket
                 matches={matches}
                 standings={standings}
@@ -2938,7 +2938,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
               <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
             </div>
           </div>
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <WorldCupChat match={featureMatch} />
           </div>
         </div>
