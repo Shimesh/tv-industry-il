@@ -116,12 +116,6 @@ function inferCrewBucket(role: string, roleDetail?: string | null): CrewBucket {
   return classification.workArea || classification.department;
 }
 
-function timeToMinutes(t: string): number | null {
-  const parts = (t || '').split(':').map(Number);
-  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
-  return parts[0] * 60 + parts[1];
-}
-
 function enrichCrewWithPhones(
   crew: CrewMember[],
   contactList: { firstName: string; lastName: string; phone?: string; is_consented?: boolean }[],
@@ -229,12 +223,12 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeDepartment, setActiveDepartment] = useState<ActiveDepartment>('הכל');
   const [resolvedPhones, setResolvedPhones] = useState<Record<string, string>>({});
-  const [isPhonesLoading, setIsPhonesLoading] = useState(
+  const [, setIsPhonesLoading] = useState(
     () => (production.crew ?? []).some((m) => !normalizePhone(m.phone ?? '')),
   );
   const { contacts } = useAppData();
   const { user } = useAuth();
-  const { contactIdToUserId, nameToUserId } = useContactUserMap();
+  const { nameToUserId } = useContactUserMap();
   const displayDay = production.day && !production.day.includes('?')
     ? production.day
     : getHebrewDay(production.date);
@@ -324,23 +318,15 @@ export default function CrewModal({ production, currentUserName, currentUserPhon
 
   const directorNames = useMemo(() => new Set(directors.map((d) => d.name)), [directors]);
   const filteredCrew = useMemo(() => {
-    const prodStartMin = timeToMinutes(production.startTime ?? '');
-    const base = (activeDepartment === 'הכל' ? sortedCrew : sortedCrew.filter((member) => member.department === activeDepartment))
-      .filter((member) => {
-        if (prodStartMin !== null && member.endTime) {
-          // Crew times are stored in Herzliya convention: startTime=shiftEnd, endTime=shiftStart
-          // Filter out crew whose actual shift start (stored in endTime) is more than 2h before production
-          const memberActualStartMin = timeToMinutes(member.endTime);
-          if (memberActualStartMin !== null && memberActualStartMin < prodStartMin - 120) return false;
-        }
-        return true;
-      });
+    const base = activeDepartment === 'הכל'
+      ? sortedCrew
+      : sortedCrew.filter((member) => member.department === activeDepartment);
     // Directors are already shown in the hero box at the top; hide them from the main list to avoid double display.
     if (directors.length > 0 && activeDepartment === 'הכל') {
       return base.filter((m) => !directorNames.has(m.name));
     }
     return base;
-  }, [sortedCrew, activeDepartment, directors, directorNames, production.startTime]);
+  }, [sortedCrew, activeDepartment, directors, directorNames]);
 
   const shareMyDetails = () => {
     const myEntry = sortedCrew.find((member) => member.isCurrentUser);
