@@ -174,10 +174,10 @@ function MatchScore({ match, compact = false }: { match: WorldCupMatch; compact?
       <div className={`shrink-0 rounded-xl bg-[#002046] text-center font-black tabular-nums text-[#D4AF37] ${compact ? 'px-2 py-1.5 text-sm' : 'px-3 py-2 text-lg'}`} dir="ltr">
         {isLive ? (
           <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>
-            {match.awayScore ?? '0'} : {match.homeScore ?? '0'}
+            {match.homeScore ?? '0'} : {match.awayScore ?? '0'}
           </motion.span>
         ) : (
-          <>{match.awayScore ?? '-'} : {match.homeScore ?? '-'}</>
+          <>{match.homeScore ?? '-'} : {match.awayScore ?? '-'}</>
         )}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
@@ -1591,7 +1591,7 @@ function LiveMatchBanner({ matches, onClickMatch }: { matches: WorldCupMatch[]; 
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {match.awayScore ?? 0} : {match.homeScore ?? 0}
+                    {match.homeScore ?? 0} : {match.awayScore ?? 0}
                   </motion.div>
                   <div className="mt-1.5 flex items-center justify-center gap-1.5 text-xs font-black text-red-400">
                     <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -2772,7 +2772,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   useEffect(() => {
     let cancelled = false;
     const poll = () => {
-      fetch('/api/world-cup/matches', { cache: 'no-store' })
+      fetch(`/api/world-cup/matches?_t=${Date.now()}`, { cache: 'no-store' })
         .then((res) => res.ok ? res.json() : null)
         .then((payload) => {
           if (cancelled || !payload) return;

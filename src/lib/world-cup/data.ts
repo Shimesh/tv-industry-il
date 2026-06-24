@@ -178,7 +178,14 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     const kickoffInFuture = kickoffMs > 0 && kickoffMs > Date.now();
     let status: WorldCupMatch['status'] = match.status;
     if (!kickoffInFuture) {
-      if (statusName === 'STATUS_IN_PROGRESS' || statusName === 'STATUS_HALFTIME') status = 'live';
+      if ([
+        'STATUS_IN_PROGRESS',
+        'STATUS_FIRST_HALF',
+        'STATUS_HALFTIME',
+        'STATUS_SECOND_HALF',
+        'STATUS_EXTRA_TIME',
+        'STATUS_PENALTY_SHOOTOUT',
+      ].includes(statusName)) status = 'live';
       else if (isCompleted || ['STATUS_FINAL', 'STATUS_FULL_TIME', 'STATUS_AWARDED', 'STATUS_POSTPONED'].includes(statusName)) status = 'finished';
       else if (statusName === 'STATUS_SCHEDULED' || statusName === 'STATUS_PRE') status = 'scheduled';
     } else {
@@ -374,10 +381,22 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     matches = applyESPNOverlay(matches, espnEvents);
   }
 
+  const now = Date.now();
+  matches = matches.map((match) => {
+    if (match.status !== 'scheduled' || !match.kickoff) return match;
+    const elapsed = now - Date.parse(match.kickoff);
+    if (elapsed < 0 || elapsed > 130 * 60_000) return match;
+    return {
+      ...match,
+      status: 'live' as const,
+      homeScore: match.homeScore ?? 0,
+      awayScore: match.awayScore ?? 0,
+    };
+  });
+
   // Supplement with openfootball for:
   // 1. matches still 'scheduled' but kickoff >105 min ago (ESPN missed them)
   // 2. matches stuck as 'live' but kickoff >120 min ago (ESPN stopped reporting)
-  const now = Date.now();
   const needsScore = matches.some(m => {
     if (!m.kickoff) return false;
     const elapsed = now - Date.parse(m.kickoff);

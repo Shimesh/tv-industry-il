@@ -1,12 +1,13 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { WorldCupMatch } from '@/lib/world-cup/types';
 import { fallbackMatches } from '@/lib/world-cup/static-data';
 
 type WorldCupContextValue = {
   isWorldCupMode: boolean;
   activeMatch: WorldCupMatch | null;
+  activeMatches: WorldCupMatch[];
   nextMatch: WorldCupMatch | null;
   refresh: () => Promise<void>;
 };
@@ -14,6 +15,7 @@ type WorldCupContextValue = {
 const WorldCupContext = createContext<WorldCupContextValue>({
   isWorldCupMode: false,
   activeMatch: null,
+  activeMatches: [],
   nextMatch: null,
   refresh: async () => {},
 });
@@ -61,24 +63,13 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
 
   // Stabilise references — only update when the match ID actually changes,
   // so context consumers don't re-render on every poll cycle.
-  const prevActiveRef = useRef<WorldCupMatch | null>(null);
-  const activeMatch = useMemo(() => {
-    const found = matches.find((m) => m.status === 'live') ?? null;
-    const prev = prevActiveRef.current;
-    // Stabilise reference only when nothing score/status/minute-relevant changed,
-    // so consumers that show live scores still re-render when the match updates.
-    if (
-      found?.id === prev?.id &&
-      found?.homeScore === prev?.homeScore &&
-      found?.awayScore === prev?.awayScore &&
-      found?.minute === prev?.minute &&
-      found?.status === prev?.status
-    ) {
-      return prev;
-    }
-    prevActiveRef.current = found;
-    return found;
-  }, [matches]);
+  const activeMatches = useMemo(() => (
+    matches
+      .filter((m) => m.status === 'live')
+      .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+  ), [matches]);
+
+  const activeMatch = activeMatches[0] ?? null;
 
   useEffect(() => {
     void refresh();
@@ -87,23 +78,17 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(interval);
   }, [refresh, activeMatch]);
 
-  const prevNextRef = useRef<WorldCupMatch | null>(null);
-  const nextMatch = useMemo(() => {
-    const found = getNextMatch(matches);
-    if (found?.id === prevNextRef.current?.id) return prevNextRef.current;
-    prevNextRef.current = found;
-    return found;
-  }, [matches]);
+  const nextMatch = useMemo(() => getNextMatch(matches), [matches]);
 
-  const isWorldCupMode = Boolean(activeMatch);
+  const isWorldCupMode = activeMatches.length > 0;
 
   useEffect(() => {
     applyWorldCupMode(isWorldCupMode);
   }, [isWorldCupMode]);
 
   const value = useMemo(
-    () => ({ isWorldCupMode, activeMatch, nextMatch, refresh }),
-    [activeMatch, isWorldCupMode, nextMatch, refresh],
+    () => ({ isWorldCupMode, activeMatch, activeMatches, nextMatch, refresh }),
+    [activeMatch, activeMatches, isWorldCupMode, nextMatch, refresh],
   );
 
   return <WorldCupContext.Provider value={value}>{children}</WorldCupContext.Provider>;

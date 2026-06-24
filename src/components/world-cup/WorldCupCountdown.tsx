@@ -87,7 +87,7 @@ function FlagBadge({ team, small = false }: { team: { id: string; nameHe: string
 
 export default function WorldCupCountdown({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const { activeMatch, nextMatch, refresh } = useWorldCup();
+  const { activeMatch, activeMatches, nextMatch, refresh } = useWorldCup();
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
 
   // Count down to next/active match kickoff, not to the fixed tournament start date
@@ -102,6 +102,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   const label = useMemo(() => (isStarting ? 'מונדיאל LIVE' : 'מונדיאל 2026'), [isStarting]);
   // Show the active match if confirmed, otherwise show nextMatch when it just started
   const previewMatch = activeMatch ?? nextMatch ?? null;
+  const liveMatches = activeMatches.length > 0 ? activeMatches : (activeMatch ? [activeMatch] : []);
 
   useEffect(() => {
     setDiff(getDiff(targetIso));
@@ -206,7 +207,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                 animate={{ opacity: [1, 0.5, 1] }}
                 transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
               >
-                {activeMatch ? `${activeMatch.awayScore ?? 0}:${activeMatch.homeScore ?? 0}` : 'חי'}
+                {liveMatches.length > 1 ? `${liveMatches.length} חי` : activeMatch ? `${activeMatch.homeScore ?? 0}:${activeMatch.awayScore ?? 0}` : 'חי'}
               </motion.span>
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
@@ -261,7 +262,39 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
           </span>
 
           {/* Match preview */}
-          {previewMatch && (
+          {liveMatches.length > 1 ? (
+            <span
+              className="relative flex w-full flex-col gap-2 rounded-2xl px-3 py-3"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0,15,45,0.85) 0%, rgba(0,10,30,0.9) 100%)',
+                border: '1px solid rgba(212,175,55,0.2)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+              dir="rtl"
+            >
+              <span className="text-center text-[11px] font-black text-red-400">
+                {liveMatches.length} משחקים חיים עכשיו
+              </span>
+              {liveMatches.slice(0, 3).map((match) => (
+                <span key={match.id} className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-2.5 py-2">
+                  <span className="min-w-0 flex-1 truncate text-right text-xs font-black text-white/85">
+                    {match.homeTeam.flag} {match.homeTeam.nameHe}
+                  </span>
+                  <motion.span
+                    className="shrink-0 rounded-lg border border-[#D4AF37]/35 bg-[#D4AF37]/12 px-2.5 py-1 text-sm font-black tabular-nums text-[#D4AF37]"
+                    animate={{ opacity: [1, 0.55, 1] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                    dir="ltr"
+                  >
+                    {match.homeScore ?? 0}:{match.awayScore ?? 0}
+                  </motion.span>
+                  <span className="min-w-0 flex-1 truncate text-left text-xs font-black text-white/85">
+                    {match.awayTeam.nameHe} {match.awayTeam.flag}
+                  </span>
+                </span>
+              ))}
+            </span>
+          ) : previewMatch && (
             <motion.span
               className="relative flex w-full items-center justify-center gap-3 rounded-2xl px-4 py-3"
               style={{
@@ -293,7 +326,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {activeMatch ? `${activeMatch.awayScore ?? 0}:${activeMatch.homeScore ?? 0}` : '0:0'}
+                    {activeMatch ? `${activeMatch.homeScore ?? 0}:${activeMatch.awayScore ?? 0}` : '0:0'}
                   </motion.span>
                   <span className="flex items-center gap-1 text-[10px] font-black text-red-400">
                     <motion.span
