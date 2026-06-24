@@ -9,10 +9,6 @@
       "path": "/api/cron/scrape-ratings",
       "schedule": "0 6 * * *"
     },
-    {
-      "path": "/api/cron/sync-calendar",
-      "schedule": "*/30 * * * *"
-    },
     { "path": "/api/cron/scrape-ratings/telegram", "schedule": "0 6 * * *" },
     { "path": "/api/cron/scrape-ratings/telegram", "schedule": "1 6 * * *" },
     { "path": "/api/cron/scrape-ratings/telegram", "schedule": "2 6 * * *" },

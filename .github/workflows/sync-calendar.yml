@@ -1,9 +1,7 @@
-name: Sync Calendar (Hourly)
+﻿name: Sync Calendar (Hourly)
 
 on:
-  schedule:
-    - cron: '0 * * * *'   # every hour at :00
-    - cron: '30 * * * *'  # every hour at :30 (backup — GitHub cron is unreliable)
+  # Manual cloud trigger only. Herzliya currently times out from GitHub/Vercel cloud IPs.
   workflow_dispatch:
 
 concurrency:
