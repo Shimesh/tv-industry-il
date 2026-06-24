@@ -2798,6 +2798,10 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
         .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? matches[0]
     );
   }, [matches]);
+  const liveMatchesCount = matches.filter((m) => m.status === 'live').length;
+  const featureMatchLabel = featureMatch.status === 'live'
+    ? (liveMatchesCount > 1 ? `שידור חי עכשיו · ${liveMatchesCount} משחקים` : 'שידור חי עכשיו')
+    : 'המשחק הבא';
   const selectedVenue = venues.find((venue) => venue.id === featureMatch.venueId);
 
   useEffect(() => {
@@ -2881,7 +2885,9 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="mb-0.5 flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-[#D4AF37]/70 uppercase tracking-wider">המשחק הבא</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${featureMatch.status === 'live' ? 'text-red-400' : 'text-[#D4AF37]/70'}`}>
+                    {featureMatchLabel}
+                  </span>
                 </div>
                 <p className={`text-xs font-bold ${featureMatch.status === 'live' ? 'text-red-400' : 'text-[#D4AF37]'}`}>{statusLabel(featureMatch)}</p>
                 <h2 className="truncate text-lg font-black text-white sm:text-xl">{stageLabel(featureMatch.stage)}{featureMatch.group ? ` · בית ${featureMatch.group}` : ''}</h2>
