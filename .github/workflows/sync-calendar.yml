@@ -22,15 +22,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci --prefer-offline
-
-      - name: Sync saved calendars
+      - name: Trigger Vercel calendar sync cron
         env:
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
-          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          SYNC_SAVED_CALENDARS: '1'
-        run: node functions/calendar-sync.cjs
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: node scripts/poll-calendar-sync-cron.mjs
