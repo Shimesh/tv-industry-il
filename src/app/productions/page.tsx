@@ -1404,6 +1404,7 @@ function ProductionsContent() {
     setRequestError(null);
     setStatusMessage(null);
     setWorkerName(extractedWorkerName);
+    const requestStartedAt = Date.now();
 
     const applyLoadedProductions = async () => {
       if (normalizedDateLabels) {
@@ -1444,13 +1445,14 @@ function ProductionsContent() {
         });
       } catch { /* will fall back to API-only path */ }
 
-      fetch('/api/trigger-action', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${idToken}` },
-      }).catch(() => {});
+      // The GitHub repository_dispatch fallback only calls the Vercel cron endpoint.
+      // Vercel/GitHub currently cannot reach Herzliya reliably, and that path does
+      // not update scheduleRequests. Save the URL and poll user_calendar_sync instead;
+      // the local scheduled sync can pick it up without leaving this UI spinning.
 
       // Primary sync: await save-sync-url (server-side, no Puppeteer).
-      // On success → show done immediately. On any failure → fall through to GitHub Action polling.
+      // On success show done immediately. On failure, poll user_calendar_sync so local
+      // scheduled sync can still complete the visible request without an endless spinner.
       let syncedViaApi = false;
       let syncTimeout: number | null = null;
       try {
@@ -1487,11 +1489,11 @@ function ProductionsContent() {
             setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 8000);
           } else {
-            if (syncData.reason !== 'empty_schedule') {
-              // Only show error message for unexpected failures — empty_schedule is normal for
-              // Herzliya URLs since the server can't authenticate; GitHub Action handles it.
-              const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 150)}` : '';
-              setStatusMessage(`שגיאת סנכרון${debugStr}`);
+            if (syncData.reason === 'empty_schedule') {
+              setStatusMessage('הקישור נשמר, בודק עדכון ברקע...');
+            } else {
+              const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 120)}` : '';
+              setStatusMessage(`הקישור נשמר. הסנכרון בענן לא הגיע להרצליה, בודק סנכרון מקומי...${debugStr}`);
             }
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
@@ -1502,32 +1504,64 @@ function ProductionsContent() {
         if (syncTimeout) window.clearTimeout(syncTimeout);
       }
 
-      // Fallback: poll scheduleRequests for GitHub Action result
+      // Fallback: poll the saved sync document for a fresh local/background result.
       if (!syncedViaApi) {
-        const pollInterval = setInterval(async () => {
-          if (!docId) return;
+        setRequestStatus('processing');
+        let localSyncError: string | null = null;
+        const stopPolling = (pollInterval: ReturnType<typeof setInterval>, timeoutId: ReturnType<typeof setTimeout>) => {
+          clearInterval(pollInterval);
+          clearTimeout(timeoutId);
+        };
+        const pollForResult = async (
+          pollInterval: ReturnType<typeof setInterval>,
+          timeoutId: ReturnType<typeof setTimeout>,
+        ) => {
           try {
-            const data = await firestoreRestRead(`scheduleRequests/${docId}`);
-            if (!data) return;
-            const status = data.status as RequestStatus;
-            setRequestStatus(status);
-            if (status === 'done') {
-              clearInterval(pollInterval);
+            if (docId) {
+              const data = await firestoreRestRead(`scheduleRequests/${docId}`);
+              if (data) {
+                const status = data.status as RequestStatus;
+                if (status === 'done') {
+                  stopPolling(pollInterval, timeoutId);
+                  setRequestStatus('done');
+                  await applyLoadedProductions();
+                  setTimeout(() => setRequestStatus('idle'), 5000);
+                  return;
+                }
+                if (status === 'error') {
+                  localSyncError = (data.error as string) || 'הסנכרון בענן נכשל';
+                }
+              }
+            }
+
+            const syncDoc = await firestoreRestRead(`user_calendar_sync/${user.uid}`);
+            const lastSyncAt = Number(syncDoc?.lastSyncAt || 0);
+            const lastSyncStatus = syncDoc?.lastSyncStatus as string | undefined;
+            const lastSyncCount = Number(syncDoc?.lastSyncCount || 0);
+            if (lastSyncStatus === 'success' && lastSyncAt >= requestStartedAt - 5000) {
+              stopPolling(pollInterval, timeoutId);
               await applyLoadedProductions();
+              setStatusMessage(`הסנכרון הושלם ברקע${lastSyncCount ? ` | נטענו ${lastSyncCount} הפקות` : ''}`);
+              setRequestStatus('done');
               setTimeout(() => setRequestStatus('idle'), 5000);
-            } else if (status === 'error') {
-              clearInterval(pollInterval);
-              setRequestError((data.error as string) || 'שגיאה בטעינת הלוח');
-              setTimeout(() => setRequestStatus('idle'), 8000);
             }
           } catch { /* ignore poll errors */ }
-        }, 10000);
-        setTimeout(() => {
+        };
+        const timeoutId = setTimeout(() => {
           clearInterval(pollInterval);
-          setRequestStatus(prev =>
-            prev === 'pending' || prev === 'processing' ? 'idle' : prev,
-          );
-        }, 5 * 60 * 1000);
+          setRequestStatus(prev => {
+            if (prev !== 'pending' && prev !== 'processing') return prev;
+            setRequestError(localSyncError);
+            setStatusMessage(
+              localSyncError
+                ? `הקישור נשמר, אבל הסנכרון עדיין לא הסתיים: ${localSyncError}`
+                : 'הקישור נשמר. הסנכרון ימשיך ברקע ויעדכן את היומן כשיסתיים.',
+            );
+            return 'idle';
+          });
+        }, 2 * 60 * 1000);
+        const pollInterval = setInterval(() => void pollForResult(pollInterval, timeoutId), 7000);
+        void pollForResult(pollInterval, timeoutId);
       }
     } catch (error: unknown) {
       setRequestStatus('error');

@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
   const byId = new Map<string, Production>();
   for (const doc of docSets.flat()) {
     if (!doc?.id) continue;
+    if ((doc as Production & { missingCandidate?: unknown }).missingCandidate === true) continue;
     const existing = byId.get(doc.id);
     if (!existing || String(doc.lastUpdatedAt || '') > String(existing.lastUpdatedAt || '')) {
       byId.set(doc.id, doc);
