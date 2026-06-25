@@ -289,7 +289,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {match.homeScore ?? 0}:{match.awayScore ?? 0}
+                    {match.awayScore ?? 0}:{match.homeScore ?? 0}
                   </motion.span>
                   <span className="min-w-0 flex-1 truncate text-left text-xs font-black text-white/85">
                     {match.awayTeam.nameHe} {match.awayTeam.flag}
@@ -361,7 +361,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     dir="ltr"
                   >
-                    {activeMatch ? `${activeMatch.homeScore ?? 0}:${activeMatch.awayScore ?? 0}` : '0:0'}
+                    {activeMatch ? `${activeMatch.awayScore ?? 0}:${activeMatch.homeScore ?? 0}` : '0:0'}
                   </motion.span>
                   <span className="flex items-center gap-1 text-[10px] font-black text-red-400">
                     <motion.span
