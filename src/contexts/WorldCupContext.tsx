@@ -9,6 +9,7 @@ type WorldCupContextValue = {
   activeMatch: WorldCupMatch | null;
   activeMatches: WorldCupMatch[];
   nextMatch: WorldCupMatch | null;
+  nextMatches: WorldCupMatch[];
   refresh: () => Promise<void>;
 };
 
@@ -17,6 +18,7 @@ const WorldCupContext = createContext<WorldCupContextValue>({
   activeMatch: null,
   activeMatches: [],
   nextMatch: null,
+  nextMatches: [],
   refresh: async () => {},
 });
 
@@ -42,11 +44,15 @@ function applyWorldCupMode(active: boolean) {
   }
 }
 
-function getNextMatch(matches: WorldCupMatch[]) {
+function getNextMatches(matches: WorldCupMatch[]): WorldCupMatch[] {
   const now = Date.now();
-  return matches
+  const upcoming = matches
     .filter((match) => match.status !== 'finished' && Date.parse(match.kickoff) >= now - 2 * 60 * 60 * 1000)
-    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? null;
+    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
+  if (upcoming.length === 0) return [];
+  const firstKickoff = Date.parse(upcoming[0].kickoff);
+  // Return all matches within 2 minutes of the earliest kickoff (handles simultaneous matches)
+  return upcoming.filter((m) => Math.abs(Date.parse(m.kickoff) - firstKickoff) <= 2 * 60 * 1000);
 }
 
 export function WorldCupProvider({ children }: { children: React.ReactNode }) {
@@ -78,7 +84,8 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(interval);
   }, [refresh, activeMatch]);
 
-  const nextMatch = useMemo(() => getNextMatch(matches), [matches]);
+  const nextMatches = useMemo(() => getNextMatches(matches), [matches]);
+  const nextMatch = nextMatches[0] ?? null;
 
   const isWorldCupMode = activeMatches.length > 0;
 
@@ -87,8 +94,8 @@ export function WorldCupProvider({ children }: { children: React.ReactNode }) {
   }, [isWorldCupMode]);
 
   const value = useMemo(
-    () => ({ isWorldCupMode, activeMatch, activeMatches, nextMatch, refresh }),
-    [activeMatch, activeMatches, isWorldCupMode, nextMatch, refresh],
+    () => ({ isWorldCupMode, activeMatch, activeMatches, nextMatch, nextMatches, refresh }),
+    [activeMatch, activeMatches, isWorldCupMode, nextMatch, nextMatches, refresh],
   );
 
   return <WorldCupContext.Provider value={value}>{children}</WorldCupContext.Provider>;

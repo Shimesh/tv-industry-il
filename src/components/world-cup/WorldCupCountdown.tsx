@@ -87,7 +87,7 @@ function FlagBadge({ team, small = false }: { team: { id: string; nameHe: string
 
 export default function WorldCupCountdown({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const { activeMatch, activeMatches, nextMatch, refresh } = useWorldCup();
+  const { activeMatch, activeMatches, nextMatch, nextMatches, refresh } = useWorldCup();
   const [diff, setDiff] = useState<ReturnType<typeof getDiff> | null>(null);
 
   // Count down to next/active match kickoff, not to the fixed tournament start date
@@ -103,6 +103,8 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
   // Show the active match if confirmed, otherwise show nextMatch when it just started
   const previewMatch = activeMatch ?? nextMatch ?? null;
   const liveMatches = activeMatches.length > 0 ? activeMatches : (activeMatch ? [activeMatch] : []);
+  // All matches happening at the same upcoming time
+  const simultaneousNextMatches = nextMatches;
 
   useEffect(() => {
     setDiff(getDiff(targetIso));
@@ -263,6 +265,7 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
 
           {/* Match preview */}
           {liveMatches.length > 1 ? (
+            /* Multiple live matches */
             <span
               className="relative flex w-full flex-col gap-2 rounded-2xl px-3 py-3"
               style={{
@@ -294,7 +297,39 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
                 </span>
               ))}
             </span>
+          ) : !isStarting && simultaneousNextMatches.length > 1 ? (
+            /* Multiple simultaneous upcoming matches */
+            <span
+              className="relative flex w-full flex-col gap-1.5 rounded-2xl px-3 py-3"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0,15,45,0.85) 0%, rgba(0,10,30,0.9) 100%)',
+                border: '1px solid rgba(212,175,55,0.18)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+              dir="rtl"
+            >
+              <span className="mb-0.5 text-center text-[10px] font-black text-[#D4AF37]/70">
+                {simultaneousNextMatches.length} משחקים בו-זמנית
+              </span>
+              {simultaneousNextMatches.slice(0, 3).map((match) => (
+                <span key={match.id} className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-2.5 py-1.5">
+                  <span className="min-w-0 flex-1 truncate text-right text-xs font-black text-white/85">
+                    {match.homeTeam.flag} {match.homeTeam.nameHe}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2 py-0.5 text-[11px] font-black text-[#D4AF37]"
+                    dir="ltr"
+                  >
+                    VS
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-left text-xs font-black text-white/85">
+                    {match.awayTeam.nameHe} {match.awayTeam.flag}
+                  </span>
+                </span>
+              ))}
+            </span>
           ) : previewMatch && (
+            /* Single match */
             <motion.span
               className="relative flex w-full items-center justify-center gap-3 rounded-2xl px-4 py-3"
               style={{

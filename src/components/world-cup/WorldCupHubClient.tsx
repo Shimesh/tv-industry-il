@@ -163,13 +163,16 @@ function resolveKnockoutPlaceholders(matches: WorldCupMatch[], standings: WorldC
 }
 
 function getNextCountdown(matches: WorldCupMatch[], now: number) {
-  const next = matches
+  const upcoming = matches
     .filter((m) => m.status === 'scheduled' && Date.parse(m.kickoff) > now)
-    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0];
-  if (!next) return null;
-  const diffMs = Math.max(0, Date.parse(next.kickoff) - now);
+    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
+  if (upcoming.length === 0) return null;
+  const firstKickoff = Date.parse(upcoming[0].kickoff);
+  // All matches within 2 minutes of the earliest kickoff (simultaneous matches)
+  const nextGroup = upcoming.filter((m) => Math.abs(Date.parse(m.kickoff) - firstKickoff) <= 2 * 60 * 1000);
+  const diffMs = Math.max(0, firstKickoff - now);
   return {
-    match: next,
+    matches: nextGroup,
     days: Math.floor(diffMs / 86_400_000),
     hours: Math.floor((diffMs % 86_400_000) / 3_600_000),
     minutes: Math.floor((diffMs % 3_600_000) / 60_000),
@@ -2771,10 +2774,16 @@ function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
     <div className="mt-4 rounded-2xl border border-[#D4AF37]/25 bg-black/25 px-4 py-3 backdrop-blur-sm">
       <div className="mb-1.5 flex items-center justify-center gap-2">
         <Timer className="h-4 w-4 shrink-0 text-[#D4AF37]" />
-        <span className="text-xs font-bold text-white/55">המשחק הבא</span>
+        <span className="text-xs font-bold text-white/55">
+          {cd.matches.length > 1 ? `${cd.matches.length} משחקים הבאים` : 'המשחק הבא'}
+        </span>
       </div>
-      <div className="mb-3 text-center text-sm font-black text-white">
-        {cd.match.homeTeam.flag} {cd.match.homeTeam.nameHe} <span className="text-white/40">vs</span> {cd.match.awayTeam.nameHe} {cd.match.awayTeam.flag}
+      <div className="mb-3 flex flex-col gap-1" dir="rtl">
+        {cd.matches.map((match) => (
+          <div key={match.id} className="text-center text-sm font-black text-white">
+            {match.homeTeam.flag} {match.homeTeam.nameHe} <span className="text-white/40">vs</span> {match.awayTeam.nameHe} {match.awayTeam.flag}
+          </div>
+        ))}
       </div>
       <div className="flex gap-1.5 text-center" dir="ltr">
         {cd.days > 0 && (
@@ -2788,11 +2797,11 @@ function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
           <div className="text-[9px] font-bold text-white/55">שעות</div>
         </div>
         <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.minutes).padStart(2, '00')}</div>
+          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.minutes).padStart(2, '0')}</div>
           <div className="text-[9px] font-bold text-white/55">דקות</div>
         </div>
         <div className="flex-1 rounded-lg bg-[#D4AF37]/15 px-2 py-1.5">
-          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.seconds).padStart(2, '00')}</div>
+          <div className="text-xl font-black tabular-nums text-[#D4AF37]">{String(cd.seconds).padStart(2, '0')}</div>
           <div className="text-[9px] font-bold text-white/55">שניות</div>
         </div>
       </div>
@@ -2882,9 +2891,19 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
     );
   }, [displayMatches]);
   const liveMatchesCount = displayMatches.filter((m) => m.status === 'live').length;
+  // Simultaneous scheduled matches at the same kickoff time as the feature match
+  const simultaneousScheduledCount = useMemo(() => {
+    if (!featureMatch || featureMatch.status !== 'scheduled') return 0;
+    const featureKickoff = Date.parse(featureMatch.kickoff);
+    return displayMatches.filter(
+      (m) => m.status === 'scheduled' && Math.abs(Date.parse(m.kickoff) - featureKickoff) <= 2 * 60 * 1000,
+    ).length;
+  }, [displayMatches, featureMatch]);
   const featureMatchLabel = featureMatch.status === 'live'
     ? (liveMatchesCount > 1 ? `שידור חי עכשיו · ${liveMatchesCount} משחקים` : 'שידור חי עכשיו')
-    : 'המשחק הבא';
+    : simultaneousScheduledCount > 1
+      ? `המשחק הבא · +${simultaneousScheduledCount - 1} בו-זמנית`
+      : 'המשחק הבא';
   const selectedVenue = venues.find((venue) => venue.id === featureMatch.venueId);
 
   useEffect(() => {
