@@ -42,7 +42,7 @@ type ChatMessage = {
   createdAt?: { toMillis?: () => number } | number | null;
 };
 
-type StageFilter = 'all' | 'group' | 'knockout' | 'final';
+type StageFilter = 'all' | 'group' | 'knockout' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
 type SectionTab = 'matches' | 'bracket' | 'standings' | 'venues' | 'stats' | 'teams';
 
 function formatIsraelTime(isoDate: string): string {
@@ -263,12 +263,22 @@ function MatchScore({ match, compact = false }: { match: WorldCupMatch; compact?
 }
 
 function StageFilterTabs({ value, onChange }: { value: StageFilter; onChange: (v: StageFilter) => void }) {
-  const tabs: { key: StageFilter; label: string }[] = [
+  const legacyTabs: { key: StageFilter; label: string }[] = [
     { key: 'all', label: 'הכל' },
     { key: 'group', label: 'בתים' },
     { key: 'knockout', label: 'נוקאאוט' },
     { key: 'final', label: 'גמר' },
   ];
+  const tabs: { key: StageFilter; label: string }[] = [
+    { key: 'all', label: 'הכל' },
+    { key: 'group', label: 'בתים' },
+    { key: 'round_of_32', label: '32 האחרונות' },
+    { key: 'round_of_16', label: 'שמינית' },
+    { key: 'quarter_final', label: 'רבע' },
+    { key: 'semi_final', label: 'חצי' },
+    { key: 'final', label: 'גמר' },
+  ];
+  void legacyTabs;
   return (
     <div className="flex gap-1.5 overflow-x-auto px-4 py-2" style={{ scrollbarWidth: 'none' }}>
       {tabs.map((tab) => (
@@ -296,7 +306,8 @@ function ScheduleGrid({ matches, activeId, onSelect, onDetail }: { matches: Worl
     if (stageFilter === 'all') return matches;
     if (stageFilter === 'group') return matches.filter((m) => m.stage === 'group');
     if (stageFilter === 'final') return matches.filter((m) => m.stage === 'final' || m.stage === 'third_place');
-    return matches.filter((m) => isKnockout(m.stage) && m.stage !== 'final' && m.stage !== 'third_place');
+    if (stageFilter === 'knockout') return matches.filter((m) => isKnockout(m.stage) && m.stage !== 'final' && m.stage !== 'third_place');
+    return matches.filter((m) => m.stage === stageFilter);
   }, [matches, stageFilter]);
 
   const byDay = useMemo(() => {
