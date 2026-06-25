@@ -351,6 +351,10 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     source = 'football-data';
     const nowMs = Date.now();
     matches = fdMatches.map((match, index) => {
+      const matchNumber = match.matchday ?? index + 1;
+      const base = fallbackMatches.find((candidate) => candidate.matchNumber === matchNumber) ?? fallbackMatches[index];
+      const normalizedHome = normalizeTeam(match.homeTeam);
+      const normalizedAway = normalizeTeam(match.awayTeam);
       const kickoffMs = match.utcDate ? Date.parse(match.utcDate) : 0;
       const kickoffInFuture = kickoffMs > nowMs;
       // Never mark a match as finished/live if its kickoff is still in the future —
@@ -359,16 +363,16 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
       const status = kickoffInFuture ? 'scheduled' : rawStatus;
       return {
         id: String(match.id),
-        matchNumber: match.matchday ?? index + 1,
-        stage: normalizeStage(match.stage),
+        matchNumber,
+        stage: base?.stage ?? normalizeStage(match.stage),
         group: match.group?.replace(/^GROUP_/, '') || undefined,
-        homeTeam: normalizeTeam(match.homeTeam),
-        awayTeam: normalizeTeam(match.awayTeam),
+        homeTeam: normalizedHome.id === 'tbd' && base?.homeTeam.id !== 'tbd' ? base.homeTeam : normalizedHome,
+        awayTeam: normalizedAway.id === 'tbd' && base?.awayTeam.id !== 'tbd' ? base.awayTeam : normalizedAway,
         homeScore: status !== 'scheduled' ? (match.score?.fullTime?.home ?? match.score?.halfTime?.home ?? null) : null,
         awayScore: status !== 'scheduled' ? (match.score?.fullTime?.away ?? match.score?.halfTime?.away ?? null) : null,
         status,
         kickoff: match.utcDate,
-        venueId: fallbackMatches[index]?.venueId ?? venues[index % venues.length].id,
+        venueId: base?.venueId ?? venues[index % venues.length].id,
         broadcaster: 'kan11',
         minute: status === 'live' ? null : undefined,
       };

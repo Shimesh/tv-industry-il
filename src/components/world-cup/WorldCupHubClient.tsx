@@ -93,6 +93,75 @@ function isKnockout(stage: WorldCupMatch['stage']) {
   return ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(stage);
 }
 
+const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('');
+
+function goalDifference(row: WorldCupStanding) {
+  return row.goalsFor - row.goalsAgainst;
+}
+
+function compareStandingsRows(a: WorldCupStanding, b: WorldCupStanding) {
+  return b.points - a.points || goalDifference(b) - goalDifference(a) || b.goalsFor - a.goalsFor || a.team.nameEn.localeCompare(b.team.nameEn);
+}
+
+function buildStandingsByGroup(standings: WorldCupStanding[]) {
+  return standings.reduce<Record<string, WorldCupStanding[]>>((acc, row) => {
+    const group = row.group.toUpperCase();
+    acc[group] = [...(acc[group] ?? []), row].sort(compareStandingsRows);
+    return acc;
+  }, {});
+}
+
+function getBestThirdPlaceRows(groups: Record<string, WorldCupStanding[]>) {
+  return GROUP_LETTERS
+    .map((group) => groups[group]?.[2])
+    .filter((row): row is WorldCupStanding => Boolean(row))
+    .sort(compareStandingsRows);
+}
+
+function resolveBracketTeam(
+  team: WorldCupTeam,
+  groups: Record<string, WorldCupStanding[]>,
+  bestThirdRows: WorldCupStanding[],
+  assignedThirdGroups: Set<string>,
+): WorldCupTeam {
+  const winnerMatch = team.id.match(/^w-([a-l])$/i);
+  if (winnerMatch) {
+    return groups[winnerMatch[1].toUpperCase()]?.[0]?.team ?? team;
+  }
+
+  const runnerUpMatch = team.id.match(/^r-up-([a-l])$/i);
+  if (runnerUpMatch) {
+    return groups[runnerUpMatch[1].toUpperCase()]?.[1]?.team ?? team;
+  }
+
+  const thirdPlaceMatch = team.id.match(/^3-([a-l]+)$/i);
+  if (thirdPlaceMatch) {
+    const allowedGroups = new Set(thirdPlaceMatch[1].toUpperCase().split(''));
+    const candidate = bestThirdRows.find((row) => allowedGroups.has(row.group.toUpperCase()) && !assignedThirdGroups.has(row.group.toUpperCase()));
+    if (candidate) {
+      assignedThirdGroups.add(candidate.group.toUpperCase());
+      return candidate.team;
+    }
+  }
+
+  return team;
+}
+
+function resolveKnockoutPlaceholders(matches: WorldCupMatch[], standings: WorldCupStanding[]) {
+  const groups = buildStandingsByGroup(standings);
+  const bestThirdRows = getBestThirdPlaceRows(groups).slice(0, 8);
+  const assignedThirdGroups = new Set<string>();
+
+  return [...matches]
+    .sort((a, b) => a.matchNumber - b.matchNumber)
+    .map((match) => {
+      if (match.stage !== 'round_of_32') return match;
+      const homeTeam = resolveBracketTeam(match.homeTeam, groups, bestThirdRows, assignedThirdGroups);
+      const awayTeam = resolveBracketTeam(match.awayTeam, groups, bestThirdRows, assignedThirdGroups);
+      return homeTeam === match.homeTeam && awayTeam === match.awayTeam ? match : { ...match, homeTeam, awayTeam };
+    });
+}
+
 function getNextCountdown(matches: WorldCupMatch[], now: number) {
   const next = matches
     .filter((m) => m.status === 'scheduled' && Date.parse(m.kickoff) > now)
@@ -535,17 +604,18 @@ function TournamentBracket({
   onSelect: (match: WorldCupMatch) => void;
   onDetail: (match: WorldCupMatch) => void;
 }) {
-  const byNumber = useMemo(() => new Map(matches.map((match) => [match.matchNumber, match])), [matches]);
+  const resolvedMatches = useMemo(() => resolveKnockoutPlaceholders(matches, standings), [matches, standings]);
+  const byNumber = useMemo(() => new Map(resolvedMatches.map((match) => [match.matchNumber, match])), [resolvedMatches]);
   const pick = (numbers: number[]) => numbers.map((number) => byNumber.get(number));
   const finalMatch = byNumber.get(104);
   const finalVenue = finalMatch ? venues.find((candidate) => candidate.id === finalMatch.venueId) : undefined;
   const bracketScrollRef = useRef<HTMLDivElement>(null);
   const nextKnockout = useMemo(() => {
     const now = Date.now();
-    return matches
+    return resolvedMatches
       .filter((match) => isKnockout(match.stage) && match.status === 'scheduled' && Date.parse(match.kickoff) >= now)
       .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0];
-  }, [matches]);
+  }, [resolvedMatches]);
 
   useEffect(() => {
     const scroller = bracketScrollRef.current;
@@ -554,7 +624,7 @@ function TournamentBracket({
     requestAnimationFrame(() => {
       scroller.scrollLeft = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) / 2);
     });
-  }, [matches]);
+  }, [resolvedMatches]);
 
   return (
     <section data-testid="world-cup-bracket" className="min-w-0 w-full max-w-full overflow-hidden rounded-3xl border border-[#D4AF37]/25 bg-[#061323] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
