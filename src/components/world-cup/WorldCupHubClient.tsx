@@ -2825,12 +2825,13 @@ function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (
 }
 
 export default function WorldCupHubClient({ matches: initialMatches, standings: initialStandings, playerStats: initialPlayerStats, venues, source: initialSource, updatedAt: initialUpdatedAt }: HubProps) {
+  const initialDisplayMatches = resolveKnockoutPlaceholders(initialMatches, initialStandings);
   const [matches, setMatches] = useState(initialMatches);
   const [standings, setStandings] = useState(initialStandings);
   const [playerStats, setPlayerStats] = useState(initialPlayerStats);
   const [source, setSource] = useState(initialSource);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
-  const [selectedMatch, setSelectedMatch] = useState(() => initialMatches.find((match) => match.status === 'live') ?? initialMatches[0]);
+  const [selectedMatch, setSelectedMatch] = useState(() => initialDisplayMatches.find((match) => match.status === 'live') ?? initialDisplayMatches[0]);
   const [matchDetail, setMatchDetail] = useState<WorldCupMatch | null>(null);
   const [news, setNews] = useState<WorldCupNewsItem[]>([]);
   const [activeSection, setActiveSection] = useState<SectionTab>('matches');
@@ -2858,17 +2859,18 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
     const id = window.setInterval(poll, 15_000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, []);
+  const displayMatches = useMemo(() => resolveKnockoutPlaceholders(matches, standings), [matches, standings]);
   const kan11 = channels.find((channel) => channel.id === 'kan11') ?? channels[0];
   const featureMatch = useMemo(() => {
-    const live = matches.find((m) => m.status === 'live');
+    const live = displayMatches.find((m) => m.status === 'live');
     if (live) return live;
     return (
-      [...matches]
+      [...displayMatches]
         .filter((m) => m.status === 'scheduled')
-        .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? matches[0]
+        .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? displayMatches[0]
     );
-  }, [matches]);
-  const liveMatchesCount = matches.filter((m) => m.status === 'live').length;
+  }, [displayMatches]);
+  const liveMatchesCount = displayMatches.filter((m) => m.status === 'live').length;
   const featureMatchLabel = featureMatch.status === 'live'
     ? (liveMatchesCount > 1 ? `שידור חי עכשיו · ${liveMatchesCount} משחקים` : 'שידור חי עכשיו')
     : 'המשחק הבא';
@@ -2880,6 +2882,11 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       .then((payload) => setNews(Array.isArray(payload.items) ? payload.items : []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const updatedSelection = displayMatches.find((match) => match.id === selectedMatch.id || match.matchNumber === selectedMatch.matchNumber);
+    if (updatedSelection && updatedSelection !== selectedMatch) setSelectedMatch(updatedSelection);
+  }, [displayMatches, selectedMatch]);
 
   const openWcArticle = async (item: WorldCupNewsItem) => {
     setWcSelectedItem(item);
@@ -2940,7 +2947,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <h1 className="text-3xl font-black leading-tight text-white sm:text-4xl lg:text-5xl">כל המשחקים, השידור והדופק של הטורניר</h1>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-white/72 sm:text-base">לוח משחקים, כאן 11, חדשות, טבלאות, אצטדיונים, מזג אוויר וצ׳אט משחקים חי.</p>
 
-            <CountdownBox matches={matches} />
+            <CountdownBox matches={displayMatches} />
 
             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto text-[11px] text-white/55" style={{ scrollbarWidth: 'none' }}>
               <span className="shrink-0 rounded-full px-2.5 py-1" style={{ background: source === 'football-data' ? 'rgba(212,175,55,.18)' : 'rgba(255,255,255,.08)', color: source === 'football-data' ? '#D4AF37' : undefined }}>
@@ -2985,10 +2992,10 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <AnimatePresence>
-          {matches.some(m => m.status === 'live') && (
+          {displayMatches.some(m => m.status === 'live') && (
             <LiveMatchBanner
               key="live-banner"
-              matches={matches}
+              matches={displayMatches}
               onClickMatch={(m) => { setSelectedMatch(m); setMatchDetail(m); }}
             />
           )}
@@ -3019,7 +3026,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           </div>
           <div ref={sectionRefs.bracket} className="min-w-0 xl:col-span-2">
             <TournamentBracket
-              matches={matches}
+              matches={displayMatches}
               standings={standings}
               venues={venues}
               updatedAt={updatedAt}
@@ -3028,7 +3035,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             />
           </div>
           <div ref={sectionRefs.matches} className="xl:col-span-2">
-            <ScheduleGrid matches={matches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
+            <ScheduleGrid matches={displayMatches} activeId={selectedMatch.id} onSelect={setSelectedMatch} onDetail={setMatchDetail} />
           </div>
         </div>
 
@@ -3039,10 +3046,10 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
           <StandingsTables standings={standings} />
         </div>
         <div ref={sectionRefs.stats}>
-          <StatsSection initialPlayerStats={playerStats} matches={matches} />
+          <StatsSection initialPlayerStats={playerStats} matches={displayMatches} />
         </div>
         <div ref={sectionRefs.venues}>
-          <VenuesGrid venues={venues} matches={matches} />
+          <VenuesGrid venues={venues} matches={displayMatches} />
         </div>
       </main>
 
