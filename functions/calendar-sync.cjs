@@ -56,6 +56,20 @@ function getNextWeekStart(weekStart) {
   return date.toISOString().split('T')[0];
 }
 
+function getWeekStartFromIsoDate(dateStr) {
+  const [year, month, day] = String(dateStr).split('-').map(Number);
+  const date = new Date(Date.UTC(year, (month || 1) - 1, day || 1, 12));
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return date.toISOString().split('T')[0];
+}
+
+function getWeekStartFromHerzliyaUrl(url) {
+  const match = String(url || '').match(/,(\d{2})(\d{2})(\d{4})(?:\b|$)/);
+  if (!match) return '';
+  const [, dd, mm, yyyy] = match;
+  return getWeekStartFromIsoDate(`${yyyy}-${mm}-${dd}`);
+}
+
 // Replace the embedded date in a Herzliya URL (format: ?A=UUID,DDMMYYYY)
 // with a date inside the given ISO week so we always fetch the current week.
 function urlForWeek(url, weekStart) {
@@ -2005,7 +2019,10 @@ async function main() {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
-          const targetWeekStart = eligibleWeekStarts.has(saved.weekStart) ? saved.weekStart : currentWeekStart;
+          const urlWeekStart = getWeekStartFromHerzliyaUrl(saved.url);
+          const targetWeekStart = eligibleWeekStarts.has(urlWeekStart)
+            ? urlWeekStart
+            : eligibleWeekStarts.has(saved.weekStart) ? saved.weekStart : currentWeekStart;
           const urlToFetch = urlForWeek(saved.url, targetWeekStart);
           console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
           let schedule = null;

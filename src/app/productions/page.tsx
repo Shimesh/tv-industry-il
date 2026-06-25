@@ -1452,12 +1452,18 @@ function ProductionsContent() {
       // Primary sync: await save-sync-url (server-side, no Puppeteer).
       // On success → show done immediately. On any failure → fall through to GitHub Action polling.
       let syncedViaApi = false;
+      let syncTimeout: number | null = null;
       try {
+        const syncController = new AbortController();
+        syncTimeout = window.setTimeout(() => syncController.abort(), 70_000);
         const syncResp = await fetch('/api/calendar/save-sync-url', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urlMatch[0], workerName: extractedWorkerName }),
+          signal: syncController.signal,
         });
+        if (syncTimeout) window.clearTimeout(syncTimeout);
+        syncTimeout = null;
         if (syncResp.ok) {
           const syncData = await syncResp.json() as {
             ok: boolean;
@@ -1490,7 +1496,11 @@ function ProductionsContent() {
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
         }
-      } catch { /* network error — fall through to GitHub Action polling */ }
+      } catch {
+        setStatusMessage('הקישור נשמר, ממשיך סנכרון ברקע...');
+      } finally {
+        if (syncTimeout) window.clearTimeout(syncTimeout);
+      }
 
       // Fallback: poll scheduleRequests for GitHub Action result
       if (!syncedViaApi) {

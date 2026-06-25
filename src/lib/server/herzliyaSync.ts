@@ -72,6 +72,14 @@ export function getPreviousWeekStart(weekStart: string): string {
   return date.toISOString().split('T')[0];
 }
 
+function getHerzliyaDateArgFromUrl(url: string): string {
+  const match = String(url || '').match(/,(\d{8})(?:\b|$)/);
+  if (match) return match[1];
+  const currentWeek = getCurrentWeekStartIsrael();
+  const date = new Date(`${currentWeek}T12:00:00Z`);
+  return `${String(date.getUTCDate()).padStart(2, '0')}${String(date.getUTCMonth() + 1).padStart(2, '0')}${date.getUTCFullYear()}`;
+}
+
 const BASE_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -474,15 +482,7 @@ export async function fetchHerzliyaProductions(
       const guidMatch = effectivePersonalHtml.match(/ShowEmp[36]&arguments=-N([0-9A-Fa-f-]{20,50})/i);
       if (guidMatch) {
         const empGuid = guidMatch[1];
-        // Use current week's Sunday date in DDMMYYYY format (Israeli week = Sun-Sat)
-        const now = new Date();
-        const daysToSun = now.getUTCDay();
-        const weekSun = new Date(now);
-        weekSun.setUTCDate(now.getUTCDate() - daysToSun);
-        const dateStr =
-          String(weekSun.getUTCDate()).padStart(2, '0') +
-          String(weekSun.getUTCMonth() + 1).padStart(2, '0') +
-          String(weekSun.getUTCFullYear());
+        const dateStr = getHerzliyaDateArgFromUrl(url);
         const showEmp6Url = `${sendwaMgrqBase}?appname=HsILWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
         debugLines.push(`sendwaEmp6:guid=${empGuid.slice(0, 20)},date=${dateStr}`);
         const personalCount = (effectivePersonalHtml.match(/openmd2\(/g) || []).length;

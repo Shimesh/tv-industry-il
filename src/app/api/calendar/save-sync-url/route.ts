@@ -6,6 +6,20 @@ import { syncHerzliyaUrl, getCurrentWeekStartIsrael, type UserCalendarSyncDoc } 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+function getWeekStartFromIsoDate(dateStr: string): string {
+  const [year, month, day] = String(dateStr).split('-').map(Number);
+  const date = new Date(Date.UTC(year, (month || 1) - 1, day || 1, 12));
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return date.toISOString().split('T')[0];
+}
+
+function getWeekStartFromHerzliyaUrl(url: string): string | null {
+  const match = String(url || '').match(/,(\d{2})(\d{2})(\d{4})(?:\b|$)/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  return getWeekStartFromIsoDate(`${yyyy}-${mm}-${dd}`);
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const authUser = await verifyAuthToken(request);
   if (!authUser) return unauthorizedResponse();
@@ -44,7 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     url,
     workerName,
     savedAt: Date.now(),
-    weekStart: getCurrentWeekStartIsrael(),
+    weekStart: getWeekStartFromHerzliyaUrl(url) ?? getCurrentWeekStartIsrael(),
     ...(sessionCookie ? { sessionCookie } : {}),
     ...(herzliyaUser ? { herzliyaUser } : {}),
     ...(herzliyaPass ? { herzliyaPass } : {}),

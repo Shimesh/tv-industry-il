@@ -56,8 +56,11 @@ $env:SYNC_SAVED_CALENDARS = '1'
 $started = Get-Date -Format o
 "[$started] Starting local Herzliya calendar sync" | Tee-Object -FilePath $LogFile -Append
 
-node functions\calendar-sync.cjs 2>&1 | Tee-Object -FilePath $LogFile -Append
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+node functions\calendar-sync.cjs 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile -Append
 $exitCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorActionPreference
 
 $finished = Get-Date -Format o
 "[$finished] Finished local Herzliya calendar sync with exit code $exitCode" | Tee-Object -FilePath $LogFile -Append
