@@ -4,15 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  Briefcase,
   Camera,
   CheckCircle2,
+  CalendarRange,
   Copy,
   Clock,
-  Download,
   FileText,
   Film,
+  Image as ImageIcon,
   Loader2,
   MapPin,
+  MoreHorizontal,
   Search,
   Share2,
   Sparkles,
@@ -77,12 +80,6 @@ function initials(contact: Contact): string {
 
 function diceBearAvatarUrl(seed: string): string {
   return `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0f172a,1e40af,facc15&shapeColor=38bdf8,facc15,2563eb`;
-}
-
-function formatWhatsApp(phone?: string): string {
-  if (!phone) return '';
-  const cleaned = phone.replace(/[-\s]/g, '');
-  return `https://wa.me/972${cleaned.startsWith('0') ? cleaned.slice(1) : cleaned}`;
 }
 
 function groupCredits(credits: ProCardProductionCredit[]): GroupedCredits {
@@ -201,6 +198,7 @@ export default function ProCardModal({
   const [history, setHistory] = useState<ProCardHistoryResponse>({ productionCredits: [], boardActivity: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [shareState, setShareState] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [photoToast, setPhotoToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   const name = fullName(contact);
@@ -260,6 +258,16 @@ export default function ProCardModal({
     return { totalShifts, firstYear, lastYear, hasYears: years.size > 0 };
   }, [history.productionCredits]);
 
+  const filteredCreditCount = useMemo(
+    () => filteredGroups.reduce(
+      (total, yearGroup) => total + yearGroup.channels.reduce((yearTotal, channel) => yearTotal + channel.credits.length, 0),
+      0,
+    ),
+    [filteredGroups],
+  );
+
+  const hasSkillsOrGear = (contact.skills?.length ?? 0) > 0 || (contact.gear?.length ?? 0) > 0;
+
   const verified = isCurrentUser || contact.source === 'user-profile' || Boolean(contact.profileId);
 
   useEffect(() => {
@@ -314,6 +322,9 @@ export default function ProCardModal({
       return `• ${credit.productionName} | ${credit.role} | ${period}`;
     });
 
+    const profileId = userId || contact.profileId;
+    const profileUrl = profileId ? `${window.location.origin}/profile/${encodeURIComponent(String(profileId))}` : window.location.origin;
+
     return [
       title,
       roleText,
@@ -324,7 +335,25 @@ export default function ProCardModal({
       ...credits,
       '',
       'TV Industry IL',
+      profileUrl,
     ].filter(Boolean).join('\n');
+  }
+
+  async function copyShareText(text: string): Promise<void> {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('Copy failed');
   }
 
   async function renderCardImage(): Promise<{ blob: Blob; file: File }> {
@@ -345,6 +374,7 @@ export default function ProCardModal({
   async function shareCard() {
     if (shareState === 'rendering') return;
     setShareState('rendering');
+    setShareMenuOpen(false);
     try {
       const { blob, file } = await renderCardImage();
       const nav = navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean };
@@ -361,24 +391,49 @@ export default function ProCardModal({
       }
       setShareState('done');
       window.setTimeout(() => setShareState('idle'), 1800);
-    } catch {
-      setShareState('error');
-      window.setTimeout(() => setShareState('idle'), 2200);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setShareState('idle');
+        return;
+      }
+      try {
+        await copyShareText(buildShareText());
+        setShareState('done');
+        window.setTimeout(() => setShareState('idle'), 1800);
+      } catch {
+        setShareState('error');
+        window.setTimeout(() => setShareState('idle'), 2200);
+      }
     }
   }
 
   async function shareText() {
+    if (shareState === 'rendering') return;
+    setShareState('rendering');
+    setShareMenuOpen(false);
     const textToShare = buildShareText();
     try {
       if (navigator.share) {
-        await navigator.share({ title: name, text: textToShare });
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        await Promise.race([
+          navigator.share({ title: name, text: textToShare }),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('Share timed out')), 4000);
+          }),
+        ]).finally(() => {
+          if (timeoutId) clearTimeout(timeoutId);
+        });
       } else {
-        await navigator.clipboard.writeText(textToShare);
+        await copyShareText(textToShare);
       }
       setShareState('done');
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setShareState('idle');
+        return;
+      }
       try {
-        await navigator.clipboard.writeText(textToShare);
+        await copyShareText(textToShare);
         setShareState('done');
       } catch {
         setShareState('error');
@@ -391,6 +446,7 @@ export default function ProCardModal({
   async function sharePdf() {
     if (shareState === 'rendering') return;
     setShareState('rendering');
+    setShareMenuOpen(false);
     try {
       const { blob } = await renderCardImage();
       const imageUrl = URL.createObjectURL(blob);
@@ -606,7 +662,7 @@ export default function ProCardModal({
               {/* ── CONTENT ── */}
               <div className="bg-slate-950 p-5 sm:p-7">
 
-              {!!(contact.skills?.length || contact.gear?.length) && (
+              {hasSkillsOrGear && (
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   {contact.skills && contact.skills.length > 0 && (
                     <section className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
@@ -642,170 +698,164 @@ export default function ProCardModal({
                 </div>
               )}
 
-              <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="flex items-center gap-2 text-base font-black text-white">
-                    <Film className="h-4 w-4 text-sky-200" />
-                    היסטוריית הפקות
-                  </h3>
-                  {!historyLoading && history.productionCredits.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full bg-sky-400/14 px-2.5 py-1 text-xs font-bold text-sky-100">
-                        {history.productionCredits.length} הפקות
+              <section className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045]">
+                <div className="border-b border-white/10 p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-base font-black text-white">
+                        <Film className="h-4 w-4 text-sky-200" />
+                        היסטוריית הפקות
+                      </h3>
+                      <p className="mt-1 text-xs leading-relaxed text-white/45">הפקות, תפקידים וערוצים לאורך השנים</p>
+                    </div>
+                    {!historyLoading && groupedCredits.length > 0 && (
+                      <span className="shrink-0 text-xs font-bold text-white/45">
+                        {filteredCreditCount === history.productionCredits.length
+                          ? `${filteredCreditCount} הפקות`
+                          : `${filteredCreditCount} מתוך ${history.productionCredits.length}`}
                       </span>
-                      {stats.totalShifts > history.productionCredits.length && (
-                        <span className="rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/60">
-                          {stats.totalShifts} משמרות
-                        </span>
-                      )}
-                      {stats.hasYears && (
-                        <span className="rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/60" dir="ltr">
-                          {stats.firstYear === stats.lastYear ? stats.firstYear : `${stats.firstYear}–${stats.lastYear}`}
-                        </span>
-                      )}
+                    )}
+                  </div>
+
+                  {!historyLoading && groupedCredits.length > 0 && (
+                    <div className="mt-4 grid grid-cols-3 divide-x divide-x-reverse divide-white/10 rounded-xl border border-white/10 bg-slate-950/55 py-3">
+                      <div className="px-2 text-center">
+                        <Briefcase className="mx-auto mb-1 h-4 w-4 text-sky-300" />
+                        <div className="text-lg font-black text-white" dir="ltr">{history.productionCredits.length}</div>
+                        <div className="text-[10px] font-semibold text-white/40">הפקות</div>
+                      </div>
+                      <div className="px-2 text-center">
+                        <Clock className="mx-auto mb-1 h-4 w-4 text-emerald-300" />
+                        <div className="text-lg font-black text-white" dir="ltr">{stats.totalShifts}</div>
+                        <div className="text-[10px] font-semibold text-white/40">משמרות</div>
+                      </div>
+                      <div className="px-2 text-center">
+                        <CalendarRange className="mx-auto mb-1 h-4 w-4 text-amber-300" />
+                        <div className="whitespace-nowrap text-xs font-black text-white sm:text-sm" dir="ltr">
+                          {stats.hasYears
+                            ? stats.firstYear === stats.lastYear ? stats.firstYear : `${stats.firstYear}–${stats.lastYear}`
+                            : '—'}
+                        </div>
+                        <div className="mt-1 text-[10px] font-semibold text-white/40">שנות פעילות</div>
+                      </div>
                     </div>
                   )}
                 </div>
 
                 {historyLoading ? (
-                  <div className="flex flex-col items-center gap-3 py-10">
+                  <div className="flex flex-col items-center gap-3 py-12">
                     <Loader2 className="h-7 w-7 animate-spin text-sky-400/70" />
                     <p className="text-xs text-white/40">טוען היסטוריית הפקות...</p>
                   </div>
                 ) : groupedCredits.length > 0 ? (
                   <>
-                    {/* Search input */}
-                    <div className="relative mb-3">
-                      <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="חיפוש לפי הפקה, תפקיד, ערוץ..."
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.07] py-2 pr-9 pl-8 text-sm text-white placeholder-white/35 outline-none focus:border-sky-400/40 focus:bg-white/10 transition"
-                        dir="rtl"
-                      />
-                      {searchQuery && (
+                    <div className="space-y-3 border-b border-white/10 p-4 sm:p-5">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                        <input
+                          type="search"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="חיפוש הפקה, תפקיד או ערוץ"
+                          className="min-h-11 w-full rounded-xl border border-white/12 bg-slate-950/65 py-2.5 pr-10 pl-10 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-sky-400/55 focus:ring-2 focus:ring-sky-400/15"
+                          dir="rtl"
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute left-2.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white"
+                            aria-label="נקה חיפוש"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {allYears.length > 1 && (
+                        <div>
+                          <div className="mb-1.5 text-[10px] font-bold text-white/35">שנה</div>
+                          <div className="no-scrollbar overflow-x-auto" dir="rtl">
+                            <div className="flex w-max gap-1.5 pb-0.5">
+                              {['all', ...allYears].map((yr) => (
+                                <button
+                                  key={yr}
+                                  type="button"
+                                  onClick={() => setActiveYear(yr)}
+                                  className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-bold transition ${
+                                    activeYear === yr
+                                      ? 'bg-amber-300 text-slate-950 shadow-sm shadow-amber-300/20'
+                                      : 'border border-white/10 bg-white/[0.045] text-white/55 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  {yr === 'all' ? 'הכל' : yr}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {allChannels.length > 1 && (
+                        <div>
+                          <div className="mb-1.5 text-[10px] font-bold text-white/35">ערוץ</div>
+                          <div className="no-scrollbar overflow-x-auto" dir="rtl">
+                            <div className="flex w-max gap-1.5 pb-0.5">
+                              {['all', ...allChannels].map((channelName) => (
+                                <button
+                                  key={channelName}
+                                  type="button"
+                                  onClick={() => setActiveChannel(channelName)}
+                                  className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-bold transition ${
+                                    activeChannel === channelName
+                                      ? 'bg-sky-400 text-slate-950 shadow-sm shadow-sky-400/20'
+                                      : 'border border-white/10 bg-white/[0.045] text-white/55 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  {channelName === 'all' ? 'הכל' : channelName}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {(activeYear !== 'all' || activeChannel !== 'all' || searchQuery) && (
                         <button
                           type="button"
-                          onClick={() => setSearchQuery('')}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition"
-                          aria-label="נקה חיפוש"
+                          onClick={() => { setActiveYear('all'); setActiveChannel('all'); setSearchQuery(''); }}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-bold text-white/55 transition hover:bg-white/10 hover:text-white"
                         >
                           <X className="h-3.5 w-3.5" />
+                          איפוס סינון
                         </button>
                       )}
                     </div>
 
-                    {/* Filter chips */}
-                    {(allYears.length > 1 || allChannels.length > 1) && (
-                      <div className="mb-3 space-y-2">
-                        {allYears.length > 1 && (
-                          <div>
-                            <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-white/30">שנה</p>
-                            <div className="no-scrollbar overflow-x-auto" dir="ltr">
-                              <div className="flex w-max gap-1.5 pb-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveYear('all')}
-                                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                                    activeYear === 'all'
-                                      ? 'bg-white/18 text-white ring-1 ring-white/30'
-                                      : 'bg-white/6 text-white/45 hover:bg-white/12 hover:text-white/70'
-                                  }`}
-                                >
-                                  הכל
-                                </button>
-                                {allYears.map((yr) => (
-                                  <button
-                                    key={yr}
-                                    type="button"
-                                    onClick={() => setActiveYear(activeYear === yr ? 'all' : yr)}
-                                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                                      activeYear === yr
-                                        ? 'bg-amber-300/25 text-amber-100 ring-1 ring-amber-300/45'
-                                        : 'bg-white/6 text-white/55 hover:bg-white/12 hover:text-white/75'
-                                    }`}
-                                  >
-                                    {yr}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {allChannels.length > 1 && (
-                          <div>
-                            <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-white/30">ערוץ</p>
-                            <div className="no-scrollbar overflow-x-auto" dir="rtl">
-                              <div className="flex w-max gap-1.5 pb-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveChannel('all')}
-                                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                                    activeChannel === 'all'
-                                      ? 'bg-white/18 text-white ring-1 ring-white/30'
-                                      : 'bg-white/6 text-white/45 hover:bg-white/12 hover:text-white/70'
-                                  }`}
-                                >
-                                  הכל
-                                </button>
-                                {allChannels.map((ch) => (
-                                  <button
-                                    key={ch}
-                                    type="button"
-                                    onClick={() => setActiveChannel(activeChannel === ch ? 'all' : ch)}
-                                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                                      activeChannel === ch
-                                        ? 'bg-sky-400/22 text-sky-100 ring-1 ring-sky-400/40'
-                                        : 'bg-white/6 text-white/55 hover:bg-white/12 hover:text-white/75'
-                                    }`}
-                                  >
-                                    {ch}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {filteredGroups.length > 0 ? (
-                      <div className="space-y-5">
+                      <div className="space-y-5 p-4 sm:p-5">
                         {filteredGroups.map((yearGroup) => {
-                          const flatCredits = yearGroup.channels.flatMap((cg) => cg.credits);
+                          const flatCredits = yearGroup.channels.flatMap((channelGroup) => channelGroup.credits);
                           return (
                             <div key={yearGroup.year}>
-                              {/* Year header */}
-                              <div className="mb-2.5 flex items-center gap-2.5">
-                                <span
-                                  className="shrink-0 rounded-lg px-3 py-1 text-xs font-black text-amber-100"
-                                  style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.18), rgba(245,158,11,0.10))', border: '1px solid rgba(251,191,36,0.22)' }}
-                                  dir="ltr"
-                                >
-                                  {yearGroup.year}
-                                </span>
-                                <div className="h-px flex-1" style={{ background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.12), transparent)' }} />
-                                <span className="shrink-0 rounded-full bg-white/6 px-2 py-0.5 text-[10px] font-bold text-white/40">
-                                  {flatCredits.length} הפקות
-                                </span>
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <h4 className="text-sm font-black text-amber-100" dir="ltr">{yearGroup.year}</h4>
+                                <span className="text-[11px] font-semibold text-white/35">{flatCredits.length} הפקות</span>
                               </div>
-                              <div className="grid gap-2">
+                              <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-950/35 divide-y divide-white/8">
                                 {flatCredits.map((credit) => (
                                   <div
                                     key={`${credit.id}-${credit.role}`}
-                                    className="group flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] p-3 transition-all hover:border-white/[0.14] hover:bg-white/[0.08]"
+                                    className="flex min-h-[72px] items-center gap-3 px-3 py-3 transition hover:bg-white/[0.045]"
                                   >
                                     <ProductionMark credit={credit} />
                                     <div className="min-w-0 flex-1">
-                                      {/* Production name + badges */}
                                       <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="text-[13px] font-bold leading-snug text-white/95">{credit.productionName}</span>
+                                        <span className="text-sm font-bold leading-snug text-white">{credit.productionName}</span>
                                         {credit.isMajor && (
-                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-300/12 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
                                             <Trophy className="h-2.5 w-2.5" />
-                                            מרכזית
+                                            הפקה מרכזית
                                           </span>
                                         )}
                                         {credit.isVerified && (
@@ -814,39 +864,33 @@ export default function ProCardModal({
                                               href={credit.wikiUrl}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-0.5 rounded-full bg-sky-400/12 px-1.5 py-0.5 text-[10px] text-sky-300/80 hover:bg-sky-400/22 transition"
+                                              className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-sky-400/12 text-sky-300/80 transition hover:bg-sky-400/22"
                                               title="מאומת בוויקיפדיה"
-                                              onClick={(e) => e.stopPropagation()}
+                                              onClick={(event) => event.stopPropagation()}
                                             >
-                                              <CheckCircle2 className="h-2.5 w-2.5" />
+                                              <CheckCircle2 className="h-3 w-3" />
                                             </a>
                                           ) : (
-                                            <span className="inline-flex items-center rounded-full bg-sky-400/12 px-1.5 py-0.5 text-[10px] text-sky-300/80">
-                                              <CheckCircle2 className="h-2.5 w-2.5" />
+                                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-sky-400/12 text-sky-300/80">
+                                              <CheckCircle2 className="h-3 w-3" />
                                             </span>
                                           )
                                         )}
                                       </div>
-                                      {/* Role + channel + shift count / date */}
-                                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                                        <span className="rounded-full bg-sky-400/10 px-2 py-0.5 font-semibold text-sky-200/80">{credit.role}</span>
+                                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-white/45">
+                                        <span className="font-bold text-sky-200/75">{credit.role}</span>
                                         {credit.channelName && credit.channelName !== 'ללא ערוץ' && (
-                                          <span className="inline-flex items-center gap-1 text-white/50">
+                                          <span className="inline-flex items-center gap-1">
                                             {(() => {
-                                              const ch = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
-                                              return ch ? <ChannelLogo channel={ch} size={13} rounded={3} /> : <span className="h-1 w-1 rounded-full bg-white/25" />;
+                                              const channel = getChannelById(credit.channelId) || findChannelByName(credit.channelName);
+                                              return channel ? <ChannelLogo channel={channel} size={14} rounded={3} /> : null;
                                             })()}
-                                            <span>{credit.channelName}</span>
+                                            {credit.channelName}
                                           </span>
                                         )}
-                                        {credit.shiftCount > 1 ? (
-                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-white/6 px-2 py-0.5 font-medium text-white/40" dir="ltr">
-                                            <Clock className="h-2.5 w-2.5" />
-                                            {credit.shiftCount} משמרות
-                                          </span>
-                                        ) : (
-                                          <span className="text-white/35" dir="ltr">{formatDate(credit.date)}</span>
-                                        )}
+                                        <span className="text-white/35" dir="ltr">
+                                          {credit.shiftCount > 1 ? `${credit.shiftCount} משמרות` : formatDate(credit.date)}
+                                        </span>
                                       </div>
                                     </div>
                                   </div>
@@ -857,22 +901,18 @@ export default function ProCardModal({
                         })}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-white/14 p-6 text-center">
-                        <Search className="h-6 w-6 text-white/25" />
-                        <p className="text-sm text-white/50">לא נמצאו הפקות עבור הסינון הנבחר</p>
-                        <button
-                          type="button"
-                          onClick={() => { setSearchQuery(''); setActiveYear('all'); setActiveChannel('all'); }}
-                          className="rounded-full bg-white/8 px-3 py-1 text-xs font-bold text-white/55 transition hover:bg-white/14 hover:text-white/80"
-                        >
-                          נקה סינון
-                        </button>
+                      <div className="m-4 rounded-xl border border-dashed border-white/14 p-6 text-center">
+                        <Search className="mx-auto mb-2 h-5 w-5 text-white/30" />
+                        <p className="text-sm font-bold text-white/65">לא נמצאו הפקות</p>
+                        <p className="mt-1 text-xs text-white/40">אפשר לשנות את החיפוש או לאפס את הסינון.</p>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-white/14 p-5 text-center text-sm text-white/58">
-                    עדיין אין היסטוריית הפקות מחוברת לכרטיס הזה.
+                  <div className="p-7 text-center">
+                    <Film className="mx-auto mb-3 h-6 w-6 text-white/25" />
+                    <p className="text-sm font-bold text-white/65">עדיין אין היסטוריית הפקות</p>
+                    <p className="mt-1 text-xs text-white/40">קרדיטים שיימצאו בלוחות העבודה יופיעו כאן.</p>
                   </div>
                 )}
               </section>
@@ -895,44 +935,52 @@ export default function ProCardModal({
               )}
 
               <div className="mt-5 text-center text-[11px] font-medium text-white/45" dir="ltr">
-                TV Industry IL · Pro Card v2.8.184
+                TV Industry IL · Pro Card v2.4.0
               </div>
               </div>{/* end content */}
             </div>
           </div>
 
           <div className="relative z-10 shrink-0 border-t border-white/10 px-4 pb-4 pt-3 sm:px-6 sm:pb-5">
-            <div className="flex flex-col gap-2">
-              {/* Share row */}
-              <div className="flex items-stretch gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void shareCard()}
-                  disabled={shareState === 'rendering'}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-amber-300 to-sky-400 px-4 py-3 text-sm font-black text-slate-950 shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
-                >
-                  {shareState === 'rendering' ? <Download className="h-4 w-4 animate-pulse" /> : shareState === 'done' ? <CheckCircle2 className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-                  {shareState === 'rendering' ? 'מכין שיתוף...' : shareState === 'done' ? 'השיתוף מוכן!' : shareState === 'error' ? 'שגיאה בשיתוף' : 'שתף כרטיס מקצועי'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void sharePdf()}
-                  disabled={shareState === 'rendering'}
-                  title="PDF / הדפסה"
-                  className="flex items-center justify-center gap-1 rounded-2xl border border-white/14 bg-white/[0.07] px-3 py-3 text-white/70 transition hover:border-white/25 hover:bg-white/12 hover:text-white active:scale-95 disabled:opacity-50"
-                >
-                  <FileText className="h-4 w-4" />
-                </button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="relative flex gap-2">
                 <button
                   type="button"
                   onClick={() => void shareText()}
-                  title="העתק טקסט"
-                  className="flex items-center justify-center gap-1 rounded-2xl border border-white/14 bg-white/[0.07] px-3 py-3 text-white/70 transition hover:border-white/25 hover:bg-white/12 hover:text-white active:scale-95"
+                  disabled={shareState === 'rendering'}
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-300 to-sky-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-sky-500/20 transition hover:brightness-105 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
                 >
-                  <Copy className="h-4 w-4" />
+                  {shareState === 'rendering' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                  {shareState === 'rendering' ? 'פותח שיתוף...' : shareState === 'done' ? 'הכרטיס שותף' : shareState === 'error' ? 'השיתוף נכשל' : 'שתף כרטיס מקצועי'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShareMenuOpen((open) => !open)}
+                  className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.065] text-white/75 transition hover:bg-white/12 hover:text-white active:scale-95"
+                  aria-label="אפשרויות שיתוף נוספות"
+                  aria-expanded={shareMenuOpen}
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+
+                {shareMenuOpen ? (
+                  <div className="absolute bottom-full right-0 z-30 mb-2 min-w-56 overflow-hidden rounded-xl border border-white/12 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
+                    <button type="button" onClick={() => void shareCard()} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <ImageIcon className="h-4 w-4 text-sky-200" />
+                      תמונה לשיתוף
+                    </button>
+                    <button type="button" onClick={() => void sharePdf()} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <FileText className="h-4 w-4 text-amber-200" />
+                      PDF / הדפסה
+                    </button>
+                    <button type="button" onClick={() => void shareText()} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-right text-sm font-bold text-white/85 transition hover:bg-white/10">
+                      <Copy className="h-4 w-4 text-emerald-200" />
+                      העתקת פרטי הכרטיס
+                    </button>
+                  </div>
+                ) : null}
               </div>
-              {/* Call buttons row */}
+
               <CallButtons
                 userId={userId}
                 displayName={fullName(contact)}
