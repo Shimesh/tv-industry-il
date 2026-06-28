@@ -67,6 +67,12 @@ type PushLogEntry = {
   pushTokensCount?: number;
   webPushCount?: number;
 };
+type PushRecipient = {
+  userId: string;
+  email: string;
+  name: string;
+  read: boolean;
+};
 type PageViewPanelState = {
   page: { key: string; label: string } | null;
   events: PageViewEvent[];
@@ -744,6 +750,8 @@ export default function AdminPage() {
   const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
   const [pushLogs, setPushLogs] = useState<PushLogEntry[]>([]);
   const [pushLogsLoading, setPushLogsLoading] = useState(false);
+  const [expandedPushLogId, setExpandedPushLogId] = useState<string | null>(null);
+  const [pushRecipientsMap, setPushRecipientsMap] = useState<Record<string, { loading: boolean; recipients: PushRecipient[] | null }>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     users: true,
     discoveries: true,
@@ -1407,6 +1415,27 @@ export default function AdminPage() {
       // non-critical
     } finally {
       setPushLogsLoading(false);
+    }
+  }
+
+  async function loadPushRecipients(log: PushLogEntry) {
+    const logId = log.id;
+    setExpandedPushLogId((prev) => {
+      if (prev === logId) return null;
+      return logId;
+    });
+    if (pushRecipientsMap[logId]) return;
+    setPushRecipientsMap((prev) => ({ ...prev, [logId]: { loading: true, recipients: null } }));
+    try {
+      const params = new URLSearchParams({
+        title: log.title ?? '',
+        message: log.message ?? '',
+        sentAt: log.sentAt ?? '',
+      });
+      const data = await fetchWithAuth<{ recipients: PushRecipient[] }>(`/api/admin/push-recipients?${params.toString()}`);
+      setPushRecipientsMap((prev) => ({ ...prev, [logId]: { loading: false, recipients: data.recipients ?? [] } }));
+    } catch {
+      setPushRecipientsMap((prev) => ({ ...prev, [logId]: { loading: false, recipients: [] } }));
     }
   }
 
@@ -2708,32 +2737,82 @@ export default function AdminPage() {
                 ) : pushLogs.length === 0 ? (
                   <p className="text-xs text-gray-500">עדיין לא נשלחו פושים</p>
                 ) : (
-                  <div className="max-h-80 space-y-2 overflow-y-auto">
-                    {pushLogs.map((log) => (
-                      <div key={log.id} className="rounded-xl border border-gray-800 bg-gray-900 p-3">
-                        <div className="mb-1 flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium text-white">{log.title}</p>
-                          <span className="shrink-0 text-xs text-gray-500">{formatRelativeTime(log.sentAt)}</span>
-                        </div>
-                        <p className="mb-1.5 line-clamp-2 text-xs text-gray-400">{log.message}</p>
-                        <div className="flex flex-wrap gap-2 text-[11px]">
-                          <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-blue-300">
-                            {log.target === 'all' ? 'כולם' : log.target === 'user' ? 'יעד ספציפי' : log.target === 'incomplete_profile' ? 'פרופיל חסר' : 'בדיקה'}
-                          </span>
-                          <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-green-300">
-                            {log.recipientCount ?? 0} נמענים
-                          </span>
-                          {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0) > 0 && (
-                            <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-purple-300">
-                              {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0)} push
-                            </span>
+                  <div className="max-h-[600px] space-y-2 overflow-y-auto">
+                    {pushLogs.map((log) => {
+                      const isExpanded = expandedPushLogId === log.id;
+                      const recipientState = pushRecipientsMap[log.id];
+                      const readCount = recipientState?.recipients?.filter((r) => r.read).length ?? 0;
+                      const totalLoaded = recipientState?.recipients?.length ?? 0;
+                      return (
+                        <div key={log.id} className="rounded-xl border border-gray-800 bg-gray-900 overflow-hidden">
+                          <button
+                            className="w-full p-3 text-right transition-colors hover:bg-gray-800/60"
+                            onClick={() => void loadPushRecipients(log)}
+                          >
+                            <div className="mb-1 flex items-start justify-between gap-2">
+                              <p className="text-sm font-medium text-white">{log.title}</p>
+                              <span className="shrink-0 text-xs text-gray-500">{formatRelativeTime(log.sentAt)}</span>
+                            </div>
+                            <p className="mb-1.5 line-clamp-2 text-right text-xs text-gray-400">{log.message}</p>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                              <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-blue-300">
+                                {log.target === 'all' ? 'כולם' : log.target === 'user' ? 'יעד ספציפי' : log.target === 'incomplete_profile' ? 'פרופיל חסר' : 'בדיקה'}
+                              </span>
+                              <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-green-300">
+                                {log.recipientCount ?? 0} נמענים
+                              </span>
+                              {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0) > 0 && (
+                                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-purple-300">
+                                  {(log.pushTokensCount ?? 0) + (log.webPushCount ?? 0)} push
+                                </span>
+                              )}
+                              {recipientState?.recipients && (
+                                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                                  {readCount}/{totalLoaded} קראו
+                                </span>
+                              )}
+                              {log.sentByEmail && (
+                                <span className="truncate text-gray-600">{log.sentByEmail}</span>
+                              )}
+                              <span className="mr-auto text-gray-600">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t border-gray-800 bg-gray-950/60 px-3 py-3">
+                              {recipientState?.loading ? (
+                                <p className="text-center text-xs text-gray-500">טוען נמענים...</p>
+                              ) : !recipientState?.recipients?.length ? (
+                                <p className="text-center text-xs text-gray-600">לא נמצאו נמענים</p>
+                              ) : (
+                                <>
+                                  <div className="mb-2 flex items-center gap-2 text-[11px] text-gray-500">
+                                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> קראו ({readCount})</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-gray-600" /> לא קראו ({totalLoaded - readCount})</span>
+                                  </div>
+                                  <div className="max-h-52 space-y-1 overflow-y-auto">
+                                    {recipientState.recipients.map((r) => (
+                                      <div key={r.userId} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-800/50">
+                                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${r.read ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-400'}`}>
+                                          {(r.name ?? r.email ?? '?')[0].toUpperCase()}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-xs text-gray-300">{r.name || r.email}</span>
+                                        {r.email && r.name !== r.email && (
+                                          <span className="shrink-0 truncate text-[10px] text-gray-600">{r.email}</span>
+                                        )}
+                                        <span className={`shrink-0 text-[10px] font-bold ${r.read ? 'text-emerald-400' : 'text-gray-600'}`}>
+                                          {r.read ? '✓ נקרא' : '• לא נקרא'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           )}
-                          {log.sentByEmail && (
-                            <span className="truncate text-gray-600">{log.sentByEmail}</span>
-                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
