@@ -21,25 +21,28 @@ function hasCachedSession(): boolean {
 }
 
 export default function AuthGuard({ children, fallback }: AuthGuardProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, profile, profileReady } = useAuth();
   const router = useRouter();
-  // Computed once on first render — avoids re-reads on every update
   const cachedRef = useRef(hasCachedSession());
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
+      return;
     }
-  }, [user, loading, router]);
+    if (profileReady && profile?.approvalStatus && profile.approvalStatus !== 'active') {
+      router.replace('/account-status');
+    }
+  }, [user, loading, profile, profileReady, router]);
 
-  if (loading) {
-    // If there's a cached session the user was previously logged in —
-    // render children optimistically so the page is visible immediately.
+  if (loading || (user && !profileReady)) {
     if (cachedRef.current) return <>{children}</>;
     return fallback ?? null;
   }
 
   if (!user) return null;
+
+  if (profile?.approvalStatus && profile.approvalStatus !== 'active') return null;
 
   return <>{children}</>;
 }

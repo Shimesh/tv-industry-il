@@ -73,6 +73,14 @@ type PushRecipient = {
   name: string;
   read: boolean;
 };
+
+type PendingUser = {
+  uid: string;
+  displayName: string;
+  email: string;
+  createdAt: string | null;
+  photoURL: string | null;
+};
 type PageViewPanelState = {
   page: { key: string; label: string } | null;
   events: PageViewEvent[];
@@ -752,6 +760,9 @@ export default function AdminPage() {
   const [pushLogsLoading, setPushLogsLoading] = useState(false);
   const [expandedPushLogId, setExpandedPushLogId] = useState<string | null>(null);
   const [pushRecipientsMap, setPushRecipientsMap] = useState<Record<string, { loading: boolean; recipients: PushRecipient[] | null }>>({});
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [pendingUsersLoading, setPendingUsersLoading] = useState(false);
+  const [approvingUser, setApprovingUser] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     users: true,
     discoveries: true,
@@ -998,6 +1009,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user || !isAdmin) return;
     void loadPushLogs();
+    void loadPendingUsers();
   }, [user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh presence data every 30 seconds so online/offline status stays current
@@ -1439,6 +1451,37 @@ export default function AdminPage() {
     }
   }
 
+  async function loadPendingUsers() {
+    setPendingUsersLoading(true);
+    try {
+      const data = await fetchWithAuth<{ users: Array<{ uid: string; displayName: string; email: string; approvalStatus: string; createdAt: string | null; photoURL: string | null }> }>('/api/admin/users');
+      const pending = data.users
+        .filter((u) => u.approvalStatus === 'pending')
+        .map((u) => ({ uid: u.uid, displayName: u.displayName, email: u.email, createdAt: u.createdAt, photoURL: u.photoURL }));
+      setPendingUsers(pending);
+    } catch {
+      // silently ignore — not a blocker
+    } finally {
+      setPendingUsersLoading(false);
+    }
+  }
+
+  async function setPendingUserApproval(uid: string, status: 'active' | 'blocked') {
+    setApprovingUser((prev) => ({ ...prev, [uid]: true }));
+    try {
+      await fetchWithAuth(`/api/admin/users/${encodeURIComponent(uid)}/approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approvalStatus: status }),
+      });
+      setPendingUsers((prev) => prev.filter((u) => u.uid !== uid));
+      showToast('ok', status === 'active' ? 'המשתמש אושר' : 'המשתמש נחסם');
+    } catch (err) {
+      showToast('err', err instanceof Error ? err.message : 'שגיאה בעדכון סטטוס');
+    } finally {
+      setApprovingUser((prev) => ({ ...prev, [uid]: false }));
+    }
+  }
+
   async function sendAdminNotification() {
     if (!notificationTitle.trim() || !notificationMessage.trim()) {
       showToast('err', 'יש למלא כותרת ותוכן להתראה');
@@ -1635,6 +1678,71 @@ export default function AdminPage() {
             <button onClick={() => setError(null)} className="text-lg leading-none text-red-200">
               ×
             </button>
+          </div>
+        ) : null}
+
+        {/* Pending users alert */}
+        {pendingUsers.length > 0 ? (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-400" />
+              <span className="font-bold text-amber-300">
+                {pendingUsers.length === 1
+                  ? 'משתמש חדש מחכה לאישור'
+                  : `${pendingUsers.length} משתמשים חדשים מחכים לאישור`}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {pendingUsers.map((u) => (
+                <div
+                  key={u.uid}
+                  className="flex flex-col gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    {u.photoURL ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.photoURL} alt="" className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
+                        <UserIcon className="h-4 w-4" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-medium text-white">{u.displayName}</div>
+                      <div className="text-xs text-amber-300/70">{u.email}</div>
+                      {u.createdAt ? (
+                        <div className="text-[11px] text-gray-500">הצטרף {formatRelativeTime(u.createdAt)}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      disabled={approvingUser[u.uid]}
+                      onClick={() => void setPendingUserApproval(u.uid, 'active')}
+                      className="flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-500/15 px-3 py-1.5 text-sm font-medium text-green-300 transition-colors hover:bg-green-500/25 disabled:opacity-50"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      אשר
+                    </button>
+                    <button
+                      type="button"
+                      disabled={approvingUser[u.uid]}
+                      onClick={() => void setPendingUserApproval(u.uid, 'blocked')}
+                      className="flex items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/25 disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                      דחה
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : pendingUsersLoading ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-xs text-gray-500">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            בודק משתמשים ממתינים…
           </div>
         ) : null}
 
