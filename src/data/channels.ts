@@ -26,6 +26,7 @@ export const channels: Channel[] = [
   { id: 'keshet12', name: 'קשת 12', number: 12, logo: '/channel-logos/keshet-12.png', category: 'main', color: '#dc2626', group: 'ערוצים ראשיים' },
   { id: 'reshet13', name: 'רשת 13', number: 13, logo: '/channel-logos/reshet-13.jpg', category: 'main', color: '#059669', group: 'ערוצים ראשיים' },
   { id: 'now14', name: 'עכשיו 14', number: 14, logo: '/channel-logos/now-14.png', category: 'main', color: '#7c3aed', group: 'ערוצים ראשיים' },
+  { id: 'channel16', name: 'ערוץ 16', number: 16, logo: '/channel-logos/channel-16.svg', category: 'main', color: '#5b7cff', group: 'ערוצים ראשיים' },
   { id: 'i24', name: 'i24NEWS', number: 15, logo: '/channel-logos/i24news.png', category: 'news', color: '#0891b2', group: 'חדשות' },
   { id: 'knesset', name: 'ערוץ הכנסת', number: 99, logo: '🏛️', category: 'public', color: '#6366f1', group: 'ציבורי' },
   { id: 'kan33', name: 'כאן 33', number: 33, logo: '🎭', category: 'public', color: '#8b5cf6', group: 'ציבורי' },
@@ -41,7 +42,7 @@ export const channels: Channel[] = [
 ];
 
 export const channelGroups = [
-  { id: 'main', label: 'ערוצים ראשיים', channels: ['kan11', 'keshet12', 'reshet13', 'now14'] },
+  { id: 'main', label: 'ערוצים ראשיים', channels: ['kan11', 'keshet12', 'reshet13', 'now14', 'channel16'] },
   { id: 'news', label: 'חדשות', channels: ['i24'] },
   { id: 'public', label: 'ציבורי', channels: ['knesset', 'kan33'] },
   { id: 'sport', label: 'ספורט', channels: ['sport55', 'sport56', 'gold', 'live', 'charlton1', 'charlton2', 'charlton3', 'charlton4', 'charlton6'] },
@@ -64,6 +65,7 @@ const exactChannelNameAliases: Record<string, string> = {
   '12': 'keshet12',
   '13': 'reshet13',
   '14': 'now14',
+  '16': 'channel16',
   '24': 'i24',
 };
 
@@ -72,6 +74,7 @@ const channelNameAliases: Array<{ channelId: string; aliases: string[] }> = [
   { channelId: 'keshet12', aliases: ['קשת 12', 'ערוץ 12', 'חדשות 12', 'keshet 12', 'keshet'] },
   { channelId: 'reshet13', aliases: ['רשת 13', 'ערוץ 13', 'חדשות 13', 'reshet 13', 'reshet'] },
   { channelId: 'now14', aliases: ['עכשיו 14', 'ערוץ 14', 'now 14'] },
+  { channelId: 'channel16', aliases: ['ערוץ 16', 'channel 16', 'ch16'] },
   { channelId: 'i24', aliases: ['i24news', 'i24 news', 'i24'] },
   { channelId: 'gold', aliases: ['ספורט 5 gold', 'ספורט 5 גולד', '5 גולד', '57'] },
   { channelId: 'live', aliases: ['ספורט 5+ live', 'ספורט 5 live', 'ספורט 5+ לייב', 'ספורט 5 לייב', '5 לייב', '58'] },

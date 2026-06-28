@@ -3,6 +3,7 @@ export const CHANNEL_LABELS: Record<string, string> = {
   keshet12: 'קשת 12',
   reshet13: 'רשת 13',
   now14: 'עכשיו 14',
+  channel16: 'ערוץ 16',
   i24: 'i24NEWS',
   knesset: 'ערוץ הכנסת',
   kan33: 'כאן 33',

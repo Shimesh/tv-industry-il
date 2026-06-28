@@ -104,6 +104,16 @@ export const streamConfigs: Record<string, StreamConfig> = {
     note: 'עכשיו 14 - שידור חי',
   },
 
+  channel16: {
+    type: 'hls',
+    streamUrl: 'https://ch16israel-cdn.encoders.immergo.tv/master.m3u8',
+    embedUrl: 'https://snippet.univtec.com/player.html?data-insight=eyJndWlkIjoiODY2OWNkMmYtZGM5Yi00Y2U5LWEwODYtOTZkMGM5MDRjNmMwIiwidHlwZSI6ImNoYW5uZWxzIiwiYWNjb3VudElkIjoiNmEyOThjZjYwMWQ1NTAzYzljZDM5ZGFkIiwiY2xpZW50IjoiY2gxNmlzcmFlbCIsImFwaSI6Imh0dHBzOi8vaW5zaWdodC1hcGktZnJhbmtseS51bml2dGVjLmNvbS8ifQ%3D%3D',
+    websiteUrl: 'https://www.ch16.co.il/',
+    requiresAuth: false,
+    hasLiveStream: true,
+    note: 'ערוץ 16 - שידור חי',
+  },
+
   // === PAID CHANNELS ===
   sport55: {
     type: 'external-paid',

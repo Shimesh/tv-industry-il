@@ -11,7 +11,8 @@ import { getDocument, patchDocument } from '@/lib/server/firestoreAdminRest';
 const CACHE_TTL_MS = 3 * 60 * 1000;
 const STALE_TTL_MS = 12 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
-const HOME_CHANNEL_IDS = ['kan11', 'keshet12', 'reshet13', 'now14', 'i24', 'knesset'];
+const HOME_CHANNEL_IDS = ['kan11', 'keshet12', 'reshet13', 'now14', 'channel16', 'i24', 'knesset'];
+const CHANNEL16_EPG_URL = 'https://insight-api-frankly.univtec.com/cms/interface/channels/play?relations=true&filter=guid||$eq||8669cd2f-dc9b-4ce9-a086-96d0c904c6c0';
 const ISRAMEIDA_GUIDE_URL = 'https://www.isramedia.net/tv';
 const ISRAMEIDA_SPORTS_GUIDE_URL = 'https://www.isramedia.net/sports-broadcasts';
 
@@ -62,6 +63,7 @@ const OFFICIAL_SOURCES: Record<string, string> = {
   keshet12: ISRAMEIDA_GUIDE_URL,
   reshet13: ISRAMEIDA_GUIDE_URL,
   now14: ISRAMEIDA_GUIDE_URL,
+  channel16: CHANNEL16_EPG_URL,
   i24: ISRAMEIDA_GUIDE_URL,
   knesset: ISRAMEIDA_GUIDE_URL,
   kan33: ISRAMEIDA_GUIDE_URL,
@@ -688,7 +690,149 @@ async function fetchIsramediaHybridFallback(channelId: string): Promise<AdapterR
   }
 }
 
+type Channel16EpgEvent = Record<string, unknown>;
+
+function parseChannel16Date(value: unknown): Date | null {
+  if (typeof value === 'number') {
+    const milliseconds = value < 10_000_000_000 ? value * 1000 : value;
+    const parsed = new Date(milliseconds);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getChannel16EventValue(event: Channel16EpgEvent, keys: string[]): unknown {
+  for (const key of keys) {
+    if (event[key] != null) return event[key];
+  }
+  return null;
+}
+
+function parseChannel16Programs(events: Channel16EpgEvent[]): BroadcastProgram[] {
+  const parsed = events
+    .map((event, index) => {
+      const startAt = parseChannel16Date(getChannel16EventValue(event, ['startAt', 'startTime', 'start', 'from', 'date']));
+      const endAt = parseChannel16Date(getChannel16EventValue(event, ['endAt', 'endTime', 'end', 'to']));
+      const titleValue = getChannel16EventValue(event, ['title', 'name', 'programName']);
+      const title = typeof titleValue === 'string' ? titleValue.trim() : '';
+      if (!startAt || !title) return null;
+
+      return {
+        id: `channel16-${startAt.toISOString()}-${slugify(title || `program-${index}`)}`,
+        channelId: 'channel16',
+        title,
+        description: typeof event.description === 'string' ? event.description : '',
+        startAt,
+        endAt,
+        genre: typeof event.genre === 'string' ? event.genre : null,
+        isLive: event.isLive === true || event.live === true,
+        sourceUrl: CHANNEL16_EPG_URL,
+      };
+    })
+    .filter((program): program is NonNullable<typeof program> => Boolean(program))
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+
+  return parsed.map((program, index) => ({
+    ...program,
+    startAt: program.startAt.toISOString(),
+    endAt: (program.endAt ?? parsed[index + 1]?.startAt ?? addMinutes(program.startAt, 60)).toISOString(),
+  }));
+}
+
+function getChannel16LaunchSchedule(): BroadcastProgram[] {
+  const sourceUrl = 'https://www.ch16.co.il/';
+  const israelDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  if (israelDate !== '2026-06-28') {
+    if (israelDate < '2026-06-29' || israelDate > '2026-07-18') return [];
+    return [{
+      id: `channel16-soft-launch-${israelDate}`,
+      channelId: 'channel16',
+      title: 'שידורי ההשקה הרכה של ערוץ 16',
+      description: 'לוח מפורט יופיע אוטומטית לאחר פרסומו ב-EPG הרשמי של הערוץ',
+      startAt: `${israelDate}T00:00:00+03:00`,
+      endAt: `${israelDate}T23:59:59+03:00`,
+      genre: 'השקה',
+      isLive: true,
+      sourceUrl,
+    }];
+  }
+
+  return [
+    {
+      id: 'channel16-launch-day',
+      channelId: 'channel16',
+      title: 'שידורי ההשקה של ערוץ 16',
+      description: 'שידורי ההשקה הרכה של ערוץ 16',
+      startAt: '2026-06-27T21:00:00.000Z',
+      endAt: '2026-06-28T17:00:00.000Z',
+      genre: 'השקה',
+      isLive: true,
+      sourceUrl,
+    },
+    {
+      id: 'channel16-main-news-launch',
+      channelId: 'channel16',
+      title: 'המהדורה המרכזית עם יעקב אילון',
+      description: 'המהדורה המרכזית הראשונה של ערוץ 16',
+      startAt: '2026-06-28T17:00:00.000Z',
+      endAt: '2026-06-28T18:00:00.000Z',
+      genre: 'חדשות',
+      isLive: true,
+      sourceUrl,
+    },
+    {
+      id: 'channel16-launch-evening',
+      channelId: 'channel16',
+      title: 'ערוץ 16 - שידור חי',
+      description: 'המשך שידורי ההשקה של ערוץ 16',
+      startAt: '2026-06-28T18:00:00.000Z',
+      endAt: '2026-06-28T20:59:59.000Z',
+      genre: 'השקה',
+      isLive: true,
+      sourceUrl,
+    },
+  ];
+}
+
+async function fetchChannel16Schedule(): Promise<AdapterResult> {
+  const response = await fetch(CHANNEL16_EPG_URL, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    headers: {
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      Referer: 'https://www.ch16.co.il/',
+      'x-tenant-id': 'ch16israel',
+    },
+  });
+  if (!response.ok) throw new Error(`Channel 16 EPG failed with ${response.status}`);
+
+  const payload = await response.json() as {
+    vod?: { epgObject?: { events?: Channel16EpgEvent[] } };
+  };
+  const programs = parseChannel16Programs(payload.vod?.epgObject?.events ?? []);
+  const launchSchedule = getChannel16LaunchSchedule();
+  if (!programs.length && !launchSchedule.length) {
+    throw new Error('Channel 16 has not published EPG data yet');
+  }
+
+  return {
+    programs: programs.length ? programs : launchSchedule,
+    sourceUrl: programs.length ? CHANNEL16_EPG_URL : 'https://www.ch16.co.il/',
+    sourceType: programs.length ? 'official-json' : 'official-html',
+  };
+}
+
 const fallbackAdapters: Partial<Record<string, Adapter>> = {
+  channel16: fetchChannel16Schedule,
   i24: () => fetchIsramediaHybridFallback('i24'),
   knesset: () => fetchIsramediaHybridFallback('knesset'),
   kan33: () => fetchIsramediaHybridFallback('kan33'),
@@ -808,7 +952,7 @@ async function loadBroadcastChannel(
   const now = Date.now();
   const expiresAt = cacheDoc?.expiresAt ? Date.parse(cacheDoc.expiresAt) : Number.NaN;
 
-  if (cacheDoc && Number.isFinite(expiresAt) && expiresAt > now) {
+  if (cacheDoc && cacheDoc.status !== 'unavailable' && Number.isFinite(expiresAt) && expiresAt > now) {
     return hydrateStateFromCache(channelId, cacheDoc);
   }
 
