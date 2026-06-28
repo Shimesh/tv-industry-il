@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import WorldCupHubClient from '@/components/world-cup/WorldCupHubClient';
-import { deriveStandingsFromMatches, getWorldCupMatches, getWorldCupPlayerStats, getWorldCupStandings, getWorldCupVenues } from '@/lib/world-cup/data';
+import { getWorldCupMatches, getWorldCupPlayerStats, getWorldCupStandings, getWorldCupVenues } from '@/lib/world-cup/data';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,15 +10,11 @@ export const metadata: Metadata = {
 };
 
 export default async function WorldCupPage() {
-  const [{ matches, source, updatedAt }, { standings: apiStandings }, playerStats] = await Promise.all([
+  const [{ matches, source, updatedAt }, { standings }, playerStats] = await Promise.all([
     getWorldCupMatches(),
     getWorldCupStandings(),
     getWorldCupPlayerStats(),
   ]);
-
-  // Always derive standings from actual finished match results — more reliable than any external API
-  const finished = matches.filter(m => m.status === 'finished' && m.homeScore != null && m.awayScore != null);
-  const standings = finished.length > 0 ? deriveStandingsFromMatches(finished) : apiStandings;
 
   return (
     <WorldCupHubClient

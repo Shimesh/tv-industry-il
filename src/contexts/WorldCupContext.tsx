@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { WorldCupMatch } from '@/lib/world-cup/types';
-import { fallbackMatches } from '@/lib/world-cup/static-data';
 
 type WorldCupContextValue = {
   isWorldCupMode: boolean;
@@ -56,8 +55,7 @@ function getNextMatches(matches: WorldCupMatch[]): WorldCupMatch[] {
 }
 
 export function WorldCupProvider({ children }: { children: React.ReactNode }) {
-  // Seed with fallback so consumers render correctly before the first API response
-  const [matches, setMatches] = useState<WorldCupMatch[]>(fallbackMatches);
+  const [matches, setMatches] = useState<WorldCupMatch[]>([]);
 
   const refresh = useMemo(() => async () => {
     // Add cache-busting param so Vercel CDN never serves a stale edge-cached response

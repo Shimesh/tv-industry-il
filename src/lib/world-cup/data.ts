@@ -93,11 +93,12 @@ async function fetchFootballData<T>(path: string): Promise<T | null> {
 // ESPN unofficial scoreboard — free, no key needed, reliable live WC scores
 type ESPNCompetitor = {
   homeAway?: string;
-  team?: { displayName?: string; abbreviation?: string };
+  team?: { displayName?: string; abbreviation?: string; logo?: string };
   score?: string;
 };
 type ESPNEvent = {
   id?: string;
+  date?: string;
   status?: {
     type?: { name?: string; completed?: boolean; shortDetail?: string };
   };
@@ -108,13 +109,9 @@ async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
   try {
     // Fetch live scoreboard + date-based queries to capture recently completed matches
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10).replace(/-/g, '');
-    const wcStart = '20260611';
     const urls = [
-      'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard',
       `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${today}`,
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${yesterday}`,
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${wcStart}-${today}`,
+      'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=200&dates=20260611-20260719',
     ];
     const results = await Promise.all(
       urls.map(url => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) })
@@ -162,14 +159,17 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     const homeEn = espnNormalize(match.homeTeam.nameEn);
     const awayEn = espnNormalize(match.awayTeam.nameEn);
 
-    const espn = espnEvents.find(ev => {
+    const matchingByTeams = espnEvents.find(ev => {
+      if (!ev.date || !match.kickoff || Math.abs(Date.parse(ev.date) - Date.parse(match.kickoff)) > 5 * 60_000) return false;
       const comps = ev.competitions?.[0]?.competitors ?? [];
       const names = comps.map(c => espnNormalize(c.team?.displayName ?? ''));
-      const word0 = (s: string) => s.split(' ')[0];
-      const hasHome = names.some(n => n && (n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n))));
-      const hasAway = names.some(n => n && (n === awayEn || n.startsWith(word0(awayEn)) || awayEn.startsWith(word0(n))));
-      return hasHome && hasAway;
+      return names.includes(homeEn) && names.includes(awayEn);
     });
+    const matchingByKickoff = espnEvents.filter((event) => {
+      if (!event.date || !match.kickoff) return false;
+      return Math.abs(Date.parse(event.date) - Date.parse(match.kickoff)) <= 60_000;
+    });
+    const espn = matchingByTeams ?? (matchingByKickoff.length === 1 ? matchingByKickoff[0] : undefined);
     if (!espn) return match;
 
     const statusName = espn.status?.type?.name ?? '';
@@ -194,12 +194,22 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     }
 
     const comps = espn.competitions?.[0]?.competitors ?? [];
-    const word0 = (s: string) => s.split(' ')[0];
-    const homeComp = comps.find(c => {
+    const matchedHomeComp = comps.find(c => {
       const n = espnNormalize(c.team?.displayName ?? '');
-      return n === homeEn || n.startsWith(word0(homeEn)) || homeEn.startsWith(word0(n));
+      return n === homeEn;
     });
-    const awayComp = comps.find(c => c !== homeComp);
+    const homeComp = comps.find(c => c.homeAway === 'home') ?? matchedHomeComp;
+    const awayComp = comps.find(c => c.homeAway === 'away') ?? comps.find(c => c !== homeComp);
+
+    const espnTeam = (competitor: ESPNCompetitor | undefined, fallback: WorldCupTeam): WorldCupTeam => {
+      if (!competitor?.team?.displayName) return fallback;
+      const normalized = normalizeTeam({
+        name: competitor.team.displayName,
+        tla: competitor.team.abbreviation,
+        crest: competitor.team.logo,
+      });
+      return normalized.id === 'tbd' ? fallback : normalized;
+    };
 
     const homeScore = homeComp?.score != null ? parseInt(homeComp.score, 10) : null;
     const awayScore = awayComp?.score != null ? parseInt(awayComp.score, 10) : null;
@@ -222,6 +232,8 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
 
     return {
       ...match,
+      homeTeam: espnTeam(homeComp, match.homeTeam),
+      awayTeam: espnTeam(awayComp, match.awayTeam),
       status,
       homeScore: !kickoffInFuture && homeScore != null && !isNaN(homeScore) ? homeScore : match.homeScore,
       awayScore: !kickoffInFuture && awayScore != null && !isNaN(awayScore) ? awayScore : match.awayScore,
@@ -386,18 +398,6 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
   }
 
   const now = Date.now();
-  matches = matches.map((match) => {
-    if (match.status !== 'scheduled' || !match.kickoff) return match;
-    const elapsed = now - Date.parse(match.kickoff);
-    if (elapsed < 0 || elapsed > 130 * 60_000) return match;
-    return {
-      ...match,
-      status: 'live' as const,
-      homeScore: match.homeScore ?? 0,
-      awayScore: match.awayScore ?? 0,
-    };
-  });
-
   // Supplement with openfootball for:
   // 1. matches still 'scheduled' but kickoff >105 min ago (ESPN missed them)
   // 2. matches stuck as 'live' but kickoff >120 min ago (ESPN stopped reporting)
