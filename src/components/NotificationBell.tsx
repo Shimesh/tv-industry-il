@@ -98,7 +98,10 @@ export default function NotificationBell() {
         onClick={() => {
           const next = !open;
           setOpen(next);
-          if (next) void refreshNotifications().catch(() => {});
+          if (next) {
+            void refreshNotifications().catch(() => {});
+            if (unreadCount > 0) void markAllAsRead().catch(() => {});
+          }
         }}
         className="relative rounded-lg p-2 transition-all hover:bg-[var(--theme-accent-glow)]"
         style={{ color: 'var(--theme-text-secondary)' }}

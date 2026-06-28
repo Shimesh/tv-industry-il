@@ -1,6 +1,6 @@
 
 
-const CACHE_NAME = 'tv-industry-il-v2.8.188';
+const CACHE_NAME = 'tv-industry-il-v2.8.189';
 
 const STATIC_ASSETS = [
   '/manifest.json',
@@ -111,15 +111,16 @@ self.addEventListener('notificationclick', (event) => {
   }
 
   const link = notifData.link || '/';
+  const trackLink = link.includes('?') ? `${link}&src=push` : `${link}?src=push`;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(link);
+          client.navigate(trackLink);
           return client.focus();
         }
       }
-      return clients.openWindow(link);
+      return clients.openWindow(trackLink);
     }),
   );
 });

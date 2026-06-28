@@ -10,6 +10,8 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import ScrollToTop from '@/components/ScrollToTop';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
+import PushClickTracker from '@/components/PushClickTracker';
+import { Suspense } from 'react';
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tv-industry-il.vercel.app';
 const appDescription =
   'הפלטפורמה המובילה לעובדי תעשיית הטלוויזיה בישראל - שידור חי, אלפון מקצועי, חדשות ואירועים, אולפנים ועוד';
@@ -83,6 +85,7 @@ export default function RootLayout({
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
             <ConditionalFooter />
+            <Suspense><PushClickTracker /></Suspense>
             <ServiceWorkerRegistration />
             <InstallPrompt />
             <AccessibilityWidget />
