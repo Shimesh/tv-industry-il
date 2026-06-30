@@ -2,9 +2,11 @@
 
 /* Theme CSS Variables - Default (DUSK theme) */
 :root {
-  color-scheme: only dark;
-  --background: #0e0a1f;
-  --foreground: #f5ecdf;
+  /* The app paints every theme itself. Advertising a light-only native scheme
+     prevents Samsung Internet/Chromium Force Dark from recoloring the UI. */
+  color-scheme: only light;
+  --background: #18112e;
+  --foreground: #fffaf4;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
@@ -13,20 +15,20 @@
   --app-header-offset: calc(var(--app-header-height) + var(--safe-area-top));
 
   /* Theme System Variables */
-  --theme-bg: #0e0a1f;
-  --theme-bg-secondary: #18122e;
-  --theme-bg-card: #211a3d;
-  --theme-text: #f5ecdf;
-  --theme-text-secondary: #b8a8c9;
-  --theme-border: rgba(245, 236, 223, 0.12);
-  --theme-accent: #e07a5f;
-  --theme-accent-secondary: #5fb0a8;
-  --theme-accent-glow: rgba(224, 122, 95, 0.20);
+  --theme-bg: #18112e;
+  --theme-bg-secondary: #251c43;
+  --theme-bg-card: #312653;
+  --theme-text: #fffaf4;
+  --theme-text-secondary: #ded2e7;
+  --theme-border: rgba(255, 244, 236, 0.22);
+  --theme-accent: #ff6a3d;
+  --theme-accent-secondary: #56d6ca;
+  --theme-accent-glow: rgba(255, 106, 61, 0.30);
   --theme-success: #22c55e;
   --theme-warning: #f59e0b;
   --theme-danger: #ef4444;
   --theme-info: #38bdf8;
-  --theme-nav-bg: rgba(14, 10, 31, 0.94);
+  --theme-nav-bg: rgba(19, 13, 39, 0.96);
 
   /* Brand gradient — sienna → coral → dusty teal */
   --brand-grad-start: #c84e3e;
@@ -53,7 +55,7 @@
 :root[data-theme='midnight'],
 :root[data-theme='sunset'],
 :root[data-theme='forest'] {
-  color-scheme: only dark;
+  color-scheme: only light;
 }
 
 /* One vivid sRGB palette per theme keeps colors stable across display engines. */
