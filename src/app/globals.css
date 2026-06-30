@@ -56,6 +56,68 @@
   color-scheme: only dark;
 }
 
+/* Keep dark themes readable on Android displays without changing iOS/desktop. */
+:root[data-android-display='true']:not([data-theme]),
+:root[data-android-display='true'][data-theme='dark'] {
+  --background: #18112e !important;
+  --foreground: #fffaf4 !important;
+  --theme-bg: #18112e !important;
+  --theme-bg-secondary: #251c43 !important;
+  --theme-bg-card: #312653 !important;
+  --theme-nav-bg: rgba(19, 13, 39, 0.96) !important;
+  --theme-border: rgba(255, 244, 236, 0.22) !important;
+  --theme-text: #fffaf4 !important;
+  --theme-text-secondary: #ded2e7 !important;
+  --theme-accent: #ff9b7a !important;
+  --theme-accent-secondary: #75d4ca !important;
+  --theme-accent-glow: rgba(255, 155, 122, 0.28) !important;
+}
+
+:root[data-android-display='true'][data-theme='midnight'] {
+  --background: #101947 !important;
+  --foreground: #fff8e9 !important;
+  --theme-bg: #101947 !important;
+  --theme-bg-secondary: #1c285d !important;
+  --theme-bg-card: #28366f !important;
+  --theme-nav-bg: rgba(12, 20, 58, 0.96) !important;
+  --theme-border: rgba(222, 228, 255, 0.26) !important;
+  --theme-text: #fff8e9 !important;
+  --theme-text-secondary: #d6ddf3 !important;
+  --theme-accent: #ffc078 !important;
+  --theme-accent-secondary: #ff8d73 !important;
+  --theme-accent-glow: rgba(255, 192, 120, 0.28) !important;
+}
+
+:root[data-android-display='true'][data-theme='sunset'] {
+  --background: #2b160f !important;
+  --foreground: #fff3df !important;
+  --theme-bg: #2b160f !important;
+  --theme-bg-secondary: #3b2118 !important;
+  --theme-bg-card: #4a2b21 !important;
+  --theme-nav-bg: rgba(37, 18, 12, 0.96) !important;
+  --theme-border: rgba(255, 210, 174, 0.27) !important;
+  --theme-text: #fff3df !important;
+  --theme-text-secondary: #f0cda8 !important;
+  --theme-accent: #f19573 !important;
+  --theme-accent-secondary: #89b7a5 !important;
+  --theme-accent-glow: rgba(241, 149, 115, 0.29) !important;
+}
+
+:root[data-android-display='true'][data-theme='forest'] {
+  --background: #12261d !important;
+  --foreground: #fff4df !important;
+  --theme-bg: #12261d !important;
+  --theme-bg-secondary: #1d362a !important;
+  --theme-bg-card: #29483a !important;
+  --theme-nav-bg: rgba(14, 32, 24, 0.96) !important;
+  --theme-border: rgba(231, 219, 183, 0.25) !important;
+  --theme-text: #fff4df !important;
+  --theme-text-secondary: #d2e2cf !important;
+  --theme-accent: #efc18f !important;
+  --theme-accent-secondary: #ee7c68 !important;
+  --theme-accent-glow: rgba(239, 193, 143, 0.28) !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -165,6 +227,25 @@ body {
 .home-greeting-copy {
   color: #d9cfe2;
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-android-display='true'] .home-greeting-badge {
+  border-color: rgba(255, 202, 72, 0.76);
+  background: rgba(48, 37, 68, 0.97);
+  color: #fff0ad;
+}
+
+:root[data-android-display='true'] .home-greeting-name {
+  color: #ffc0aa;
+  text-shadow: 0 2px 28px rgba(255, 155, 122, 0.38);
+}
+
+:root[data-android-display='true'] .home-greeting-title {
+  color: #ffffff;
+}
+
+:root[data-android-display='true'] .home-greeting-copy {
+  color: #eee5f2;
 }
 
 :root[data-theme='light'] .home-greeting-badge {
