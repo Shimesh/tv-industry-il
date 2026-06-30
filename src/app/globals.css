@@ -56,9 +56,9 @@
   color-scheme: only dark;
 }
 
-/* Keep dark themes readable on Android displays without changing iOS/desktop. */
-:root[data-android-display='true']:not([data-theme]),
-:root[data-android-display='true'][data-theme='dark'] {
+/* One vivid sRGB palette per theme keeps colors stable across display engines. */
+:root:not([data-theme]),
+:root[data-theme='dark'] {
   --background: #18112e !important;
   --foreground: #fffaf4 !important;
   --theme-bg: #18112e !important;
@@ -68,12 +68,12 @@
   --theme-border: rgba(255, 244, 236, 0.22) !important;
   --theme-text: #fffaf4 !important;
   --theme-text-secondary: #ded2e7 !important;
-  --theme-accent: #ff9b7a !important;
-  --theme-accent-secondary: #75d4ca !important;
-  --theme-accent-glow: rgba(255, 155, 122, 0.28) !important;
+  --theme-accent: #ff6a3d !important;
+  --theme-accent-secondary: #56d6ca !important;
+  --theme-accent-glow: rgba(255, 106, 61, 0.30) !important;
 }
 
-:root[data-android-display='true'][data-theme='midnight'] {
+:root[data-theme='midnight'] {
   --background: #101947 !important;
   --foreground: #fff8e9 !important;
   --theme-bg: #101947 !important;
@@ -83,12 +83,12 @@
   --theme-border: rgba(222, 228, 255, 0.26) !important;
   --theme-text: #fff8e9 !important;
   --theme-text-secondary: #d6ddf3 !important;
-  --theme-accent: #ffc078 !important;
-  --theme-accent-secondary: #ff8d73 !important;
-  --theme-accent-glow: rgba(255, 192, 120, 0.28) !important;
+  --theme-accent: #ffc14d !important;
+  --theme-accent-secondary: #ff7048 !important;
+  --theme-accent-glow: rgba(255, 193, 77, 0.30) !important;
 }
 
-:root[data-android-display='true'][data-theme='sunset'] {
+:root[data-theme='sunset'] {
   --background: #2b160f !important;
   --foreground: #fff3df !important;
   --theme-bg: #2b160f !important;
@@ -98,12 +98,12 @@
   --theme-border: rgba(255, 210, 174, 0.27) !important;
   --theme-text: #fff3df !important;
   --theme-text-secondary: #f0cda8 !important;
-  --theme-accent: #f19573 !important;
-  --theme-accent-secondary: #89b7a5 !important;
-  --theme-accent-glow: rgba(241, 149, 115, 0.29) !important;
+  --theme-accent: #ff784e !important;
+  --theme-accent-secondary: #72c7ae !important;
+  --theme-accent-glow: rgba(255, 120, 78, 0.31) !important;
 }
 
-:root[data-android-display='true'][data-theme='forest'] {
+:root[data-theme='forest'] {
   --background: #12261d !important;
   --foreground: #fff4df !important;
   --theme-bg: #12261d !important;
@@ -113,9 +113,9 @@
   --theme-border: rgba(231, 219, 183, 0.25) !important;
   --theme-text: #fff4df !important;
   --theme-text-secondary: #d2e2cf !important;
-  --theme-accent: #efc18f !important;
-  --theme-accent-secondary: #ee7c68 !important;
-  --theme-accent-glow: rgba(239, 193, 143, 0.28) !important;
+  --theme-accent: #ffc27a !important;
+  --theme-accent-secondary: #ff715c !important;
+  --theme-accent-glow: rgba(255, 194, 122, 0.30) !important;
 }
 
 @theme inline {
@@ -229,22 +229,22 @@ body {
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.28);
 }
 
-:root[data-android-display='true'] .home-greeting-badge {
+:root .home-greeting-badge {
   border-color: rgba(255, 202, 72, 0.76);
   background: rgba(48, 37, 68, 0.97);
   color: #fff0ad;
 }
 
-:root[data-android-display='true'] .home-greeting-name {
-  color: #ffc0aa;
-  text-shadow: 0 2px 28px rgba(255, 155, 122, 0.38);
+:root .home-greeting-name {
+  color: #ff7048;
+  text-shadow: 0 2px 28px rgba(255, 112, 72, 0.40);
 }
 
-:root[data-android-display='true'] .home-greeting-title {
+:root .home-greeting-title {
   color: #ffffff;
 }
 
-:root[data-android-display='true'] .home-greeting-copy {
+:root .home-greeting-copy {
   color: #eee5f2;
 }
 
