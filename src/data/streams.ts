@@ -42,14 +42,11 @@ export const streamConfigs: Record<string, StreamConfig> = {
     note: 'רשת 13 - שידור חי',
   },
 
-  // i24NEWS Hebrew direct Brightcove embed. The i24 app shell opens a language picker, so use the Hebrew live video directly.
-  // embedUrl has NO muted params — appendMutedParams adds them for the carousel,
-  // and appendAutoplayParams (without muted) lets the schedule page play with sound.
+  // i24NEWS Hebrew official Immergo HLS feed.
   i24: {
-    type: 'iframe',
-    streamUrl: null,
-    embedUrl: 'https://players.brightcove.net/5377161796001/NwpCHKlKW_default/index.html?videoId=6352464366112&autoplay=1&playsinline=true',
-    websiteUrl: 'https://www.isramedia.net/9568/%D7%A2%D7%A8%D7%95%D7%A6%D7%99-%D7%97%D7%93%D7%A9%D7%95%D7%AA/i24news-%D7%91%D7%A2%D7%91%D7%A8%D7%99%D7%AA-%D7%A9%D7%99%D7%93%D7%95%D7%A8-%D7%97%D7%99',
+    type: 'hls',
+    streamUrl: 'https://i24newshebrew-cdn.encoders.immergo.tv/master.m3u8',
+    websiteUrl: 'https://video.i24news.tv/r/hebrew/page/6875657dd9a706e53126829d',
     requiresAuth: false,
     hasLiveStream: true,
     dynamicStream: true,

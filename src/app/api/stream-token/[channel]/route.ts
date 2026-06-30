@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCipheriv, createDecipheriv } from 'node:crypto';
 
 const DESKTOP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const I24_ACCOUNT_ID = '5377161796001';
-const I24_VIDEO_ID = '6352464366112';
-const I24_POLICY_KEY = 'BCpkADawqM1UIU4favtR1Jj4rqM0ZAkYwMEbgN9bsEpJ2150CdxJmRIG8jK-Up_9w4w37x3tP1AsoO_MZhD_XoAGkdKWxymaaw4OHuhPn_lEJczODTm3AO7S08gLFPnLnb-FcKJwXhbxCQ10';
+const I24_HEBREW_HLS = 'https://i24newshebrew-cdn.encoders.immergo.tv/master.m3u8';
 const NOW14_GUID = '9fb14ce7-fcc2-4695-839b-e641390d7a00';
 const NOW14_API_BASE = 'https://insight-api-channel14.univtec.com/';
 const NOW14_TENANT_ID = 'channel14';
@@ -20,13 +18,6 @@ const KESHET_TOKEN_KEY = Buffer.from('YhnUaXMmltB6gd8p9SWleQ==', 'utf8');
 const KESHET_CRYPTO_IV = Buffer.from('theExact16Chars=', 'utf8');
 const KESHET_STREAM_HOST = 'd2249b6f08tjt0.cloudfront.net';
 const KESHET_STREAM_PATH_PREFIX = '/k12dvr/';
-
-type BrightcovePlaybackResponse = {
-  sources?: Array<{
-    src?: string;
-    type?: string;
-  }>;
-};
 
 type UnivtecPlayResponse = {
   vod?: {
@@ -231,22 +222,18 @@ async function isPlayableHlsManifest(url: string, userAgent: string | null): Pro
 
 async function resolveI24Stream(): Promise<string | null> {
   try {
-    const response = await fetch(`https://edge.api.brightcove.com/playback/v1/accounts/${I24_ACCOUNT_ID}/videos/${I24_VIDEO_ID}`, {
+    const response = await fetch(I24_HEBREW_HLS, {
       headers: {
-        Accept: 'application/json',
-        'BCOV-Policy': I24_POLICY_KEY,
+        Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*',
+        'User-Agent': DESKTOP_USER_AGENT,
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(8000),
       cache: 'no-store',
     });
 
     if (!response.ok) return null;
-
-    const data = (await response.json()) as BrightcovePlaybackResponse;
-    const hlsSource = data.sources?.find(source => source.src?.includes('.m3u8'))
-      ?? data.sources?.find(source => source.type === 'application/vnd.apple.mpegurl');
-
-    return hlsSource?.src ?? null;
+    const manifest = await response.text();
+    return manifest.trimStart().startsWith('#EXTM3U') ? I24_HEBREW_HLS : null;
   } catch {
     return null;
   }
