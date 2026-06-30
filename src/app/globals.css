@@ -2,6 +2,7 @@
 
 /* Theme CSS Variables - Default (DUSK theme) */
 :root {
+  color-scheme: only dark;
   --background: #0e0a1f;
   --foreground: #f5ecdf;
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -42,6 +43,17 @@
   --ch-kan33:    #a855f7;
   --ch-sport:    #22c55e;
   --ch-live:     #ff2d2d;
+}
+
+:root[data-theme='light'] {
+  color-scheme: only light;
+}
+
+:root[data-theme='dark'],
+:root[data-theme='midnight'],
+:root[data-theme='sunset'],
+:root[data-theme='forest'] {
+  color-scheme: only dark;
 }
 
 @theme inline {
@@ -128,6 +140,51 @@ body {
     radial-gradient(ellipse 60% 70% at 88% 5%, color-mix(in srgb, var(--theme-accent-secondary) 28%, transparent), transparent 50%),
     radial-gradient(circle at 52% 60%, color-mix(in srgb, var(--theme-bg-card) 55%, transparent), transparent 60%),
     linear-gradient(170deg, color-mix(in srgb, var(--theme-bg-card) 80%, transparent) 0%, transparent 60%);
+}
+
+.home-greeting-badge {
+  border-color: rgba(251, 191, 36, 0.58);
+  background: rgba(38, 28, 52, 0.92);
+  color: #fde68a;
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.08),
+    0 8px 30px rgba(0, 0, 0, 0.28);
+}
+
+.home-greeting-name {
+  color: #ff9b7a;
+  -webkit-text-fill-color: currentColor;
+  text-shadow: 0 2px 24px rgba(224, 122, 95, 0.28);
+}
+
+.home-greeting-title {
+  color: #fffaf2;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.34);
+}
+
+.home-greeting-copy {
+  color: #d9cfe2;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme='light'] .home-greeting-badge {
+  background: rgba(255, 255, 255, 0.94);
+  color: #7c2d12;
+}
+
+:root[data-theme='light'] .home-greeting-name {
+  color: #b9382b;
+  text-shadow: none;
+}
+
+:root[data-theme='light'] .home-greeting-title {
+  color: #241813;
+  text-shadow: none;
+}
+
+:root[data-theme='light'] .home-greeting-copy {
+  color: #55443b;
+  text-shadow: none;
 }
 
 .app-hero::after {

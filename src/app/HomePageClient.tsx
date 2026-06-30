@@ -86,7 +86,7 @@ export default function HomePageClient({ greeting }: { greeting: string }) {
       {/* Greeting — above everything */}
       <header className="app-hero">
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10 text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.12)]">
+          <div className="home-greeting-badge mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-black tracking-wide">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
@@ -94,13 +94,13 @@ export default function HomePageClient({ greeting }: { greeting: string }) {
             <Sparkles className="h-3.5 w-3.5 text-amber-400" />
             מרכז העבודה של תעשיית הטלוויזיה הישראלית
           </div>
-          <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" style={{ color: 'var(--theme-text)' }}>
-            <span className="gradient-text">{greeting}{firstName ? ` ${firstName}` : ''}</span>
-            <span className="block">מה קורה היום בתעשייה?</span>
+          <h1 className="text-4xl font-black leading-tight sm:text-5xl lg:text-6xl">
+            <span className="home-greeting-name">{greeting}{firstName ? ` ${firstName}` : ''}</span>
+            <span className="home-greeting-title block">מה קורה היום בתעשייה?</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: 'var(--theme-text-secondary)' }}>
+          <p className="home-greeting-copy mx-auto mt-4 max-w-2xl text-base font-medium leading-8">
             שידורים חיים, חדשות, יומן אישי, צוותים, אולפנים ואלפון מקצועי —{' '}
-            <span style={{ color: 'var(--theme-text)', fontWeight: 700 }}>הכל במקום אחד</span>.
+            <span className="home-greeting-title font-bold">הכל במקום אחד</span>.
           </p>
         </div>
       </header>
