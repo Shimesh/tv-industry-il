@@ -28,7 +28,7 @@
   --theme-warning: #f59e0b;
   --theme-danger: #ef4444;
   --theme-info: #38bdf8;
-  --theme-nav-bg: rgba(19, 13, 39, 0.96);
+  --theme-nav-bg: #17102f;
 
   /* Brand gradient — sienna → coral → dusty teal */
   --brand-grad-start: #c84e3e;
@@ -66,7 +66,7 @@
   --theme-bg: #18112e !important;
   --theme-bg-secondary: #251c43 !important;
   --theme-bg-card: #312653 !important;
-  --theme-nav-bg: rgba(19, 13, 39, 0.96) !important;
+  --theme-nav-bg: #17102f !important;
   --theme-border: rgba(255, 244, 236, 0.22) !important;
   --theme-text: #fffaf4 !important;
   --theme-text-secondary: #ded2e7 !important;
@@ -81,7 +81,7 @@
   --theme-bg: #101947 !important;
   --theme-bg-secondary: #1c285d !important;
   --theme-bg-card: #28366f !important;
-  --theme-nav-bg: rgba(12, 20, 58, 0.96) !important;
+  --theme-nav-bg: #111b4d !important;
   --theme-border: rgba(222, 228, 255, 0.26) !important;
   --theme-text: #fff8e9 !important;
   --theme-text-secondary: #d6ddf3 !important;
@@ -96,7 +96,7 @@
   --theme-bg: #2b160f !important;
   --theme-bg-secondary: #3b2118 !important;
   --theme-bg-card: #4a2b21 !important;
-  --theme-nav-bg: rgba(37, 18, 12, 0.96) !important;
+  --theme-nav-bg: #321a12 !important;
   --theme-border: rgba(255, 210, 174, 0.27) !important;
   --theme-text: #fff3df !important;
   --theme-text-secondary: #f0cda8 !important;
@@ -111,7 +111,7 @@
   --theme-bg: #12261d !important;
   --theme-bg-secondary: #1d362a !important;
   --theme-bg-card: #29483a !important;
-  --theme-nav-bg: rgba(14, 32, 24, 0.96) !important;
+  --theme-nav-bg: #142d22 !important;
   --theme-border: rgba(231, 219, 183, 0.25) !important;
   --theme-text: #fff4df !important;
   --theme-text-secondary: #d2e2cf !important;
@@ -156,9 +156,9 @@ body {
 .app-ambient {
   position: relative;
   background:
-    radial-gradient(circle at 12% 2%, color-mix(in srgb, var(--theme-accent) 18%, transparent), transparent 28rem),
-    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--theme-accent-secondary) 16%, transparent), transparent 26rem),
-    linear-gradient(180deg, var(--theme-bg) 0%, color-mix(in srgb, var(--theme-bg) 88%, #000 12%) 100%);
+    radial-gradient(circle at 12% 2%, color-mix(in srgb, var(--theme-accent) 18%, var(--theme-bg)) 0, var(--theme-bg) 28rem),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--theme-accent-secondary) 14%, var(--theme-bg)) 0, var(--theme-bg) 26rem),
+    var(--theme-bg);
 }
 
 .app-panel {
@@ -200,10 +200,9 @@ body {
   max-width: 100vw;
   border-bottom: 1px solid var(--theme-border);
   background:
-    radial-gradient(ellipse 70% 80% at 12% 20%, color-mix(in srgb, var(--theme-accent) 32%, transparent), transparent 55%),
-    radial-gradient(ellipse 60% 70% at 88% 5%, color-mix(in srgb, var(--theme-accent-secondary) 28%, transparent), transparent 50%),
-    radial-gradient(circle at 52% 60%, color-mix(in srgb, var(--theme-bg-card) 55%, transparent), transparent 60%),
-    linear-gradient(170deg, color-mix(in srgb, var(--theme-bg-card) 80%, transparent) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 80% at 12% 20%, color-mix(in srgb, var(--theme-accent) 24%, var(--theme-bg-card)) 0%, var(--theme-bg-card) 58%),
+    radial-gradient(ellipse 60% 70% at 88% 5%, color-mix(in srgb, var(--theme-accent-secondary) 20%, var(--theme-bg-card)) 0%, var(--theme-bg-card) 54%),
+    var(--theme-bg-card);
 }
 
 .home-greeting-badge {
@@ -227,7 +226,7 @@ body {
 }
 
 .home-greeting-copy {
-  color: #d9cfe2;
+  color: #f4edf7;
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.28);
 }
 
@@ -247,7 +246,7 @@ body {
 }
 
 :root .home-greeting-copy {
-  color: #eee5f2;
+  color: #f7f1fa;
 }
 
 :root[data-theme='light'] .home-greeting-badge {
@@ -407,15 +406,14 @@ body.accessibility-high-contrast [data-quick-drawer-root] {
 }
 
 .app-nav-shell {
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  background: var(--theme-nav-bg);
   transform: translateZ(0);
   isolation: isolate;
 }
 
 @supports (-webkit-touch-callout: none) {
   :root {
-    --theme-nav-bg: rgba(14, 10, 31, 0.98);
+    --theme-nav-bg: #17102f;
   }
 
   html,
