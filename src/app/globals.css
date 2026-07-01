@@ -122,8 +122,13 @@
 
 /* Samsung Internet can apply its own page-level Night Mode after CSS paint,
    even while reporting a light color preference. Feed that compositor a
-   brighter opaque palette so the final standalone-PWA output matches the
-   standard dark theme instead of collapsing into brown-black tones. */
+   brighter opaque palette and lift the final composited output so dark tones
+   do not collapse into brown-black on Samsung OLED devices. */
+:root[data-browser='samsung-internet'] {
+  color-scheme: only dark !important;
+  forced-color-adjust: none;
+}
+
 :root[data-browser='samsung-internet']:not([data-theme]),
 :root[data-browser='samsung-internet'][data-theme='dark'] {
   --background: #2a2049 !important;
@@ -138,6 +143,16 @@
   --theme-accent: #ff855d !important;
   --theme-accent-secondary: #6de7dc !important;
   --theme-accent-glow: rgba(255, 133, 93, 0.42) !important;
+}
+
+:root[data-browser='samsung-internet'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.15);
+  mix-blend-mode: screen;
 }
 
 :root[data-browser='samsung-internet'] .home-greeting-badge {
