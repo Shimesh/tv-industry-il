@@ -95,6 +95,16 @@ function UsageTracker() {
           pathname,
           visitorId: getVisitorId(),
           referrer: document.referrer || null,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          screen: `${window.screen.width}x${window.screen.height}`,
+          devicePixelRatio: window.devicePixelRatio || 1,
+          colorGamut: window.matchMedia('(color-gamut: rec2020)').matches
+            ? 'rec2020'
+            : window.matchMedia('(color-gamut: p3)').matches
+              ? 'p3'
+              : 'srgb',
+          preferredColorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+          displayMode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
         }),
         keepalive: true,
       }).catch(() => {});

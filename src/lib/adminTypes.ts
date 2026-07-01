@@ -82,6 +82,15 @@ export type PageViewEvent = {
   browser: string | null;
   os: string | null;
   userAgent: string | null;
+  deviceModel?: string | null;
+  platformVersion?: string | null;
+  browserVersions?: string | null;
+  viewport?: string | null;
+  screen?: string | null;
+  devicePixelRatio?: number | null;
+  colorGamut?: string | null;
+  preferredColorScheme?: string | null;
+  displayMode?: string | null;
   referrer: string | null;
 };
 

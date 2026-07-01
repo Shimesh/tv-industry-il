@@ -36,6 +36,10 @@ const securityHeaders = [
     value: 'strict-origin-when-cross-origin',
   },
   {
+    key: 'Accept-CH',
+    value: 'Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List',
+  },
+  {
     key: 'Permissions-Policy',
     value: 'camera=(self), microphone=(self), geolocation=(self), fullscreen=(self), payment=(), usb=(), serial=(), bluetooth=(), browsing-topics=()',
   },

@@ -58,10 +58,10 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <head>
-        <meta name="color-scheme" content="only light" />
-        <meta name="supported-color-schemes" content="light" />
+        <meta name="color-scheme" content="dark light" />
+        <meta name="supported-color-schemes" content="dark light" />
         {/* Apply stored theme synchronously before first paint to prevent FOUC */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tv-industry-theme');if(['dark','light','midnight','sunset','forest'].indexOf(t)>=0){document.documentElement.dataset.theme=t;}}catch(e){}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var r=document.documentElement;var t=localStorage.getItem('tv-industry-theme');if(['dark','light','midnight','sunset','forest'].indexOf(t)>=0){r.dataset.theme=t;}if(/SamsungBrowser\//.test(navigator.userAgent)){r.dataset.browser='samsung-internet';}}catch(e){}})();` }} />
         <link
           href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap"
           rel="stylesheet"

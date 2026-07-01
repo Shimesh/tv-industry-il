@@ -66,6 +66,15 @@ type PageViewWriteInput = {
   browser?: string | null;
   os?: string | null;
   userAgent?: string | null;
+  deviceModel?: string | null;
+  platformVersion?: string | null;
+  browserVersions?: string | null;
+  viewport?: string | null;
+  screen?: string | null;
+  devicePixelRatio?: number | null;
+  colorGamut?: string | null;
+  preferredColorScheme?: string | null;
+  displayMode?: string | null;
   referrer?: string | null;
 };
 
@@ -189,6 +198,15 @@ export async function recordPageView(input: PageViewWriteInput): Promise<void> {
       browser: input.browser || null,
       os: input.os || null,
       userAgent: input.userAgent || null,
+      deviceModel: input.deviceModel || null,
+      platformVersion: input.platformVersion || null,
+      browserVersions: input.browserVersions || null,
+      viewport: input.viewport || null,
+      screen: input.screen || null,
+      devicePixelRatio: input.devicePixelRatio || null,
+      colorGamut: input.colorGamut || null,
+      preferredColorScheme: input.preferredColorScheme || null,
+      displayMode: input.displayMode || null,
       referrer: input.referrer || null,
     }, eventId);
   } catch {
@@ -224,6 +242,15 @@ export async function getPageViewEvents(pathname: string, limit = 50): Promise<P
       browser: event.browser || null,
       os: event.os || null,
       userAgent: event.userAgent || null,
+      deviceModel: event.deviceModel || null,
+      platformVersion: event.platformVersion || null,
+      browserVersions: event.browserVersions || null,
+      viewport: event.viewport || null,
+      screen: event.screen || null,
+      devicePixelRatio: event.devicePixelRatio || null,
+      colorGamut: event.colorGamut || null,
+      preferredColorScheme: event.preferredColorScheme || null,
+      displayMode: event.displayMode || null,
       referrer: event.referrer || null,
     }));
 }

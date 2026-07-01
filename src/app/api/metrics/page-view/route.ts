@@ -28,6 +28,7 @@ function detectDevice(userAgent: string): 'desktop' | 'mobile' | 'tablet' | 'bot
 
 function detectBrowser(userAgent: string): string | null {
   if (!userAgent) return null;
+  if (/SamsungBrowser\//.test(userAgent)) return 'Samsung Internet';
   if (/Edg\//.test(userAgent)) return 'Edge';
   if (/OPR\//.test(userAgent)) return 'Opera';
   if (/Chrome\//.test(userAgent)) return 'Chrome';
@@ -52,6 +53,12 @@ export async function POST(request: NextRequest) {
       pathname?: string;
       visitorId?: string;
       referrer?: string;
+      viewport?: string;
+      screen?: string;
+      devicePixelRatio?: number;
+      colorGamut?: string;
+      preferredColorScheme?: string;
+      displayMode?: string;
     };
     const pathname = String(body.pathname || '').trim();
     if (!pathname.startsWith('/')) {
@@ -75,6 +82,15 @@ export async function POST(request: NextRequest) {
       browser: detectBrowser(userAgent),
       os: detectOs(userAgent),
       userAgent: userAgent.slice(0, 500) || null,
+      deviceModel: request.headers.get('sec-ch-ua-model'),
+      platformVersion: request.headers.get('sec-ch-ua-platform-version'),
+      browserVersions: request.headers.get('sec-ch-ua-full-version-list'),
+      viewport: String(body.viewport || '').slice(0, 40) || null,
+      screen: String(body.screen || '').slice(0, 40) || null,
+      devicePixelRatio: Number.isFinite(Number(body.devicePixelRatio)) ? Number(body.devicePixelRatio) : null,
+      colorGamut: String(body.colorGamut || '').slice(0, 20) || null,
+      preferredColorScheme: String(body.preferredColorScheme || '').slice(0, 20) || null,
+      displayMode: String(body.displayMode || '').slice(0, 20) || null,
       referrer: String(body.referrer || request.headers.get('referer') || '').slice(0, 500) || null,
     });
     return NextResponse.json({ success: true });

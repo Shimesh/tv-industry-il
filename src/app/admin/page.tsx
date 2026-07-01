@@ -179,7 +179,16 @@ function formatPageViewLocation(event: PageViewEvent): string {
 }
 
 function formatPageViewDevice(event: PageViewEvent): string {
-  return [event.deviceType, event.browser, event.os].filter(Boolean).join(' · ') || 'לא זמין';
+  const dimensions = [event.viewport, event.screen].filter(Boolean).join(' / ');
+  const rendering = [
+    event.devicePixelRatio ? `DPR ${event.devicePixelRatio}` : null,
+    event.colorGamut,
+    event.preferredColorScheme,
+    event.displayMode,
+  ].filter(Boolean).join(' · ');
+  return [event.deviceModel, event.deviceType, event.browser, event.os, event.platformVersion, dimensions, rendering]
+    .filter(Boolean)
+    .join(' · ') || 'לא זמין';
 }
 
 function safeProfileFields(entry: unknown) {

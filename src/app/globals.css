@@ -2,9 +2,9 @@
 
 /* Theme CSS Variables - Default (DUSK theme) */
 :root {
-  /* The app paints every theme itself. Advertising a light-only native scheme
-     prevents Samsung Internet/Chromium Force Dark from recoloring the UI. */
-  color-scheme: only light;
+  /* The app paints both schemes itself. Samsung Internet requires both values
+     to prefer site colors over its own Force Dark transformation. */
+  color-scheme: dark light;
   --background: #18112e;
   --foreground: #fffaf4;
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -48,14 +48,14 @@
 }
 
 :root[data-theme='light'] {
-  color-scheme: only light;
+  color-scheme: light;
 }
 
 :root[data-theme='dark'],
 :root[data-theme='midnight'],
 :root[data-theme='sunset'],
 :root[data-theme='forest'] {
-  color-scheme: only light;
+  color-scheme: dark;
 }
 
 /* One vivid sRGB palette per theme keeps colors stable across display engines. */
