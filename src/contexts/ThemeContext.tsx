@@ -157,10 +157,17 @@ function applyTheme(theme: ThemeName) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeName>('dark');
+  const [theme, setThemeState] = useState<ThemeName>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeName | null;
+    return stored && stored in themes ? stored : 'dark';
+  });
 
   const setTheme = useCallback((nextTheme: ThemeName) => {
     setThemeState(nextTheme);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, nextTheme);
+    }
     applyTheme(nextTheme);
   }, []);
 
