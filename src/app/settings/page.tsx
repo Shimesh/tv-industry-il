@@ -2,13 +2,12 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import UserAvatar from '@/components/UserAvatar';
 import ProfilePhotoUploadButton from '@/components/ProfilePhotoUploadButton';
 import {
-  Settings, Palette, Bell, Shield, LogOut, CheckCircle,
+  Settings, Bell, Shield, LogOut, CheckCircle,
   ChevronLeft, User, Volume2, Eye, Smartphone, Trash2, AlertTriangle, Camera,
   Calendar, Link2, Link2Off, Loader2, Sparkles
 } from 'lucide-react';
@@ -26,7 +25,6 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const { profile, user, logout, updateUserProfile, deleteDirectoryProfile } = useAuth();
-  const { theme, setTheme } = useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [notificationsEnabled, setNotificationsEnabled] = useState(profile?.notificationsEnabled !== false);
@@ -285,28 +283,6 @@ function SettingsContent() {
             >
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${profile.openToWork ? 'right-0.5' : 'right-[22px]'}`} />
             </button>
-          </div>
-        </SettingsSection>
-
-        {/* Theme */}
-        <SettingsSection icon={<Palette className="w-4 h-4" />} title="ערכת נושא">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, t]) => (
-              <button
-                key={key}
-                onClick={() => setTheme(key)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                  theme === key
-                    ? 'bg-[var(--theme-accent-glow)] text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]/30'
-                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)]'
-                }`}
-                style={theme !== key ? { background: 'var(--theme-bg)' } : undefined}
-              >
-                <span className="text-lg">{t.emoji}</span>
-                <span className="font-medium">{t.label}</span>
-                {theme === key && <CheckCircle className="w-3.5 h-3.5 mr-auto" />}
-              </button>
-            ))}
           </div>
         </SettingsSection>
 

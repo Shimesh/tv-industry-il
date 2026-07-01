@@ -60,8 +60,8 @@ export default function RootLayout({
       <head>
         <meta name="color-scheme" content="dark light" />
         <meta name="supported-color-schemes" content="dark light" />
-        {/* Apply stored theme synchronously before first paint to prevent FOUC */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var r=document.documentElement;var t=localStorage.getItem('tv-industry-theme');if(['dark','light','midnight','sunset','forest'].indexOf(t)>=0){r.dataset.theme=t;}if(/SamsungBrowser\//.test(navigator.userAgent)){r.dataset.browser='samsung-internet';}}catch(e){}})();` }} />
+        {/* Clear any stored theme — all users use the single default dark theme */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{localStorage.removeItem('tv-industry-theme');if(/SamsungBrowser\//.test(navigator.userAgent)){document.documentElement.dataset.browser='samsung-internet';}}catch(e){}})();` }} />
         <link
           href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap"
           rel="stylesheet"

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme, themes, ThemeName } from '@/contexts/ThemeContext';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 import { useGlobalUnread } from '@/hooks/useGlobalUnread';
 import UserAvatar from './UserAvatar';
@@ -14,7 +13,6 @@ import NotificationBell from './NotificationBell';
 import {
   BarChart3,
   Building2,
-  CheckCircle,
   ChevronDown,
   Clapperboard,
   LogIn,
@@ -23,7 +21,6 @@ import {
   Menu,
   MessageCircle,
   Newspaper,
-  Palette,
   Radio,
   Settings,
   Shield,
@@ -69,18 +66,15 @@ export default function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, profile, loading } = useAuth();
-  const { theme, setTheme } = useTheme();
   const { isWorldCupMode } = useWorldCup();
   const totalUnread = useGlobalUnread();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [loadingBar, setLoadingBar] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [cachedProfile, setCachedProfile] = useState<typeof profile>(null);
   const prevPathnameRef = useRef(pathname);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
   const effectiveProfile = profile ?? (loading ? cachedProfile : null);
   const hasAuthUi = Boolean(user || (loading && cachedProfile));
   const showAdminLink = hasAuthUi && effectiveProfile?.siteRole === 'admin';
@@ -90,7 +84,6 @@ export default function Navigation() {
     emitNavigationStart();
     setMobileOpen(false);
     setUserMenuOpen(false);
-    setThemeMenuOpen(false);
     if (href === '/' && pathname === '/' && typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -135,7 +128,6 @@ export default function Navigation() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) setUserMenuOpen(false);
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) setThemeMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -274,49 +266,11 @@ export default function Navigation() {
           <div className="flex shrink-0 items-center gap-1">
             {mounted && user ? <NotificationBell /> : null}
 
-            <div className="relative hidden md:block" ref={themeMenuRef}>
-              <button
-                onClick={() => {
-                  setThemeMenuOpen(!themeMenuOpen);
-                  setUserMenuOpen(false);
-                }}
-                className="rounded-xl p-2 text-[var(--theme-text-secondary)] transition-all hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]"
-                title="ערכת נושא"
-              >
-                <Palette className="h-5 w-5" />
-              </button>
-
-              {themeMenuOpen ? (
-                <div className="app-panel absolute left-0 top-full z-[100] mt-2 w-52 p-2 shadow-2xl">
-                  {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, themeOption]) => (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        setTheme(key);
-                        setThemeMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all ${
-                        theme === key
-                          ? 'text-[var(--theme-accent)]'
-                          : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-accent-glow)] hover:text-[var(--theme-text)]'
-                      }`}
-                      style={theme === key ? { background: 'var(--theme-accent-glow)' } : undefined}
-                    >
-                      <span className="text-lg">{themeOption.emoji}</span>
-                      <span className="font-bold">{themeOption.label}</span>
-                      {theme === key ? <CheckCircle className="mr-auto h-4 w-4" /> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
             {hasAuthUi ? (
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => {
                     setUserMenuOpen(!userMenuOpen);
-                    setThemeMenuOpen(false);
                   }}
                   className="flex items-center gap-2 rounded-xl p-1.5 transition-all hover:bg-[var(--theme-accent-glow)]"
                 >
@@ -407,27 +361,6 @@ export default function Navigation() {
               </div>
             ) : null}
 
-            <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--theme-border)' }}>
-              <p className="flex items-center gap-2 px-4 py-1.5 text-xs font-black text-[var(--theme-text-secondary)]">
-                <Palette className="h-3.5 w-3.5" />
-                ערכת נושא
-              </p>
-              <div className="flex flex-wrap gap-2 px-4 py-2">
-                {(Object.entries(themes) as [ThemeName, typeof themes.dark][]).map(([key, themeOption]) => (
-                  <button
-                    key={key}
-                    onClick={() => setTheme(key)}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                      theme === key ? 'text-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]'
-                    }`}
-                    style={{ background: theme === key ? 'var(--theme-accent-glow)' : 'var(--theme-bg)' }}
-                  >
-                    <span>{themeOption.emoji}</span>
-                    {themeOption.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       ) : null}
