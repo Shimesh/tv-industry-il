@@ -120,6 +120,43 @@
   --theme-accent-glow: rgba(255, 194, 122, 0.30) !important;
 }
 
+/* Samsung Internet can apply its own page-level Night Mode after CSS paint,
+   even while reporting a light color preference. Feed that compositor a
+   brighter opaque palette so the final standalone-PWA output matches the
+   standard dark theme instead of collapsing into brown-black tones. */
+:root[data-browser='samsung-internet']:not([data-theme]),
+:root[data-browser='samsung-internet'][data-theme='dark'] {
+  --background: #2a2049 !important;
+  --foreground: #ffffff !important;
+  --theme-bg: #2a2049 !important;
+  --theme-bg-secondary: #3d315f !important;
+  --theme-bg-card: #4b3d70 !important;
+  --theme-nav-bg: #251a45 !important;
+  --theme-border: rgba(255, 248, 242, 0.38) !important;
+  --theme-text: #ffffff !important;
+  --theme-text-secondary: #f5edf8 !important;
+  --theme-accent: #ff855d !important;
+  --theme-accent-secondary: #6de7dc !important;
+  --theme-accent-glow: rgba(255, 133, 93, 0.42) !important;
+}
+
+:root[data-browser='samsung-internet'] .home-greeting-badge {
+  background: #4b3d70;
+  border-color: #ffd05c;
+  color: #fff4bd;
+}
+
+:root[data-browser='samsung-internet'] .home-greeting-name {
+  color: #ff855d;
+  text-shadow: none;
+}
+
+:root[data-browser='samsung-internet'] .home-greeting-title,
+:root[data-browser='samsung-internet'] .home-greeting-copy {
+  color: #ffffff;
+  text-shadow: none;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
