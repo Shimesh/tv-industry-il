@@ -52,6 +52,24 @@ if ($browser) {
   $env:PUPPETEER_EXECUTABLE_PATH = $browser
 }
 
+$probe = [System.Net.Sockets.TcpClient]::new()
+try {
+  $connectTask = $probe.ConnectAsync('hsil.acc.co.il', 5443)
+  if (-not $connectTask.Wait(5000) -or -not $probe.Connected) {
+    $checkedAt = Get-Date -Format o
+    "[$checkedAt] Herzliya route unavailable; skipping browser sync until the next scheduled check" |
+      Tee-Object -FilePath $LogFile -Append
+    exit 0
+  }
+} catch {
+  $checkedAt = Get-Date -Format o
+  "[$checkedAt] Herzliya route unavailable; skipping browser sync until the next scheduled check" |
+    Tee-Object -FilePath $LogFile -Append
+  exit 0
+} finally {
+  $probe.Dispose()
+}
+
 $env:SYNC_SAVED_CALENDARS = '1'
 $started = Get-Date -Format o
 "[$started] Starting local Herzliya calendar sync" | Tee-Object -FilePath $LogFile -Append
