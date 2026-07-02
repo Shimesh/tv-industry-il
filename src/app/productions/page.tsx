@@ -1495,7 +1495,7 @@ function ProductionsContent() {
               setStatusMessage('הקישור נשמר, אבל לא נמצאו הפקות בלוח. הוא ייבדק שוב בסנכרון האוטומטי.');
             } else {
               const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 120)}` : '';
-              setStatusMessage(`הקישור נשמר, אבל שרת הרצליה אינו זמין כרגע. הסנכרון האוטומטי ינסה שוב.${debugStr}`);
+              setStatusMessage(`הקישור נשמר, אבל החיבור של האפליקציה להרצליה נכשל כרגע. הסנכרון האוטומטי ינסה שוב.${debugStr}`);
             }
             setRequestStatus('idle');
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
@@ -1504,7 +1504,7 @@ function ProductionsContent() {
       } catch {
         shouldPollForBackground = false;
         setRequestStatus('idle');
-        setStatusMessage('הקישור נשמר, אבל החיבור להרצליה ארך יותר מדי. הסנכרון האוטומטי ינסה שוב.');
+        setStatusMessage('הקישור נשמר, אבל החיבור של האפליקציה להרצליה ארך יותר מדי. הסנכרון האוטומטי ינסה שוב.');
       } finally {
         if (syncTimeout) window.clearTimeout(syncTimeout);
       }

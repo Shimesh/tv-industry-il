@@ -41,6 +41,13 @@ jobs:
           crontab -l
           REMOTE
 
+      - name: Check Herzliya connectivity from Oracle
+        run: |
+          ssh -i ~/.ssh/oracle_key \
+              -o StrictHostKeyChecking=no \
+              "${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}" \
+              "curl -4 -k -sS -o /dev/null -w 'Herzliya HTTP %{http_code} connect=%{time_connect}s total=%{time_total}s\n' --connect-timeout 12 --max-time 20 https://hsil.acc.co.il:5443/"
+
       - name: Write .env and run scraper
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
