@@ -1987,7 +1987,10 @@ async function main() {
           eligibleWeekStarts.has(entry.weekStart) ||
           (entry.savedAt && entry.savedAt >= sevenDaysAgo)
         ),
-      );
+      )
+      // A freshly pasted calendar is the most time-sensitive and may be the only
+      // request that succeeds before Herzliya starts rejecting a busy source IP.
+      .sort((a, b) => Number(b.savedAt || 0) - Number(a.savedAt || 0));
 
     console.log(
       `Found ${savedCalendars.length} eligible saved calendars `
@@ -2063,6 +2066,7 @@ async function main() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const isLicense = message.includes('no free license slot');
+          const isNetworkFailure = /ERR_CONNECTION_TIMED_OUT|Navigation timeout|ECONN(?:REFUSED|RESET|TIMEDOUT)|fetch failed/i.test(message);
           if (isLicense) licenseFailCount++;
           console.error(`Hourly sync failed for ${saved.uid}:`, message);
           await syncRef.set({
@@ -2071,6 +2075,10 @@ async function main() {
             lastSyncCount: 0,
             lastSyncError: message.slice(0, 300),
           }, { merge: true });
+          if (isNetworkFailure) {
+            console.error('Herzliya network route is unavailable; stopping this run to avoid repeated blocked requests.');
+            break;
+          }
         }
         // Brief pause between users to avoid hammering the Herzliya server
         if (savedCalendars.indexOf(saved) < savedCalendars.length - 1) {
