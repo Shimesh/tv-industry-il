@@ -17,7 +17,9 @@ jobs:
             --get 'https://api.scraperapi.com/' \
             --data-urlencode "api_key=${SCRAPERAPI_KEY}" \
             --data-urlencode 'url=https://hsil.acc.co.il:5443/' \
-            --data-urlencode 'device_type=mobile')
+            --data-urlencode 'device_type=mobile' \
+            --data-urlencode 'country_code=il' \
+            --data-urlencode 'premium=true')
           bytes=$(wc -c < /tmp/herzliya-response.html)
           echo "ScraperAPI status=${status} bytes=${bytes}"
           test "$status" = "200"
