@@ -1,0 +1,24 @@
+name: Diagnose Herzliya Proxy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe Herzliya through ScraperAPI
+        env:
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+        run: |
+          status=$(curl -sS -o /tmp/herzliya-response.html -w '%{http_code}' \
+            --max-time 80 \
+            --get 'https://api.scraperapi.com/' \
+            --data-urlencode "api_key=${SCRAPERAPI_KEY}" \
+            --data-urlencode 'url=https://hsil.acc.co.il:5443/' \
+            --data-urlencode 'device_type=mobile')
+          bytes=$(wc -c < /tmp/herzliya-response.html)
+          echo "ScraperAPI status=${status} bytes=${bytes}"
+          test "$status" = "200"
+          test "$bytes" -gt 0
