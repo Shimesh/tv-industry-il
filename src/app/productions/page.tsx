@@ -1454,6 +1454,7 @@ function ProductionsContent() {
       // On success show done immediately. On failure, poll user_calendar_sync so local
       // scheduled sync can still complete the visible request without an endless spinner.
       let syncedViaApi = false;
+      let shouldPollForBackground = true;
       let syncTimeout: number | null = null;
       try {
         const syncController = new AbortController();
@@ -1489,23 +1490,27 @@ function ProductionsContent() {
             setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 8000);
           } else {
+            shouldPollForBackground = false;
             if (syncData.reason === 'empty_schedule') {
-              setStatusMessage('הקישור נשמר, בודק עדכון ברקע...');
+              setStatusMessage('הקישור נשמר, אבל לא נמצאו הפקות בלוח. הוא ייבדק שוב בסנכרון האוטומטי.');
             } else {
               const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 120)}` : '';
-              setStatusMessage(`הקישור נשמר. הסנכרון בענן לא הגיע להרצליה, בודק סנכרון מקומי...${debugStr}`);
+              setStatusMessage(`הקישור נשמר, אבל שרת הרצליה אינו זמין כרגע. הסנכרון האוטומטי ינסה שוב.${debugStr}`);
             }
+            setRequestStatus('idle');
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
         }
       } catch {
-        setStatusMessage('הקישור נשמר, ממשיך סנכרון ברקע...');
+        shouldPollForBackground = false;
+        setRequestStatus('idle');
+        setStatusMessage('הקישור נשמר, אבל החיבור להרצליה ארך יותר מדי. הסנכרון האוטומטי ינסה שוב.');
       } finally {
         if (syncTimeout) window.clearTimeout(syncTimeout);
       }
 
       // Fallback: poll the saved sync document for a fresh local/background result.
-      if (!syncedViaApi) {
+      if (!syncedViaApi && shouldPollForBackground) {
         setRequestStatus('processing');
         let localSyncError: string | null = null;
         const stopPolling = (pollInterval: ReturnType<typeof setInterval>, timeoutId: ReturnType<typeof setTimeout>) => {
