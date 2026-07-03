@@ -2026,7 +2026,12 @@ async function main() {
           const targetWeekStart = eligibleWeekStarts.has(urlWeekStart)
             ? urlWeekStart
             : eligibleWeekStarts.has(saved.weekStart) ? saved.weekStart : currentWeekStart;
-          const urlToFetch = urlForWeek(saved.url, targetWeekStart);
+          // A freshly pasted URL already points at the requested week and may carry
+          // a date chosen by Herzliya (for example the Saturday at the end of it).
+          // Preserve that exact URL. Rewrite only stale URLs that must move weeks.
+          const urlToFetch = eligibleWeekStarts.has(urlWeekStart)
+            ? saved.url
+            : urlForWeek(saved.url, targetWeekStart);
           console.log(`Syncing ${saved.uid}: ${urlToFetch}`);
           let schedule = null;
           let lastErr = null;
