@@ -1818,6 +1818,9 @@ export default function AdminPage() {
               <Link href="/admin/industry-master" className="flex items-center gap-1.5 rounded-xl border border-gray-700/60 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-200 transition-colors">
                 <Database className="h-3.5 w-3.5" /> מנהל הפקות
               </Link>
+              <Link href="/admin/calendar-manual" className="flex items-center gap-1.5 rounded-xl border border-orange-400/40 px-3 py-1.5 text-xs text-orange-300 hover:border-orange-300 hover:text-orange-200 transition-colors">
+                <Clapperboard className="h-3.5 w-3.5" /> עדכון יומן ידני
+              </Link>
               <Link href="/admin/sync" className="flex items-center gap-1.5 rounded-xl border border-gray-700/60 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-200 transition-colors">
                 <Settings className="h-3.5 w-3.5" /> כלי סנכרון
               </Link>
