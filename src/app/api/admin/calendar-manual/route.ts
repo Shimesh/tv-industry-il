@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
 import { deleteDocument, getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import { fetchHerzliyaProductions } from '@/lib/server/herzliyaSync';
-import { parseHerzliyaPopupHtml, parseScheduleHTML } from '@/lib/productionScheduleParser';
+import { extractDateFromPopup, extractNameFromPopup, extractStudioFromPopup, parseHerzliyaPopupHtml, parseScheduleHTML } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
-import { generateProductionId, getHebrewDay, getWeekId, type Production } from '@/lib/productionDiff';
+import { canonicalProductionName, generateProductionId, getHebrewDay, getWeekId, type Production } from '@/lib/productionDiff';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -48,6 +48,20 @@ function validateParsedProductions(productions: Production[]): string | null {
   return null;
 }
 
+async function productionFromPopup(targetUid: string, html: string): Promise<Production | null> {
+  const date = extractDateFromPopup(html);
+  const name = extractNameFromPopup(html);
+  const studio = extractStudioFromPopup(html);
+  const crew = parseHerzliyaPopupHtml(html).map((member) => ({ ...member, roleDetail: '', phone: member.phone || null }));
+  if (!date || !name || crew.length === 0) return null;
+  const docs = await listDocuments<Production>(`productions/${targetUid}/weeks/${getWeekId(date)}/productions`).catch(() => []);
+  const canonicalName = canonicalProductionName(name);
+  const existing = docs.find((production) => production.date === date && canonicalProductionName(production.name) === canonicalName)
+    || docs.find((production) => production.date === date && (canonicalProductionName(production.name).includes(canonicalName) || canonicalName.includes(canonicalProductionName(production.name))));
+  if (!existing) return null;
+  return { ...existing, name, studio: studio || existing.studio, crew, isCurrentUserShift: true, crewSource: 'popup', popupParsed: true } as Production;
+}
+
 async function removeManualFallbacks(targetUid: string, weekIds: Set<string>) {
   for (const weekId of weekIds) {
     const docs = await listDocuments<Production & { source?: string }>(`productions/${targetUid}/weeks/${weekId}/productions`).catch(() => []);
@@ -88,6 +102,13 @@ export async function POST(request: NextRequest) {
   if (input) {
     const url = extractUrl(input);
     try {
+      if (!url && /<td[^>]*>\s*נייד\s*<\/td>/i.test(input)) {
+        const popupProduction = await productionFromPopup(targetUid, input);
+        if (!popupProduction) return NextResponse.json({ error: 'נמצאה טבלת צוות, אך לא נמצאה הפקה תואמת לפי השם והתאריך.' }, { status: 422 });
+        if (body.preview) return NextResponse.json({ ok: true, preview: [popupProduction], source: 'popup-html' });
+        const result = await saveProductions(targetUid, authUser.uid, [popupProduction], 'popup-html');
+        return NextResponse.json({ ok: true, ...result, source: 'popup-html' });
+      }
       if (url) {
         const imported = await fetchHerzliyaProductions(url);
         const validationError = validateParsedProductions(imported.productions);

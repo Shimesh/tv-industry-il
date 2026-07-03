@@ -224,7 +224,7 @@ function parsePopupHeader(html: string): { studio: string; isoDate: string; name
       if (dm) return {
         studio: cells[dateIdx - 1],
         isoDate: `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`,
-        name: dateIdx >= 3 ? cells[dateIdx - 2] : undefined,
+        name: cells[dateIdx - 2],
       };
     }
   }
