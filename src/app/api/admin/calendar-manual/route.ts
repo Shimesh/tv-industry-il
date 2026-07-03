@@ -38,6 +38,15 @@ function parseBundle(input: string): { productions: Production[]; workerName: st
   return { productions, workerName: parsed.workerName, source: Object.keys(popupHtmlById).length ? 'html-bundle' : 'html' };
 }
 
+function validateParsedProductions(productions: Production[]): string | null {
+  if (!productions.length) return 'לא נמצאו הפקות בקוד שהודבק';
+  const generic = productions.filter((production) => !production.name.trim() || production.name.trim() === 'הפקה');
+  if (generic.length > 0) return 'הקוד לא זוהה כלוח הרצליה מלא: נמצאו הפקות ללא שם. שום נתון לא נשמר.';
+  const invalidDates = productions.filter((production) => !/^\d{4}-\d{2}-\d{2}$/.test(production.date || ''));
+  if (invalidDates.length > 0) return 'נמצאו הפקות ללא תאריך תקין. שום נתון לא נשמר.';
+  return null;
+}
+
 async function removeManualFallbacks(targetUid: string, weekIds: Set<string>) {
   for (const weekId of weekIds) {
     const docs = await listDocuments<Production & { source?: string }>(`productions/${targetUid}/weeks/${weekId}/productions`).catch(() => []);
@@ -70,7 +79,7 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
 export async function POST(request: NextRequest) {
   const authUser = await requirePrimaryAdminRequest(request);
   if (authUser instanceof NextResponse) return authUser;
-  const body = (await request.json()) as { targetUid?: string; productions?: ManualProduction[]; input?: string };
+  const body = (await request.json()) as { targetUid?: string; productions?: ManualProduction[]; parsedProductions?: Production[]; input?: string; preview?: boolean };
   const targetUid = String(body.targetUid || '').trim();
   if (!targetUid) return NextResponse.json({ error: 'יש לבחור משתמש' }, { status: 400 });
 
@@ -80,17 +89,28 @@ export async function POST(request: NextRequest) {
     try {
       if (url) {
         const imported = await fetchHerzliyaProductions(url);
-        if (!imported.productions.length) return NextResponse.json({ error: 'לא נמצאו הפקות בקישור.' }, { status: 422 });
+        const validationError = validateParsedProductions(imported.productions);
+        if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
+        if (body.preview) return NextResponse.json({ ok: true, preview: imported.productions, source: 'url' });
         const result = await saveProductions(targetUid, authUser.uid, imported.productions, 'url');
         return NextResponse.json({ ok: true, ...result, source: 'url' });
       }
       const imported = parseBundle(input);
-      if (!imported.productions.length) return NextResponse.json({ error: 'לא נמצאו הפקות. יש להדביק את קוד המקור המלא של דף הלוח.' }, { status: 422 });
+      const validationError = validateParsedProductions(imported.productions);
+      if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
+      if (body.preview) return NextResponse.json({ ok: true, preview: imported.productions, source: imported.source, workerName: imported.workerName || '' });
       const result = await saveProductions(targetUid, authUser.uid, imported.productions, imported.source);
       return NextResponse.json({ ok: true, ...result, workerName: imported.workerName || '', source: imported.source });
     } catch (error) {
       return NextResponse.json({ error: url ? 'לא ניתן לפתוח את הקישור מהשרת. הדבק את קוד המקור של דף הלוח במקום את הקישור.' : (error instanceof Error ? error.message : 'הייבוא נכשל') }, { status: 502 });
     }
+  }
+
+  if (Array.isArray(body.parsedProductions)) {
+    const validationError = validateParsedProductions(body.parsedProductions);
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
+    const result = await saveProductions(targetUid, authUser.uid, body.parsedProductions, 'html-preview');
+    return NextResponse.json({ ok: true, ...result, source: 'html-preview' });
   }
 
   const rows = Array.isArray(body.productions) ? body.productions : [];

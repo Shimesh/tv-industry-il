@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, CalendarPlus, ClipboardPaste, Save } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import type { Production } from '@/lib/productionDiff';
 
 type Mode = 'source' | 'rows';
 const EXAMPLE = `2026-07-05 | 13:00 | 23:00 | אולפן 2 | רצועת ערב
@@ -17,11 +18,13 @@ export default function ManualCalendarAdminPage() {
   const [rowsInput, setRowsInput] = useState(EXAMPLE);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [preview, setPreview] = useState<Production[]>([]);
 
   async function save() {
     if (!user) return;
     const body: Record<string, unknown> = { targetUid };
-    if (mode === 'source') body.input = sourceInput;
+    if (mode === 'source' && preview.length === 0) { body.input = sourceInput; body.preview = true; }
+    else if (mode === 'source') body.parsedProductions = preview;
     else body.productions = rowsInput.split(/\r?\n/).filter(Boolean).map((line) => {
       const [date, startTime, endTime, studio, ...name] = line.split('|').map((part) => part.trim());
       return { date, startTime, endTime, studio, name: name.join(' | ') };
@@ -30,9 +33,15 @@ export default function ManualCalendarAdminPage() {
     try {
       const token = await user.getIdToken();
       const response = await fetch('/api/admin/calendar-manual', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const result = await response.json() as { error?: string; personal?: number; global?: number; source?: string };
+      const result = await response.json() as { error?: string; personal?: number; global?: number; source?: string; preview?: Production[] };
       if (!response.ok) throw new Error(result.error || 'השמירה נכשלה');
-      setMessage(`נשמרו ${result.personal || 0} משמרות אישיות ו-${result.global || 0} הפקות בלוח המלא`);
+      if (Array.isArray(result.preview)) {
+        setPreview(result.preview);
+        setMessage(`נמצאו ${result.preview.length} הפקות. בדוק את הרשימה ואשר שמירה.`);
+      } else {
+        setMessage(`נשמרו ${result.personal || 0} משמרות אישיות ו-${result.global || 0} הפקות בלוח המלא`);
+        setPreview([]);
+      }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'השמירה נכשלה'); }
     finally { setSaving(false); }
   }
@@ -45,9 +54,10 @@ export default function ManualCalendarAdminPage() {
       <button onClick={() => setMode('source')} className={`min-h-11 rounded-md px-3 font-semibold ${mode === 'source' ? 'bg-orange-500 text-[#170b09]' : 'text-violet-200'}`}>הודעה, קישור או קוד דף</button>
       <button onClick={() => setMode('rows')} className={`min-h-11 rounded-md px-3 font-semibold ${mode === 'rows' ? 'bg-orange-500 text-[#170b09]' : 'text-violet-200'}`}>הזנת שורות</button>
     </div>
-    {mode === 'source' ? <label className="block space-y-2"><span className="text-sm font-semibold">הדבק כאן</span><textarea value={sourceInput} onChange={(e) => setSourceInput(e.target.value)} rows={16} placeholder="הדבק הודעת WhatsApp, קישור, או את קוד המקור המלא של דף הרצליה" className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-6 outline-none focus:border-orange-400" spellCheck={false} /><p className="text-xs leading-5 text-violet-300">לקבלת אנשי צוות יש להדביק חבילת JSON הכוללת scheduleHtml ו-popupHtmlById. קוד הלוח לבדו מחלץ את כל ההפקות שמופיעות בו.</p></label>
+    {mode === 'source' ? <label className="block space-y-2"><span className="text-sm font-semibold">הדבק כאן</span><textarea value={sourceInput} onChange={(e) => { setSourceInput(e.target.value); setPreview([]); setMessage(''); }} rows={16} placeholder="הדבק הודעת WhatsApp, קישור, או את קוד המקור המלא של דף הרצליה" className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-6 outline-none focus:border-orange-400" spellCheck={false} /><p className="text-xs leading-5 text-violet-300">לקבלת אנשי צוות יש להדביק חבילת JSON הכוללת scheduleHtml ו-popupHtmlById. קוד הלוח לבדו מחלץ את כל ההפקות שמופיעות בו.</p></label>
       : <label className="block space-y-2"><span className="text-sm font-semibold">כל שורה: תאריך | התחלה | סיום | אולפן | שם הפקה</span><textarea value={rowsInput} onChange={(e) => setRowsInput(e.target.value)} rows={14} className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-7 outline-none focus:border-orange-400" spellCheck={false} /></label>}
-    <button onClick={() => void save()} disabled={saving || (mode === 'source' && !sourceInput.trim())} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 font-bold text-[#170b09] hover:bg-orange-400 disabled:opacity-60">{mode === 'source' ? <ClipboardPaste className="h-5 w-5" /> : <Save className="h-5 w-5" />} {saving ? 'מחלץ ושומר...' : 'חלץ, שמור והצג ביומן'}</button>
+    {preview.length > 0 && <section className="space-y-2 rounded-lg border border-emerald-400/40 bg-[#17102f] p-4"><h2 className="font-bold text-emerald-300">תצוגה מקדימה לפני שמירה</h2>{preview.map((production) => <div key={`${production.id}-${production.date}`} className="grid grid-cols-[1fr_auto] gap-3 border-t border-white/10 py-2 text-sm"><span>{production.name}</span><span dir="ltr" className="text-violet-200">{production.date} · {production.startTime}-{production.endTime} · {production.crew?.length || 0} צוות</span></div>)}</section>}
+    <button onClick={() => void save()} disabled={saving || (mode === 'source' && !sourceInput.trim())} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 font-bold text-[#170b09] hover:bg-orange-400 disabled:opacity-60">{mode === 'source' && preview.length === 0 ? <ClipboardPaste className="h-5 w-5" /> : <Save className="h-5 w-5" />} {saving ? 'מעבד...' : mode === 'source' && preview.length === 0 ? 'חלץ והצג תצוגה מקדימה' : 'אשר ושמור ביומן'}</button>
     {message && <p className="rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-center text-sm">{message}</p>}
   </section></main>;
 }
