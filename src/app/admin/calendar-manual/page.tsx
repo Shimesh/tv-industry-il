@@ -2,40 +2,52 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CalendarPlus, Save } from 'lucide-react';
+import { ArrowRight, CalendarPlus, ClipboardPaste, Save } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
+type Mode = 'source' | 'rows';
 const EXAMPLE = `2026-07-05 | 13:00 | 23:00 | אולפן 2 | רצועת ערב
 2026-07-06 | 19:00 | 24:30 | אולפן 7 | מונדיאל 2026`;
 
 export default function ManualCalendarAdminPage() {
   const { user } = useAuth();
   const [targetUid, setTargetUid] = useState('pVtM4KuNSSSexQ3W32UmImJHJID3');
-  const [text, setText] = useState(EXAMPLE);
+  const [mode, setMode] = useState<Mode>('source');
+  const [sourceInput, setSourceInput] = useState('');
+  const [rowsInput, setRowsInput] = useState(EXAMPLE);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+
   async function save() {
     if (!user) return;
-    const productions = text.split(/\r?\n/).filter(Boolean).map((line) => {
+    const body: Record<string, unknown> = { targetUid };
+    if (mode === 'source') body.input = sourceInput;
+    else body.productions = rowsInput.split(/\r?\n/).filter(Boolean).map((line) => {
       const [date, startTime, endTime, studio, ...name] = line.split('|').map((part) => part.trim());
       return { date, startTime, endTime, studio, name: name.join(' | ') };
     });
     setSaving(true); setMessage('');
     try {
       const token = await user.getIdToken();
-      const response = await fetch('/api/admin/calendar-manual', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ targetUid, productions }) });
-      const result = await response.json() as { error?: string; written?: number };
+      const response = await fetch('/api/admin/calendar-manual', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const result = await response.json() as { error?: string; personal?: number; global?: number; source?: string };
       if (!response.ok) throw new Error(result.error || 'השמירה נכשלה');
-      setMessage(`${result.written || 0} הפקות נשמרו ביומן האישי`);
+      setMessage(`נשמרו ${result.personal || 0} משמרות אישיות ו-${result.global || 0} הפקות בלוח המלא`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'השמירה נכשלה'); }
     finally { setSaving(false); }
   }
+
   return <main dir="rtl" className="min-h-screen bg-[#09061a] px-4 py-24 text-white"><section className="mx-auto max-w-3xl space-y-6">
     <Link href="/admin" className="inline-flex items-center gap-2 text-sm text-violet-200 hover:text-white"><ArrowRight className="h-4 w-4" /> חזרה לניהול</Link>
-    <header className="space-y-2"><div className="flex items-center gap-3"><CalendarPlus className="h-7 w-7 text-orange-400" /><h1 className="text-2xl font-bold">עדכון ידני של יומן הפקות</h1></div><p className="text-sm text-violet-200">כל שורה: תאריך | התחלה | סיום | אולפן | שם הפקה</p></header>
+    <header className="space-y-2"><div className="flex items-center gap-3"><CalendarPlus className="h-7 w-7 text-orange-400" /><h1 className="text-2xl font-bold">עדכון ידני של יומן הפקות</h1></div><p className="text-sm text-violet-200">ייבוא לוח מהרצליה גם כאשר הסנכרון האוטומטי אינו זמין.</p></header>
     <label className="block space-y-2"><span className="text-sm font-semibold">מזהה המשתמש</span><input value={targetUid} onChange={(e) => setTargetUid(e.target.value)} className="w-full rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 font-mono text-sm outline-none focus:border-orange-400" dir="ltr" /></label>
-    <label className="block space-y-2"><span className="text-sm font-semibold">הפקות</span><textarea value={text} onChange={(e) => setText(e.target.value)} rows={14} className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-7 outline-none focus:border-orange-400" spellCheck={false} /></label>
-    <button onClick={() => void save()} disabled={saving} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 font-bold text-[#170b09] hover:bg-orange-400 disabled:opacity-60"><Save className="h-5 w-5" /> {saving ? 'שומר...' : 'שמור והצג ביומן'}</button>
+    <div className="grid grid-cols-2 gap-2 rounded-lg bg-[#17102f] p-1">
+      <button onClick={() => setMode('source')} className={`min-h-11 rounded-md px-3 font-semibold ${mode === 'source' ? 'bg-orange-500 text-[#170b09]' : 'text-violet-200'}`}>הודעה, קישור או קוד דף</button>
+      <button onClick={() => setMode('rows')} className={`min-h-11 rounded-md px-3 font-semibold ${mode === 'rows' ? 'bg-orange-500 text-[#170b09]' : 'text-violet-200'}`}>הזנת שורות</button>
+    </div>
+    {mode === 'source' ? <label className="block space-y-2"><span className="text-sm font-semibold">הדבק כאן</span><textarea value={sourceInput} onChange={(e) => setSourceInput(e.target.value)} rows={16} placeholder="הדבק הודעת WhatsApp, קישור, או את קוד המקור המלא של דף הרצליה" className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-6 outline-none focus:border-orange-400" spellCheck={false} /><p className="text-xs leading-5 text-violet-300">לקבלת אנשי צוות יש להדביק חבילת JSON הכוללת scheduleHtml ו-popupHtmlById. קוד הלוח לבדו מחלץ את כל ההפקות שמופיעות בו.</p></label>
+      : <label className="block space-y-2"><span className="text-sm font-semibold">כל שורה: תאריך | התחלה | סיום | אולפן | שם הפקה</span><textarea value={rowsInput} onChange={(e) => setRowsInput(e.target.value)} rows={14} className="w-full resize-y rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-sm leading-7 outline-none focus:border-orange-400" spellCheck={false} /></label>}
+    <button onClick={() => void save()} disabled={saving || (mode === 'source' && !sourceInput.trim())} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 font-bold text-[#170b09] hover:bg-orange-400 disabled:opacity-60">{mode === 'source' ? <ClipboardPaste className="h-5 w-5" /> : <Save className="h-5 w-5" />} {saving ? 'מחלץ ושומר...' : 'חלץ, שמור והצג ביומן'}</button>
     {message && <p className="rounded-lg border border-violet-400/30 bg-[#17102f] px-4 py-3 text-center text-sm">{message}</p>}
   </section></main>;
 }
