@@ -62,6 +62,16 @@ async function productionFromPopup(targetUid: string, html: string): Promise<Pro
   return { ...existing, name, studio: studio || existing.studio, crew, isCurrentUserShift: true, crewSource: 'popup', popupParsed: true } as Production;
 }
 
+async function productionsFromPopupInput(targetUid: string, html: string): Promise<Production[]> {
+  const starts = [...html.matchAll(/<div[^>]*class=["'][^"']*\bmodal-body\b[^"']*["'][^>]*>/gi)].map((match) => match.index || 0);
+  const blocks = starts.length > 1
+    ? starts.map((start, index) => html.slice(start, starts[index + 1] ?? html.length))
+    : [html];
+  const parsed = await Promise.all(blocks.map((block) => productionFromPopup(targetUid, block)));
+  const byId = new Map(parsed.filter((production): production is Production => Boolean(production)).map((production) => [production.id, production]));
+  return [...byId.values()];
+}
+
 async function removeManualFallbacks(targetUid: string, weekIds: Set<string>) {
   for (const weekId of weekIds) {
     const docs = await listDocuments<Production & { source?: string }>(`productions/${targetUid}/weeks/${weekId}/productions`).catch(() => []);
@@ -103,10 +113,10 @@ export async function POST(request: NextRequest) {
     const url = extractUrl(input);
     try {
       if (!url && /<td[^>]*>\s*נייד\s*<\/td>/i.test(input)) {
-        const popupProduction = await productionFromPopup(targetUid, input);
-        if (!popupProduction) return NextResponse.json({ error: 'נמצאה טבלת צוות, אך לא נמצאה הפקה תואמת לפי השם והתאריך.' }, { status: 422 });
-        if (body.preview) return NextResponse.json({ ok: true, preview: [popupProduction], source: 'popup-html' });
-        const result = await saveProductions(targetUid, authUser.uid, [popupProduction], 'popup-html');
+        const popupProductions = await productionsFromPopupInput(targetUid, input);
+        if (!popupProductions.length) return NextResponse.json({ error: 'נמצאו טבלאות צוות, אך לא נמצאו הפקות תואמות לפי השם והתאריך.' }, { status: 422 });
+        if (body.preview) return NextResponse.json({ ok: true, preview: popupProductions, source: 'popup-html' });
+        const result = await saveProductions(targetUid, authUser.uid, popupProductions, 'popup-html');
         return NextResponse.json({ ok: true, ...result, source: 'popup-html' });
       }
       if (url) {
