@@ -167,6 +167,8 @@ function parseHerzliyaEventSummary(chunk: string): {
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
     .replace(/\s+/g, ' ')
     .trim();
   const timeMatch = eventText.match(
@@ -833,8 +835,11 @@ function parseEventCrewFromHtml(chunk: string): { crew: CrewMember[]; startTime:
  * Strategy 2 fallback: extract all openmd2 events in order and assign dates by position.
  */
 function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
-  const headerStart = html.indexOf('calendar-header');
-  const bodyStart = html.indexOf('calendar-body');
+  // Match real elements, not the same class names inside the page's <style> block.
+  const headerTag = /<[^/!>][^>]*class=["'][^"']*\bcalendar-header\b[^"']*["'][^>]*>/i.exec(html);
+  const bodyTag = /<[^/!>][^>]*class=["'][^"']*\bcalendar-body\b[^"']*["'][^>]*>/i.exec(html);
+  const headerStart = headerTag?.index ?? -1;
+  const bodyStart = bodyTag?.index ?? -1;
   if (headerStart === -1 || bodyStart === -1 || headerStart > bodyStart) {
     return { workerName: '', weekStart: '', weekEnd: '', productions: [] };
   }
@@ -884,7 +889,13 @@ function parseHerzliyaHTMLServer(html: string): ParsedSchedule {
         const endTime = parsedCrew.endTime || summary.endTime;
         const studioFromParts = parsedCrew.studio;
         const studio = studioFromParts || studioFromName;
-        productions.push({ id: generateProductionId(name, isoDate, studio, startTime), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId });
+        const marker = new RegExp(`onclick=["']openmd2\\(${herzliyaId}\\)`, 'i');
+        const markerIndex = cellHtml.search(marker);
+        const tagStart = markerIndex >= 0 ? cellHtml.lastIndexOf('<', markerIndex) : -1;
+        const tagEnd = markerIndex >= 0 ? cellHtml.indexOf('>', markerIndex) : -1;
+        const openingTag = tagStart >= 0 && tagEnd > tagStart ? cellHtml.slice(tagStart, tagEnd + 1) : '';
+        const isCurrentUserShift = /class=["'][^"']*\bsat\b/i.test(openingTag);
+        productions.push({ id: String(herzliyaId), name, studio, date: isoDate, day: getHebrewDay(isoDate), startTime, endTime, status: 'scheduled', crew, herzliyaId, isCurrentUserShift });
       }
     });
   }

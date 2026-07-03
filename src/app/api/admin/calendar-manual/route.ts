@@ -28,12 +28,13 @@ function parseBundle(input: string): { productions: Production[]; workerName: st
   const parsed = parseScheduleHTML(bundle.scheduleHtml || '', bundle.departmentHtml || '');
   const popupHtmlById = bundle.popupHtmlById || {};
   const productions = parsed.productions.map((production) => {
+    const stableProduction = production.herzliyaId ? { ...production, id: String(production.herzliyaId) } : production;
     const popup = production.herzliyaId ? popupHtmlById[String(production.herzliyaId)] : '';
-    if (!popup) return production;
+    if (!popup) return stableProduction;
     const crew = parseHerzliyaPopupHtml(popup).map((member) => ({
       ...member, roleDetail: '', phone: member.phone || null,
     }));
-    return { ...production, crew, crewSource: 'popup', popupParsed: true } as Production;
+    return { ...stableProduction, crew, crewSource: 'popup', popupParsed: true } as Production;
   });
   return { productions, workerName: parsed.workerName, source: Object.keys(popupHtmlById).length ? 'html-bundle' : 'html' };
 }
