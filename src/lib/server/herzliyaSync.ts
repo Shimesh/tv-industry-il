@@ -41,7 +41,8 @@ export type UserCalendarSyncDoc = {
   herzliyaUser?: string;
   herzliyaPass?: string;
   lastSyncAt?: number;
-  lastSyncStatus?: 'success' | 'error' | 'empty';
+  lastSyncStatus?: 'pending' | 'success' | 'error' | 'empty';
+  lastSyncRequestedAt?: number;
   lastSyncCount?: number;
   lastSyncError?: string | null;
 };

@@ -1473,6 +1473,7 @@ function ProductionsContent() {
             synced?: boolean;
             count?: number;
             reason?: string;
+            queued?: boolean;
             studios?: Array<{ name: string; studio: string }>;
             debug?: string;
             fullCalendarDetected?: boolean;
@@ -1490,21 +1491,20 @@ function ProductionsContent() {
             setRequestStatus('done');
             setTimeout(() => setRequestStatus('idle'), 8000);
           } else {
-            shouldPollForBackground = false;
+            shouldPollForBackground = syncData.ok && syncData.queued !== false;
             if (syncData.reason === 'empty_schedule') {
-              setStatusMessage('הקישור נשמר, אבל לא נמצאו הפקות בלוח. הוא ייבדק שוב בסנכרון האוטומטי.');
+              setStatusMessage('הקישור נשמר. הסנכרון ממשיך ברקע ויבדוק שוב את הלוח.');
             } else {
-              const debugStr = syncData.debug ? ` | ${syncData.debug.slice(0, 120)}` : '';
-              setStatusMessage(`הקישור נשמר, אבל החיבור של האפליקציה להרצליה נכשל כרגע. הסנכרון האוטומטי ינסה שוב.${debugStr}`);
+              setStatusMessage('הקישור נשמר. הסנכרון המיידי לא הסתיים והעיבוד ממשיך ברקע.');
             }
-            setRequestStatus('idle');
+            setRequestStatus(shouldPollForBackground ? 'processing' : 'idle');
             console.log('[save-sync-url] response:', JSON.stringify(syncData));
           }
         }
       } catch {
-        shouldPollForBackground = false;
-        setRequestStatus('idle');
-        setStatusMessage('הקישור נשמר, אבל החיבור של האפליקציה להרצליה ארך יותר מדי. הסנכרון האוטומטי ינסה שוב.');
+        shouldPollForBackground = true;
+        setRequestStatus('processing');
+        setStatusMessage('הקישור נשמר. הסנכרון המיידי ארך יותר מהצפוי והעיבוד ממשיך ברקע.');
       } finally {
         if (syncTimeout) window.clearTimeout(syncTimeout);
       }
@@ -1534,7 +1534,7 @@ function ProductionsContent() {
                   return;
                 }
                 if (status === 'error') {
-                  localSyncError = (data.error as string) || 'הסנכרון בענן נכשל';
+                  localSyncError = (data.error as string) || null;
                 }
               }
             }
@@ -1558,9 +1558,7 @@ function ProductionsContent() {
             if (prev !== 'pending' && prev !== 'processing') return prev;
             setRequestError(localSyncError);
             setStatusMessage(
-              localSyncError
-                ? `הקישור נשמר, אבל הסנכרון עדיין לא הסתיים: ${localSyncError}`
-                : 'הקישור נשמר. הסנכרון ימשיך ברקע ויעדכן את היומן כשיסתיים.',
+              'הקישור נשמר. הסנכרון ממשיך ברקע ויעדכן את היומן כשיסתיים.',
             );
             return 'idle';
           });
@@ -3316,13 +3314,13 @@ function ScheduleRequestStatus({
 }) {
   const steps = [
     { id: 1, text: 'ההודעה התקבלה', icon: '✅' },
-    { id: 2, text: 'מתחבר לשרת השידורים...', icon: '🔗' },
-    { id: 3, text: 'קורא לוח שידורים', icon: '📋' },
-    { id: 4, text: 'מעבד נתוני צוות', icon: '👥' },
-    { id: 5, text: 'שומר ביומן', icon: '💾' },
+    { id: 2, text: 'הקישור נשמר', icon: '🔗' },
+    { id: 3, text: 'בודק סנכרון מיידי', icon: '📋' },
+    { id: 4, text: 'מעבד את הלוח ברקע', icon: '👥' },
+    { id: 5, text: 'היומן עודכן', icon: '💾' },
   ];
 
-  const activeStep = status === 'pending' ? 2 : status === 'processing' ? 3 : status === 'done' ? 6 : 0;
+  const activeStep = status === 'pending' ? 2 : status === 'processing' ? 4 : status === 'done' ? 6 : 0;
 
   if (status === 'error') {
     return (

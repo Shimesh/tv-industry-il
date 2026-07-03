@@ -59,6 +59,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     workerName,
     savedAt: Date.now(),
     weekStart: getWeekStartFromHerzliyaUrl(url) ?? getCurrentWeekStartIsrael(),
+    lastSyncStatus: 'pending',
+    lastSyncRequestedAt: Date.now(),
     ...(sessionCookie ? { sessionCookie } : {}),
     ...(herzliyaUser ? { herzliyaUser } : {}),
     ...(herzliyaPass ? { herzliyaPass } : {}),
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const statusPatch: Partial<UserCalendarSyncDoc> = {
       lastSyncAt: Date.now(),
-      lastSyncStatus: result.status,
+      lastSyncStatus: result.status === 'success' ? 'success' : 'pending',
       lastSyncCount: result.status === 'success' ? result.count : 0,
       lastSyncError: result.status === 'error' ? result.error : null,
     };
@@ -106,15 +108,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         calendarEmploymentType: result.fullCalendarDetected ? 'employee' : undefined,
       });
     }
-    return NextResponse.json({ ok: true, synced: false, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error', debug: (result as { debug?: string }).debug });
+    return NextResponse.json({ ok: true, synced: false, queued: true, reason: result.status === 'empty' ? 'empty_schedule' : 'sync_error', debug: (result as { debug?: string }).debug });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     await patchDocument(userSyncPath, {
       lastSyncAt: Date.now(),
-      lastSyncStatus: 'error',
+      lastSyncStatus: 'pending',
       lastSyncError: errorMsg.slice(0, 300),
     } as unknown as Record<string, string>).catch(() => {});
 
-    return NextResponse.json({ ok: true, synced: false, reason: 'sync_error', error: errorMsg });
+    return NextResponse.json({ ok: true, synced: false, queued: true, reason: 'sync_error', error: errorMsg });
   }
 }
