@@ -149,7 +149,9 @@ function parseRankedItem(segment: { sourceRank: number; text: string }): Telegra
     showName = beforePercent.replace(/\s*-\s*$/u, '');
   }
 
-  showName = normalizeWhitespace(showName.replace(/\d+(?:\.\d+)?k\b/gi, ''));
+  showName = normalizeWhitespace(showName.replace(/\d+(?:\.\d+)?k\b/gi, ''))
+    .replace(/[,;-]+\s*$/u, '')
+    .trim();
   channel = normalizeChannel(channel);
 
   if (!showName) return null;

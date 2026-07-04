@@ -1607,6 +1607,20 @@ export default function AdminPage() {
   const midrugJobRunning =
     runningFirebaseSync ||
     (midrugRatingsJob?.lastStatus === 'running' && !midrugJobIsStale);
+  const telegramJobIsStale =
+    telegramRatingsJob?.lastStatus === 'running' &&
+    !!telegramRatingsJob.lastRunAt &&
+    Date.now() - new Date(telegramRatingsJob.lastRunAt).getTime() > 3 * 60 * 1000;
+  const telegramJobRunning =
+    runningTelegramSync ||
+    (telegramRatingsJob?.lastStatus === 'running' && !telegramJobIsStale);
+  const telegramJobForDisplay = telegramJobIsStale && telegramRatingsJob
+    ? {
+        ...telegramRatingsJob,
+        lastStatus: 'failure' as const,
+        lastMessage: 'הריצה הקודמת נעצרה לפני שהושלמה. אפשר להפעיל סנכרון חדש.',
+      }
+    : telegramRatingsJob;
 
   const effectiveRatingsJob = midrugRatingsJob;
   const runningRatingsSync = runningFirebaseSync;
@@ -2304,18 +2318,18 @@ export default function AdminPage() {
             <RatingsJobCard
               title="Scopt Telegram"
               description="משיכת ההודעה האחרונה מערוץ Scopt בטלגרם ושמירת מדדי החדשות והפריים תחת אותו מסמך יומי."
-              job={telegramRatingsJob}
-              running={runningTelegramSync || telegramRatingsJob?.lastStatus === 'running'}
+              job={telegramJobForDisplay}
+              running={telegramJobRunning}
               tone="sky"
               icon={<MessageCircle className="h-4 w-4 text-sky-300" />}
               action={(
                 <button
                   type="button"
                   onClick={() => void runTelegramRatingsSync()}
-                  disabled={runningTelegramSync || telegramRatingsJob?.lastStatus === 'running'}
+                  disabled={telegramJobRunning}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-sky-500/20 transition-colors hover:bg-sky-500 disabled:opacity-60"
                 >
-                  <RefreshCw className={`h-4 w-4 ${(runningTelegramSync || telegramRatingsJob?.lastStatus === 'running') ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ${telegramJobRunning ? 'animate-spin' : ''}`} />
                   משוך מ-Scopt
                 </button>
               )}
