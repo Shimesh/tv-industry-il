@@ -96,6 +96,28 @@ type ESPNCompetitor = {
   team?: { displayName?: string; abbreviation?: string; logo?: string };
   score?: string;
 };
+
+// football-data assigns its own chronological matchday sequence to several
+// Round-of-32 fixtures. These stable source IDs map them back to FIFA's official
+// match numbers, which drive the schedule and knockout bracket.
+const FOOTBALL_DATA_CANONICAL_MATCH_NUMBERS: Record<number, number> = {
+  537417: 73,
+  537415: 74,
+  537418: 75,
+  537423: 76,
+  537416: 77,
+  537424: 78,
+  537425: 79,
+  537426: 80,
+  537422: 81,
+  537421: 82,
+  537420: 83,
+  537419: 84,
+  537429: 85,
+  537428: 86,
+  537427: 87,
+  537430: 88,
+};
 type ESPNEvent = {
   id?: string;
   date?: string;
@@ -372,7 +394,9 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
         ? fallbackMatches.find((candidate) =>
             candidate.homeTeam.id === normalizedHome.id && candidate.awayTeam.id === normalizedAway.id)
         : undefined;
-      const reportedMatchNumber = match.matchday ?? index + 1;
+      const reportedMatchNumber = FOOTBALL_DATA_CANONICAL_MATCH_NUMBERS[match.id]
+        ?? match.matchday
+        ?? index + 1;
       const base = baseByTeams
         ?? fallbackMatches.find((candidate) => candidate.matchNumber === reportedMatchNumber)
         ?? fallbackMatches[index];
