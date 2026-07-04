@@ -363,10 +363,20 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     source = 'football-data';
     const nowMs = Date.now();
     matches = fdMatches.map((match, index) => {
-      const matchNumber = match.matchday ?? index + 1;
-      const base = fallbackMatches.find((candidate) => candidate.matchNumber === matchNumber) ?? fallbackMatches[index];
       const normalizedHome = normalizeTeam(match.homeTeam);
       const normalizedAway = normalizeTeam(match.awayTeam);
+      // football-data's `matchday` is the chronological tournament sequence,
+      // not FIFA's official match number. Knockout games played on the same day
+      // can therefore be numbered differently. Prefer the canonical team pairing.
+      const baseByTeams = normalizedHome.id !== 'tbd' && normalizedAway.id !== 'tbd'
+        ? fallbackMatches.find((candidate) =>
+            candidate.homeTeam.id === normalizedHome.id && candidate.awayTeam.id === normalizedAway.id)
+        : undefined;
+      const reportedMatchNumber = match.matchday ?? index + 1;
+      const base = baseByTeams
+        ?? fallbackMatches.find((candidate) => candidate.matchNumber === reportedMatchNumber)
+        ?? fallbackMatches[index];
+      const matchNumber = base?.matchNumber ?? reportedMatchNumber;
       const kickoffMs = match.utcDate ? Date.parse(match.utcDate) : 0;
       const kickoffInFuture = kickoffMs > nowMs;
       // Never mark a match as finished/live if its kickoff is still in the future —
