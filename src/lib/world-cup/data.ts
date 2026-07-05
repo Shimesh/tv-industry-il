@@ -145,6 +145,11 @@ const FOOTBALL_DATA_CANONICAL_MATCH_NUMBERS: Record<number, number> = {
   537430: 87,
   537428: 88,
 };
+
+const KICKOFF_OVERRIDES: Record<number, string> = {
+  // Mexico v England delayed by one hour due to the severe-weather protocol.
+  92: '2026-07-06T01:00:00.000Z',
+};
 type ESPNEvent = {
   id?: string;
   date?: string;
@@ -525,6 +530,10 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
   }
 
   matches = resolveFinishedKnockoutParticipants(matches);
+  matches = matches.map((match) => {
+    const kickoff = KICKOFF_OVERRIDES[match.matchNumber];
+    return kickoff ? { ...match, kickoff } : match;
+  });
 
   return { matches, source, updatedAt: new Date().toISOString() };
 }
