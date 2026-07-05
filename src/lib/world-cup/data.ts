@@ -77,6 +77,33 @@ function normalizeStage(stage?: string): WorldCupMatch['stage'] {
   return 'group';
 }
 
+function resolveFinishedKnockoutParticipants(matches: WorldCupMatch[]): WorldCupMatch[] {
+  const byNumber = new Map(matches.map((match) => [match.matchNumber, match]));
+
+  const resolveReference = (team: WorldCupTeam): WorldCupTeam => {
+    const reference = team.id.match(/^([wl])-?(\d+)$/i);
+    if (!reference) return team;
+    const source = byNumber.get(Number(reference[2]));
+    if (!source || source.status !== 'finished' || source.homeScore == null || source.awayScore == null) return team;
+    if (source.homeScore === source.awayScore) return team;
+    const homeWon = source.homeScore > source.awayScore;
+    if (reference[1].toLowerCase() === 'w') return homeWon ? source.homeTeam : source.awayTeam;
+    return homeWon ? source.awayTeam : source.homeTeam;
+  };
+
+  return [...matches]
+    .sort((a, b) => a.matchNumber - b.matchNumber)
+    .map((match) => {
+      const homeTeam = resolveReference(match.homeTeam);
+      const awayTeam = resolveReference(match.awayTeam);
+      const resolved = homeTeam === match.homeTeam && awayTeam === match.awayTeam
+        ? match
+        : { ...match, homeTeam, awayTeam };
+      byNumber.set(resolved.matchNumber, resolved);
+      return resolved;
+    });
+}
+
 async function fetchFootballData<T>(path: string): Promise<T | null> {
   const token = process.env.FOOTBALL_DATA_API_TOKEN?.trim();
   if (!token) return null;
@@ -488,6 +515,8 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
       }
     } catch { /* ignore, use current status */ }
   }
+
+  matches = resolveFinishedKnockoutParticipants(matches);
 
   return { matches, source, updatedAt: new Date().toISOString() };
 }
