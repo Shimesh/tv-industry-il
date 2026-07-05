@@ -50,6 +50,7 @@ type RawContact = {
 
 type RawAppConfig = {
   maintenanceMode?: boolean;
+  calendarForcePersonal?: boolean;
   boardAnnouncement?: string;
   ratingsAutomation?: {
     midrugEnabled?: boolean;
@@ -436,6 +437,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
 
   const appConfig: AppConfigSnapshot = {
     maintenanceMode: Boolean(appConfigRaw?.maintenanceMode),
+    calendarForcePersonal: Boolean(appConfigRaw?.calendarForcePersonal),
     boardAnnouncement: String(appConfigRaw?.boardAnnouncement || ''),
     ratingsAutomation: {
       midrugEnabled: appConfigRaw?.ratingsAutomation?.midrugEnabled !== false,

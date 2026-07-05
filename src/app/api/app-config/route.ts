@@ -7,6 +7,7 @@ export async function GET() {
   try {
     const config = await getDocument<{
       maintenanceMode?: boolean;
+      calendarForcePersonal?: boolean;
       boardAnnouncement?: string;
       ratingsAutomation?: {
         midrugEnabled?: boolean;
@@ -20,6 +21,7 @@ export async function GET() {
 
     return NextResponse.json({
       maintenanceMode: Boolean(config?.maintenanceMode),
+      calendarForcePersonal: Boolean(config?.calendarForcePersonal),
       boardAnnouncement: String(config?.boardAnnouncement || ''),
       ratingsAutomation: {
         midrugEnabled: config?.ratingsAutomation?.midrugEnabled !== false,
@@ -34,6 +36,7 @@ export async function GET() {
     return NextResponse.json(
       {
         maintenanceMode: false,
+        calendarForcePersonal: false,
         boardAnnouncement: '',
         ratingsAutomation: {
           midrugEnabled: true,

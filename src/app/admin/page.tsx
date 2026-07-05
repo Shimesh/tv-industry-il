@@ -39,6 +39,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
+import {
+  CALENDAR_PREVIEW_CHANGED_EVENT,
+  CALENDAR_PREVIEW_STORAGE_KEY,
+  type CalendarPreviewMode,
+} from '@/lib/calendarAccess';
 import type { AdminLoginMethod, AdminOverview, AdminRole, AdminUserSummary, ContactDiscovery, JobStatusMetric, PageViewEvent, SystemEventRecord } from '@/lib/adminTypes';
 import { INDUSTRY_DEPARTMENT_OPTIONS, INDUSTRY_ROLE_OPTIONS } from '@/constants/departments';
 import { normalizeProfessionalFields, stringArray } from '@/lib/professionalFields';
@@ -127,6 +133,7 @@ const EMPTY_OVERVIEW: AdminOverview = {
   },
   appConfig: {
     maintenanceMode: false,
+    calendarForcePersonal: false,
     boardAnnouncement: '',
     ratingsAutomation: {
       midrugEnabled: true,
@@ -683,6 +690,7 @@ const KNOWN_PAGES: Array<{ key: string; label: string }> = [
 
 export default function AdminPage() {
   const { user, profile, loading: authLoading } = useAuth();
+  const { refresh: refreshAppConfig } = useAppConfig();
   const [overview, setOverview] = useState<AdminOverview>(EMPTY_OVERVIEW);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -697,6 +705,14 @@ export default function AdminPage() {
   const [claimingAdmin, setClaimingAdmin] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [calendarPreviewMode, setCalendarPreviewMode] = useState<CalendarPreviewMode>(() => {
+    if (typeof window === 'undefined') return 'full';
+    try {
+      return window.localStorage.getItem(CALENDAR_PREVIEW_STORAGE_KEY) === 'personal' ? 'personal' : 'full';
+    } catch {
+      return 'full';
+    }
+  });
   const [runningSync, setRunningSync] = useState(false);
   const [runningFirebaseSync, setRunningFirebaseSync] = useState(false);
   const [runningTelegramSync, setRunningTelegramSync] = useState(false);
@@ -1111,6 +1127,7 @@ export default function AdminPage() {
 
   async function saveAppConfig(next: {
     maintenanceMode?: boolean;
+    calendarForcePersonal?: boolean;
     boardAnnouncement?: string;
     ratingsAutomation?: Partial<AdminOverview['appConfig']['ratingsAutomation']>;
   }) {
@@ -1125,6 +1142,10 @@ export default function AdminPage() {
           typeof next.maintenanceMode === 'boolean'
             ? next.maintenanceMode
             : overview.appConfig.maintenanceMode,
+        calendarForcePersonal:
+          typeof next.calendarForcePersonal === 'boolean'
+            ? next.calendarForcePersonal
+            : overview.appConfig.calendarForcePersonal,
         boardAnnouncement:
           typeof next.boardAnnouncement === 'string'
             ? next.boardAnnouncement
@@ -1136,6 +1157,7 @@ export default function AdminPage() {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      await refreshAppConfig();
       draftDirtyRef.current = false;
       showToast('ok', 'הגדרות המערכת נשמרו');
       await loadOverview(true);
@@ -1143,6 +1165,16 @@ export default function AdminPage() {
       showToast('err', configError instanceof Error ? configError.message : 'שגיאה בשמירת הגדרות');
     } finally {
       setSavingConfig(false);
+    }
+  }
+
+  function setAdminCalendarPreview(mode: Exclude<CalendarPreviewMode, 'policy'>) {
+    setCalendarPreviewMode(mode);
+    try {
+      window.localStorage.setItem(CALENDAR_PREVIEW_STORAGE_KEY, mode);
+      window.dispatchEvent(new CustomEvent(CALENDAR_PREVIEW_CHANGED_EVENT, { detail: mode }));
+    } catch {
+      showToast('err', 'לא ניתן לשמור את מצב תצוגת היומן בדפדפן');
     }
   }
 
@@ -2706,6 +2738,79 @@ export default function AdminPage() {
           >
             <div className="p-4 sm:p-5">
             <div className="space-y-5">
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/15 p-4" dir="rtl">
+                <div className="mb-4 flex items-center gap-2">
+                  <Clapperboard className="h-4 w-4 text-cyan-300" />
+                  <span className="text-sm font-medium text-white">בקרת תצוגת יומנים</span>
+                </div>
+
+                <div className="mb-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-gray-200">התצוגה שלך כמנהל</div>
+                      <div className="text-xs text-gray-500">משפיעה על היומן ועל הווידג׳ט שלך בלבד</div>
+                    </div>
+                    <Link
+                      href={`/productions?preview=${calendarPreviewMode}`}
+                      className="shrink-0 rounded-lg border border-cyan-400/25 px-2.5 py-1.5 text-xs font-bold text-cyan-200 transition-colors hover:bg-cyan-400/10"
+                    >
+                      פתח יומן
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-950 p-1">
+                    {([
+                      { value: 'full' as const, label: 'יומן מלא' },
+                      { value: 'personal' as const, label: 'תצוגת פרילנסר' },
+                    ]).map((option) => {
+                      const active = calendarPreviewMode === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setAdminCalendarPreview(option.value)}
+                          className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                            active ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-800 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-200">מצב פרילנסר לכל המשתמשים</div>
+                      <div className="mt-0.5 text-xs leading-5 text-gray-500">
+                        תצוגת הבדיקה שלך כמנהל נשארת בשליטתך. בכיבוי המתג המערכת חוזרת אוטומטית להרשאות שכיר, פרילנסר והחרגות אישיות.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={overview.appConfig.calendarForcePersonal}
+                      aria-label="מצב פרילנסר לכל המשתמשים"
+                      onClick={() => void saveAppConfig({ calendarForcePersonal: !overview.appConfig.calendarForcePersonal })}
+                      disabled={savingConfig}
+                      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+                        overview.appConfig.calendarForcePersonal ? 'bg-orange-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                          overview.appConfig.calendarForcePersonal ? 'right-6' : 'right-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <div className={`mt-3 text-xs font-bold ${overview.appConfig.calendarForcePersonal ? 'text-orange-300' : 'text-green-300'}`}>
+                    {overview.appConfig.calendarForcePersonal ? 'פעיל: כולם רואים יומן אישי' : 'כבוי: המדיניות הרגילה פעילה'}
+                  </div>
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-medium">מצב תחזוקה</span>

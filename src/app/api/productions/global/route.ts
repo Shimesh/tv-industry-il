@@ -153,7 +153,8 @@ export async function GET(request: NextRequest) {
   const normalizedPhone = phone ? normalizePhone(phone) : null;
   const queryKey = normalizedPhone || shadowKey || null;
   const userDoc = await getDocument<Record<string, unknown>>(`users/${authUser.uid}`).catch(() => null);
-  const canQueryFullCalendar = hasFullCalendarAccess(userDoc);
+  const appConfig = await getDocument<{ calendarForcePersonal?: boolean }>('appConfig/global').catch(() => null);
+  const canQueryFullCalendar = appConfig?.calendarForcePersonal !== true && hasFullCalendarAccess(userDoc);
 
   if (!queryKey && !profileId && !canQueryFullCalendar) {
     return NextResponse.json({ success: true, count: 0, productions: [], calendarMode: 'personal' }, {

@@ -24,8 +24,10 @@ export function hasFullCalendarAccess(profile: CalendarAccessProfile | null | un
 export function resolveCalendarAccessMode(
   profile: CalendarAccessProfile | null | undefined,
   previewMode: CalendarPreviewMode = 'policy',
+  forcePersonal = false,
 ): 'full' | 'personal' {
   if (previewMode === 'full') return 'full';
   if (previewMode === 'personal') return 'personal';
+  if (forcePersonal) return 'personal';
   return hasFullCalendarAccess(profile) ? 'full' : 'personal';
 }

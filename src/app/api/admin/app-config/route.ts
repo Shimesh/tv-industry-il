@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 
 type AppConfigPayload = {
   maintenanceMode?: boolean;
+  calendarForcePersonal?: boolean;
   boardAnnouncement?: string;
   ratingsAutomation?: {
     midrugEnabled?: boolean;
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
   try {
     const config = await getDocument<{
       maintenanceMode?: boolean;
+      calendarForcePersonal?: boolean;
       boardAnnouncement?: string;
       ratingsAutomation?: AppConfigPayload['ratingsAutomation'] & {
         cronSchedule?: string;
@@ -50,6 +52,7 @@ export async function GET(request: NextRequest) {
     await recordRouteMetric({ route: '/api/admin/app-config', ok: true, statusCode: 200 });
     return NextResponse.json({
       maintenanceMode: Boolean(config?.maintenanceMode),
+      calendarForcePersonal: Boolean(config?.calendarForcePersonal),
       boardAnnouncement: String(config?.boardAnnouncement || ''),
       ratingsAutomation: normalizeRatingsAutomation(config?.ratingsAutomation, config?.ratingsAutomation),
       updatedAt: config?.updatedAt || null,
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as AppConfigPayload;
     const current = await getDocument<{
       maintenanceMode?: boolean;
+      calendarForcePersonal?: boolean;
       boardAnnouncement?: string;
       ratingsAutomation?: AppConfigPayload['ratingsAutomation'];
     }>('appConfig/global');
@@ -87,6 +91,10 @@ export async function POST(request: NextRequest) {
         typeof body.maintenanceMode === 'boolean'
           ? body.maintenanceMode
           : Boolean(current?.maintenanceMode),
+      calendarForcePersonal:
+        typeof body.calendarForcePersonal === 'boolean'
+          ? body.calendarForcePersonal
+          : Boolean(current?.calendarForcePersonal),
       boardAnnouncement:
         typeof body.boardAnnouncement === 'string'
           ? body.boardAnnouncement.trim()

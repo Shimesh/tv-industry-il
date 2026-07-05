@@ -135,6 +135,7 @@ export type AdminOverviewStats = {
 
 export type AppConfigSnapshot = {
   maintenanceMode: boolean;
+  calendarForcePersonal: boolean;
   boardAnnouncement: string;
   ratingsAutomation: RatingsAutomationConfig;
   updatedAt: string | null;

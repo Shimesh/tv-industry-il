@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 import Link from 'next/link';
 import MessageInput from '@/components/productions/MessageInput';
 import WeeklyCalendar from '@/components/productions/WeeklyCalendar';
@@ -351,6 +352,7 @@ function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): strin
 
 function ProductionsContent() {
   const { user, profile, updateUserProfile } = useAuth();
+  const { calendarForcePersonal } = useAppConfig();
   const { addNotification } = useNotifications();
   const { teams } = useTeam();
   const searchParams = useSearchParams();
@@ -401,8 +403,11 @@ function ProductionsContent() {
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || null;
   const effectiveCalendarMode = selectedTeamId
     ? 'full'
-    : resolveCalendarAccessMode(profile, profile?.siteRole === 'admin' ? adminCalendarPreviewMode : 'policy');
-  const canUseAdminCalendarPreview = profile?.siteRole === 'admin' && !selectedTeamId;
+    : resolveCalendarAccessMode(
+        profile,
+        profile?.siteRole === 'admin' ? adminCalendarPreviewMode : 'policy',
+        calendarForcePersonal,
+      );
   const setSharedAdminCalendarPreviewMode = useCallback((mode: CalendarPreviewMode) => {
     setAdminCalendarPreviewMode(mode);
     const params = new URLSearchParams(searchParams.toString());
@@ -723,6 +728,7 @@ function ProductionsContent() {
       const calendarMode = resolveCalendarAccessMode(
         currentProfile,
         currentProfile?.siteRole === 'admin' ? adminCalendarPreviewMode : 'policy',
+        calendarForcePersonal,
       );
       const canLoadFullCalendar = calendarMode === 'full';
       const normalizedPhone = normalizePhone(currentProfile?.phone || '');
@@ -797,7 +803,7 @@ function ProductionsContent() {
       console.error('[loadExistingWeek] Error:', error);
       return [];
     }
-  }, [user, selectedTeamId, restListDocs, parseProductionDocs, adminCalendarPreviewMode]);
+  }, [user, selectedTeamId, restListDocs, parseProductionDocs, adminCalendarPreviewMode, calendarForcePersonal]);
 
   const fetchGlobalWeekIds = useCallback(async (): Promise<string[]> => {
     if (!user || selectedTeamId) return [];
@@ -2982,43 +2988,6 @@ function ProductionsContent() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {canUseAdminCalendarPreview && (
-        <div
-          className="mb-4 flex flex-col gap-2 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-          style={{ background: 'var(--theme-bg-secondary)', borderColor: 'var(--theme-border)' }}
-          dir="rtl"
-        >
-          <div className="min-w-0">
-            <div className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>בדיקת תצוגת יומן</div>
-            <div className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-              מצב פעיל: {effectiveCalendarMode === 'full' ? 'יומן מלא' : 'יומן אישי לפרילנסר'}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: 'var(--theme-bg)' }}>
-            {([
-              { value: 'full' as const, label: 'יומן מלא' },
-              { value: 'personal' as const, label: 'תצוגת פרילנסר' },
-            ]).map((option) => {
-              const active = adminCalendarPreviewMode === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setSharedAdminCalendarPreviewMode(option.value)}
-                  className="rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
-                  style={{
-                    background: active ? 'var(--theme-accent)' : 'transparent',
-                    color: active ? 'white' : 'var(--theme-text-secondary)',
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
       )}
 

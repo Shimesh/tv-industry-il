@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 type AppConfigState = {
   maintenanceMode: boolean;
+  calendarForcePersonal: boolean;
   boardAnnouncement: string;
   updatedAt: string | null;
   loading: boolean;
@@ -23,6 +24,7 @@ type AppConfigState = {
 
 const AppConfigContext = createContext<AppConfigState>({
   maintenanceMode: false,
+  calendarForcePersonal: false,
   boardAnnouncement: '',
   updatedAt: null,
   loading: true,
@@ -122,6 +124,7 @@ function MaintenanceBanner({
 export function AppConfigProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, loading: authLoading } = useAuth();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [calendarForcePersonal, setCalendarForcePersonal] = useState(false);
   const [boardAnnouncement, setBoardAnnouncement] = useState('');
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,6 +136,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/app-config', { cache: 'no-store' });
       const data = await response.json();
       setMaintenanceMode(data.maintenanceMode === true);
+      setCalendarForcePersonal(data.calendarForcePersonal === true);
       setBoardAnnouncement(typeof data.boardAnnouncement === 'string' ? data.boardAnnouncement : '');
       setUpdatedAt(typeof data.updatedAt === 'string' ? data.updatedAt : null);
     } finally {
@@ -177,13 +181,14 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       maintenanceMode,
+      calendarForcePersonal,
       boardAnnouncement,
       updatedAt,
       loading,
       refresh,
       disableMaintenance,
     }),
-    [boardAnnouncement, disableMaintenance, loading, maintenanceMode, refresh, updatedAt],
+    [boardAnnouncement, calendarForcePersonal, disableMaintenance, loading, maintenanceMode, refresh, updatedAt],
   );
 
   const shouldBlockForMaintenance = maintenanceMode && !loading && !authLoading && !isAdmin;

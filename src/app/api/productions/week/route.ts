@@ -34,17 +34,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [userDoc, userSyncDoc, systemSyncDoc] = await Promise.all([
+    const [userDoc, userSyncDoc, systemSyncDoc, appConfig] = await Promise.all([
       getDocument<Record<string, unknown>>(`users/${authUser.uid}`).catch(() => null),
       getDocument<CalendarSyncDoc>(`user_calendar_sync/${authUser.uid}`).catch(() => null),
       getDocument<CalendarSyncDoc>('system/calendarSync').catch(() => null),
+      getDocument<{ calendarForcePersonal?: boolean }>('appConfig/global').catch(() => null),
     ]);
 
     const previewMode: CalendarPreviewMode =
       userDoc?.siteRole === 'admin' && (requestedViewMode === 'full' || requestedViewMode === 'personal')
         ? requestedViewMode
         : 'policy';
-    const calendarMode = resolveCalendarAccessMode(userDoc, previewMode);
+    const calendarMode = resolveCalendarAccessMode(userDoc, previewMode, appConfig?.calendarForcePersonal === true);
     const lastSyncAt = userSyncDoc?.lastSyncAt ?? systemSyncDoc?.lastSyncAt ?? null;
     const lastSyncStatus = userSyncDoc?.lastSyncStatus ?? systemSyncDoc?.lastSyncStatus ?? null;
 

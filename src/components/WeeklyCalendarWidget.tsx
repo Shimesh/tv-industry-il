@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 import { normalizeName, normalizePhone, deduplicateCrewEntries } from '@/lib/crewNormalization';
 import {
   CALENDAR_PREVIEW_CHANGED_EVENT,
@@ -333,6 +334,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, previewM
 
 export default function WeeklyCalendarWidget() {
   const { user, profile } = useAuth();
+  const { calendarForcePersonal } = useAppConfig();
   const [weekOffset, setWeekOffset] = useState(0);
   const [days, setDays] = useState<string[]>(() => getWeekDays(0));
   const [productions, setProductions] = useState<Production[] | null>(null);
@@ -350,7 +352,11 @@ export default function WeeklyCalendarWidget() {
   const displayName = profile?.crewName || profile?.displayName || user?.displayName || '';
   const phone = profile?.phone ?? '';
   const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
-  const effectiveCalendarMode = resolveCalendarAccessMode(profile, profile?.siteRole === 'admin' ? adminPreviewMode : 'policy');
+  const effectiveCalendarMode = resolveCalendarAccessMode(
+    profile,
+    profile?.siteRole === 'admin' ? adminPreviewMode : 'policy',
+    calendarForcePersonal,
+  );
   const productionsHref = profile?.siteRole === 'admin'
     ? `/productions?preview=${adminPreviewMode}`
     : '/productions';
