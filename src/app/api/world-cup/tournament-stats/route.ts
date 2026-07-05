@@ -71,6 +71,8 @@ type ESPNKeyEvent = {
   team?: { displayName?: string };
   participants?: Array<{ athlete?: { displayName?: string }; type?: { description?: string } }>;
   text?: string;
+  scoringPlay?: boolean;
+  shootout?: boolean;
 };
 type ESPNSummary = { scoringPlays?: ESPNPlay[]; plays?: ESPNPlay[]; keyEvents?: ESPNKeyEvent[] };
 type ESPNCompetitor = { team?: { displayName?: string }; homeAway?: string; score?: string };
@@ -109,6 +111,9 @@ function parseSummary(
   red: Map<string, StatEntry>,
   subs: Map<string, StatEntry>,
 ) {
+  const hasScoringPlays = (s.scoringPlays?.length ?? 0) > 0;
+  const hasDetailedPlays = (s.plays?.length ?? 0) > 0;
+
   for (const play of s.scoringPlays ?? []) {
     const isOwn = (play.type?.text ?? '').toLowerCase().includes('own');
     const team = resolveTeam(play.team?.displayName);
@@ -136,16 +141,19 @@ function parseSummary(
     const team = resolveTeam(ke.team?.displayName);
     const scorer = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('scor'))?.athlete?.displayName
       ?? ke.participants?.[0]?.athlete?.displayName ?? '';
-    if (text.includes('goal') && !text.includes('own')) {
+    const isScoringPlay = ke.shootout !== true && (
+      ke.scoringPlay === true || text.includes('goal') || text.includes('penalty - scored')
+    );
+    if (!hasScoringPlays && isScoringPlay && !text.includes('own')) {
       if (scorer) inc(goals, scorer, team);
       const assister = ke.participants?.find(p => p.type?.description?.toLowerCase().includes('assist'))?.athlete?.displayName
         ?? (ke.participants && ke.participants.length > 1 ? ke.participants[1]?.athlete?.displayName : undefined);
       if (assister && assister !== scorer) inc(assists, assister, team);
-    } else if (text.includes('red card') || text.includes('red-card')) {
+    } else if (!hasDetailedPlays && (text.includes('red card') || text.includes('red-card'))) {
       if (scorer) inc(red, scorer, team);
-    } else if (text.includes('yellow card') || text.includes('yellow-card')) {
+    } else if (!hasDetailedPlays && (text.includes('yellow card') || text.includes('yellow-card'))) {
       if (scorer) inc(yellow, scorer, team);
-    } else if (text.includes('substitut')) {
+    } else if (!hasDetailedPlays && text.includes('substitut')) {
       if (scorer) inc(subs, scorer, team);
     }
   }
