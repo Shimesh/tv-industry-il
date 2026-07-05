@@ -244,10 +244,11 @@ interface DayPopupProps {
   productions: Production[];
   displayName: string;
   phone: string;
+  previewMode?: CalendarPreviewMode;
   onClose: () => void;
 }
 
-function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose }: DayPopupProps) {
+function DayPopup({ dateStr, dayIndex, productions, displayName, phone, previewMode, onClose }: DayPopupProps) {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -316,7 +317,7 @@ function DayPopup({ dateStr, dayIndex, productions, displayName, phone, onClose 
 
         <div className="border-t px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
           <Link
-            href={`/productions?date=${dateStr}`}
+            href={`/productions?date=${dateStr}${previewMode ? `&preview=${previewMode}` : ''}`}
             onClick={onClose}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-colors hover:opacity-90"
             style={{ background: 'var(--theme-accent-glow)', color: 'var(--theme-accent)' }}
@@ -350,6 +351,9 @@ export default function WeeklyCalendarWidget() {
   const phone = profile?.phone ?? '';
   const profileIdentityId = profile?.profileId || (profile?.linkedContactId ? String(profile.linkedContactId) : '');
   const effectiveCalendarMode = resolveCalendarAccessMode(profile, profile?.siteRole === 'admin' ? adminPreviewMode : 'policy');
+  const productionsHref = profile?.siteRole === 'admin'
+    ? `/productions?preview=${adminPreviewMode}`
+    : '/productions';
 
   // Keep profile fields in refs so the fetch effect always uses current values
   // without re-triggering a full re-fetch when profile loads after initial user auth
@@ -631,7 +635,7 @@ export default function WeeklyCalendarWidget() {
               הבא
             </button>
             <div className="mx-1 h-4 w-px opacity-20" style={{ background: 'var(--theme-border)' }} />
-            <Link href="/productions" className="flex items-center gap-0.5 text-xs font-bold opacity-90 transition-opacity hover:opacity-100" style={{ color: 'var(--theme-accent)' }}>
+            <Link href={productionsHref} className="flex items-center gap-0.5 text-xs font-bold opacity-90 transition-opacity hover:opacity-100" style={{ color: 'var(--theme-accent)' }}>
               לכל האירועים
               <ArrowLeft className="h-3.5 w-3.5" />
             </Link>
@@ -746,6 +750,7 @@ export default function WeeklyCalendarWidget() {
           productions={popupProductions}
           displayName={displayName}
           phone={phone}
+          previewMode={profile?.siteRole === 'admin' ? adminPreviewMode : undefined}
           onClose={() => setPopupDate(null)}
         />
       )}

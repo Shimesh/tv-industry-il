@@ -357,7 +357,19 @@ function ProductionsContent() {
   const router = useRouter();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showTeamSelector, setShowTeamSelector] = useState(false);
-  const [adminCalendarPreviewMode, setAdminCalendarPreviewMode] = useState<CalendarPreviewMode>('full');
+  const [adminCalendarPreviewMode, setAdminCalendarPreviewMode] = useState<CalendarPreviewMode>(() => {
+    const requested = searchParams.get('preview');
+    if (requested === 'personal' || requested === 'full') return requested;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = window.localStorage.getItem(CALENDAR_PREVIEW_STORAGE_KEY);
+        if (saved === 'personal' || saved === 'full') return saved;
+      } catch {
+        // Fall back to the default when browser storage is unavailable.
+      }
+    }
+    return 'full';
+  });
 
   // Initialize team from URL query param
   useEffect(() => {
@@ -377,7 +389,12 @@ function ProductionsContent() {
     setCurrentDate(new Date(dateParam + 'T12:00:00'));
     setPendingScrollDate(dateParam);
     const team = searchParams.get('team');
-    router.replace(team ? `/productions?team=${team}` : '/productions', { scroll: false });
+    const preview = searchParams.get('preview');
+    const params = new URLSearchParams();
+    if (team) params.set('team', team);
+    if (preview === 'personal' || preview === 'full') params.set('preview', preview);
+    const query = params.toString();
+    router.replace(query ? `/productions?${query}` : '/productions', { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -388,23 +405,31 @@ function ProductionsContent() {
   const canUseAdminCalendarPreview = profile?.siteRole === 'admin' && !selectedTeamId;
   const setSharedAdminCalendarPreviewMode = useCallback((mode: CalendarPreviewMode) => {
     setAdminCalendarPreviewMode(mode);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('preview', mode);
+    router.replace(`/productions?${params.toString()}`, { scroll: false });
     try {
       window.localStorage.setItem(CALENDAR_PREVIEW_STORAGE_KEY, mode);
       window.dispatchEvent(new CustomEvent(CALENDAR_PREVIEW_CHANGED_EVENT, { detail: mode }));
     } catch {
       // Preview persistence is best-effort only.
     }
-  }, []);
+  }, [router, searchParams]);
 
   useEffect(() => {
     if (profile?.siteRole !== 'admin') return;
     try {
+      const requested = searchParams.get('preview');
+      if (requested === 'personal' || requested === 'full') {
+        setSharedAdminCalendarPreviewMode(requested);
+        return;
+      }
       const saved = window.localStorage.getItem(CALENDAR_PREVIEW_STORAGE_KEY);
       if (saved === 'personal' || saved === 'full') setAdminCalendarPreviewMode(saved);
     } catch {
       // Ignore storage failures.
     }
-  }, [profile?.siteRole]);
+  }, [profile?.siteRole, searchParams, setSharedAdminCalendarPreviewMode]);
 
   const handleTeamChange = (teamId: string | null) => {
     setSelectedTeamId(teamId);
