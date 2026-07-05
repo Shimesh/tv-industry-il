@@ -157,9 +157,15 @@ type ESPNEvent = {
 async function fetchESPNScoreboard(): Promise<ESPNEvent[] | null> {
   try {
     // Fetch live scoreboard + date-based queries to capture recently completed matches
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const dateKey = (offsetDays: number) => {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() + offsetDays);
+      return date.toISOString().slice(0, 10).replace(/-/g, '');
+    };
     const urls = [
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${today}`,
+      ...[-1, 0, 1].map((offset) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateKey(offset)}&limit=100`,
+      ),
       'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=200&dates=20260611-20260719',
     ];
     const results = await Promise.all(
