@@ -681,7 +681,7 @@ function TournamentBracket({
         <div ref={bracketScrollRef} data-testid="world-cup-bracket-scroll" className="relative mt-5 min-w-0 max-w-full overflow-x-auto pb-2" dir="ltr" style={{ scrollbarWidth: 'thin' }}>
           <div className="flex w-max min-w-[2140px] items-center justify-center gap-4 px-1">
             <BracketColumn title="32 האחרונות" matches={pick([73, 74, 75, 76, 77, 78, 79, 80])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
-            <BracketColumn title="שמינית גמר" matches={pick([89, 90, 91, 92])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="שמינית גמר" matches={pick([89, 90, 93, 94])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="רבע גמר" matches={pick([97, 98])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="חצי גמר" matches={pick([101])} venues={venues} accent="semi" onSelect={onSelect} onDetail={onDetail} />
             <div className="w-[300px] shrink-0" dir="rtl">
@@ -702,7 +702,7 @@ function TournamentBracket({
             </div>
             <BracketColumn title="חצי גמר" matches={pick([102])} venues={venues} accent="semi" onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="רבע גמר" matches={pick([99, 100])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
-            <BracketColumn title="שמינית גמר" matches={pick([93, 94, 95, 96])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
+            <BracketColumn title="שמינית גמר" matches={pick([91, 92, 95, 96])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
             <BracketColumn title="32 האחרונות" matches={pick([81, 82, 83, 84, 85, 86, 87, 88])} venues={venues} onSelect={onSelect} onDetail={onDetail} />
           </div>
         </div>

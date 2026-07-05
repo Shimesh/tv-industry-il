@@ -209,7 +209,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
     const awayEn = espnNormalize(match.awayTeam.nameEn);
 
     const matchingByTeams = espnEvents.find(ev => {
-      if (!ev.date || !match.kickoff || Math.abs(Date.parse(ev.date) - Date.parse(match.kickoff)) > 5 * 60_000) return false;
+      if (!ev.date || !match.kickoff || Math.abs(Date.parse(ev.date) - Date.parse(match.kickoff)) > 12 * 60 * 60_000) return false;
       const comps = ev.competitions?.[0]?.competitors ?? [];
       const names = comps.map(c => espnNormalize(c.team?.displayName ?? ''));
       return names.includes(homeEn) && names.includes(awayEn);
@@ -223,7 +223,8 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
 
     const statusName = espn.status?.type?.name ?? '';
     const isCompleted = espn.status?.type?.completed === true;
-    const kickoffMs = match.kickoff ? Date.parse(match.kickoff) : 0;
+    const effectiveKickoff = espn.date ?? match.kickoff;
+    const kickoffMs = effectiveKickoff ? Date.parse(effectiveKickoff) : 0;
     const kickoffInFuture = kickoffMs > 0 && kickoffMs > Date.now();
     let status: WorldCupMatch['status'] = match.status;
     if (!kickoffInFuture) {
@@ -283,6 +284,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
       ...match,
       homeTeam: espnTeam(homeComp, match.homeTeam),
       awayTeam: espnTeam(awayComp, match.awayTeam),
+      kickoff: effectiveKickoff,
       status,
       homeScore: !kickoffInFuture && homeScore != null && !isNaN(homeScore) ? homeScore : match.homeScore,
       awayScore: !kickoffInFuture && awayScore != null && !isNaN(awayScore) ? awayScore : match.awayScore,
