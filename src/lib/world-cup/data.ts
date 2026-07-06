@@ -146,9 +146,15 @@ const FOOTBALL_DATA_CANONICAL_MATCH_NUMBERS: Record<number, number> = {
   537428: 88,
 };
 
-const KICKOFF_OVERRIDES: Record<number, string> = {
-  // Mexico v England delayed by one hour due to the severe-weather protocol.
-  92: '2026-07-06T01:00:00.000Z',
+const MATCH_OVERRIDES: Record<number, Partial<WorldCupMatch>> = {
+  // Mexico v England was delayed by one hour and finished 2-3.
+  92: {
+    kickoff: '2026-07-06T01:00:00.000Z',
+    status: 'finished',
+    homeScore: 2,
+    awayScore: 3,
+    espnEventId: '760505',
+  },
 };
 type ESPNEvent = {
   id?: string;
@@ -529,11 +535,11 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
     } catch { /* ignore, use current status */ }
   }
 
-  matches = resolveFinishedKnockoutParticipants(matches);
   matches = matches.map((match) => {
-    const kickoff = KICKOFF_OVERRIDES[match.matchNumber];
-    return kickoff ? { ...match, kickoff } : match;
+    const override = MATCH_OVERRIDES[match.matchNumber];
+    return override ? { ...match, ...override } : match;
   });
+  matches = resolveFinishedKnockoutParticipants(matches);
 
   return { matches, source, updatedAt: new Date().toISOString() };
 }

@@ -46,7 +46,7 @@ function applyWorldCupMode(active: boolean) {
 function getNextMatches(matches: WorldCupMatch[]): WorldCupMatch[] {
   const now = Date.now();
   const upcoming = matches
-    .filter((match) => match.status !== 'finished' && Date.parse(match.kickoff) >= now - 2 * 60 * 60 * 1000)
+    .filter((match) => match.status === 'scheduled' && Date.parse(match.kickoff) >= now - 3 * 60 * 60 * 1000)
     .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
   if (upcoming.length === 0) return [];
   const firstKickoff = Date.parse(upcoming[0].kickoff);

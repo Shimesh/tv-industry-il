@@ -2886,7 +2886,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
     if (live) return live;
     return (
       [...displayMatches]
-        .filter((m) => m.status === 'scheduled')
+        .filter((m) => m.status === 'scheduled' && Date.parse(m.kickoff) >= Date.now() - 3 * 60 * 60 * 1000)
         .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] ?? displayMatches[0]
     );
   }, [displayMatches]);
