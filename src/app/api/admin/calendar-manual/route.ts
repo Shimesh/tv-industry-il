@@ -11,6 +11,7 @@ export const maxDuration = 300;
 
 type ManualProduction = Pick<Production, 'name' | 'date' | 'studio' | 'startTime' | 'endTime'>;
 type ImportBundle = { scheduleHtml?: string; departmentHtml?: string; popupHtmlById?: Record<string, string> };
+type ProductionWithCrewSource = Production & { crewSource?: string; popupParsed?: boolean };
 
 function validTime(value: string): boolean {
   return /^\d{1,2}:\d{2}$/.test(value) && Number(value.split(':')[0]) <= 29;
@@ -90,11 +91,37 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
     const normalized: Production = { ...production, day: production.day || getHebrewDay(production.date), status: production.status || 'scheduled', crew: production.crew || [], lastUpdatedBy: adminUid, lastUpdatedAt: now };
     const globalDoc = toGlobalProduction(normalized, adminUid, `manual-import/${getWeekId(production.date)}`);
     const existing = await getDocument<GlobalProductionDoc>(`global_productions/${globalDoc.id}`).catch(() => null);
-    await patchDocument(`global_productions/${globalDoc.id}`, mergeGlobalProduction(existing, globalDoc) as unknown as Record<string, string>);
+    const mergedGlobal = mergeGlobalProduction(existing, globalDoc);
+    await patchDocument(`global_productions/${globalDoc.id}`, mergedGlobal as unknown as Record<string, string>);
     global++;
     if (production.isCurrentUserShift === false) continue;
+    const personalPath = `productions/${targetUid}/weeks/${getWeekId(production.date)}/productions/${production.id}`;
+    const existingPersonal = await getDocument<ProductionWithCrewSource>(personalPath).catch(() => null);
+    const hasAuthoritativeIncomingCrew = (production as ProductionWithCrewSource).crewSource === 'popup'
+      || (production as ProductionWithCrewSource).popupParsed === true;
+    const preservedCrew = mergedGlobal.crewSource === 'popup' && mergedGlobal.crew_list.length > 0
+      ? mergedGlobal.crew_list.map((member) => ({
+          name: member.name,
+          role: member.profession || member.role || '',
+          roleDetail: member.profession || member.role || '',
+          phone: member.phone_number || member.phone || null,
+          startTime: member.startTime || '',
+          endTime: member.endTime || '',
+        }))
+      : existingPersonal?.crew || [];
+    const personalCrew = hasAuthoritativeIncomingCrew || preservedCrew.length === 0
+      ? normalized.crew
+      : preservedCrew;
+    const personalCrewSource = hasAuthoritativeIncomingCrew || (mergedGlobal.crewSource === 'popup' && preservedCrew.length > 0)
+      ? 'popup'
+      : existingPersonal?.crewSource;
     await patchDocument(`productions/${targetUid}/weeks/${getWeekId(production.date)}/productions/${production.id}`, {
-      ...normalized, isCurrentUserShift: true, missingCandidate: false, source: `manual-${source}`,
+      ...normalized,
+      crew: personalCrew,
+      ...(personalCrewSource ? { crewSource: personalCrewSource } : {}),
+      isCurrentUserShift: true,
+      missingCandidate: false,
+      source: `manual-${source}`,
     } as unknown as Record<string, string>);
     personal++;
   }
