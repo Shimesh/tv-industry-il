@@ -1,5 +1,5 @@
 # One-time installer: registers a Windows Scheduled Task that runs
-# run-local-calendar-sync.ps1 every hour (as long as this PC is on), and
+# run-local-calendar-sync.ps1 every two hours (as long as this PC is on), and
 # kicks off an immediate first run right away.
 #
 # Usage: run once from the project root, in a normal PowerShell window:
@@ -23,7 +23,7 @@ $Action = New-ScheduledTaskAction `
 
 $Trigger = New-ScheduledTaskTrigger `
   -Once -At (Get-Date) `
-  -RepetitionInterval (New-TimeSpan -Hours 1) `
+  -RepetitionInterval (New-TimeSpan -Hours 2) `
   -RepetitionDuration (New-TimeSpan -Days 3650)
 
 $Settings = New-ScheduledTaskSettingsSet `
@@ -44,10 +44,10 @@ Register-ScheduledTask `
   -Action $Action `
   -Trigger $Trigger `
   -Settings $Settings `
-  -Description 'Runs the local Herzliya calendar sync every hour while this PC is on.' `
+  -Description 'Runs the local Herzliya calendar sync every two hours while this PC is on.' `
   | Out-Null
 
-Write-Host "Scheduled task '$TaskName' installed - will run hourly from now on."
+Write-Host "Scheduled task '$TaskName' installed - will run every two hours from now on."
 Write-Host "Kicking off an immediate first run..."
 
 Start-ScheduledTask -TaskName $TaskName

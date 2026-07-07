@@ -20,6 +20,14 @@ type RawProductionDoc = Record<string, unknown> & {
   crew?: unknown[];
 };
 
+const AUTO_SYNC_MIN_INTERVAL_MS = 2 * 60 * 60 * 1000;
+
+function isAutomaticSyncDue(user: UserCalendarSyncDoc, now = Date.now()): boolean {
+  if (user.lastSyncStatus !== 'success') return true;
+  const lastSyncAt = Number(user.lastSyncAt || 0);
+  return !lastSyncAt || now - lastSyncAt >= AUTO_SYNC_MIN_INTERVAL_MS;
+}
+
 async function migrateGlobalProductions(): Promise<{ written: number; unique: number; errors: number }> {
   const allDocs = await runQuery<RawProductionDoc>({
     from: [{ collectionId: 'productions', allDescendants: true }],
@@ -92,7 +100,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // A schedule pasted on Saturday can describe the week beginning the next day.
   // Keep the previous week's saved URL eligible through the current week rollover.
   const eligibleWeekStarts = new Set([previousWeekStart, currentWeekStart, nextWeekStart]);
-  const activeUsers = allUsers.filter(u => u.url?.trim() && eligibleWeekStarts.has(u.weekStart));
+  const eligibleUsers = allUsers.filter(u => u.url?.trim() && eligibleWeekStarts.has(u.weekStart));
+  const activeUsers = eligibleUsers.filter((user) => isAutomaticSyncDue(user));
+  const freshUsers = eligibleUsers.filter((user) => !isAutomaticSyncDue(user));
   const skippedUsers = allUsers.filter(u => u.url?.trim() && !eligibleWeekStarts.has(u.weekStart));
 
   if (skippedUsers.length > 0) {
@@ -103,12 +113,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (activeUsers.length === 0) {
-    await recordJobMetric({ job: 'cron-sync-calendar', ok: false, message: `אין משתמשים לסינכרון השבוע (${currentWeekStart})` });
+    const allFresh = freshUsers.length > 0;
+    await recordJobMetric({
+      job: 'cron-sync-calendar',
+      ok: allFresh,
+      message: allFresh
+        ? `דילוג: ${freshUsers.length} יומנים כבר סונכרנו בהצלחה בשעתיים האחרונות`
+        : `אין משתמשים לסינכרון השבוע (${currentWeekStart})`,
+    });
     return NextResponse.json({
-      ok: false,
-      reason: 'no_active_users_this_week',
+      ok: allFresh,
+      reason: allFresh ? 'all_calendars_fresh' : 'no_active_users_this_week',
       currentWeekStart,
       previousWeekStart,
+      fresh: freshUsers.length,
       skipped: skippedUsers.length,
     });
   }

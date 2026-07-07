@@ -273,7 +273,7 @@ export const scrapeRatingsScheduled = onSchedule('every day 07:15', async () => 
 });
 
 export const syncCalendarsScheduled = onSchedule({
-  schedule: 'every 60 minutes',
+  schedule: 'every 120 minutes',
   timeZone: 'Asia/Jerusalem',
   timeoutSeconds: 300,
   memory: '1GiB',

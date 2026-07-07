@@ -1,4 +1,4 @@
-﻿name: Sync Calendar (Hourly)
+name: Sync Calendar (Manual Fallback)
 
 on:
   # Manual cloud trigger only. Herzliya currently times out from GitHub/Vercel cloud IPs.

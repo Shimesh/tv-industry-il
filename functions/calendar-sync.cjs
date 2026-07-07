@@ -25,6 +25,29 @@ const db = getFirestore();
 const USER_SCHEDULES_ROOT = 'userSchedules';
 const getUserProductionsRoot = (uid) => `productions/${uid}/weeks`;
 const AUTO_SYNC_SAVED_CALENDARS = process.env.SYNC_SAVED_CALENDARS === '1';
+const AUTO_SYNC_MIN_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const AUTO_SYNC_LEASE_MS = 15 * 60 * 1000;
+
+function isAutomaticSyncDue(entry, now = Date.now()) {
+  if (entry.lastSyncStatus !== 'success') return true;
+  const lastSyncAt = Number(entry.lastSyncAt || 0);
+  return !lastSyncAt || now - lastSyncAt >= AUTO_SYNC_MIN_INTERVAL_MS;
+}
+
+async function claimAutomaticSync(syncRef) {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(syncRef);
+    const data = snapshot.exists ? snapshot.data() : {};
+    const now = Date.now();
+    if (!isAutomaticSyncDue(data, now)) return false;
+    if (Number(data.autoSyncLeaseUntil || 0) > now) return false;
+    transaction.set(syncRef, {
+      autoSyncLeaseUntil: now + AUTO_SYNC_LEASE_MS,
+      lastAutoSyncStartedAt: now,
+    }, { merge: true });
+    return true;
+  });
+}
 const WINDOWS_BROWSER_PATHS = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -1973,20 +1996,21 @@ function parsePopupSnapshot(production, snapshot) {
 
 async function main() {
   if (AUTO_SYNC_SAVED_CALENDARS) {
-    console.log('Checking saved calendar URLs for hourly sync...');
+    console.log('Checking saved calendar URLs for scheduled sync...');
     const currentWeekStart = getCurrentWeekStartIsrael();
     const previousWeekStart = getPreviousWeekStart(currentWeekStart);
     const nextWeekStart = getNextWeekStart(currentWeekStart);
     const eligibleWeekStarts = new Set([currentWeekStart, previousWeekStart, nextWeekStart]);
     const savedSnap = await db.collection('user_calendar_sync').get();
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
     const savedCalendars = savedSnap.docs
       .map((doc) => ({ uid: doc.id, ...doc.data() }))
       .filter((entry) =>
         entry.url && (
           eligibleWeekStarts.has(entry.weekStart) ||
           (entry.savedAt && entry.savedAt >= sevenDaysAgo)
-        ),
+        ) && isAutomaticSyncDue(entry, now),
       )
       // A freshly pasted calendar is the most time-sensitive and may be the only
       // request that succeeds before Herzliya starts rejecting a busy source IP.
@@ -2018,10 +2042,17 @@ async function main() {
     let successCount = 0;
     let productionCount = 0;
     let licenseFailCount = 0;
+    let claimedCount = 0;
     try {
       for (const saved of savedCalendars) {
         const syncRef = db.doc(`user_calendar_sync/${saved.uid}`);
         try {
+          const claimed = await claimAutomaticSync(syncRef);
+          if (!claimed) {
+            console.log(`Skipping ${saved.uid}: a complete sync is still fresh or another automatic sync is active.`);
+            continue;
+          }
+          claimedCount++;
           const urlWeekStart = getWeekStartFromHerzliyaUrl(saved.url);
           const targetWeekStart = eligibleWeekStarts.has(urlWeekStart)
             ? urlWeekStart
@@ -2066,19 +2097,22 @@ async function main() {
             lastSyncStatus: 'success',
             lastSyncCount: schedule.productions.length,
             lastSyncError: null,
+            autoSyncLeaseUntil: null,
+            lastAutoSyncCompletedAt: Date.now(),
           }, { merge: true });
-          console.log(`Hourly sync saved ${schedule.productions.length} productions for ${saved.uid}`);
+          console.log(`Scheduled sync saved ${schedule.productions.length} productions for ${saved.uid}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const isLicense = message.includes('no free license slot');
           const isNetworkFailure = /ERR_CONNECTION_TIMED_OUT|Navigation timeout|ECONN(?:REFUSED|RESET|TIMEDOUT)|fetch failed/i.test(message);
           if (isLicense) licenseFailCount++;
-          console.error(`Hourly sync failed for ${saved.uid}:`, message);
+          console.error(`Scheduled sync failed for ${saved.uid}:`, message);
           await syncRef.set({
             lastSyncAt: Date.now(),
             lastSyncStatus: isLicense ? 'license_busy' : 'error',
             lastSyncCount: 0,
             lastSyncError: message.slice(0, 300),
+            autoSyncLeaseUntil: null,
           }, { merge: true });
           if (isNetworkFailure) {
             console.error('Herzliya network route is unavailable; stopping this run to avoid repeated blocked requests.');
@@ -2096,22 +2130,26 @@ async function main() {
 
     await db.doc('system/calendarSync').set({
       lastSyncAt: Date.now(),
-      lastSyncStatus: successCount === savedCalendars.length ? 'success' : 'partial',
+      lastSyncStatus: claimedCount === 0 || successCount === claimedCount ? 'success' : 'partial',
       lastSyncCount: productionCount,
     }, { merge: true });
 
     console.log(
-      `Hourly saved-calendar sync completed: ${successCount}/${savedCalendars.length} users, `
+      `Scheduled saved-calendar sync completed: ${successCount}/${claimedCount} claimed users, `
       + `${productionCount} productions`,
     );
+    if (claimedCount === 0) {
+      console.log('All eligible calendars were already fresh or claimed by another automatic worker.');
+      return;
+    }
     if (successCount === 0) {
-      const allLicense = licenseFailCount === savedCalendars.length;
+      const allLicense = licenseFailCount === claimedCount;
       if (allLicense) {
-        // Transient — Herzliya server busy. Exit cleanly; next 5-min run will retry.
+        // Transient — Herzliya server busy. Exit cleanly; the next scheduled run will retry.
         console.log('All failures were Herzliya license-busy errors — will retry on next scheduled run.');
         return;
       }
-      throw new Error('Hourly saved-calendar sync did not update any calendars');
+      throw new Error('Scheduled saved-calendar sync did not update any calendars');
     }
     return;
   }

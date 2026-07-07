@@ -6,6 +6,20 @@ Set-Location $Root
 $LogDir = Join-Path $Root 'logs'
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 $LogFile = Join-Path $LogDir 'calendar-sync-local.log'
+$StateDir = Join-Path $env:LOCALAPPDATA 'TVIndustryIL'
+$LastAttemptFile = Join-Path $StateDir 'calendar-sync-last-attempt.txt'
+$MinimumInterval = [TimeSpan]::FromHours(2)
+
+# The Windows task may still have an older hourly trigger. Enforce the two-hour
+# interval before even opening a TCP connection to Herzliya.
+if (Test-Path $LastAttemptFile) {
+  $lastAttempt = (Get-Item $LastAttemptFile).LastWriteTimeUtc
+  if (((Get-Date).ToUniversalTime() - $lastAttempt) -lt $MinimumInterval) {
+    exit 0
+  }
+}
+New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+Set-Content -Path $LastAttemptFile -Value ([DateTime]::UtcNow.ToString('O')) -Encoding ASCII
 
 function Import-DotEnvFile {
   param([string]$Path)
