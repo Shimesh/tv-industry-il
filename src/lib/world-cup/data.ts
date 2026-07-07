@@ -66,6 +66,12 @@ function normalizeStatus(status: string): WorldCupMatch['status'] {
   return 'scheduled';
 }
 
+function isGenericKnockoutPlaceholder(team: WorldCupTeam): boolean {
+  const value = `${team.id} ${team.nameEn}`.toLowerCase();
+  return /\b(winner|loser|round of|quarter.?final|semi.?final|finalist|tbd|to be determined)\b/.test(value)
+    || /^(rd|r16|qf|sf)[\s_-]*[wl]?\d+/.test(team.id.toLowerCase());
+}
+
 function normalizeStage(stage?: string): WorldCupMatch['stage'] {
   if (!stage) return 'group';
   if (stage.includes('LAST_32')) return 'round_of_32';
@@ -275,7 +281,7 @@ function applyESPNOverlay(matches: WorldCupMatch[], espnEvents: ESPNEvent[]): Wo
         tla: competitor.team.abbreviation,
         crest: competitor.team.logo,
       });
-      return normalized.id === 'tbd' ? fallback : normalized;
+      return normalized.id === 'tbd' || isGenericKnockoutPlaceholder(normalized) ? fallback : normalized;
     };
 
     const homeScore = homeComp?.score != null ? parseInt(homeComp.score, 10) : null;
@@ -458,8 +464,12 @@ export async function getWorldCupMatches(): Promise<{ matches: WorldCupMatch[]; 
         matchNumber,
         stage: base?.stage ?? normalizeStage(match.stage),
         group: match.group?.replace(/^GROUP_/, '') || undefined,
-        homeTeam: normalizedHome.id === 'tbd' && base?.homeTeam.id !== 'tbd' ? base.homeTeam : normalizedHome,
-        awayTeam: normalizedAway.id === 'tbd' && base?.awayTeam.id !== 'tbd' ? base.awayTeam : normalizedAway,
+        homeTeam: (normalizedHome.id === 'tbd' || isGenericKnockoutPlaceholder(normalizedHome)) && base?.homeTeam.id !== 'tbd'
+          ? base.homeTeam
+          : normalizedHome,
+        awayTeam: (normalizedAway.id === 'tbd' || isGenericKnockoutPlaceholder(normalizedAway)) && base?.awayTeam.id !== 'tbd'
+          ? base.awayTeam
+          : normalizedAway,
         homeScore: status !== 'scheduled' ? (match.score?.fullTime?.home ?? match.score?.halfTime?.home ?? null) : null,
         awayScore: status !== 'scheduled' ? (match.score?.fullTime?.away ?? match.score?.halfTime?.away ?? null) : null,
         status,
