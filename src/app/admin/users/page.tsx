@@ -35,6 +35,8 @@ type ManagedUser = {
   hasDisplayName?: boolean;
   isOnline?: boolean;
   isPrivate?: boolean;
+  calendarEmploymentType?: 'employee' | 'freelancer';
+  calendarFullAccess?: boolean;
 };
 
 type ConfirmAction =
@@ -54,6 +56,20 @@ const statusClasses: Record<UserApprovalStatus, string> = {
   blocked: 'border-red-400/30 bg-red-500/10 text-red-200',
 };
 
+const employmentLabels: Record<'employee' | 'freelancer', string> = {
+  employee: 'שכיר',
+  freelancer: 'פרילנסר',
+};
+
+const employmentClasses: Record<'employee' | 'freelancer', string> = {
+  employee: 'border-cyan-400/30 bg-cyan-500/10 text-cyan-200',
+  freelancer: 'border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200',
+};
+
+function employmentTypeFor(user: ManagedUser): 'employee' | 'freelancer' {
+  return user.calendarEmploymentType === 'employee' ? 'employee' : 'freelancer';
+}
+
 function formatRelative(value: string | null): string {
   if (!value) return 'לא זמין';
   const parsed = Date.parse(value);
@@ -70,6 +86,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | UserApprovalStatus>('all');
+  const [employmentFilter, setEmploymentFilter] = useState<'all' | 'employee' | 'freelancer'>('all');
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
@@ -120,21 +137,34 @@ export default function AdminUsersPage() {
     [users],
   );
 
+  const employeeUsersCount = useMemo(
+    () => users.filter((entry) => employmentTypeFor(entry) === 'employee').length,
+    [users],
+  );
+
+  const freelancerUsersCount = useMemo(
+    () => users.filter((entry) => employmentTypeFor(entry) === 'freelancer').length,
+    [users],
+  );
+
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
     return users.filter((entry) => {
       const matchesStatus = statusFilter === 'all' || entry.approvalStatus === statusFilter;
+      const employmentType = employmentTypeFor(entry);
+      const matchesEmployment = employmentFilter === 'all' || employmentType === employmentFilter;
       const matchesSearch = !term || [
         entry.displayName,
         entry.email,
         entry.department,
         entry.role,
+        employmentLabels[employmentType],
         entry.phone || '',
         entry.uid,
       ].join(' ').toLowerCase().includes(term);
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesEmployment && matchesSearch;
     });
-  }, [search, statusFilter, users]);
+  }, [employmentFilter, search, statusFilter, users]);
 
   useEffect(() => {
     const uid = new URLSearchParams(window.location.search).get('uid') || '';
@@ -299,7 +329,7 @@ export default function AdminUsersPage() {
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-300" />
               <h2 className="text-lg font-bold">כל המשתמשים</h2>
-              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{users.length}</span>
+              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">{filteredUsers.length}/{users.length}</span>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <div className="relative">
@@ -324,14 +354,47 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
+          <div className="grid gap-3 border-b border-gray-800 p-5 sm:grid-cols-3">
+            {([
+              { key: 'all' as const, label: 'כולם', count: users.length, hint: 'כל סוגי היומן' },
+              { key: 'employee' as const, label: 'שכירים', count: employeeUsersCount, hint: 'משתמשים עם יומן מלא' },
+              { key: 'freelancer' as const, label: 'פרילנסרים', count: freelancerUsersCount, hint: 'משתמשים עם יומן אישי' },
+            ]).map((tab) => {
+              const isActive = employmentFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setEmploymentFilter(tab.key)}
+                  className={`rounded-2xl border p-4 text-right transition ${
+                    isActive
+                      ? 'border-purple-400/50 bg-purple-500/15 text-white shadow-lg shadow-purple-950/20'
+                      : 'border-gray-800 bg-gray-950/40 text-gray-300 hover:border-gray-700 hover:bg-gray-800/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold">{tab.label}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                      isActive ? 'bg-purple-300 text-purple-950' : 'bg-gray-800 text-gray-300'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">{tab.hint}</p>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-right text-sm">
+            <table className="w-full min-w-[980px] text-right text-sm">
               <thead className="text-xs text-gray-500">
                 <tr className="border-b border-gray-800">
                   <th className="px-5 py-3 font-medium">משתמש</th>
                   <th className="px-4 py-3 font-medium">אימייל</th>
                   <th className="px-4 py-3 font-medium">מחלקה</th>
                   <th className="px-4 py-3 font-medium">תפקיד</th>
+                  <th className="px-4 py-3 font-medium">סוג יומן</th>
                   <th className="px-4 py-3 font-medium">סטטוס גישה</th>
                   <th className="px-4 py-3 font-medium">נראה לאחרונה</th>
                   <th className="px-5 py-3 font-medium">פעולות</th>
@@ -354,6 +417,9 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-4 text-gray-300">{entry.department || 'לא צוין'}</td>
                     <td className="px-4 py-4 text-gray-300">{entry.role || 'לא צוין'}</td>
+                    <td className="px-4 py-4">
+                      <EmploymentBadge user={entry} />
+                    </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[entry.approvalStatus]}`}>
                         {statusLabels[entry.approvalStatus]}
@@ -417,7 +483,7 @@ export default function AdminUsersPage() {
                 ))}
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-5 py-12 text-center text-gray-500">
                       לא נמצאו משתמשים
                     </td>
                   </tr>
@@ -511,6 +577,7 @@ function UserIdentity({ user, compact = false }: { user: ManagedUser; compact?: 
               פרטי
             </span>
           ) : null}
+          <EmploymentBadge user={user} compact />
         </div>
         {showEmailLine ? (
           <p className="truncate text-xs font-medium text-gray-300" dir="ltr">{user.email}</p>
@@ -518,5 +585,19 @@ function UserIdentity({ user, compact = false }: { user: ManagedUser; compact?: 
         <p className="truncate text-xs text-gray-500" dir="ltr">{user.uid}</p>
       </div>
     </div>
+  );
+}
+
+function EmploymentBadge({ user, compact = false }: { user: ManagedUser; compact?: boolean }) {
+  const employmentType = employmentTypeFor(user);
+  const fullAccess = user.calendarFullAccess === true;
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-semibold ${compact ? 'text-[10px]' : 'text-xs'} ${employmentClasses[employmentType]}`}>
+      {employmentLabels[employmentType]}
+      {fullAccess && employmentType === 'freelancer' ? (
+        <span className="text-[10px] text-cyan-200">+ יומן מלא</span>
+      ) : null}
+    </span>
   );
 }

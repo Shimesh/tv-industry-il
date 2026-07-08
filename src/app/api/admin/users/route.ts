@@ -22,6 +22,8 @@ type RawUser = {
   createdAt?: string | null;
   isOnline?: boolean;
   isPrivate?: boolean;
+  calendarEmploymentType?: string | null;
+  calendarFullAccess?: boolean;
 };
 
 export type AdminManagedUser = {
@@ -42,6 +44,8 @@ export type AdminManagedUser = {
   hasDisplayName: boolean;
   isOnline: boolean;
   isPrivate: boolean;
+  calendarEmploymentType: 'employee' | 'freelancer';
+  calendarFullAccess: boolean;
 };
 
 function cleanString(value: unknown): string {
@@ -97,6 +101,8 @@ function toManagedUser(user: RawUser, primaryAdminUid: string): AdminManagedUser
     hasDisplayName: display.hasDisplayName,
     isOnline: user.isOnline === true,
     isPrivate: user.isPrivate === true,
+    calendarEmploymentType: user.calendarEmploymentType === 'employee' ? 'employee' : 'freelancer',
+    calendarFullAccess: user.calendarFullAccess === true,
   };
 }
 
