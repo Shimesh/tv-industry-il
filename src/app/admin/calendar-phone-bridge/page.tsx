@@ -38,37 +38,8 @@ function clampProgress(value: number | undefined): number {
 }
 
 function buildBookmarklet(token: string, ingestUrl: string): string {
-  const source = `
-(async()=>{const sleep=ms=>new Promise(r=>setTimeout(r,ms));try{
-const token=${JSON.stringify(token)};
-const ingestUrl=${JSON.stringify(ingestUrl)};
-const statusUrl=ingestUrl.replace('/ingest','/status');
-const report=(phase,message,progress,extra={})=>fetch(statusUrl,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token,phase,message,progress,...extra})}).catch(()=>{});
-await report('phone_started','הופעל מהטלפון. בודק את לוח הרצליה.',10);
-const ids=[...new Set([...document.querySelectorAll('[onclick*="openmd2("]')].map(e=>String(e.getAttribute('onclick')||'').match(/openmd2\\((\\d+)\\)/)?.[1]).filter(Boolean))];
-if(!ids.length){await report('failed','לא נמצאו הפקות עם openmd2 בדף הזה.',100,{error:'לא נמצאו הפקות'});alert('לא נמצאו הפקות עם openmd2 בדף הזה');return;}
-await report('events_found','נמצאו '+ids.length+' הפקות. מתחיל למשוך פופאפים של צוותים.',20,{eventCount:ids.length,popupTotal:ids.length,popupDone:0});
-const popupHtmlById={};
-let done=0;
-for(const id of ids){
-  await report('popup_loading','טוען צוות להפקה '+id+' ('+(done+1)+'/'+ids.length+')',20+Math.round((done/ids.length)*50),{popupDone:done,popupTotal:ids.length});
-  const url=new URL('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N'+id,location.href).toString();
-  const res=await fetch(url,{credentials:'include'});
-  const html=await res.text();
-  if(!res.ok||!html.includes('נייד')){throw new Error('לא נטען צוות להפקה '+id);}
-  popupHtmlById[id]=html;
-  done+=1;
-  await report('popup_progress','נמשך צוות להפקה '+id+' ('+done+'/'+ids.length+')',20+Math.round((done/ids.length)*50),{popupDone:done,popupTotal:ids.length});
-  await sleep(350);
-}
-await report('uploading','כל הפופאפים נאספו. שולח לאפליקציה לשמירה.',75,{popupDone:ids.length,popupTotal:ids.length,eventCount:ids.length});
-const payload={token,href:location.href,scheduleHtml:document.documentElement.outerHTML,popupHtmlById};
-const save=await fetch(ingestUrl,{method:'POST',headers:{'content-type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-const data=await save.json().catch(()=>({}));
-if(!save.ok||!data.ok){throw new Error(data.error||('HTTP '+save.status));}
-await report('done','היומן עודכן: '+data.personal+' הפקות עם צוותים מלאים.',100,{popupDone:ids.length,popupTotal:ids.length,eventCount:ids.length});
-alert('היומן עודכן: '+data.personal+' הפקות, '+ids.length+' פופאפים');
-}catch(e){const message='ייבוא נכשל: '+(e&&e.message?e.message:e);try{await fetch(${JSON.stringify(ingestUrl)}.replace('/ingest','/status'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)},phase:'failed',message,progress:100,error:message})});}catch(_){}alert(message);}})();`;
+  const runnerUrl = `${ingestUrl.replace('/ingest', '/runner')}?token=${encodeURIComponent(token)}`;
+  const source = `(function(){var s=document.createElement('script');s.src=${JSON.stringify(runnerUrl)}+'&_='+Date.now();s.onerror=function(){alert('לא הצלחתי לטעון את סקריפט החילוץ מהאפליקציה');};document.documentElement.appendChild(s);})();`;
   return `javascript:${encodeURIComponent(source)}`;
 }
 
@@ -248,11 +219,15 @@ export default function CalendarPhoneBridgePage() {
         {bookmarklet ? (
           <section className="space-y-4 rounded-2xl border border-emerald-400/40 bg-[#17102f] p-5">
             <h2 className="font-bold text-emerald-300">מה עושים בפועל</h2>
+            <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100">
+              שים לב: את הסימנייה מפעילים מתוך הטאב של הרצליה, לא מתוך הטאב של ממשק הניהול.
+              אם המסך נשאר על “מחכה להפעלה מהטלפון”, הסימנייה עדיין לא רצה בתוך דף הרצליה.
+            </p>
             <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
               <li>השאר את המסך הזה פתוח במחשב.</li>
-              <li>העתק את ה-Bookmarklet לטלפון ושמור אותו כסימנייה בדפדפן.</li>
+              <li>העתק את ה-Bookmarklet הקצר לטלפון ושמור אותו כסימנייה בדפדפן.</li>
               <li>פתח בטלפון את קישור הרצליה השבועי כשהוא נטען דרך הגלישה שעובדת אצלך.</li>
-              <li>כשהלוח האישי מוצג, הפעל את הסימנייה. ההתקדמות תופיע כאן במחשב.</li>
+              <li>כשהלוח האישי מוצג, הקלד בשורת הכתובת את שם הסימנייה ובחר אותה מהרשימה.</li>
               <li>אם יש פופאפ שלא נטען, שום דבר חלקי לא נשמר והמסך יציג את השגיאה.</li>
             </ol>
             <textarea
