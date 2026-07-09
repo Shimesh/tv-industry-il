@@ -155,6 +155,174 @@ const report = async (phase, message, progress, extra = {}) => {
 `.trim();
 }
 
+function buildAndroidUserscript(token: string, ingestUrl: string): string {
+  const statusUrl = ingestUrl.replace('/ingest', '/status');
+  return `
+// ==UserScript==
+// @name         TV Industry - Herzliya Calendar Bridge
+// @namespace    https://tv-industry-il.vercel.app/
+// @version      1.0
+// @description  חילוץ יומן הרצליה ישירות מטלפון Android
+// @match        https://hsil.acc.co.il:5443/*
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+  const token = ${JSON.stringify(token)};
+  const statusUrl = ${JSON.stringify(statusUrl)};
+  const ingestUrl = ${JSON.stringify(ingestUrl)};
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const report = async (phase, message, progress, extra = {}) => {
+    try {
+      await fetch(statusUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, phase, message, progress, ...extra })
+      });
+    } catch (_) {}
+  };
+
+  const setButton = (button, text, disabled = false) => {
+    button.textContent = text;
+    button.disabled = disabled;
+    button.style.opacity = disabled ? '0.75' : '1';
+  };
+
+  const run = async (button) => {
+    try {
+      setButton(button, 'רץ...');
+      await report('android_started', 'החילוץ הופעל מתוך דף הרצליה ב-Android.', 10);
+
+      if (!/hsil\\.acc\\.co\\.il$/i.test(location.hostname)) {
+        const message = 'הקוד רץ בדף הלא נכון. פתח קודם את לוח הרצליה.';
+        await report('failed', message, 100, { error: message });
+        alert(message);
+        setButton(button, 'עדכן יומן');
+        return;
+      }
+
+      let ids = [];
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        ids = [...new Set([...document.querySelectorAll('[onclick*="openmd2("]')]
+          .map((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1])
+          .filter(Boolean))];
+        if (ids.length) break;
+        await sleep(500);
+      }
+
+      if (!ids.length) {
+        const message = 'לא נמצאו הפקות בדף. ודא שלוח הרצליה נטען עד הסוף.';
+        await report('failed', message, 100, { error: message });
+        alert(message);
+        setButton(button, 'עדכן יומן');
+        return;
+      }
+
+      await report('events_found', 'נמצאו ' + ids.length + ' הפקות. מושך פופאפים של צוותים.', 20, {
+        eventCount: ids.length,
+        popupDone: 0,
+        popupTotal: ids.length
+      });
+
+      const popupHtmlById = {};
+      let done = 0;
+      for (const id of ids) {
+        setButton(button, 'צוות ' + (done + 1) + '/' + ids.length);
+        await report('popup_loading', 'טוען צוות להפקה ' + id + ' (' + (done + 1) + '/' + ids.length + ')', 20 + Math.round((done / ids.length) * 50), {
+          popupDone: done,
+          popupTotal: ids.length
+        });
+
+        const popupUrl = new URL('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N' + id, location.href).toString();
+        const response = await fetch(popupUrl, { credentials: 'include' });
+        const html = await response.text();
+        if (!response.ok || !html || html.length < 100) {
+          throw new Error('לא נטען צוות להפקה ' + id);
+        }
+
+        popupHtmlById[id] = html;
+        done += 1;
+        await report('popup_progress', 'נמשך צוות להפקה ' + id + ' (' + done + '/' + ids.length + ')', 20 + Math.round((done / ids.length) * 50), {
+          popupDone: done,
+          popupTotal: ids.length
+        });
+        await sleep(350);
+      }
+
+      setButton(button, 'שומר...');
+      await report('uploading', 'כל הפופאפים נאספו. שולח לאפליקציה לשמירה.', 75, {
+        eventCount: ids.length,
+        popupDone: ids.length,
+        popupTotal: ids.length
+      });
+
+      const saveResponse = await fetch(ingestUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'content-type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          token,
+          href: location.href,
+          scheduleHtml: document.documentElement.outerHTML,
+          popupHtmlById
+        })
+      });
+      const result = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok || !result.ok) {
+        throw new Error(result.error || ('HTTP ' + saveResponse.status));
+      }
+
+      await report('done', 'היומן עודכן: ' + result.personal + ' הפקות עם צוותים מלאים.', 100, {
+        eventCount: ids.length,
+        popupDone: ids.length,
+        popupTotal: ids.length
+      });
+      setButton(button, 'הושלם');
+      alert('היומן עודכן: ' + result.personal + ' הפקות, ' + ids.length + ' פופאפים');
+    } catch (error) {
+      const message = 'ייבוא נכשל: ' + (error && error.message ? error.message : error);
+      await report('failed', message, 100, { error: message });
+      alert(message);
+      setButton(button, 'נסה שוב');
+    }
+  };
+
+  const addButton = () => {
+    if (document.getElementById('tv-industry-herzliya-bridge-button')) return;
+    const button = document.createElement('button');
+    button.id = 'tv-industry-herzliya-bridge-button';
+    button.type = 'button';
+    button.textContent = 'עדכן יומן';
+    button.style.cssText = [
+      'position:fixed',
+      'z-index:2147483647',
+      'left:12px',
+      'bottom:72px',
+      'border:0',
+      'border-radius:999px',
+      'background:#ff6a00',
+      'color:#120700',
+      'font:bold 16px Arial,sans-serif',
+      'padding:12px 18px',
+      'box-shadow:0 8px 24px rgba(0,0,0,.35)',
+      'direction:rtl'
+    ].join(';');
+    button.addEventListener('click', () => void run(button));
+    document.body.appendChild(button);
+    void report('android_ready', 'כפתור עדכון היומן מוכן בדף הרצליה ב-Android.', 8);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', addButton);
+  } else {
+    addButton();
+  }
+})();
+`.trim();
+}
+
 export default function CalendarPhoneBridgePage() {
   const { user, loading } = useAuth();
   const [targetUid, setTargetUid] = useState(DEFAULT_TARGET_UID);
@@ -171,6 +339,11 @@ export default function CalendarPhoneBridgePage() {
   const shortcutScript = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl
       ? buildShortcutScript(tokenData.token, tokenData.ingestUrl)
+      : ''
+  ), [tokenData]);
+  const androidUserscript = useMemo(() => (
+    tokenData?.token && tokenData.ingestUrl
+      ? buildAndroidUserscript(tokenData.token, tokenData.ingestUrl)
       : ''
   ), [tokenData]);
 
@@ -261,8 +434,8 @@ export default function CalendarPhoneBridgePage() {
             <h1 className="text-2xl font-bold">גשר טלפון ליומן הרצליה</h1>
           </div>
           <p className="text-sm leading-6 text-violet-200">
-            מצב טלפון בלבד: קיצור דרך ב-iPhone/Safari רץ מתוך דף הרצליה עצמו, אוסף את הלוח ואת פופאפי הצוותים,
-            ושולח אותם לאפליקציה. מסך הניהול מציג את ההתקדמות בזמן אמת.
+            מצב Android/Pixels: סקריפט פרטי רץ בתוך דף הרצליה בטלפון, מוסיף כפתור “עדכן יומן”,
+            אוסף את הלוח ואת פופאפי הצוותים, ושולח אותם לאפליקציה.
           </p>
         </header>
 
@@ -333,24 +506,24 @@ export default function CalendarPhoneBridgePage() {
           </section>
         ) : null}
 
-        {shortcutScript ? (
+        {androidUserscript ? (
           <section className="space-y-4 rounded-2xl border border-emerald-400/40 bg-[#17102f] p-5">
-            <h2 className="font-bold text-emerald-300">מסלול מומלץ: טלפון בלבד דרך קיצור דרך</h2>
+            <h2 className="font-bold text-emerald-300">מסלול מומלץ ל-Pixel 7 Pro / Android</h2>
             <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100">
-              זה לא משתמש במחשב ולא ב-Bookmarklet. הקוד רץ מתוך דף הרצליה בטלפון דרך Share Sheet,
-              ולכן הוא משתמש בגישה שכבר עובדת אצלך בטלפון.
+              זה לא משתמש במחשב ולא ב-Bookmarklet. הסקריפט רץ בדפדפן Android שתומך בתוספים,
+              בתוך דף הרצליה עצמו, ולכן הוא משתמש בגישה שכבר עובדת אצלך בטלפון.
             </p>
             <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
-              <li>בטלפון פתח את אפליקציית Shortcuts וצור קיצור דרך חדש.</li>
-              <li>הוסף פעולה בשם <span dir="ltr">Run JavaScript on Web Page</span>.</li>
-              <li>הדבק בפעולה את הקוד שמופיע כאן למטה.</li>
-              <li>בהגדרות הקיצור הפעל <span dir="ltr">Show in Share Sheet</span>, והשאר אותו עבור <span dir="ltr">Safari Web Pages</span>.</li>
-              <li>פתח בטלפון את קישור הרצליה השבועי ב-Safari.</li>
-              <li>כשהלוח האישי מוצג, לחץ Share ובחר את הקיצור שיצרת.</li>
-              <li>ההתקדמות תופיע במסך הזה. אם משהו חסר, שום דבר חלקי לא נשמר.</li>
+              <li>בטלפון התקן דפדפן שתומך בתוספי Chrome באנדרואיד, למשל <span dir="ltr">Kiwi Browser</span>.</li>
+              <li>בתוך Kiwi התקן את התוסף <span dir="ltr">Tampermonkey</span>.</li>
+              <li>פתח את Tampermonkey, צור <span dir="ltr">New script</span>, מחק את התוכן הקיים והדבק את הקוד שמופיע כאן.</li>
+              <li>שמור את הסקריפט.</li>
+              <li>פתח ב-Kiwi את קישור הרצליה השבועי.</li>
+              <li>כשהלוח האישי מוצג, יופיע כפתור כתום “עדכן יומן” בתחתית המסך.</li>
+              <li>לחץ עליו. ההתקדמות תופיע כאן. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
             </ol>
             <textarea
-              value={shortcutScript}
+              value={androidUserscript}
               readOnly
               rows={12}
               dir="ltr"
@@ -358,13 +531,37 @@ export default function CalendarPhoneBridgePage() {
             />
             <button
               type="button"
-              onClick={() => void copy(shortcutScript, 'קוד Shortcut')}
+              onClick={() => void copy(androidUserscript, 'קוד Android')}
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
             >
               <Copy className="h-4 w-4" />
-              העתק קוד לקיצור דרך
+              העתק קוד Android
             </button>
           </section>
+        ) : null}
+
+        {shortcutScript ? (
+          <details className="rounded-2xl border border-violet-400/30 bg-[#17102f] p-5">
+            <summary className="cursor-pointer text-sm font-bold text-violet-100">גיבוי ל-iPhone בלבד</summary>
+            <p className="mt-3 text-sm leading-6 text-violet-200">
+              זה לא מתאים ל-Pixel. נשאר כאן רק אם בעתיד תרצה להריץ דרך iPhone/Safari Shortcuts.
+            </p>
+            <textarea
+              value={shortcutScript}
+              readOnly
+              rows={8}
+              dir="ltr"
+              className="mt-3 w-full rounded-lg border border-violet-400/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-violet-100"
+            />
+            <button
+              type="button"
+              onClick={() => void copy(shortcutScript, 'קוד Shortcut')}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-bold text-white hover:bg-violet-400"
+            >
+              <Copy className="h-4 w-4" />
+              העתק קוד iPhone
+            </button>
+          </details>
         ) : null}
 
         {bookmarklet ? (
