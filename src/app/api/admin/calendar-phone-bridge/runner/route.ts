@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       const popupUrl = new URL('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N' + id, location.href).toString();
       const response = await fetch(popupUrl, { credentials: 'include' });
       const html = await response.text();
-      if (!response.ok || !html || !html.includes('נייד')) {
+      if (!response.ok || !html || html.length < 100) {
         throw new Error('לא נטען צוות להפקה ' + id);
       }
 
