@@ -49,6 +49,24 @@ function validateParsedProductions(productions: Production[]): string | null {
   return null;
 }
 
+function isIncompleteHerzliyaCrewImport(productions: Production[]): boolean {
+  const realHerzliyaProductions = productions.filter((production) => {
+    const herzliyaId = production.herzliyaId || (/^\d+$/.test(String(production.id || '')) ? Number(production.id) : 0);
+    return Boolean(herzliyaId);
+  });
+  if (realHerzliyaProductions.length === 0) return false;
+
+  return realHerzliyaProductions.every((production) => {
+    const hasPopupCrew = (production as ProductionWithCrewSource).crewSource === 'popup'
+      || (production as ProductionWithCrewSource).popupParsed === true;
+    return !hasPopupCrew || (production.crew || []).length === 0;
+  });
+}
+
+function incompleteCrewMessage(): string {
+  return 'נמצאו הפקות מהרצליה, אבל לא נקרא אף צוות מ-ShowCrew. השמירה נחסמה כדי לא ליצור שבוע בלי צוותים. נסה שוב מרשת שמצליחה לפתוח את הרצליה או הדבק HTML של פופאפי הצוותים.';
+}
+
 async function productionFromPopup(targetUid: string, html: string): Promise<Production | null> {
   const date = extractDateFromPopup(html);
   const name = extractNameFromPopup(html);
@@ -150,14 +168,35 @@ export async function POST(request: NextRequest) {
         const imported = await fetchHerzliyaProductions(url);
         const validationError = validateParsedProductions(imported.productions);
         if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
-        if (body.preview) return NextResponse.json({ ok: true, preview: imported.productions, source: 'url' });
+        const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
+        if (body.preview) {
+          return NextResponse.json({
+            ok: true,
+            preview: imported.productions,
+            source: 'url',
+            incompleteCrew,
+            warning: incompleteCrew ? incompleteCrewMessage() : undefined,
+          });
+        }
+        if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
         const result = await saveProductions(targetUid, authUser.uid, imported.productions, 'url');
         return NextResponse.json({ ok: true, ...result, source: 'url' });
       }
       const imported = parseBundle(input);
       const validationError = validateParsedProductions(imported.productions);
       if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
-      if (body.preview) return NextResponse.json({ ok: true, preview: imported.productions, source: imported.source, workerName: imported.workerName || '' });
+      const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
+      if (body.preview) {
+        return NextResponse.json({
+          ok: true,
+          preview: imported.productions,
+          source: imported.source,
+          workerName: imported.workerName || '',
+          incompleteCrew,
+          warning: incompleteCrew ? incompleteCrewMessage() : undefined,
+        });
+      }
+      if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
       const result = await saveProductions(targetUid, authUser.uid, imported.productions, imported.source);
       return NextResponse.json({ ok: true, ...result, workerName: imported.workerName || '', source: imported.source });
     } catch (error) {
@@ -168,6 +207,9 @@ export async function POST(request: NextRequest) {
   if (Array.isArray(body.parsedProductions)) {
     const validationError = validateParsedProductions(body.parsedProductions);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
+    if (isIncompleteHerzliyaCrewImport(body.parsedProductions)) {
+      return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
+    }
     const result = await saveProductions(targetUid, authUser.uid, body.parsedProductions, 'html-preview');
     return NextResponse.json({ ok: true, ...result, source: 'html-preview' });
   }
