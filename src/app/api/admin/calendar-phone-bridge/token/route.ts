@@ -28,6 +28,15 @@ export async function POST(request: NextRequest) {
     expiresAt,
     usedAt: null,
     status: 'active',
+    bridgePhase: 'created',
+    bridgeMessage: 'נוצר טוקן. מחכה להפעלה מהטלפון.',
+    bridgeProgress: 5,
+    eventCount: 0,
+    popupDone: 0,
+    popupTotal: 0,
+    productionCount: 0,
+    error: null,
+    log: [`[${new Date().toLocaleTimeString('he-IL')}] נוצר טוקן. מחכה להפעלה מהטלפון.`],
   });
 
   return NextResponse.json({

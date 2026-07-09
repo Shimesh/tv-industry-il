@@ -22,6 +22,7 @@ type BridgeTokenDoc = {
   expiresAt?: number;
   usedAt?: number | null;
   status?: string;
+  log?: unknown;
 };
 
 type ProductionWithSource = Production & {
@@ -36,6 +37,36 @@ type IngestPayload = {
   popupHtmlById?: Record<string, string>;
   href?: string;
 };
+
+function safeLog(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string').slice(-30)
+    : [];
+}
+
+async function updateBridgeStatus(
+  token: string,
+  tokenDoc: BridgeTokenDoc | null,
+  phase: string,
+  message: string,
+  progress: number,
+  extra: Record<string, string | number | boolean | null | string[]> = {},
+) {
+  if (!token || !tokenDoc) return;
+  const log = [
+    ...safeLog(tokenDoc.log),
+    `[${new Date().toLocaleTimeString('he-IL')}] ${message}`,
+  ].slice(-30);
+  tokenDoc.log = log;
+  await patchDocument(`calendar_phone_bridge_tokens/${token}`, {
+    bridgePhase: phase,
+    bridgeMessage: message,
+    bridgeProgress: Math.max(0, Math.min(100, progress)),
+    log,
+    lastStatusAt: Date.now(),
+    ...extra,
+  });
+}
 
 function cors(response: NextResponse): NextResponse {
   response.headers.set('Access-Control-Allow-Origin', '*');
@@ -159,12 +190,16 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
 }
 
 export async function POST(request: NextRequest) {
+  let failureToken = '';
+  let failureTokenDoc: BridgeTokenDoc | null = null;
   try {
     const payload = await parsePayload(request);
     const token = String(payload.token || '').trim();
+    failureToken = token;
     if (!token) return cors(NextResponse.json({ error: 'חסר טוקן גשר' }, { status: 401 }));
 
     const tokenDoc = await getDocument<BridgeTokenDoc>(`calendar_phone_bridge_tokens/${token}`).catch(() => null);
+    failureTokenDoc = tokenDoc;
     if (!tokenDoc || tokenDoc.status !== 'active') {
       return cors(NextResponse.json({ error: 'טוקן לא תקין או כבר נוצל' }, { status: 403 }));
     }
@@ -175,20 +210,44 @@ export async function POST(request: NextRequest) {
       return cors(NextResponse.json({ error: 'הטוקן פג תוקף. צור טוקן חדש בממשק הניהול.' }, { status: 403 }));
     }
 
+    await updateBridgeStatus(token, tokenDoc, 'received', 'החבילה התקבלה מהטלפון. מאמת נתונים.', 78);
     const productions = buildProductions(payload);
+    await updateBridgeStatus(token, tokenDoc, 'validating', `נמצאו ${productions.length} הפקות. בודק פופאפים וצוותים.`, 84, {
+      eventCount: productions.length,
+    });
     const validationError = validateProductions(productions);
-    if (validationError) return cors(NextResponse.json({ error: validationError }, { status: 422 }));
+    if (validationError) {
+      await updateBridgeStatus(token, tokenDoc, 'failed', validationError, 100, {
+        status: 'failed',
+        error: validationError,
+      });
+      return cors(NextResponse.json({ error: validationError }, { status: 422 }));
+    }
 
+    await updateBridgeStatus(token, tokenDoc, 'saving', 'הנתונים תקינים. שומר ליומן וללוח הגלובלי.', 90);
     const result = await saveProductions(String(tokenDoc.targetUid || ''), productions);
     await patchDocument(`calendar_phone_bridge_tokens/${token}`, {
       usedAt: Date.now(),
       status: 'used',
       href: String(payload.href || '').slice(0, 500),
       productionCount: result.personal,
+      bridgePhase: 'done',
+      bridgeMessage: `הושלם. נשמרו ${result.personal} הפקות עם צוותים מלאים.`,
+      bridgeProgress: 100,
+      log: [
+        ...safeLog(tokenDoc.log),
+        `[${new Date().toLocaleTimeString('he-IL')}] הושלם. נשמרו ${result.personal} הפקות עם צוותים מלאים.`,
+      ].slice(-30),
     });
 
     return cors(NextResponse.json({ ok: true, ...result }));
   } catch (error) {
+    try {
+      await updateBridgeStatus(failureToken, failureTokenDoc, 'failed', error instanceof Error ? error.message : 'ייבוא מהטלפון נכשל', 100, {
+        status: 'failed',
+        error: error instanceof Error ? error.message.slice(0, 500) : 'ייבוא מהטלפון נכשל',
+      });
+    } catch { /* best effort only */ }
     return cors(NextResponse.json({
       error: error instanceof Error ? error.message : 'ייבוא מהטלפון נכשל',
     }, { status: 500 }));
