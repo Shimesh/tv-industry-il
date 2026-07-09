@@ -3,6 +3,7 @@ import { syncHerzliyaUrl } from '@/lib/server/herzliyaSync';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+export const preferredRegion = 'fra1';
 
 const ONCE_TOKEN = 'codex-once-20260709-6ad9e27c0f0d49a2a4b2';
 const TARGET_UID = 'pVtM4KuNSSSexQ3W32UmImJHJID3';
