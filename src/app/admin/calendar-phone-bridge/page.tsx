@@ -346,6 +346,11 @@ export default function CalendarPhoneBridgePage() {
       ? buildAndroidUserscript(tokenData.token, tokenData.ingestUrl)
       : ''
   ), [tokenData]);
+  const androidInstallUrl = useMemo(() => (
+    tokenData?.token
+      ? `/admin/calendar-phone-bridge/android.user.js?token=${encodeURIComponent(tokenData.token)}`
+      : ''
+  ), [tokenData?.token]);
 
   useEffect(() => {
     if (!user || !tokenData?.token) return undefined;
@@ -516,12 +521,25 @@ export default function CalendarPhoneBridgePage() {
             <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
               <li>בטלפון התקן דפדפן שתומך בתוספי Chrome באנדרואיד, למשל <span dir="ltr">Kiwi Browser</span>.</li>
               <li>בתוך Kiwi התקן את התוסף <span dir="ltr">Tampermonkey</span>.</li>
-              <li>פתח את Tampermonkey, צור <span dir="ltr">New script</span>, מחק את התוכן הקיים והדבק את הקוד שמופיע כאן.</li>
-              <li>שמור את הסקריפט.</li>
+              <li>פתח את המסך הזה מתוך Kiwi ולחץ על “התקן סקריפט Android”.</li>
+              <li>אם Tampermonkey מציג מסך התקנה, לחץ <span dir="ltr">Install</span>.</li>
               <li>פתח ב-Kiwi את קישור הרצליה השבועי.</li>
               <li>כשהלוח האישי מוצג, יופיע כפתור כתום “עדכן יומן” בתחתית המסך.</li>
               <li>לחץ עליו. ההתקדמות תופיע כאן. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
             </ol>
+            {androidInstallUrl ? (
+              <a
+                href={androidInstallUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-3 text-center text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+              >
+                התקן סקריפט Android
+              </a>
+            ) : null}
+            <p className="text-xs leading-5 text-violet-300">
+              אם ההתקנה הישירה לא נפתחת, השתמש בקוד הגיבוי למטה והדבק אותו ידנית ב-Tampermonkey.
+            </p>
             <textarea
               value={androidUserscript}
               readOnly
