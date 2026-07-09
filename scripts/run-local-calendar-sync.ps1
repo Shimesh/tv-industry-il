@@ -1,3 +1,7 @@
+param(
+  [switch]$Force
+)
+
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -12,7 +16,7 @@ $MinimumInterval = [TimeSpan]::FromHours(2)
 
 # The Windows task may still have an older hourly trigger. Enforce the two-hour
 # interval before even opening a TCP connection to Herzliya.
-if (Test-Path $LastAttemptFile) {
+if (-not $Force -and (Test-Path $LastAttemptFile)) {
   $lastAttempt = (Get-Item $LastAttemptFile).LastWriteTimeUtc
   if (((Get-Date).ToUniversalTime() - $lastAttempt) -lt $MinimumInterval) {
     exit 0
