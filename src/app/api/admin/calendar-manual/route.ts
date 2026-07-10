@@ -21,6 +21,23 @@ function extractUrl(value: string): string {
   return value.match(/https?:\/\/hsil\.acc\.co\.il:5443\/[^\s<]+/i)?.[0] || '';
 }
 
+function looksLikePopupCrewInput(value: string): boolean {
+  const input = value.trim();
+  if (!input.includes('<table') || !input.includes('<td')) return false;
+
+  const hasPopupShell = /<div[^>]*class=["'][^"']*\bmodal-body\b/i.test(input);
+  const hasHerzliyaPopupHeader =
+    /<font[^>]*color=["']red["'][^>]*>\s*<b>[\s\S]*?<\/b>\s*<\/font>/i.test(input)
+    && /<font[^>]*color=["']#0255b5["'][^>]*>\s*<b>\d{1,2}\/\d{1,2}\/\d{4}<\/b>\s*<\/font>/i.test(input);
+  const hasCrewColumns =
+    /<td[^>]*>\s*(?:שעות|time)\s*<\/td>/i.test(input)
+    && /<td[^>]*>\s*(?:תפקיד|role)\s*<\/td>/i.test(input)
+    && /<td[^>]*>\s*(?:שם|name)\s*<\/td>/i.test(input)
+    && /<td[^>]*>\s*(?:נייד|טלפון|phone|mobile)\s*<\/td>/i.test(input);
+
+  return hasCrewColumns && (hasPopupShell || hasHerzliyaPopupHeader);
+}
+
 function parseBundle(input: string): { productions: Production[]; workerName: string; source: string } {
   let bundle: ImportBundle = { scheduleHtml: input };
   if (input.trim().startsWith('{')) {
@@ -208,7 +225,7 @@ export async function POST(request: NextRequest) {
   if (input) {
     const url = extractUrl(input);
     try {
-      if (!url && /<td[^>]*>\s*נייד\s*<\/td>/i.test(input)) {
+      if (!url && looksLikePopupCrewInput(input)) {
         const popupProductions = await productionsFromPopupInput(targetUid, input);
         if (!popupProductions.length) return NextResponse.json({ error: 'נמצאו טבלאות צוות, אך לא נמצאו הפקות תואמות לפי השם והתאריך.' }, { status: 422 });
         if (body.preview) return NextResponse.json({ ok: true, preview: popupProductions, source: 'popup-html' });
