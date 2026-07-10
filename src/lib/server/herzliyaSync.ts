@@ -484,7 +484,7 @@ export async function fetchHerzliyaProductions(
       if (guidMatch) {
         const empGuid = guidMatch[1];
         const dateStr = getHerzliyaDateArgFromUrl(url);
-        const showEmp6Url = `${sendwaMgrqBase}?appname=HsILWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
+        const showEmp6Url = `${sendwaMgrqBase}?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N${empGuid},-A${dateStr},-Atrue`;
         debugLines.push(`sendwaEmp6:guid=${empGuid.slice(0, 20)},date=${dateStr}`);
         const personalCount = (effectivePersonalHtml.match(/openmd2\(/g) || []).length;
         const tryEmp6 = async (cookie: string) => {
@@ -863,7 +863,8 @@ export async function fetchHerzliyaProductions(
       name: cleanName,
       id: prod.herzliyaId ? String(prod.herzliyaId) : (prod.id || generateProductionId(cleanName, prod.date, prod.studio, prod.startTime)),
       day: prod.day || getHebrewDay(prod.date),
-      crewSource: (prod as Production & { crewSource?: string }).crewSource || (popupParsed ? 'popup' : undefined),
+      crewSource: (prod as Production & { crewSource?: string }).crewSource || (popupParsed ? 'popup' : (prod.crew?.length ? 'department' : undefined)),
+      departmentEnriched: !popupParsed && Boolean(prod.crew?.length),
       popupParsed,
     };
   });

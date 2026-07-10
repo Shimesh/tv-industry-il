@@ -28,16 +28,23 @@ function parseBundle(input: string): { productions: Production[]; workerName: st
   }
   const parsed = parseScheduleHTML(bundle.scheduleHtml || '', bundle.departmentHtml || '');
   const popupHtmlById = bundle.popupHtmlById || {};
+  const hasPopupBundle = Object.keys(popupHtmlById).length > 0;
   const productions = parsed.productions.map((production) => {
     const stableProduction = production.herzliyaId ? { ...production, id: String(production.herzliyaId) } : production;
     const popup = production.herzliyaId ? popupHtmlById[String(production.herzliyaId)] : '';
-    if (!popup) return stableProduction;
+    if (!popup) {
+      const hasDepartmentCrew = (stableProduction.crew || []).length > 0;
+      return hasDepartmentCrew
+        ? { ...stableProduction, crewSource: 'department', departmentEnriched: true } as Production
+        : stableProduction;
+    }
     const crew = parseHerzliyaPopupHtml(popup).map((member) => ({
       ...member, roleDetail: '', phone: member.phone || null,
     }));
     return { ...stableProduction, crew, crewSource: 'popup', popupParsed: true } as Production;
   });
-  return { productions, workerName: parsed.workerName, source: Object.keys(popupHtmlById).length ? 'html-bundle' : 'html' };
+  const hasDepartmentCrew = productions.some((production) => (production.crew || []).length > 0 && (production as ProductionWithCrewSource).crewSource !== 'popup');
+  return { productions, workerName: parsed.workerName, source: hasPopupBundle ? 'html-bundle' : hasDepartmentCrew ? 'department-html' : 'html' };
 }
 
 function validateParsedProductions(productions: Production[]): string | null {
@@ -59,8 +66,21 @@ function isIncompleteHerzliyaCrewImport(productions: Production[]): boolean {
   return realHerzliyaProductions.every((production) => {
     const hasPopupCrew = (production as ProductionWithCrewSource).crewSource === 'popup'
       || (production as ProductionWithCrewSource).popupParsed === true;
-    return !hasPopupCrew || (production.crew || []).length === 0;
+    const hasUsableDepartmentCrew = (production.crew || []).length > 0;
+    return (!hasPopupCrew || (production.crew || []).length === 0) && !hasUsableDepartmentCrew;
   });
+}
+
+function hasDepartmentOnlyCrew(productions: Production[]): boolean {
+  return productions.some((production) => (
+    (production.crew || []).length > 0
+    && (production as ProductionWithCrewSource).crewSource !== 'popup'
+    && (production as ProductionWithCrewSource).popupParsed !== true
+  ));
+}
+
+function departmentOnlyCrewMessage(): string {
+  return 'נמצא יומן מחלקתי מלא מ-ShowEmp6. הצוותים שמופיעים בכרטיסים יישמרו כצוות מחלקתי חלקי, וצוות מלא שכבר נקלט מפופאפים לא יידרס.';
 }
 
 function incompleteCrewMessage(): string {
@@ -117,6 +137,7 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
     const existingPersonal = await getDocument<ProductionWithCrewSource>(personalPath).catch(() => null);
     const hasAuthoritativeIncomingCrew = (production as ProductionWithCrewSource).crewSource === 'popup'
       || (production as ProductionWithCrewSource).popupParsed === true;
+    const incomingCrewSource = (production as ProductionWithCrewSource).crewSource;
     const preservedCrew = mergedGlobal.crewSource === 'popup' && mergedGlobal.crew_list.length > 0
       ? mergedGlobal.crew_list.map((member) => ({
           name: member.name,
@@ -132,6 +153,8 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
       : preservedCrew;
     const personalCrewSource = hasAuthoritativeIncomingCrew || (mergedGlobal.crewSource === 'popup' && preservedCrew.length > 0)
       ? 'popup'
+      : incomingCrewSource === 'department'
+        ? 'department'
       : existingPersonal?.crewSource;
     await patchDocument(`productions/${targetUid}/weeks/${getWeekId(production.date)}/productions/${production.id}`, {
       ...normalized,
@@ -169,13 +192,15 @@ export async function POST(request: NextRequest) {
         const validationError = validateParsedProductions(imported.productions);
         if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
         const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
+        const departmentCrew = hasDepartmentOnlyCrew(imported.productions);
         if (body.preview) {
           return NextResponse.json({
             ok: true,
             preview: imported.productions,
             source: 'url',
             incompleteCrew,
-            warning: incompleteCrew ? incompleteCrewMessage() : undefined,
+            departmentCrew,
+            warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
           });
         }
         if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
@@ -186,6 +211,7 @@ export async function POST(request: NextRequest) {
       const validationError = validateParsedProductions(imported.productions);
       if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
       const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
+      const departmentCrew = hasDepartmentOnlyCrew(imported.productions);
       if (body.preview) {
         return NextResponse.json({
           ok: true,
@@ -193,7 +219,8 @@ export async function POST(request: NextRequest) {
           source: imported.source,
           workerName: imported.workerName || '',
           incompleteCrew,
-          warning: incompleteCrew ? incompleteCrewMessage() : undefined,
+          departmentCrew,
+          warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
         });
       }
       if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });

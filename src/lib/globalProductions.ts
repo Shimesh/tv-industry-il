@@ -78,8 +78,11 @@ export function mergeGlobalProduction(
   if (!existing) return incoming;
 
   const incomingAuthoritative = incoming.crewSource === 'popup';
+  const keepExistingAuthoritativeCrew = existing.crewSource === 'popup' && !incomingAuthoritative;
   const crewList = incomingAuthoritative
     ? incoming.crew_list ?? []
+    : keepExistingAuthoritativeCrew
+      ? existing.crew_list ?? []
     : mergeCrewLists(existing.crew_list, incoming.crew_list);
   const crewPhones = new Set<string>();
   const crewShadowKeys = new Set<string>();
@@ -152,6 +155,17 @@ export function mergeGlobalProductionDocs(
       ...incoming,
       crew_phones: Array.from(new Set((incoming.crew_list ?? []).map((member) => normalizePhone(member.phone_number || member.normalizedPhone)).filter((phone): phone is string => Boolean(phone)))),
       crew_shadow_keys: Array.from(new Set((incoming.crew_list ?? []).map((member) => member.shadowKey).filter((key): key is string => Boolean(key)))),
+    };
+  }
+
+  if (existing.crewSource === 'popup') {
+    return {
+      ...existing,
+      ...incoming,
+      crew_list: existing.crew_list ?? [],
+      crew_phones: existing.crew_phones ?? [],
+      crew_shadow_keys: existing.crew_shadow_keys ?? [],
+      crewSource: 'popup',
     };
   }
 
