@@ -343,7 +343,7 @@ function isConfirmedPersonalShift(production: Production): boolean {
   return production.isCurrentUserShift === true && !staleCandidate;
 }
 
-const PRODUCTIONS_CACHE_KEY = 'productions_cache_v9';
+const PRODUCTIONS_CACHE_KEY = 'productions_cache_v10';
 type CalendarAccessMode = ReturnType<typeof resolveCalendarAccessMode>;
 
 function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): string {
