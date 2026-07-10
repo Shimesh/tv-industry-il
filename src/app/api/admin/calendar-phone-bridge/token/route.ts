@@ -12,7 +12,11 @@ export async function POST(request: NextRequest) {
   const authUser = await requirePrimaryAdminRequest(request);
   if (authUser instanceof NextResponse) return authUser;
 
-  const body = (await request.json().catch(() => ({}))) as { targetUid?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    targetUid?: string;
+    sourceUrl?: string;
+    fullDepartmentUrl?: string;
+  };
   const targetUid = String(body.targetUid || DEFAULT_TARGET_UID).trim();
   if (!targetUid) return NextResponse.json({ error: 'חסר משתמש יעד' }, { status: 400 });
 
@@ -36,6 +40,8 @@ export async function POST(request: NextRequest) {
     popupTotal: 0,
     productionCount: 0,
     error: null,
+    sourceUrl: String(body.sourceUrl || '').slice(0, 1000),
+    fullDepartmentUrl: String(body.fullDepartmentUrl || '').slice(0, 1000),
     log: [`[${new Date().toLocaleTimeString('he-IL')}] נוצר טוקן. מחכה להפעלה מהטלפון.`],
   });
 

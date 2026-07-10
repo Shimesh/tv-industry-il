@@ -6,6 +6,7 @@ import { ArrowRight, CheckCircle2, Copy, Loader2, Smartphone, XCircle } from 'lu
 import { useAuth } from '@/contexts/AuthContext';
 
 const DEFAULT_TARGET_UID = 'pVtM4KuNSSSexQ3W32UmImJHJID3';
+const HERZLIYA_FULL_DEPARTMENT_BASE = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll';
 
 type TokenResponse = {
   ok: boolean;
@@ -35,6 +36,23 @@ type BridgeStatus = {
 function clampProgress(value: number | undefined): number {
   if (typeof value !== 'number' || Number.isNaN(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function extractHerzliyaUrl(input: string): string {
+  return input.match(/https?:\/\/hsil\.acc\.co\.il:5443\/[^\s<>"']+/i)?.[0] || input.trim();
+}
+
+function deriveFullDepartmentUrl(input: string): string {
+  const candidate = extractHerzliyaUrl(input);
+  const sendwaMatch = candidate.match(/[?&]A=([^,\s&]+),(\d{8})/i)
+    || input.match(/\bA=([A-F0-9-]{36}),(\d{8})/i);
+  const directMatch = candidate.match(/arguments=-N([^,\s&]+),-A(\d{8})(?:,-A(?:true|false))?/i)
+    || input.match(/arguments=-N([^,\s&]+),-A(\d{8})(?:,-A(?:true|false))?/i);
+  const match = directMatch || sendwaMatch;
+  if (!match) return '';
+  const guid = match[1];
+  const date = match[2];
+  return `${HERZLIYA_FULL_DEPARTMENT_BASE}?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N${guid},-A${date},-Atrue`;
 }
 
 function buildBookmarklet(token: string, ingestUrl: string): string {
@@ -70,6 +88,20 @@ const report = async (phase, message, progress, extra = {}) => {
       await report('failed', message, 100, { error: message });
       completion(message);
       return;
+    }
+
+    const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
+    if (!isFullDepartmentPage) {
+      const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
+      const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
+        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+      if (match) {
+        const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
+          + match[1] + ',-A' + match[2] + ',-Atrue';
+        await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
+        location.href = fullUrl;
+        return;
+      }
     }
 
     let ids = [];
@@ -140,12 +172,12 @@ const report = async (phase, message, progress, extra = {}) => {
       throw new Error(result.error || ('HTTP ' + saveResponse.status));
     }
 
-    await report('done', 'היומן עודכן: ' + result.personal + ' הפקות עם צוותים מלאים.', 100, {
+    await report('done', 'היומן המלא עודכן: ' + result.global + ' הפקות, מתוכן ' + result.personal + ' משמרות אישיות.', 100, {
       eventCount: ids.length,
       popupDone: ids.length,
       popupTotal: ids.length
     });
-    completion('היומן עודכן: ' + result.personal + ' הפקות, ' + ids.length + ' פופאפים');
+    completion('היומן המלא עודכן: ' + result.global + ' הפקות, ' + ids.length + ' פופאפים');
   } catch (error) {
     const message = 'ייבוא נכשל: ' + (error && error.message ? error.message : error);
     await report('failed', message, 100, { error: message });
@@ -201,6 +233,20 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
         alert(message);
         setButton(button, 'עדכן יומן');
         return;
+      }
+
+      const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
+      if (!isFullDepartmentPage) {
+        const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
+        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
+          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+        if (match) {
+          const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
+            + match[1] + ',-A' + match[2] + ',-Atrue';
+          await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
+          location.href = fullUrl;
+          return;
+        }
       }
 
       let ids = [];
@@ -274,13 +320,13 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
         throw new Error(result.error || ('HTTP ' + saveResponse.status));
       }
 
-      await report('done', 'היומן עודכן: ' + result.personal + ' הפקות עם צוותים מלאים.', 100, {
+      await report('done', 'היומן המלא עודכן: ' + result.global + ' הפקות, מתוכן ' + result.personal + ' משמרות אישיות.', 100, {
         eventCount: ids.length,
         popupDone: ids.length,
         popupTotal: ids.length
       });
       setButton(button, 'הושלם');
-      alert('היומן עודכן: ' + result.personal + ' הפקות, ' + ids.length + ' פופאפים');
+      alert('היומן המלא עודכן: ' + result.global + ' הפקות, ' + ids.length + ' פופאפים');
     } catch (error) {
       const message = 'ייבוא נכשל: ' + (error && error.message ? error.message : error);
       await report('failed', message, 100, { error: message });
@@ -330,6 +376,7 @@ export default function CalendarPhoneBridgePage() {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [scheduleInput, setScheduleInput] = useState('');
 
   const bookmarklet = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl
@@ -351,6 +398,7 @@ export default function CalendarPhoneBridgePage() {
       ? `/admin/calendar-phone-bridge/android.user.js?token=${encodeURIComponent(tokenData.token)}`
       : ''
   ), [tokenData?.token]);
+  const fullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
 
   useEffect(() => {
     if (!user || !tokenData?.token) return undefined;
@@ -395,7 +443,11 @@ export default function CalendarPhoneBridgePage() {
           Authorization: `Bearer ${idToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ targetUid }),
+        body: JSON.stringify({
+          targetUid,
+          sourceUrl: extractHerzliyaUrl(scheduleInput),
+          fullDepartmentUrl,
+        }),
       });
       const payload = await response.json() as TokenResponse;
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'יצירת הטוקן נכשלה');
@@ -453,6 +505,62 @@ export default function CalendarPhoneBridgePage() {
             dir="ltr"
           />
         </label>
+
+        <section className="space-y-3 rounded-2xl border border-orange-400/30 bg-[#17102f] p-5">
+          <div className="space-y-1">
+            <h2 className="font-bold text-orange-200">יצירת קישור יומן מלא לטלפון</h2>
+            <p className="text-sm leading-6 text-violet-200">
+              הדבק כאן את הודעת הרצליה או את הקישור האישי שקיבלת. הממשק יחלץ ממנו את ה־GUID והתאריך,
+              ויבנה את קישור `ShowEmp6` המלא — זה הקישור שפותחים בטלפון כדי לחלץ את כל ההפקות וכל הפופאפים.
+            </p>
+          </div>
+
+          <textarea
+            value={scheduleInput}
+            onChange={(event) => setScheduleInput(event.target.value)}
+            rows={4}
+            className="w-full rounded-lg border border-violet-400/30 bg-[#09061a] px-4 py-3 text-sm outline-none focus:border-orange-400"
+            placeholder="הדבק כאן הודעת WhatsApp מהרצליה או URL של sendwa.html..."
+          />
+
+          {fullDepartmentUrl ? (
+            <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+              <div className="text-sm font-bold text-emerald-200">קישור מלא שנבנה:</div>
+              <input
+                value={fullDepartmentUrl}
+                readOnly
+                dir="ltr"
+                className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50"
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void copy(fullDepartmentUrl, 'קישור היומן המלא')}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+                >
+                  <Copy className="h-4 w-4" />
+                  העתק קישור מלא
+                </button>
+                <a
+                  href={fullDepartmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10"
+                >
+                  פתח בטלפון/דפדפן
+                </a>
+              </div>
+              <p className="text-xs leading-5 text-emerald-100">
+                אחרי שפתחת את הקישור הזה בטלפון: לחץ על הכפתור הכתום “עדכן יומן” שמופיע בתוך דף הרצליה.
+                אם הסקריפט מותקן, הוא ישאב את כל `openmd2`, יוריד את כל `ShowCrew`, וישלח לאפליקציה חבילה אחת לשמירה.
+              </p>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-[#09061a] px-4 py-3 text-sm text-violet-300">
+              עדיין לא זוהה קישור הרצליה. צריך URL שמכיל `sendwa.html?A=...,...` או `arguments=-N...,-A...`.
+            </p>
+          )}
+        </section>
 
         <button
           type="button"

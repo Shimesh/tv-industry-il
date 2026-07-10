@@ -114,7 +114,7 @@ function buildProductions(payload: IngestPayload): ProductionWithSource[] {
         id: String(production.herzliyaId),
         day: production.day || getHebrewDay(production.date),
         status: production.status || 'scheduled',
-        isCurrentUserShift: true,
+        isCurrentUserShift: production.isCurrentUserShift === true,
       };
       if (!popupHtml) return base;
       const patch = popupProductionPatch(popupHtml);
@@ -125,7 +125,7 @@ function buildProductions(payload: IngestPayload): ProductionWithSource[] {
         herzliyaId: production.herzliyaId,
         startTime: production.startTime || base.startTime,
         endTime: production.endTime || base.endTime,
-        isCurrentUserShift: true,
+        isCurrentUserShift: base.isCurrentUserShift,
       };
     });
 }
@@ -150,8 +150,30 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
   let personal = 0;
   let global = 0;
   const weekIds = new Set(productions.map((production) => getWeekId(production.date)));
+  const confirmedPersonal = productions.filter((production) => production.isCurrentUserShift === true);
 
   for (const production of productions) {
+    const normalized: ProductionWithSource = {
+      ...production,
+      id: String(production.herzliyaId || production.id),
+      day: production.day || getHebrewDay(production.date),
+      status: production.status || 'scheduled',
+      crew: production.crew || [],
+      isCurrentUserShift: production.isCurrentUserShift === true,
+      lastUpdatedBy: `phone-bridge:${adminUid}`,
+      lastUpdatedAt: now,
+      crewSource: 'popup',
+      popupParsed: true,
+    };
+
+    const globalDoc = toGlobalProduction(normalized, adminUid, `phone-bridge/${getWeekId(normalized.date)}`);
+    const existingGlobal = await getDocument<GlobalProductionDoc>(`global_productions/${globalDoc.id}`).catch(() => null);
+    const mergedGlobal = mergeGlobalProduction(existingGlobal, globalDoc);
+    await patchDocument(`global_productions/${globalDoc.id}`, mergedGlobal as unknown as Record<string, string>);
+    global += 1;
+  }
+
+  for (const production of confirmedPersonal) {
     const normalized: ProductionWithSource = {
       ...production,
       id: String(production.herzliyaId || production.id),
@@ -165,12 +187,6 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
       popupParsed: true,
     };
 
-    const globalDoc = toGlobalProduction(normalized, adminUid, `phone-bridge/${getWeekId(normalized.date)}`);
-    const existingGlobal = await getDocument<GlobalProductionDoc>(`global_productions/${globalDoc.id}`).catch(() => null);
-    const mergedGlobal = mergeGlobalProduction(existingGlobal, globalDoc);
-    await patchDocument(`global_productions/${globalDoc.id}`, mergedGlobal as unknown as Record<string, string>);
-    global += 1;
-
     await patchDocument(`productions/${targetUid}/weeks/${getWeekId(normalized.date)}/productions/${normalized.id}`, {
       ...normalized,
       missingCandidate: false,
@@ -182,7 +198,7 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
   for (const weekId of weekIds) {
     const docs = await listDocuments<Production & { source?: string }>(`productions/${targetUid}/weeks/${weekId}/productions`).catch(() => []);
     await Promise.all(docs
-      .filter((doc) => doc.source === 'manual-emergency-personal-html' && doc.id && productions.some((production) => String(production.herzliyaId || production.id) === doc.id))
+      .filter((doc) => doc.source === 'manual-emergency-personal-html' && doc.id && confirmedPersonal.some((production) => String(production.herzliyaId || production.id) === doc.id))
       .map((doc) => deleteDocument(`productions/${targetUid}/weeks/${weekId}/productions/${doc.id}`)));
   }
 
@@ -230,13 +246,13 @@ export async function POST(request: NextRequest) {
       usedAt: Date.now(),
       status: 'used',
       href: String(payload.href || '').slice(0, 500),
-      productionCount: result.personal,
+      productionCount: result.global,
       bridgePhase: 'done',
-      bridgeMessage: `הושלם. נשמרו ${result.personal} הפקות עם צוותים מלאים.`,
+      bridgeMessage: `הושלם. נשמרו ${result.global} הפקות ליומן המלא, ומתוכן ${result.personal} משמרות אישיות.`,
       bridgeProgress: 100,
       log: [
         ...safeLog(tokenDoc.log),
-        `[${new Date().toLocaleTimeString('he-IL')}] הושלם. נשמרו ${result.personal} הפקות עם צוותים מלאים.`,
+        `[${new Date().toLocaleTimeString('he-IL')}] הושלם. נשמרו ${result.global} הפקות ליומן המלא, ומתוכן ${result.personal} משמרות אישיות.`,
       ].slice(-30),
     });
 

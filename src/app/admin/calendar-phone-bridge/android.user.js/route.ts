@@ -44,6 +44,20 @@ function buildAndroidUserscript(token: string, origin: string): string {
       setButton(button, 'רץ...', true);
       await report('android_started', 'החילוץ הופעל מתוך דף הרצליה ב-Android.', 10);
 
+      const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
+      if (!isFullDepartmentPage) {
+        const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
+        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
+          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+        if (match) {
+          const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
+            + match[1] + ',-A' + match[2] + ',-Atrue';
+          await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
+          location.href = fullUrl;
+          return;
+        }
+      }
+
       let ids = [];
       for (let attempt = 0; attempt < 12; attempt += 1) {
         ids = [...new Set([...document.querySelectorAll('[onclick*="openmd2("]')]
@@ -115,13 +129,13 @@ function buildAndroidUserscript(token: string, origin: string): string {
         throw new Error(result.error || ('HTTP ' + saveResponse.status));
       }
 
-      await report('done', 'היומן עודכן: ' + result.personal + ' הפקות עם צוותים מלאים.', 100, {
+      await report('done', 'היומן המלא עודכן: ' + result.global + ' הפקות, מתוכן ' + result.personal + ' משמרות אישיות.', 100, {
         eventCount: ids.length,
         popupDone: ids.length,
         popupTotal: ids.length
       });
       setButton(button, 'הושלם', true);
-      alert('היומן עודכן: ' + result.personal + ' הפקות, ' + ids.length + ' פופאפים');
+      alert('היומן המלא עודכן: ' + result.global + ' הפקות, ' + ids.length + ' פופאפים');
     } catch (error) {
       const message = 'ייבוא נכשל: ' + (error && error.message ? error.message : error);
       await report('failed', message, 100, { error: message });
