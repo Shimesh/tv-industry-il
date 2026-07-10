@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
-import { deleteDocument, getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
+import { deleteDocument, getDocument, listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
 import { fetchHerzliyaProductions } from '@/lib/server/herzliyaSync';
 import { extractDateFromPopup, extractNameFromPopup, extractStudioFromPopup, parseHerzliyaPopupHtml, parseScheduleHTML } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
@@ -93,12 +93,40 @@ async function productionFromPopup(targetUid: string, html: string): Promise<Pro
   const studio = extractStudioFromPopup(html);
   const crew = parseHerzliyaPopupHtml(html).map((member) => ({ ...member, roleDetail: '', phone: member.phone || null }));
   if (!date || !name || crew.length === 0) return null;
-  const docs = await listDocuments<Production>(`productions/${targetUid}/weeks/${getWeekId(date)}/productions`).catch(() => []);
   const canonicalName = canonicalProductionName(name);
-  const existing = docs.find((production) => production.date === date && canonicalProductionName(production.name) === canonicalName)
-    || docs.find((production) => production.date === date && (canonicalProductionName(production.name).includes(canonicalName) || canonicalName.includes(canonicalProductionName(production.name))));
+  const [globalDocs, personalDocs] = await Promise.all([
+    runQuery<GlobalProductionDoc>({
+      from: [{ collectionId: 'global_productions' }],
+      where: { fieldFilter: { field: { fieldPath: 'date' }, op: 'EQUAL', value: { stringValue: date } } },
+      limit: 100,
+    }).catch(() => []),
+    listDocuments<Production>(`productions/${targetUid}/weeks/${getWeekId(date)}/productions`).catch(() => []),
+  ]);
+
+  const matchesName = (productionName: string) => {
+    const candidate = canonicalProductionName(productionName);
+    return candidate === canonicalName || candidate.includes(canonicalName) || canonicalName.includes(candidate);
+  };
+  const existingGlobal = globalDocs.find((production) => matchesName(production.name || ''));
+  const existingPersonal = personalDocs.find((production) => production.date === date && matchesName(production.name || ''));
+  const existing = existingGlobal || existingPersonal;
   if (!existing) return null;
-  return { ...existing, name, studio: studio || existing.studio, crew, isCurrentUserShift: true, crewSource: 'popup', popupParsed: true } as Production;
+
+  return {
+    id: String(existing.id),
+    herzliyaId: existing.herzliyaId,
+    name,
+    studio: studio || existing.studio || '',
+    date,
+    day: getHebrewDay(date),
+    startTime: crew[0]?.endTime || existing.startTime || '',
+    endTime: crew[0]?.startTime || existing.endTime || '',
+    status: 'scheduled',
+    crew,
+    isCurrentUserShift: existingPersonal?.isCurrentUserShift === true,
+    crewSource: 'popup',
+    popupParsed: true,
+  } as Production;
 }
 
 async function productionsFromPopupInput(targetUid: string, html: string): Promise<Production[]> {
