@@ -300,8 +300,21 @@ function parseHerzliyaPopupText(html: string): Array<{ name: string; role: strin
   const crew: Array<{ name: string; role: string; phone: string; startTime: string; endTime: string }> = [];
   if (!html) return crew;
 
-  // Convert table markup to tab-delimited rows; preserve empty cells for column alignment
-  const text = html
+  const cleanCell = (value: string) => value
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const markupRows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((rowMatch) => [...rowMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((cellMatch) => cleanCell(cellMatch[1])))
+    .filter((row) => row.some((cell) => cell.length > 0));
+
+  // Convert table markup to tab-delimited rows as a fallback; preserve empty cells for column alignment.
+  const fallbackText = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, '\t')
@@ -310,16 +323,18 @@ function parseHerzliyaPopupText(html: string): Array<{ name: string; role: strin
     .replace(/&nbsp;/g, ' ');
 
   // Keep empty cells (no filter) so column indices stay stable across rows
-  const rows = text.split('\n')
+  const fallbackRows = fallbackText.split('\n')
     .map(line => line.split('\t').map(p => p.replace(/\s+/g, ' ').trim()))
     .filter(r => r.some(p => p.length > 0));
+  const rows = markupRows.length > 0 ? markupRows : fallbackRows;
 
-  // Detect header row: look for "שם" (name col) and "נייד" (phone col)
+  // Detect header row: look for "שם" (name col) and "נייד" (phone col).
+  // Keep the legacy mojibake variants because some old fixtures/logs were saved with broken encoding.
   // Default matches known fixed structure: שעות(0) | תפקיד(1) | שם(2) | פרטים(3) | נייד(4)
   let timeCol = 0, roleCol = 1, nameCol = 2, phoneCol = 4;
   for (const row of rows) {
-    const shmIdx = row.indexOf('שם');
-    const nayadIdx = row.indexOf('נייד');
+    const shmIdx = row.findIndex((cell) => cell === 'שם' || cell === '׳©׳');
+    const nayadIdx = row.findIndex((cell) => cell === 'נייד' || cell === 'טלפון' || cell === '׳ ׳™׳™׳“');
     if (shmIdx !== -1 && nayadIdx !== -1) {
       nameCol = shmIdx;
       phoneCol = nayadIdx;
@@ -331,12 +346,14 @@ function parseHerzliyaPopupText(html: string): Array<{ name: string; role: strin
 
   for (const parts of rows) {
     // Skip the header row
-    if (parts.includes('שם') && parts.includes('נייד')) continue;
+    const isHeaderRow = parts.some((cell) => cell === 'שם' || cell === '׳©׳')
+      && parts.some((cell) => cell === 'נייד' || cell === 'טלפון' || cell === '׳ ׳™׳™׳“');
+    if (isHeaderRow) continue;
     if (parts.length <= nameCol) continue;
 
     const name = parts[nameCol];
     // Must be Hebrew text (at least 2 Hebrew characters)
-    if (!name || !/[א-ת]{2,}/.test(name)) continue;
+    if (!name || !/[\u0590-\u05FF]{2,}/.test(name)) continue;
 
     const role = roleCol < parts.length ? parts[roleCol] : '';
     const phoneRaw = phoneCol < parts.length ? parts[phoneCol] : '';
