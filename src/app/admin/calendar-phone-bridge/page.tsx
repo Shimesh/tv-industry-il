@@ -76,10 +76,18 @@ const loadPopupHtml = async (id) => {
     if (modalBody) modalBody.innerHTML = '';
   };
 
-  if (typeof pageWindow.openmd2 === 'function') {
-    clearModal();
+const eventElement = [...document.querySelectorAll('[onclick*="openmd2("]')]
+  .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\((\d+)\)/)?.[1] === String(id));
+
+if (eventElement || typeof pageWindow.openmd2 === 'function') {
+  clearModal();
+  if (eventElement instanceof HTMLElement) {
+    eventElement.scrollIntoView({ block: 'center', inline: 'center' });
+    eventElement.click();
+  } else {
     pageWindow.openmd2(Number(id));
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+  }
+  for (let attempt = 0; attempt < 40; attempt += 1) {
       await sleep(250);
       const modalBody = document.querySelector(modalBodySelector);
       const html = modalBody ? modalBody.innerHTML : '';
@@ -222,6 +230,7 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
 // @version      1.0
 // @description  חילוץ יומן הרצליה ישירות מטלפון Android
 // @match        https://hsil.acc.co.il:5443/*
+// @connect      tv-industry-il.vercel.app
 // @grant        unsafeWindow
 // @run-at       document-idle
 // ==/UserScript==
@@ -240,9 +249,17 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
     if (modalBody) modalBody.innerHTML = '';
   };
 
-  if (typeof pageWindow.openmd2 === 'function') {
+  const eventElement = [...document.querySelectorAll('[onclick*="openmd2("]')]
+    .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\((\d+)\)/)?.[1] === String(id));
+
+  if (eventElement || typeof pageWindow.openmd2 === 'function') {
     clearModal();
-    pageWindow.openmd2(Number(id));
+    if (eventElement instanceof HTMLElement) {
+      eventElement.scrollIntoView({ block: 'center', inline: 'center' });
+      eventElement.click();
+    } else {
+      pageWindow.openmd2(Number(id));
+    }
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await sleep(250);
       const modalBody = document.querySelector(modalBodySelector);

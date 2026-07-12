@@ -32,9 +32,17 @@ function buildAndroidUserscript(token: string, origin: string): string {
       if (modalBody) modalBody.innerHTML = '';
     };
 
-    if (typeof pageWindow.openmd2 === 'function') {
+    const eventElement = [...document.querySelectorAll('[onclick*="openmd2("]')]
+      .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\((\d+)\)/)?.[1] === String(id));
+
+    if (eventElement || typeof pageWindow.openmd2 === 'function') {
       clearModal();
-      pageWindow.openmd2(Number(id));
+      if (eventElement instanceof HTMLElement) {
+        eventElement.scrollIntoView({ block: 'center', inline: 'center' });
+        eventElement.click();
+      } else {
+        pageWindow.openmd2(Number(id));
+      }
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await sleep(250);
         const modalBody = document.querySelector(modalBodySelector);
