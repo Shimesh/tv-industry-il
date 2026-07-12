@@ -10,6 +10,7 @@ import {
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { getHebrewDay, getWeekId, type Production } from '@/lib/productionDiff';
 import { getPrimaryAdminUid } from '@/lib/server/primaryAdmin';
+import { markPersonalAssignmentsFromCrew, removeStalePersonalAssignments } from '@/lib/server/calendarPersonalAssignments';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -149,10 +150,12 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
   const adminUid = getPrimaryAdminUid();
   let personal = 0;
   let global = 0;
-  const weekIds = new Set(productions.map((production) => getWeekId(production.date)));
-  const confirmedPersonal = productions.filter((production) => production.isCurrentUserShift === true);
+  const marked = await markPersonalAssignmentsFromCrew(targetUid, productions);
+  const resolvedProductions = marked.identityAvailable ? marked.productions : productions;
+  const weekIds = new Set(resolvedProductions.map((production) => getWeekId(production.date)));
+  const confirmedPersonal = resolvedProductions.filter((production) => production.isCurrentUserShift === true);
 
-  for (const production of productions) {
+  for (const production of resolvedProductions) {
     const normalized: ProductionWithSource = {
       ...production,
       id: String(production.herzliyaId || production.id),
@@ -202,7 +205,11 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
       .map((doc) => deleteDocument(`productions/${targetUid}/weeks/${weekId}/productions/${doc.id}`)));
   }
 
-  return { personal, global, weekIds: Array.from(weekIds) };
+  const removedPersonal = marked.identityAvailable
+    ? await removeStalePersonalAssignments(targetUid, resolvedProductions)
+    : 0;
+
+  return { personal, global, removedPersonal, weekIds: Array.from(weekIds) };
 }
 
 export async function POST(request: NextRequest) {

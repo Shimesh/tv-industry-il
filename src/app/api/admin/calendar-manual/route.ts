@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
 import { deleteDocument, getDocument, listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
 import { fetchHerzliyaProductions } from '@/lib/server/herzliyaSync';
+import { markPersonalAssignmentsFromCrew, removeStalePersonalAssignments } from '@/lib/server/calendarPersonalAssignments';
 import { extractDateFromPopup, extractNameFromPopup, extractStudioFromPopup, parseHerzliyaPopupHtml, parseScheduleHTML } from '@/lib/productionScheduleParser';
 import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } from '@/lib/globalProductions';
 import { canonicalProductionName, generateProductionId, getHebrewDay, getWeekId, type Production } from '@/lib/productionDiff';
@@ -97,7 +98,7 @@ function hasDepartmentOnlyCrew(productions: Production[]): boolean {
 }
 
 function departmentOnlyCrewMessage(): string {
-  return 'נמצא יומן מחלקתי מלא מ-ShowEmp6. הצוותים שמופיעים בכרטיסים יישמרו כצוות מחלקתי חלקי, וצוות מלא שכבר נקלט מפופאפים לא יידרס.';
+  return 'נמצא יומן מחלקתי מלא מ-ShowEmp6, אבל הצוותים בכרטיסים הם חלקיים בלבד. השמירה נחסמה. צריך להריץ את גשר הטלפון או להדביק חבילת JSON שכוללת popupHtmlById / פופאפי ShowCrew מלאים.';
 }
 
 function incompleteCrewMessage(): string {
@@ -165,11 +166,13 @@ async function removeManualFallbacks(targetUid: string, weekIds: Set<string>) {
 
 async function saveProductions(targetUid: string, adminUid: string, productions: Production[], source: string) {
   const now = new Date().toISOString();
+  const marked = await markPersonalAssignmentsFromCrew(targetUid, productions);
+  const resolvedProductions = marked.identityAvailable ? marked.productions : productions;
   const weekIds = new Set(productions.map((production) => getWeekId(production.date)));
   await removeManualFallbacks(targetUid, weekIds);
   let personal = 0;
   let global = 0;
-  for (const production of productions) {
+  for (const production of resolvedProductions) {
     if (!production.id || !production.name || !production.date) continue;
     const normalized: Production = { ...production, day: production.day || getHebrewDay(production.date), status: production.status || 'scheduled', crew: production.crew || [], lastUpdatedBy: adminUid, lastUpdatedAt: now };
     const globalDoc = toGlobalProduction(normalized, adminUid, `manual-import/${getWeekId(production.date)}`);
@@ -177,7 +180,7 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
     const mergedGlobal = mergeGlobalProduction(existing, globalDoc);
     await patchDocument(`global_productions/${globalDoc.id}`, mergedGlobal as unknown as Record<string, string>);
     global++;
-    if (production.isCurrentUserShift === false) continue;
+    if (production.isCurrentUserShift !== true) continue;
     const personalPath = `productions/${targetUid}/weeks/${getWeekId(production.date)}/productions/${production.id}`;
     const existingPersonal = await getDocument<ProductionWithCrewSource>(personalPath).catch(() => null);
     const hasAuthoritativeIncomingCrew = (production as ProductionWithCrewSource).crewSource === 'popup'
@@ -211,7 +214,10 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
     } as unknown as Record<string, string>);
     personal++;
   }
-  return { personal, global };
+  const removedPersonal = marked.identityAvailable
+    ? await removeStalePersonalAssignments(targetUid, resolvedProductions)
+    : 0;
+  return { personal, global, removedPersonal };
 }
 
 export async function POST(request: NextRequest) {
@@ -248,7 +254,9 @@ export async function POST(request: NextRequest) {
             warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
           });
         }
-        if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
+        if (incompleteCrew || departmentCrew) {
+          return NextResponse.json({ error: incompleteCrew ? incompleteCrewMessage() : departmentOnlyCrewMessage() }, { status: 422 });
+        }
         const result = await saveProductions(targetUid, authUser.uid, imported.productions, 'url');
         return NextResponse.json({ ok: true, ...result, source: 'url' });
       }
@@ -268,7 +276,9 @@ export async function POST(request: NextRequest) {
           warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
         });
       }
-      if (incompleteCrew) return NextResponse.json({ error: incompleteCrewMessage() }, { status: 422 });
+      if (incompleteCrew || departmentCrew) {
+        return NextResponse.json({ error: incompleteCrew ? incompleteCrewMessage() : departmentOnlyCrewMessage() }, { status: 422 });
+      }
       const result = await saveProductions(targetUid, authUser.uid, imported.productions, imported.source);
       return NextResponse.json({ ok: true, ...result, workerName: imported.workerName || '', source: imported.source });
     } catch (error) {
