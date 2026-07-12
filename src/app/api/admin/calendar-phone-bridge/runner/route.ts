@@ -29,6 +29,40 @@ export async function GET(request: NextRequest) {
   const statusUrl = ${JSON.stringify(statusUrl)};
   const ingestUrl = ${JSON.stringify(ingestUrl)};
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const loadPopupHtml = async (id) => {
+    const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    const modalBodySelector = '#myModal .modal-body';
+    const clearModal = () => {
+      const modalBody = document.querySelector(modalBodySelector);
+      if (modalBody) modalBody.innerHTML = '';
+    };
+
+    if (typeof pageWindow.openmd2 === 'function') {
+      clearModal();
+      pageWindow.openmd2(Number(id));
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await sleep(250);
+        const modalBody = document.querySelector(modalBodySelector);
+        const html = modalBody ? modalBody.innerHTML : '';
+        const text = modalBody ? modalBody.textContent || '' : '';
+        if (html && html.length > 100 && /<table/i.test(html) && /(נייד|טלפון|phone|mobile)/i.test(text)) {
+          try {
+            if (pageWindow.jQuery) pageWindow.jQuery('#myModal').modal('hide');
+          } catch (_) {}
+          return '<div class="modal-body">' + html + '</div>';
+        }
+      }
+    }
+
+    const popupUrl = new URL('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N' + id, location.href).toString();
+    const response = await fetch(popupUrl, { credentials: 'include' });
+    const html = await response.text();
+    if (!response.ok || !html || html.length < 100) {
+      throw new Error('ShowCrew failed for production ' + id);
+    }
+    return html;
+  };
   const report = async (phase, message, progress, extra = {}) => {
     try {
       await fetch(statusUrl, {
@@ -93,14 +127,7 @@ export async function GET(request: NextRequest) {
         popupDone: done,
         popupTotal: ids.length
       });
-
-      const popupUrl = new URL('mgrqispi.dll?appname=HsILWeb&prgname=ShowCrew&arguments=-N' + id, location.href).toString();
-      const response = await fetch(popupUrl, { credentials: 'include' });
-      const html = await response.text();
-      if (!response.ok || !html || html.length < 100) {
-        throw new Error('לא נטען צוות להפקה ' + id);
-      }
-
+      const html = await loadPopupHtml(id);
       popupHtmlById[id] = html;
       done += 1;
       await report('popup_progress', 'נמשך צוות להפקה ' + id + ' (' + done + '/' + ids.length + ')', 20 + Math.round((done / ids.length) * 50), {
