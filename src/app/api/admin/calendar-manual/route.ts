@@ -15,6 +15,8 @@ type ImportBundle = { scheduleHtml?: string; departmentHtml?: string; popupHtmlB
 type ProductionWithCrewSource = Production & { crewSource?: string; popupParsed?: boolean };
 
 const HERZLIYA_SHOWCREW_BASE = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll';
+const SHOWCREW_TIMEOUT_MS = 8000;
+const SHOWCREW_CONCURRENCY = 5;
 
 function validTime(value: string): boolean {
   return /^\d{1,2}:\d{2}$/.test(value) && Number(value.split(':')[0]) <= 29;
@@ -50,37 +52,44 @@ function buildShowCrewUrl(herzliyaId: number): string {
 }
 
 async function fetchShowCrewPopup(herzliyaId: number, referer?: string): Promise<string> {
-  const response = await fetch(buildShowCrewUrl(herzliyaId), {
-    headers: {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      ...(referer ? { referer } : {}),
-    },
-    redirect: 'follow',
-  });
-  if (!response.ok) throw new Error(`ShowCrew ${herzliyaId} HTTP ${response.status}`);
-  const html = await response.text();
-  if (!html || html.length < 100 || !/<table/i.test(html)) throw new Error(`ShowCrew ${herzliyaId} returned empty html`);
-  return html;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SHOWCREW_TIMEOUT_MS);
+  try {
+    const response = await fetch(buildShowCrewUrl(herzliyaId), {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        ...(referer ? { referer } : {}),
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`ShowCrew ${herzliyaId} HTTP ${response.status}`);
+    const html = await response.text();
+    if (!html || html.length < 100 || !/<table/i.test(html)) throw new Error(`ShowCrew ${herzliyaId} returned empty html`);
+    return html;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function enrichWithLiveShowCrew(productions: Production[], referer?: string): Promise<{ productions: Production[]; fetched: number; failed: number }> {
   let fetched = 0;
   let failed = 0;
-  const enriched: Production[] = [];
+  const enriched: Production[] = new Array(productions.length);
 
-  for (const production of productions) {
+  async function enrichOne(production: Production, index: number): Promise<void> {
     const herzliyaId = production.herzliyaId || (/^\d+$/.test(String(production.id || '')) ? Number(production.id) : 0);
     if (!herzliyaId) {
-      enriched.push(production);
-      continue;
+      enriched[index] = production;
+      return;
     }
     try {
       const popup = await fetchShowCrewPopup(herzliyaId, referer);
       const crew = parseHerzliyaPopupHtml(popup).map((member) => ({ ...member, roleDetail: '', phone: member.phone || null }));
       if (crew.length === 0) throw new Error(`ShowCrew ${herzliyaId} parsed zero crew`);
       fetched++;
-      enriched.push({
+      enriched[index] = {
         ...production,
         id: String(herzliyaId),
         herzliyaId,
@@ -91,12 +100,21 @@ async function enrichWithLiveShowCrew(productions: Production[], referer?: strin
         crew,
         crewSource: 'popup',
         popupParsed: true,
-      } as Production);
+      } as Production;
     } catch {
       failed++;
-      enriched.push(production);
+      enriched[index] = production;
     }
   }
+
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(SHOWCREW_CONCURRENCY, productions.length) }, async () => {
+    while (cursor < productions.length) {
+      const index = cursor++;
+      await enrichOne(productions[index], index);
+    }
+  });
+  await Promise.all(workers);
 
   return { productions: enriched, fetched, failed };
 }
