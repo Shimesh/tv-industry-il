@@ -14,6 +14,8 @@ type ManualProduction = Pick<Production, 'name' | 'date' | 'studio' | 'startTime
 type ImportBundle = { scheduleHtml?: string; departmentHtml?: string; popupHtmlById?: Record<string, string> };
 type ProductionWithCrewSource = Production & { crewSource?: string; popupParsed?: boolean };
 
+const HERZLIYA_SHOWCREW_BASE = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll';
+
 function validTime(value: string): boolean {
   return /^\d{1,2}:\d{2}$/.test(value) && Number(value.split(':')[0]) <= 29;
 }
@@ -39,7 +41,67 @@ function looksLikePopupCrewInput(value: string): boolean {
   return hasCrewColumns && (hasPopupShell || hasHerzliyaPopupHeader);
 }
 
-function parseBundle(input: string): { productions: Production[]; workerName: string; source: string } {
+function buildShowCrewUrl(herzliyaId: number): string {
+  const url = new URL(HERZLIYA_SHOWCREW_BASE);
+  url.searchParams.set('appname', 'HsILWeb');
+  url.searchParams.set('prgname', 'ShowCrew');
+  url.searchParams.set('arguments', `-N${herzliyaId}`);
+  return url.toString();
+}
+
+async function fetchShowCrewPopup(herzliyaId: number, referer?: string): Promise<string> {
+  const response = await fetch(buildShowCrewUrl(herzliyaId), {
+    headers: {
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      ...(referer ? { referer } : {}),
+    },
+    redirect: 'follow',
+  });
+  if (!response.ok) throw new Error(`ShowCrew ${herzliyaId} HTTP ${response.status}`);
+  const html = await response.text();
+  if (!html || html.length < 100 || !/<table/i.test(html)) throw new Error(`ShowCrew ${herzliyaId} returned empty html`);
+  return html;
+}
+
+async function enrichWithLiveShowCrew(productions: Production[], referer?: string): Promise<{ productions: Production[]; fetched: number; failed: number }> {
+  let fetched = 0;
+  let failed = 0;
+  const enriched: Production[] = [];
+
+  for (const production of productions) {
+    const herzliyaId = production.herzliyaId || (/^\d+$/.test(String(production.id || '')) ? Number(production.id) : 0);
+    if (!herzliyaId) {
+      enriched.push(production);
+      continue;
+    }
+    try {
+      const popup = await fetchShowCrewPopup(herzliyaId, referer);
+      const crew = parseHerzliyaPopupHtml(popup).map((member) => ({ ...member, roleDetail: '', phone: member.phone || null }));
+      if (crew.length === 0) throw new Error(`ShowCrew ${herzliyaId} parsed zero crew`);
+      fetched++;
+      enriched.push({
+        ...production,
+        id: String(herzliyaId),
+        herzliyaId,
+        name: extractNameFromPopup(popup) || production.name,
+        studio: extractStudioFromPopup(popup) || production.studio,
+        date: extractDateFromPopup(popup) || production.date,
+        day: getHebrewDay(extractDateFromPopup(popup) || production.date),
+        crew,
+        crewSource: 'popup',
+        popupParsed: true,
+      } as Production);
+    } catch {
+      failed++;
+      enriched.push(production);
+    }
+  }
+
+  return { productions: enriched, fetched, failed };
+}
+
+async function parseBundle(input: string, referer?: string): Promise<{ productions: Production[]; workerName: string; source: string; popupFetched?: number; popupFailed?: number }> {
   let bundle: ImportBundle = { scheduleHtml: input };
   if (input.trim().startsWith('{')) {
     try { bundle = JSON.parse(input) as ImportBundle; } catch { /* raw HTML below */ }
@@ -62,7 +124,19 @@ function parseBundle(input: string): { productions: Production[]; workerName: st
     return { ...stableProduction, crew, crewSource: 'popup', popupParsed: true } as Production;
   });
   const hasDepartmentCrew = productions.some((production) => (production.crew || []).length > 0 && (production as ProductionWithCrewSource).crewSource !== 'popup');
-  return { productions, workerName: parsed.workerName, source: hasPopupBundle ? 'html-bundle' : hasDepartmentCrew ? 'department-html' : 'html' };
+  if (!hasPopupBundle && parsed.productions.some((production) => production.herzliyaId || /^\d+$/.test(String(production.id || '')))) {
+    const live = await enrichWithLiveShowCrew(productions, referer);
+    const liveHasPopup = live.productions.some((production) => (production as ProductionWithCrewSource).crewSource === 'popup');
+    const liveHasDepartmentCrew = live.productions.some((production) => (production.crew || []).length > 0 && (production as ProductionWithCrewSource).crewSource !== 'popup');
+    return {
+      productions: live.productions,
+      workerName: parsed.workerName,
+      source: liveHasPopup ? 'html-showcrew-live' : liveHasDepartmentCrew ? 'department-html' : 'html',
+      popupFetched: live.fetched,
+      popupFailed: live.failed,
+    };
+  }
+  return { productions, workerName: parsed.workerName, source: hasPopupBundle ? 'html-bundle' : hasDepartmentCrew ? 'department-html' : 'html', popupFetched: 0, popupFailed: 0 };
 }
 
 function validateParsedProductions(productions: Production[]): string | null {
@@ -98,7 +172,7 @@ function hasDepartmentOnlyCrew(productions: Production[]): boolean {
 }
 
 function departmentOnlyCrewMessage(): string {
-  return 'נמצא יומן מחלקתי מלא מ-ShowEmp6, אבל הצוותים בכרטיסים הם חלקיים בלבד. השמירה נחסמה. צריך להריץ את גשר הטלפון או להדביק חבילת JSON שכוללת popupHtmlById / פופאפי ShowCrew מלאים.';
+  return 'נמצא יומן מחלקתי מלא מ-ShowEmp6. השרת ניסה להשלים פופאפי ShowCrew; פופאפים שלא נשלפו לא ידרסו צוות מלא קיים.';
 }
 
 function incompleteCrewMessage(): string {
@@ -240,27 +314,30 @@ export async function POST(request: NextRequest) {
       }
       if (url) {
         const imported = await fetchHerzliyaProductions(url);
-        const validationError = validateParsedProductions(imported.productions);
+        const live = hasDepartmentOnlyCrew(imported.productions) || isIncompleteHerzliyaCrewImport(imported.productions)
+          ? await enrichWithLiveShowCrew(imported.productions, url)
+          : { productions: imported.productions, fetched: 0, failed: 0 };
+        const importedProductions = live.productions;
+        const validationError = validateParsedProductions(importedProductions);
         if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
-        const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
-        const departmentCrew = hasDepartmentOnlyCrew(imported.productions);
+        const incompleteCrew = isIncompleteHerzliyaCrewImport(importedProductions);
+        const departmentCrew = hasDepartmentOnlyCrew(importedProductions);
         if (body.preview) {
           return NextResponse.json({
             ok: true,
-            preview: imported.productions,
-            source: 'url',
+            preview: importedProductions,
+            source: live.fetched > 0 ? 'url-showcrew-live' : 'url',
             incompleteCrew,
             departmentCrew,
+            popupFetched: live.fetched,
+            popupFailed: live.failed,
             warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
           });
         }
-        if (incompleteCrew || departmentCrew) {
-          return NextResponse.json({ error: incompleteCrew ? incompleteCrewMessage() : departmentOnlyCrewMessage() }, { status: 422 });
-        }
-        const result = await saveProductions(targetUid, authUser.uid, imported.productions, 'url');
-        return NextResponse.json({ ok: true, ...result, source: 'url' });
+        const result = await saveProductions(targetUid, authUser.uid, importedProductions, live.fetched > 0 ? 'url-showcrew-live' : 'url');
+        return NextResponse.json({ ok: true, ...result, source: live.fetched > 0 ? 'url-showcrew-live' : 'url', incompleteCrew, departmentCrew, popupFetched: live.fetched, popupFailed: live.failed });
       }
-      const imported = parseBundle(input);
+      const imported = await parseBundle(input, url || undefined);
       const validationError = validateParsedProductions(imported.productions);
       if (validationError) return NextResponse.json({ error: validationError }, { status: 422 });
       const incompleteCrew = isIncompleteHerzliyaCrewImport(imported.productions);
@@ -273,14 +350,13 @@ export async function POST(request: NextRequest) {
           workerName: imported.workerName || '',
           incompleteCrew,
           departmentCrew,
+          popupFetched: imported.popupFetched || 0,
+          popupFailed: imported.popupFailed || 0,
           warning: incompleteCrew ? incompleteCrewMessage() : departmentCrew ? departmentOnlyCrewMessage() : undefined,
         });
       }
-      if (incompleteCrew || departmentCrew) {
-        return NextResponse.json({ error: incompleteCrew ? incompleteCrewMessage() : departmentOnlyCrewMessage() }, { status: 422 });
-      }
       const result = await saveProductions(targetUid, authUser.uid, imported.productions, imported.source);
-      return NextResponse.json({ ok: true, ...result, workerName: imported.workerName || '', source: imported.source });
+      return NextResponse.json({ ok: true, ...result, workerName: imported.workerName || '', source: imported.source, incompleteCrew, departmentCrew, popupFetched: imported.popupFetched || 0, popupFailed: imported.popupFailed || 0 });
     } catch (error) {
       return NextResponse.json({ error: url ? 'לא ניתן לפתוח את הקישור מהשרת. הדבק את קוד המקור של דף הלוח במקום את הקישור.' : (error instanceof Error ? error.message : 'הייבוא נכשל') }, { status: 502 });
     }

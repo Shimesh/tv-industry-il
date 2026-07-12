@@ -60,6 +60,8 @@ export default function ManualCalendarAdminPage() {
         preview?: PreviewProduction[];
         incompleteCrew?: boolean;
         departmentCrew?: boolean;
+        popupFetched?: number;
+        popupFailed?: number;
         warning?: string;
       };
       if (!response.ok) throw new Error(result.error || 'השמירה נכשלה');
@@ -68,7 +70,10 @@ export default function ManualCalendarAdminPage() {
         setPreview(result.preview);
         setIncompleteCrew(result.incompleteCrew === true);
         setDepartmentCrew(result.departmentCrew === true);
-        setMessage(result.warning || `נמצאו ${result.preview.length} הפקות. בדוק את הרשימה ואשר שמירה.`);
+        const popupStatus = result.popupFetched || result.popupFailed
+          ? ` פופאפים: ${result.popupFetched || 0} נשלפו, ${result.popupFailed || 0} נכשלו.`
+          : '';
+        setMessage((result.warning || `נמצאו ${result.preview.length} הפקות. בדוק את הרשימה ואשר שמירה.`) + popupStatus);
       } else {
         setMessage(`נשמרו ${result.personal || 0} משמרות אישיות ו-${result.global || 0} הפקות בלוח המלא`);
         setPreview([]);
@@ -104,7 +109,7 @@ export default function ManualCalendarAdminPage() {
           </div>
           <p className="text-sm leading-6 text-violet-200">
             אפשר להדביק הודעת WhatsApp, קישור מהרצליה, קוד HTML של `ShowEmp6`, או פופאפים של `ShowCrew`.
-            יומן `ShowEmp6` משמש לגילוי הפקות בלבד. שמירה תתאפשר רק כשיש פופאפים מלאים של `ShowCrew`.
+            יומן `ShowEmp6` משמש לגילוי הפקות, והשרת ינסה לחלץ אוטומטית את כל פופאפי `ShowCrew` לפני שמירה.
           </p>
         </header>
 
@@ -150,7 +155,7 @@ export default function ManualCalendarAdminPage() {
               spellCheck={false}
             />
             <p className="text-xs leading-5 text-violet-300">
-              אם הודבק `ShowEmp6`, הכלי יזהה את כל ההפקות אבל יחסום שמירה בלי פופאפים. פופאפים של `ShowCrew` נשמרים כצוות מלא וסמכותי.
+              אם הודבק `ShowEmp6`, הכלי יזהה את כל ההפקות וינסה לפתוח את כל פופאפי `ShowCrew`. פופאפ שנשלף יישמר כצוות מלא וסמכותי.
             </p>
           </label>
         ) : (
@@ -177,7 +182,7 @@ export default function ManualCalendarAdminPage() {
               </p>
             ) : departmentCrew ? (
               <p className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm leading-6 text-sky-100">
-                נמצאו הפקות מתוך `ShowEmp6`, אבל אלה רק הצוותים שמופיעים בכרטיסים. שמירה חסומה כדי לא לעדכן צוות חלקי. צריך גשר טלפון או פופאפים מלאים של `ShowCrew`.
+                נמצאו הפקות מתוך `ShowEmp6`, אבל חלק מהפופאפים לא נשלפו. בשמירה לא יימחק צוות מלא קיים; מה שנשלף מ-`ShowCrew` ייכנס כצוות מלא.
               </p>
             ) : null}
             {preview.map((production) => (
@@ -194,11 +199,11 @@ export default function ManualCalendarAdminPage() {
         <button
           type="button"
           onClick={() => void save()}
-          disabled={saving || incompleteCrew || departmentCrew || (mode === 'source' && !sourceInput.trim())}
+          disabled={saving || incompleteCrew || (mode === 'source' && !sourceInput.trim())}
           className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 font-bold text-[#170b09] hover:bg-orange-400 disabled:opacity-60"
         >
           {mode === 'source' && preview.length === 0 ? <ClipboardPaste className="h-5 w-5" /> : <Save className="h-5 w-5" />}
-          {saving ? 'מעבד...' : incompleteCrew || departmentCrew ? 'השמירה חסומה — חסרים פופאפים מלאים' : mode === 'source' && preview.length === 0 ? 'חלץ והצג תצוגה מקדימה' : 'אשר ושמור ביומן'}
+          {saving ? 'מעבד...' : incompleteCrew ? 'השמירה חסומה — לא נשלף אף צוות' : mode === 'source' && preview.length === 0 ? 'חלץ והצג תצוגה מקדימה' : 'אשר ושמור ביומן'}
         </button>
 
         {message && (
