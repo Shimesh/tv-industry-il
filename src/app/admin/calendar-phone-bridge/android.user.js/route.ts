@@ -105,7 +105,7 @@ function buildAndroidUserscript(token: string, origin: string): string {
       for (let attempt = 0; attempt < 12; attempt += 1) {
         ids = [...new Set([...document.querySelectorAll('[onclick*="openmd2("]')]
           .map((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1])
-          .filter(Boolean))];
+          .filter((id) => id && id !== '0'))];
         if (ids.length) break;
         await sleep(500);
       }

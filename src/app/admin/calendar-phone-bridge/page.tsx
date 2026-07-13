@@ -149,7 +149,7 @@ const report = async (phase, message, progress, extra = {}) => {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       ids = [...new Set([...document.querySelectorAll('[onclick*="openmd2("]')]
         .map((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1])
-        .filter(Boolean))];
+        .filter((id) => id && id !== '0'))];
       if (ids.length) break;
       await sleep(500);
     }
@@ -330,7 +330,7 @@ const report = async (phase, message, progress, extra = {}) => {
       for (let attempt = 0; attempt < 12; attempt += 1) {
         ids = [...new Set([...document.querySelectorAll('[onclick*="openmd2("]')]
           .map((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1])
-          .filter(Boolean))];
+          .filter((id) => id && id !== '0'))];
         if (ids.length) break;
         await sleep(500);
       }
