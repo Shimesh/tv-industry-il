@@ -416,10 +416,18 @@ function collectCandidates(
   return { candidates, ignoredNoiseRoles, customRoles, sampleIgnoredNoiseRoles, sampleCustomRoles };
 }
 
-function mergeRoleFields(existing: Record<string, unknown> | null, recoveredRoles: string[]) {
-  const normalizedExistingRoles = normalizeRolesToCanonical(existing?.roles, existing?.role);
+function mergeRoleFields(
+  existing: Record<string, unknown> | null,
+  recoveredRoles: string[],
+  options: { replaceExistingRoles?: boolean } = {},
+) {
+  const normalizedExistingRoles = options.replaceExistingRoles
+    ? []
+    : normalizeRolesToCanonical(existing?.roles, existing?.role);
   const roles = normalizeRolesToCanonical([...normalizedExistingRoles, ...recoveredRoles]);
-  const existingDepartments = normalizeProfessionalFields(existing).departments;
+  const existingDepartments = options.replaceExistingRoles
+    ? []
+    : normalizeProfessionalFields(existing).departments;
   const inferredDepartments = roles
     .map((role) => getDepartmentForRole(role))
     .filter(Boolean);
@@ -433,12 +441,29 @@ function mergeRoleFields(existing: Record<string, unknown> | null, recoveredRole
   };
 }
 
-function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandidate) {
+function shouldReplaceLegacyProfessionalFields(
+  existing: ContactRecord | null,
+  candidate: SyncCandidate,
+  evidenceRoles: string[],
+): boolean {
+  if (!existing || evidenceRoles.length === 0) return false;
+  const sources = buildSourceList(existing, candidate).map((source) => source.toLocaleLowerCase('en'));
+  const hasLegacyImport = sources.some((source) => source.includes('pdf') || source.includes('static-migration'));
+  const hasScheduleEvidence = sources.some((source) => source === 'schedule' || source.includes('global_productions'));
+  return hasLegacyImport && hasScheduleEvidence;
+}
+
+function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandidate, evidenceRoles: string[] = []) {
   const sources = buildSourceList(existing, candidate);
   const source = existing?.source || sources[0] || 'schedule';
   const isHiddenFromDirectory = existing?.hiddenFromDirectory === true;
   const mergedPhone = isHiddenFromDirectory ? null : existing?.phone || candidate.normalizedPhone;
-  const mergedRoleFields = mergeRoleFields(existing as Record<string, unknown> | null, [candidate.role]);
+  const replaceLegacyProfessional = shouldReplaceLegacyProfessionalFields(existing, candidate, evidenceRoles);
+  const mergedRoleFields = mergeRoleFields(
+    existing as Record<string, unknown> | null,
+    evidenceRoles.length ? evidenceRoles : [candidate.role],
+    { replaceExistingRoles: replaceLegacyProfessional },
+  );
   const createdAt = existing ? undefined : nowIso();
   const ghostFields = existing ? {} : { isGhost: true, ghostAvatarSeed: ghostSeed(candidate.normalizedName) };
   const department = existing?.department && !isLegacyDepartment(existing.department)
@@ -553,6 +578,22 @@ function usersForCandidate(candidate: SyncCandidate, existing: ContactRecord | n
   return Array.from(users.values()).filter((entry) => entry.id);
 }
 
+function buildCandidateRoleEvidence(candidates: SyncCandidate[]) {
+  const byPhone = new Map<string, string[]>();
+  const byName = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, key: string | null, role: string) => {
+    if (!key || !role) return;
+    map.set(key, uniqueStrings([...(map.get(key) || []), role]));
+  };
+
+  for (const candidate of candidates) {
+    add(byName, candidate.normalizedName, candidate.role);
+    add(byPhone, candidate.normalizedPhone, candidate.role);
+  }
+
+  return { byPhone, byName };
+}
+
 export async function assertIsAdmin(uid: string): Promise<void> {
   const siteRole = await getUserSiteRole(uid);
   if (siteRole !== 'admin') {
@@ -573,6 +614,7 @@ export async function syncContactsFromProductions(
   const currentContacts = contacts.length;
   const candidateCollection = collectCandidates(productions, globalProductions);
   const candidates = candidateCollection.candidates;
+  const roleEvidence = buildCandidateRoleEvidence(candidates);
 
   const byPhone = new Map<string, ContactRecord>();
   const byComposite = new Map<string, ContactRecord>();
@@ -610,6 +652,7 @@ export async function syncContactsFromProductions(
   }> = [];
   const sampleRecoveredRoles: Array<{ name: string; phone: string | null; addedRoles: string[] }> = [];
   const touchedUsers = new Set<string>();
+  const touchedContactIds = new Set<string>();
 
   for (const candidate of candidates) {
     if (candidate.partialContact) partialWithoutPhone++;
@@ -642,11 +685,15 @@ export async function syncContactsFromProductions(
       });
     }
 
-    const merged = buildContactPatch(existing, candidate);
+    const evidenceRoles = candidate.normalizedPhone
+      ? roleEvidence.byPhone.get(candidate.normalizedPhone) || roleEvidence.byName.get(candidate.normalizedName) || []
+      : roleEvidence.byName.get(candidate.normalizedName) || [];
+    const merged = buildContactPatch(existing, candidate, evidenceRoles);
 
     if (!existing) {
       created++;
       const docId = buildCandidateDocId(candidate);
+      touchedContactIds.add(docId);
       writer?.set(`contacts/${docId}`, merged);
 
       const createdRecord: ContactRecord = { id: docId, ...merged };
@@ -668,6 +715,7 @@ export async function syncContactsFromProductions(
       }
     } else if (contactNeedsUpdate(existing, merged)) {
       updated++;
+      touchedContactIds.add(existing.id);
       writer?.update(`contacts/${existing.id}`, merged);
 
       const updatedRecord: ContactRecord = { ...existing, ...merged };
@@ -709,6 +757,7 @@ export async function syncContactsFromProductions(
 
   let recategorized = 0;
   for (const contact of contactsAfterSync) {
+    if (touchedContactIds.has(contact.id)) continue;
     const professional = normalizeProfessionalFields(contact as Record<string, unknown>);
     const role = professional.role || String(contact.role || '');
     const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
