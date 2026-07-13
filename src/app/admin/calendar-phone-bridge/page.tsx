@@ -469,6 +469,11 @@ export default function CalendarPhoneBridgePage() {
       : ''
   ), [tokenData?.token]);
   const fullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
+  const androidAppUrl = useMemo(() => (
+    tokenData?.token && tokenData.ingestUrl && fullDepartmentUrl
+      ? `tvindustryherzliya://sync?token=${encodeURIComponent(tokenData.token)}&ingestUrl=${encodeURIComponent(tokenData.ingestUrl)}&url=${encodeURIComponent(fullDepartmentUrl)}`
+      : ''
+  ), [fullDepartmentUrl, tokenData?.ingestUrl, tokenData?.token]);
 
   useEffect(() => {
     if (!user || !tokenData?.token) return undefined;
@@ -644,6 +649,16 @@ export default function CalendarPhoneBridgePage() {
 
         {tokenData ? (
           <section className="space-y-4 rounded-2xl border border-violet-400/30 bg-[#17102f] p-5">
+            {androidAppUrl ? (
+              <a
+                href={androidAppUrl}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-center font-bold text-emerald-950 hover:bg-emerald-400"
+              >
+                <Smartphone className="h-5 w-5" />
+                פתח באפליקציית Android וחלץ יומן
+              </a>
+            ) : null}
+
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-bold text-violet-100">התקדמות בזמן אמת</h2>
               {isDone ? <CheckCircle2 className="h-6 w-6 text-emerald-300" /> : null}
