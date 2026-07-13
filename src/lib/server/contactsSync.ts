@@ -182,14 +182,25 @@ function scoreContact(contact: ContactRecord): number {
   return score;
 }
 
+function contactDisplayName(contact: ContactRecord): string {
+  return `${contact.firstName || ''} ${contact.lastName || ''}`.replace(/\s+/g, ' ').trim();
+}
+
+function normalizedContactName(contact: ContactRecord): string {
+  // Prefer the displayed first/last name. Some migrated contacts carried a stale
+  // normalizedName typo, which prevented duplicate cleanup and caused duplicate
+  // directory cards for the same visible person.
+  return normalizeName(contactDisplayName(contact) || contact.normalizedName || '');
+}
+
 function shouldDeleteAsRedundant(contact: ContactRecord, keeper: ContactRecord): boolean {
   if (!contact.id || contact.id === keeper.id) return false;
   if (contact.normalizedPhone && keeper.normalizedPhone && contact.normalizedPhone !== keeper.normalizedPhone) {
     return false;
   }
 
-  const contactName = normalizeName(contact.normalizedName || `${contact.firstName || ''} ${contact.lastName || ''}`);
-  const keeperName = normalizeName(keeper.normalizedName || `${keeper.firstName || ''} ${keeper.lastName || ''}`);
+  const contactName = normalizedContactName(contact);
+  const keeperName = normalizedContactName(keeper);
   if (!contactName || contactName !== keeperName) return false;
 
   const keeperHasPhone = Boolean(keeper.normalizedPhone || keeper.phone);
@@ -283,9 +294,7 @@ async function cleanupDuplicateContacts(
   const groups = new Map<string, ContactRecord[]>();
 
   for (const contact of contacts) {
-    const normalizedName = normalizeName(
-      contact.normalizedName || `${contact.firstName || ''} ${contact.lastName || ''}`,
-    );
+    const normalizedName = normalizedContactName(contact);
     if (!normalizedName) continue;
     const enriched: ContactRecord = {
       ...contact,
@@ -573,9 +582,7 @@ export async function syncContactsFromProductions(
   const writer = applyChanges ? new SafeFirestoreBatchWriter() : null;
 
   for (const contact of contacts) {
-    const normalizedName = normalizeName(
-      contact.normalizedName || `${contact.firstName || ''} ${contact.lastName || ''}`,
-    );
+    const normalizedName = normalizedContactName(contact);
     const normalizedPhone = normalizePhone(contact.normalizedPhone || contact.phone || null);
 
     if (normalizedPhone) {
@@ -778,5 +785,5 @@ export async function syncContactsFromSavedProductions(applyChanges: boolean): P
     shouldIncludeProductionDocument(String(production._path || ''), production),
   );
 
-  return syncContactsFromProductions(filtered, applyChanges, globalProductionDocs);
+  return syncContactsFromProductions(filtered, applyChanges, globalProductionDocs, { cleanupDuplicates: true });
 }
