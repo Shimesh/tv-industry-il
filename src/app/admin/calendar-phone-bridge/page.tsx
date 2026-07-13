@@ -622,12 +622,12 @@ export default function CalendarPhoneBridgePage() {
                   rel="noreferrer"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10"
                 >
-                  פתח בטלפון/דפדפן
+                  פתח קישור מלא ב־Edge
                 </a>
               </div>
               <p className="text-xs leading-5 text-emerald-100">
-                אחרי שפתחת את הקישור הזה בטלפון: לחץ על הכפתור הכתום “עדכן יומן” שמופיע בתוך דף הרצליה.
-                אם הסקריפט מותקן, הוא ישאב את כל `openmd2`, יוריד את כל `ShowCrew`, וישלח לאפליקציה חבילה אחת לשמירה.
+                פתח את הקישור מתוך Microsoft Edge בטלפון. אם Tampermonkey מותקן והסקריפט עודכן, יופיע בתוך דף הרצליה כפתור כתום “עדכן יומן”.
+                הכפתור ישאב את כל `openmd2`, יפתח את כל פופאפי `ShowCrew`, וישלח לאפליקציה חבילה אחת לשמירה.
               </p>
             </div>
           ) : (
@@ -706,19 +706,19 @@ export default function CalendarPhoneBridgePage() {
 
         {androidUserscript ? (
           <section className="space-y-4 rounded-2xl border border-emerald-400/40 bg-[#17102f] p-5">
-            <h2 className="font-bold text-emerald-300">מסלול מומלץ ל-Pixel 7 Pro / Android</h2>
+            <h2 className="font-bold text-emerald-300">מסלול מומלץ ל־Edge Android + Tampermonkey</h2>
             <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100">
-              זה לא משתמש במחשב ולא ב-Bookmarklet. הסקריפט רץ בדפדפן Android שתומך בתוספים,
-              בתוך דף הרצליה עצמו, ולכן הוא משתמש בגישה שכבר עובדת אצלך בטלפון.
+              זה המסלול שעבד בפועל: Edge בטלפון פותח את הרצליה, Tampermonkey מוסיף כפתור “עדכן יומן”
+              בתוך דף הרצליה, והשאיבה רצה מהטלפון בלי המחשב.
             </p>
             <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
-              <li>בטלפון התקן דפדפן שתומך בתוספי Chrome באנדרואיד, למשל <span dir="ltr">Kiwi Browser</span>.</li>
-              <li>בתוך Kiwi התקן את התוסף <span dir="ltr">Tampermonkey</span>.</li>
-              <li>פתח את המסך הזה מתוך Kiwi ולחץ על “התקן סקריפט Android”.</li>
-              <li>אם Tampermonkey מציג מסך התקנה, לחץ <span dir="ltr">Install</span>.</li>
-              <li>פתח ב-Kiwi את קישור הרצליה השבועי.</li>
-              <li>כשהלוח האישי מוצג, יופיע כפתור כתום “עדכן יומן” בתחתית המסך.</li>
-              <li>לחץ עליו. ההתקדמות תופיע כאן. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
+              <li>פתח את המסך הזה בטלפון מתוך <span dir="ltr">Microsoft Edge</span>.</li>
+              <li>לחץ “צור הפעלת טלפון חדשה”.</li>
+              <li>לחץ “התקן/עדכן סקריפט Edge”.</li>
+              <li>במסך Tampermonkey לחץ <span dir="ltr">Install</span> או <span dir="ltr">Update</span>.</li>
+              <li>חזור למסך הזה ב־Edge ולחץ “פתח קישור מלא ב־Edge”.</li>
+              <li>בדף הרצליה לחץ על הכפתור הכתום “עדכן יומן”.</li>
+              <li>המתן עד שמופיע כאן שכל ההפקות וכל הפופאפים הושלמו, למשל 29/29. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
             </ol>
             {androidInstallUrl ? (
               <a
@@ -727,11 +727,11 @@ export default function CalendarPhoneBridgePage() {
                 rel="noreferrer"
                 className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-3 text-center text-sm font-bold text-emerald-950 hover:bg-emerald-400"
               >
-                התקן סקריפט Android
+                התקן/עדכן סקריפט Edge
               </a>
             ) : null}
             <p className="text-xs leading-5 text-violet-300">
-              אם ההתקנה הישירה לא נפתחת, השתמש בקוד הגיבוי למטה והדבק אותו ידנית ב-Tampermonkey.
+              אם ההתקנה הישירה לא נפתחת, השתמש בקוד הגיבוי למטה והדבק אותו ידנית ב־Tampermonkey בתוך Edge.
             </p>
             <textarea
               value={androidUserscript}
@@ -742,11 +742,11 @@ export default function CalendarPhoneBridgePage() {
             />
             <button
               type="button"
-              onClick={() => void copy(androidUserscript, 'קוד Android')}
+              onClick={() => void copy(androidUserscript, 'קוד סקריפט')}
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
             >
               <Copy className="h-4 w-4" />
-              העתק קוד Android
+              העתק קוד סקריפט
             </button>
           </section>
         ) : null}
