@@ -29,8 +29,6 @@ interface WeeklyCalendarProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   loadingMore?: boolean;
-  // Date to briefly highlight after navigation from widget
-  highlightedDate?: string | null;
 }
 
 type ViewMode = 'personal' | 'department';
@@ -52,7 +50,6 @@ export default function WeeklyCalendar({
   onLoadMore,
   hasMore,
   loadingMore,
-  highlightedDate,
 }: WeeklyCalendarProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('department');
   const [selectedProduction, setSelectedProduction] = useState<Production | null>(null);
@@ -212,14 +209,13 @@ export default function WeeklyCalendar({
               const dayProductions = productionsByDate.get(day.date) || [];
               const isToday = day.date === todayLocal;
 
-              const isHighlighted = day.date === highlightedDate;
               return (
                 <div key={day.date} id={`day-${day.date}`}>
                   <div
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-2 ${isToday || isHighlighted ? 'ring-1' : ''}`}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-2 ${isToday ? 'ring-1' : ''}`}
                     style={{
-                      background: isHighlighted ? 'rgba(251,146,60,0.12)' : isToday ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
-                      ...(isHighlighted ? { boxShadow: '0 0 0 2px var(--theme-accent)' } : isToday ? { ringColor: 'var(--theme-accent)' } : {}),
+                      background: isToday ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
+                      ...(isToday ? { ringColor: 'var(--theme-accent)' } : {}),
                     }}
                   >
                     <span className="text-sm font-bold" style={{ color: isToday ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
@@ -272,14 +268,13 @@ export default function WeeklyCalendar({
               const dayProductions = productionsByDate.get(day.date) || [];
               const isToday = day.date === todayLocal;
 
-              const isHighlighted = day.date === highlightedDate;
               return (
                 <div key={day.date} id={`day-${day.date}`} className="min-h-[200px]">
                   <div
-                    className={`text-center px-2 py-2 rounded-xl mb-2 ${isToday || isHighlighted ? 'ring-1' : ''}`}
+                    className={`text-center px-2 py-2 rounded-xl mb-2 ${isToday ? 'ring-1' : ''}`}
                     style={{
-                      background: isHighlighted ? 'rgba(251,146,60,0.12)' : isToday ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
-                      ...(isHighlighted ? { boxShadow: '0 0 0 2px var(--theme-accent)' } : isToday ? { ringColor: 'var(--theme-accent)' } : {}),
+                      background: isToday ? 'var(--theme-accent-glow)' : 'var(--theme-bg-secondary)',
+                      ...(isToday ? { ringColor: 'var(--theme-accent)' } : {}),
                     }}
                   >
                     <div className="text-xs font-bold" style={{ color: isToday ? 'var(--theme-accent)' : 'var(--theme-text)' }}>
