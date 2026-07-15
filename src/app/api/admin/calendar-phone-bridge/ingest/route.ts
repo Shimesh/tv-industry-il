@@ -23,6 +23,9 @@ type BridgeTokenDoc = {
   expiresAt?: number;
   usedAt?: number | null;
   status?: string;
+  productionCount?: number;
+  personalCount?: number;
+  removedPersonal?: number;
   log?: unknown;
 };
 
@@ -223,6 +226,16 @@ export async function POST(request: NextRequest) {
 
     const tokenDoc = await getDocument<BridgeTokenDoc>(`calendar_phone_bridge_tokens/${token}`).catch(() => null);
     failureTokenDoc = tokenDoc;
+    if (tokenDoc?.status === 'used') {
+      return cors(NextResponse.json({
+        ok: true,
+        alreadyUsed: true,
+        global: Number(tokenDoc.productionCount || 0),
+        personal: Number(tokenDoc.personalCount || 0),
+        removedPersonal: Number(tokenDoc.removedPersonal || 0),
+        message: 'הייבוא כבר הושלם עם הטוקן הזה.',
+      }));
+    }
     if (!tokenDoc || tokenDoc.status !== 'active') {
       return cors(NextResponse.json({ error: 'טוקן לא תקין או כבר נוצל' }, { status: 403 }));
     }
@@ -254,6 +267,8 @@ export async function POST(request: NextRequest) {
       status: 'used',
       href: String(payload.href || '').slice(0, 500),
       productionCount: result.global,
+      personalCount: result.personal,
+      removedPersonal: result.removedPersonal,
       bridgePhase: 'done',
       bridgeMessage: `הושלם. נשמרו ${result.global} הפקות ליומן המלא, ומתוכן ${result.personal} משמרות אישיות.`,
       bridgeProgress: 100,

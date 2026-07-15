@@ -18,7 +18,20 @@ function buildAndroidUserscript(token: string, origin: string): string {
 // ==/UserScript==
 
 (function () {
-  const token = ${JSON.stringify(token)};
+  const defaultToken = ${JSON.stringify(token)};
+  const token = (() => {
+    try {
+      const params = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+      const hashToken = params.get('tvib_token');
+      if (hashToken) {
+        window.localStorage.setItem('tv-industry-herzliya-bridge-token', hashToken);
+        return hashToken;
+      }
+      return window.localStorage.getItem('tv-industry-herzliya-bridge-token') || defaultToken;
+    } catch (_) {
+      return defaultToken;
+    }
+  })();
   const statusUrl = ${JSON.stringify(statusUrl)};
   const ingestUrl = ${JSON.stringify(ingestUrl)};
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

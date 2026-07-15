@@ -236,7 +236,20 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
 // ==/UserScript==
 
 (function () {
-  const token = ${JSON.stringify(token)};
+  const defaultToken = ${JSON.stringify(token)};
+  const token = (() => {
+    try {
+      const params = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+      const hashToken = params.get('tvib_token');
+      if (hashToken) {
+        window.localStorage.setItem('tv-industry-herzliya-bridge-token', hashToken);
+        return hashToken;
+      }
+      return window.localStorage.getItem('tv-industry-herzliya-bridge-token') || defaultToken;
+    } catch (_) {
+      return defaultToken;
+    }
+  })();
   const statusUrl = ${JSON.stringify(statusUrl)};
   const ingestUrl = ${JSON.stringify(ingestUrl)};
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -469,6 +482,11 @@ export default function CalendarPhoneBridgePage() {
       : ''
   ), [tokenData?.token]);
   const fullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
+  const fullDepartmentUrlForEdge = useMemo(() => {
+    if (!fullDepartmentUrl || !tokenData?.token) return fullDepartmentUrl;
+    const separator = fullDepartmentUrl.includes('#') ? '&' : '#';
+    return `${fullDepartmentUrl}${separator}tvib_token=${encodeURIComponent(tokenData.token)}`;
+  }, [fullDepartmentUrl, tokenData?.token]);
   const androidAppUrl = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl && fullDepartmentUrl
       ? `tvindustryherzliya://sync?token=${encodeURIComponent(tokenData.token)}&ingestUrl=${encodeURIComponent(tokenData.ingestUrl)}&url=${encodeURIComponent(fullDepartmentUrl)}`
@@ -536,7 +554,8 @@ export default function CalendarPhoneBridgePage() {
   }
 
   async function copy(text: string, label: string) {
-    await navigator.clipboard.writeText(text);
+    const value = text === fullDepartmentUrl ? fullDepartmentUrlForEdge : text;
+    await navigator.clipboard.writeText(value);
     setMessage(`${label} הועתק.`);
   }
 
@@ -602,7 +621,7 @@ export default function CalendarPhoneBridgePage() {
             <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
               <div className="text-sm font-bold text-emerald-200">קישור מלא שנבנה:</div>
               <input
-                value={fullDepartmentUrl}
+                value={fullDepartmentUrlForEdge}
                 readOnly
                 dir="ltr"
                 className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50"
@@ -617,7 +636,7 @@ export default function CalendarPhoneBridgePage() {
                   העתק קישור מלא
                 </button>
                 <a
-                  href={fullDepartmentUrl}
+                  href={fullDepartmentUrlForEdge}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10"
