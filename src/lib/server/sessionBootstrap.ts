@@ -337,6 +337,58 @@ function normalizeProfile(raw: RawUserProfile | null, authUser: VerifiedAuthUser
   };
 }
 
+function normalizePhoneDigits(value: unknown): string {
+  return cleanString(value).replace(/\D/g, '');
+}
+
+function rawDocumentId(value: unknown): string {
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return value.trim();
+  return '';
+}
+
+function mergeLinkedUserIntoContact(contact: RawContact, user: RawUserProfile): RawContact {
+  const contactProfessional = normalizeProfessionalFields(contact);
+  const userProfessional = normalizeProfessionalFields(user);
+  if (!userProfessional.roles.length && !userProfessional.departments.length) return contact;
+
+  const professional = normalizeProfessionalFields({
+    roles: [...userProfessional.roles, ...contactProfessional.roles],
+    departments: [...userProfessional.departments, ...contactProfessional.departments],
+  });
+  const uid = rawDocumentId(user.id || user.uid);
+  const contactLinkedUids = asStringArray(contact.linkedUids) || [];
+  const userLinkedUids = asStringArray(user.linkedUids) || [];
+  const userCredits = asStringArray(user.credits) || [];
+  const userGear = asStringArray(user.gear) || [];
+  const linkedUids = Array.from(new Set([
+    ...contactLinkedUids,
+    ...userLinkedUids,
+    uid,
+  ].filter(Boolean)));
+
+  return {
+    ...contact,
+    role: professional.role,
+    roles: professional.roles,
+    department: professional.department,
+    departments: professional.departments,
+    profileId: uid || contact.profileId,
+    linkedUids,
+    customPhotoURL: typeof user.customPhotoURL === 'string' ? user.customPhotoURL : contact.customPhotoURL,
+    photoURL: typeof user.customPhotoURL === 'string'
+      ? user.customPhotoURL
+      : typeof user.photoURL === 'string'
+        ? user.photoURL
+        : contact.photoURL,
+    openToWork: user.openToWork === true || contact.openToWork === true,
+    city: typeof user.city === 'string' ? user.city : contact.city,
+    yearsOfExperience: typeof user.yearsOfExperience === 'number' ? user.yearsOfExperience : contact.yearsOfExperience,
+    credits: userCredits.length ? userCredits : contact.credits,
+    gear: userGear.length ? userGear : contact.gear,
+  };
+}
+
 export async function loadAndRepairSessionProfile(authUser: VerifiedAuthUser): Promise<{
   profile: SessionProfile;
   repaired: boolean;
@@ -446,9 +498,33 @@ export async function loadContactsSnapshot(): Promise<{
   updatedAt: string | null;
 }> {
   const contacts = await listDocuments<RawContact>('contacts');
+  const users = await listDocuments<RawUserProfile>('users').catch(() => []);
+  const usersByContactId = new Map<string, RawUserProfile>();
+  const usersByPhone = new Map<string, RawUserProfile>();
+
+  for (const user of users) {
+    const uid = rawDocumentId(user.id || user.uid);
+    const linkedContactId = rawDocumentId(user.linkedContactId);
+    if (linkedContactId && !usersByContactId.has(linkedContactId)) {
+      usersByContactId.set(linkedContactId, { ...user, id: uid });
+    }
+    const phone = normalizePhoneDigits(user.phone);
+    if (phone && !usersByPhone.has(phone)) {
+      usersByPhone.set(phone, { ...user, id: uid });
+    }
+  }
+
+  const mergedContacts = contacts.map((contact) => {
+    const contactId = rawDocumentId(contact.id);
+    const phone = normalizePhoneDigits(contact.phone);
+    const linkedUser =
+      usersByContactId.get(contactId) ||
+      (phone ? usersByPhone.get(phone) : undefined);
+    return linkedUser ? mergeLinkedUserIntoContact(contact, linkedUser) : contact;
+  });
   let updatedAt: string | null = null;
 
-  for (const contact of contacts) {
+  for (const contact of mergedContacts) {
     const candidate =
       (typeof contact.updatedAt === 'string' && contact.updatedAt) ||
       (typeof contact.createdAt === 'string' && contact.createdAt) ||
@@ -459,8 +535,8 @@ export async function loadContactsSnapshot(): Promise<{
   }
 
   return {
-    contacts,
-    total: contacts.length,
+    contacts: mergedContacts,
+    total: mergedContacts.length,
     updatedAt,
   };
 }
