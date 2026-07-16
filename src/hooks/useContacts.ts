@@ -31,6 +31,14 @@ export interface ContactsHookResult {
   ensureFromCrew: (crew: CrewMember[]) => Promise<void>;
 }
 
+function cleanDisplayText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return undefined;
+  if (/^[?\uFFFD\s]+$/.test(cleaned)) return undefined;
+  return cleaned;
+}
+
 export function useContacts(): ContactsHookResult {
   const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -93,8 +101,8 @@ export function useContacts(): ContactsHookResult {
             is_consented: contact.is_consented === true,
             department: professional.department,
             departments: professional.departments,
-            workArea: typeof contact.workArea === 'string' ? contact.workArea : null,
-            specialty: typeof contact.specialty === 'string' ? contact.specialty : undefined,
+            workArea: cleanDisplayText(contact.workArea) || null,
+            specialty: cleanDisplayText(contact.specialty),
             role: professional.role,
             roles: professional.roles,
             availability: typeof contact.availability === 'string' ? contact.availability as Contact['availability'] : undefined,
