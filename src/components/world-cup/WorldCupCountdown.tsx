@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
-import { WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
+import { WORLD_CUP_CHAMPION, WORLD_CUP_CHAMPION_MESSAGE, WORLD_CUP_IS_FINISHED, WORLD_CUP_START_ISO } from '@/lib/world-cup/static-data';
 import { useWorldCup } from '@/contexts/WorldCupContext';
 
 const TROPHY_IMG = '/wc2026-logo.png';
@@ -118,6 +118,58 @@ export default function WorldCupCountdown({ compact = false }: { compact?: boole
     }, 1000);
     return () => window.clearInterval(interval);
   }, [targetIso, refresh]);
+
+  if (WORLD_CUP_IS_FINISHED) {
+    return (
+      <motion.button
+        type="button"
+        onClick={() => router.push('/world-cup')}
+        whileHover={{ y: -4, scale: 1.018 }}
+        whileTap={{ scale: 0.97, y: 0 }}
+        className={`group relative isolate flex shrink-0 cursor-pointer overflow-hidden text-right ${
+          compact
+            ? 'min-h-16 max-w-[min(58vw,210px)] items-center gap-2 rounded-2xl px-2 py-2 sm:max-w-none'
+            : 'w-full max-w-full flex-col gap-3 rounded-[1.75rem] p-4'
+        }`}
+        style={{
+          background: 'linear-gradient(160deg, #7f1d1d 0%, #111827 46%, #d4af37 140%)',
+          boxShadow: '0 0 0 1.5px rgba(212,175,55,0.45), 0 16px 42px rgba(127,29,29,0.32), 0 24px 64px rgba(0,0,0,0.5)',
+        }}
+        title="ספרד אלופת העולם 2026"
+      >
+        <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_15%,rgba(255,255,255,0.16),transparent_35%),radial-gradient(circle_at_80%_85%,rgba(212,175,55,0.24),transparent_42%)]" />
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-white/40 to-transparent" />
+        <span className={compact ? 'relative text-3xl leading-none' : 'relative text-5xl leading-none'}>
+          {WORLD_CUP_CHAMPION.flag}
+        </span>
+
+        <span className="relative min-w-0 flex-1">
+          <span className="block text-[9px] font-black uppercase tracking-widest text-[#D4AF37]/80">
+            FIFA World Cup 2026
+          </span>
+          <span className={compact ? 'block text-sm font-black leading-tight text-white' : 'block text-2xl font-black leading-tight text-white'}>
+            ספרד אלופת העולם
+          </span>
+          {!compact && (
+            <span className="mt-1 block text-sm font-bold leading-6 text-white/75">
+              {WORLD_CUP_CHAMPION_MESSAGE}
+            </span>
+          )}
+        </span>
+
+        {compact ? (
+          <span className="relative rounded-full border border-[#D4AF37]/45 bg-[#D4AF37]/15 px-2 py-1 text-[11px] font-black text-[#D4AF37]">
+            אלופה
+          </span>
+        ) : (
+          <span className="relative flex items-center gap-1 self-start rounded-full border border-[#D4AF37]/45 bg-[#D4AF37]/15 px-3 py-1 text-[12px] font-black text-[#D4AF37]">
+            לגביע
+            <ChevronLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
+          </span>
+        )}
+      </motion.button>
+    );
+  }
 
   return (
     <motion.button

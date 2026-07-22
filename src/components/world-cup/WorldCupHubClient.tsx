@@ -12,7 +12,7 @@ import LatestNewsCarousel from '@/components/home/LatestNewsCarousel';
 import ChannelLogo from '@/components/ChannelLogo';
 import { VideoPlayer } from '@/components/schedule/VideoPlayer';
 import type { WorldCupCardStat, WorldCupMatch, WorldCupNewsItem, WorldCupPlayerStat, WorldCupStanding, WorldCupTeam, WorldCupTeamDetail, WorldCupVenue, WorldCupWeather } from '@/lib/world-cup/types';
-import { teamDetails } from '@/lib/world-cup/static-data';
+import { WORLD_CUP_CHAMPION, WORLD_CUP_CHAMPION_MESSAGE, WORLD_CUP_IS_FINISHED, teamDetails } from '@/lib/world-cup/static-data';
 
 type WcArticleContent = {
   title: string;
@@ -2809,6 +2809,33 @@ function CountdownBox({ matches }: { matches: WorldCupMatch[] }) {
   );
 }
 
+function ChampionCelebrationCard() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-4 overflow-hidden rounded-3xl border border-[#D4AF37]/45 bg-black/25 p-4 shadow-[0_18px_48px_rgba(212,175,55,.16)] backdrop-blur-sm"
+    >
+      <div className="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-red-900/75 via-slate-950/82 to-yellow-700/35 px-4 py-5 text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_15%,rgba(255,255,255,.18),transparent_32%),radial-gradient(circle_at_82%_85%,rgba(212,175,55,.28),transparent_44%)]" />
+        <div className="relative mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/15 bg-white/12 text-5xl shadow-2xl shadow-black/25">
+          {WORLD_CUP_CHAMPION.flag}
+        </div>
+        <div className="relative inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/45 bg-[#D4AF37]/15 px-3 py-1 text-xs font-black text-[#D4AF37]">
+          <Trophy className="h-4 w-4" />
+          אלופת העולם 2026
+        </div>
+        <h2 className="relative mt-3 text-3xl font-black leading-tight text-white sm:text-4xl">
+          ברכות לספרד
+        </h2>
+        <p className="relative mx-auto mt-2 max-w-2xl text-sm font-bold leading-7 text-white/78 sm:text-base">
+          {WORLD_CUP_CHAMPION_MESSAGE}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 function MobileSectionTabs({ value, onChange }: { value: SectionTab; onChange: (v: SectionTab) => void }) {
   const tabs: { key: SectionTab; label: string; icon: typeof Trophy }[] = [
     { key: 'bracket', label: 'עץ', icon: Trophy },
@@ -2884,6 +2911,8 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
   const featureMatch = useMemo(() => {
     const live = displayMatches.find((m) => m.status === 'live');
     if (live) return live;
+    const final = displayMatches.find((m) => m.stage === 'final') ?? displayMatches.find((m) => m.matchNumber === 104);
+    if (WORLD_CUP_IS_FINISHED && final) return final;
     return (
       [...displayMatches]
         .filter((m) => m.status === 'scheduled' && Date.parse(m.kickoff) >= Date.now() - 3 * 60 * 60 * 1000)
@@ -2899,7 +2928,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
       (m) => m.status === 'scheduled' && Math.abs(Date.parse(m.kickoff) - featureKickoff) <= 2 * 60 * 1000,
     ).length;
   }, [displayMatches, featureMatch]);
-  const featureMatchLabel = featureMatch.status === 'live'
+  const featureMatchLabel = WORLD_CUP_IS_FINISHED ? 'אלופת העולם' : featureMatch.status === 'live'
     ? (liveMatchesCount > 1 ? `שידור חי עכשיו · ${liveMatchesCount} משחקים` : 'שידור חי עכשיו')
     : simultaneousScheduledCount > 1
       ? `המשחק הבא · +${simultaneousScheduledCount - 1} בו-זמנית`
@@ -2977,7 +3006,7 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
             <h1 className="text-3xl font-black leading-tight text-white sm:text-4xl lg:text-5xl">כל המשחקים, השידור והדופק של הטורניר</h1>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-white/72 sm:text-base">לוח משחקים, כאן 11, חדשות, טבלאות, אצטדיונים, מזג אוויר וצ׳אט משחקים חי.</p>
 
-            <CountdownBox matches={displayMatches} />
+            {WORLD_CUP_IS_FINISHED ? <ChampionCelebrationCard /> : <CountdownBox matches={displayMatches} />}
 
             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto text-[11px] text-white/55" style={{ scrollbarWidth: 'none' }}>
               <span className="shrink-0 rounded-full px-2.5 py-1" style={{ background: source === 'football-data' ? 'rgba(212,175,55,.18)' : 'rgba(255,255,255,.08)', color: source === 'football-data' ? '#D4AF37' : undefined }}>
@@ -3004,7 +3033,20 @@ export default function WorldCupHubClient({ matches: initialMatches, standings: 
                 <span className="text-[11px] font-bold text-white/80">כאן 11</span>
               </div>
             </div>
-            <MatchScore match={featureMatch} />
+            {WORLD_CUP_IS_FINISHED ? (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#D4AF37]/35 bg-[#D4AF37]/10 p-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="text-4xl leading-none">{WORLD_CUP_CHAMPION.flag}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-[#D4AF37]">הגביע הולך לספרד</p>
+                    <h3 className="truncate text-xl font-black text-white">ספרד אלופת העולם 2026</h3>
+                  </div>
+                </div>
+                <Trophy className="h-8 w-8 shrink-0 text-[#D4AF37]" />
+              </div>
+            ) : (
+              <MatchScore match={featureMatch} />
+            )}
             <div className="mt-3 flex items-center justify-between text-xs text-white/55">
               <span>{selectedVenue ? `📍 ${selectedVenue.nameHe}, ${selectedVenue.cityHe}` : 'אצטדיון ייקבע'}</span>
               {featureMatch.status === 'scheduled' && (

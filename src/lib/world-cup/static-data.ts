@@ -54,6 +54,10 @@ export const teams: Record<string, WorldCupTeam> = {
   tbd: { id: 'tbd', nameHe: 'ייקבע בהמשך', nameEn: 'TBD', flag: '🏳️' },
 };
 
+export const WORLD_CUP_CHAMPION = teams.esp;
+export const WORLD_CUP_IS_FINISHED = true;
+export const WORLD_CUP_CHAMPION_MESSAGE = 'ברכות לספרד, אלופת העולם 2026 — כדורגל גדול, אופי של אלופה, וגביע שמגיע למדריד עם הרבה סטייל.';
+
 const bracketTeam = (id: string, nameHe: string, nameEn: string): WorldCupTeam => ({
   id,
   nameHe,
