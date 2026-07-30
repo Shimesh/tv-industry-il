@@ -343,7 +343,7 @@ function isConfirmedPersonalShift(production: Production): boolean {
   return production.isCurrentUserShift === true && !staleCandidate;
 }
 
-const PRODUCTIONS_CACHE_KEY = 'productions_cache_v10';
+const PRODUCTIONS_CACHE_KEY = 'productions_cache_v11';
 type CalendarAccessMode = ReturnType<typeof resolveCalendarAccessMode>;
 
 function getProductionsCacheKey(weekId: string, mode: CalendarAccessMode): string {
@@ -2735,6 +2735,7 @@ function ProductionsContent() {
       try {
         localStorage.removeItem('productions_global_widget_cache_v8');
         localStorage.removeItem('productions_global_widget_cache_v9');
+        localStorage.removeItem('productions_global_widget_cache_v10');
       } catch { /* ignore */ }
     } catch {
       setStatusMessage('שגיאה בטעינה מחדש');

@@ -153,15 +153,23 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
   const adminUid = getPrimaryAdminUid();
   let personal = 0;
   let global = 0;
+  let removedGlobal = 0;
   const marked = await markPersonalAssignmentsFromCrew(targetUid, productions);
   const resolvedProductions = marked.identityAvailable ? marked.productions : productions;
   const weekIds = new Set(resolvedProductions.map((production) => getWeekId(production.date)));
+  const importedIdsByWeek = new Map<string, Set<string>>();
   const confirmedPersonal = resolvedProductions.filter((production) => production.isCurrentUserShift === true);
 
   for (const production of resolvedProductions) {
+    const productionId = String(production.herzliyaId || production.id);
+    const weekId = getWeekId(production.date);
+    const importedIds = importedIdsByWeek.get(weekId) || new Set<string>();
+    importedIds.add(productionId);
+    importedIdsByWeek.set(weekId, importedIds);
+
     const normalized: ProductionWithSource = {
       ...production,
-      id: String(production.herzliyaId || production.id),
+      id: productionId,
       day: production.day || getHebrewDay(production.date),
       status: production.status || 'scheduled',
       crew: production.crew || [],
@@ -212,7 +220,19 @@ async function saveProductions(targetUid: string, productions: ProductionWithSou
     ? await removeStalePersonalAssignments(targetUid, resolvedProductions)
     : 0;
 
-  return { personal, global, removedPersonal, weekIds: Array.from(weekIds) };
+  for (const [weekId, importedIds] of importedIdsByWeek.entries()) {
+    const globalDocs = await listDocuments<GlobalProductionDoc>('global_productions').catch(() => []);
+    await Promise.all(globalDocs.map(async (doc) => {
+      const docId = String(doc.id || '').trim();
+      if (!/^\d+$/.test(docId)) return;
+      if (!doc.date || getWeekId(doc.date) !== weekId) return;
+      if (importedIds.has(docId)) return;
+      await deleteDocument(`global_productions/${docId}`);
+      removedGlobal += 1;
+    }));
+  }
+
+  return { personal, global, removedPersonal, removedGlobal, weekIds: Array.from(weekIds) };
 }
 
 export async function POST(request: NextRequest) {
@@ -269,6 +289,7 @@ export async function POST(request: NextRequest) {
       productionCount: result.global,
       personalCount: result.personal,
       removedPersonal: result.removedPersonal,
+      removedGlobal: result.removedGlobal,
       bridgePhase: 'done',
       bridgeMessage: `הושלם. נשמרו ${result.global} הפקות ליומן המלא, ומתוכן ${result.personal} משמרות אישיות.`,
       bridgeProgress: 100,
