@@ -178,25 +178,62 @@ function formatHours(value: number): string {
 
 function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: CountBucket[]; accent?: string }) {
   const max = Math.max(1, ...data.map((item) => item.value));
+  const yTicks = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
+    .filter((value, index, arr) => arr.indexOf(value) === index);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3 shadow-inner">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" dir="rtl">
+    <div className="rounded-2xl border border-white/10 bg-white p-3 text-slate-900 shadow-inner">
+      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-bold">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-sm bg-blue-600" />
+          <span>הפקות שלי</span>
+        </div>
+        <span className="text-slate-500">ציר Y: מספר הפקות</span>
+      </div>
+
+      <div className="grid grid-cols-[34px_1fr] gap-2" dir="ltr">
+        <div className="relative h-72 border-l border-slate-300 text-[11px] font-bold text-slate-500">
+          {yTicks.map((tick) => (
+            <span
+              key={tick}
+              className="absolute left-0 -translate-y-1/2"
+              style={{ top: `${100 - (tick / max) * 100}%` }}
+            >
+              {tick}
+            </span>
+          ))}
+        </div>
+
+        <div className="relative h-72 border-b border-slate-300 bg-[repeating-linear-gradient(to_bottom,#e5e7eb_0,#e5e7eb_1px,transparent_1px,transparent_56px)] px-1 pt-7">
+          <div className="flex h-full items-end gap-1.5" dir="ltr">
+            {data.map((item) => (
+              <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+                <div className="mb-1 text-[11px] font-black text-slate-700">{item.value}</div>
+                <div
+                  className={`w-full max-w-10 origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-sm bg-gradient-to-t ${accent} shadow-[0_1px_4px_rgba(37,99,235,0.22)]`}
+                  style={{ height: `${Math.max(4, (item.value / max) * 86)}%` }}
+                  title={`${item.label}: ${item.value} הפקות`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="mt-2 grid gap-1 pr-[42px] text-center text-[11px] font-bold leading-4 text-slate-700"
+        dir="ltr"
+        style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
+      >
         {data.map((item) => (
-          <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.055] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-black text-slate-100">{item.label}</span>
-              <span className="shrink-0 text-sm font-black text-white">{item.value} הפקות</span>
-            </div>
-            <div className="flex h-28 items-end rounded-xl bg-slate-950/45 px-3 pt-3">
-              <div
-                className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_18px_rgba(56,189,248,0.25)]`}
-                style={{ height: `${Math.max(8, (item.value / max) * 100)}%` }}
-                title={`${item.label}: ${item.value} הפקות`}
-              />
-            </div>
+          <div key={item.label} className="min-w-0">
+            <span className="block truncate" title={item.label}>{item.label}</span>
           </div>
         ))}
+      </div>
+
+      <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+        כל עמודה מציגה את מספר ההפקות שלי בתקופה המסומנת בציר התחתון.
       </div>
     </div>
   );
