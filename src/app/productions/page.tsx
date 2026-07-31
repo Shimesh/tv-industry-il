@@ -176,28 +176,24 @@ function formatHours(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { data: CountBucket[]; accent?: string }) {
+function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: CountBucket[]; accent?: string }) {
   const max = Math.max(1, ...data.map((item) => item.value));
-  const minWidth = Math.max(420, data.length * 82);
 
   return (
-    <div className="overflow-x-auto rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(0,0,0,0.24))] p-3 shadow-inner">
-      <div className="flex h-72 items-end gap-3 px-2 pb-4 pt-10" dir="ltr" style={{ minWidth }}>
+    <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-3 shadow-inner">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" dir="rtl">
         {data.map((item) => (
-          <div key={item.label} className="flex min-w-[64px] flex-1 flex-col items-center gap-3">
-            <div className="relative flex h-48 w-full items-end">
-              <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-2.5 py-1 text-sm font-black text-white">
-                {item.value}
-              </span>
+          <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.055] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-black text-slate-100">{item.label}</span>
+              <span className="shrink-0 text-sm font-black text-white">{item.value} הפקות</span>
+            </div>
+            <div className="flex h-28 items-end rounded-xl bg-slate-950/45 px-3 pt-3">
               <div
-                className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-2xl bg-gradient-to-t ${accent} shadow-[0_0_26px_rgba(255,120,40,0.32)] transition-all`}
-                style={{ height: `${Math.max(7, (item.value / max) * 100)}%` }}
+                className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_18px_rgba(56,189,248,0.25)]`}
+                style={{ height: `${Math.max(8, (item.value / max) * 100)}%` }}
                 title={`${item.label}: ${item.value} הפקות`}
               />
-            </div>
-            <div className="min-h-10 text-center">
-              <span className="block whitespace-normal text-sm font-bold leading-5 text-slate-100">{item.label}</span>
-              <span className="block text-[11px] text-slate-400">הפקות</span>
             </div>
           </div>
         ))}
@@ -207,7 +203,7 @@ function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { dat
 }
 
 function DonutChart({ data }: { data: CountBucket[] }) {
-  const palette = ['#fb7185', '#f97316', '#facc15', '#22d3ee', '#818cf8', '#e879f9', '#34d399', '#60a5fa'];
+  const palette = ['#38bdf8', '#818cf8', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#22d3ee', '#60a5fa'];
   const activeData = data.filter((item) => item.value > 0);
   const total = activeData.reduce((sum, item) => sum + item.value, 0);
   let cursor = 0;
@@ -221,21 +217,21 @@ function DonutChart({ data }: { data: CountBucket[] }) {
     : 'rgba(255,255,255,0.12) 0% 100%';
 
   return (
-    <div className="grid gap-5 rounded-3xl border border-white/10 bg-black/20 p-5 md:grid-cols-[260px_1fr]">
-      <div className="mx-auto flex h-64 w-64 items-center justify-center rounded-full shadow-[0_0_42px_rgba(236,72,153,0.22)]" style={{ background: `conic-gradient(${gradient})` }}>
-        <div className="flex h-36 w-36 flex-col items-center justify-center rounded-full bg-slate-950/90 text-center">
-          <span className="text-4xl font-black text-white">{total}</span>
+    <div className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/35 p-4 md:grid-cols-[220px_1fr]">
+      <div className="mx-auto flex h-52 w-52 items-center justify-center rounded-full shadow-[0_0_34px_rgba(56,189,248,0.18)]" style={{ background: `conic-gradient(${gradient})` }}>
+        <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-slate-950/90 text-center">
+          <span className="text-3xl font-black text-white">{total}</span>
           <span className="text-sm font-bold text-slate-300">הפקות</span>
         </div>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {(activeData.length ? activeData : data.slice(0, 4)).slice(0, 10).map((item, index) => (
-          <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.07] px-4 py-3">
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.07] px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: palette[index % palette.length] }} />
-              <span className="truncate text-base font-bold text-slate-100">{item.label}</span>
+              <span className="truncate text-sm font-bold text-slate-100">{item.label}</span>
             </div>
-            <span className="shrink-0 text-base font-black text-white">{item.value} הפקות</span>
+            <span className="shrink-0 text-sm font-black text-white">{item.value} הפקות</span>
           </div>
         ))}
       </div>
@@ -246,16 +242,16 @@ function DonutChart({ data }: { data: CountBucket[] }) {
 function RankChart({ data }: { data: CountBucket[] }) {
   const max = Math.max(1, ...data.map((item) => item.value));
   return (
-    <div className="space-y-3 rounded-3xl border border-white/10 bg-black/20 p-4">
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/35 p-3">
       {data.map((item, index) => (
-        <div key={item.label} className="rounded-2xl bg-white/[0.06] p-4">
+        <div key={item.label} className="rounded-xl bg-white/[0.06] p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-base font-black text-slate-100">{index + 1}. {item.label}</span>
-            <span className="text-base font-black text-white">{item.value} הפקות</span>
+            <span className="text-sm font-black text-slate-100">{index + 1}. {item.label}</span>
+            <span className="text-sm font-black text-white">{item.value} הפקות</span>
           </div>
-          <div className="h-4 overflow-hidden rounded-full bg-white/10">
+          <div className="h-3 overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full origin-left animate-[growWidth_900ms_ease-out_both] rounded-full bg-gradient-to-l from-orange-400 via-fuchsia-400 to-cyan-300"
+              className="h-full origin-left animate-[growWidth_900ms_ease-out_both] rounded-full bg-gradient-to-l from-sky-300 via-indigo-400 to-violet-500"
               style={{ width: `${Math.max(4, (item.value / max) * 100)}%` }}
             />
           </div>
@@ -275,7 +271,7 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
   const [period, setPeriod] = useState<ChartPeriod>('weekly');
   const [mode, setMode] = useState<ChartMode>('bars');
   const chartData = period === 'weekly' ? analytics.weekly : period === 'monthly' ? analytics.monthly : analytics.yearly;
-  const chartTitle = period === 'weekly' ? 'הפקות שלי לפי שבועות' : period === 'monthly' ? 'הפקות שלי לפי חודשים' : 'הפקות שלי לפי שנים';
+  const chartTitle = period === 'weekly' ? 'תצוגה שבועית' : period === 'monthly' ? 'תצוגה חודשית' : 'תצוגה שנתית';
   const chartSubtitle = period === 'weekly'
     ? 'כל עמודה מייצגת שבוע עבודה ואת מספר ההפקות שלי בו'
     : period === 'monthly'
@@ -285,7 +281,7 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
   const topLabel = topValue > 0 ? chartData.find((item) => item.value === topValue)?.label || 'אין' : 'אין עדיין';
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-fuchsia-400/30 bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.24),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.18),transparent_36%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(46,16,101,0.92))] p-4 shadow-[0_22px_70px_rgba(124,58,237,0.28)] sm:p-5">
+    <section className="relative overflow-hidden rounded-[1.5rem] border border-sky-300/20 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.13),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,27,75,0.92))] p-3 shadow-[0_14px_45px_rgba(15,23,42,0.36)] sm:p-4">
       <style jsx global>{`
         @keyframes growBar {
           from { transform: scaleY(0.08); opacity: 0.35; }
@@ -296,60 +292,52 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
           to { transform: scaleX(1); opacity: 1; }
         }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-300 to-transparent" />
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
+      <div className="mb-3">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-fuchsia-100">
-            <Activity className="h-4 w-4 text-orange-300" />
-            סטטיסטיקות יומן חיות
+          <div className="mb-1.5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] text-sky-100">
+            <Activity className="h-3.5 w-3.5 text-sky-300" />
+            סטטיסטיקות יומן
           </div>
-          <h2 className="text-2xl font-black text-white">תמונת מצב אישית מהיומן</h2>
-          <p className="mt-1 text-sm text-slate-300">
-            הנתונים מחושבים מההפקות והצוותים שנשאבו בפועל. לא מוצגים נתונים מומצאים.
+          <h2 className="text-xl font-black text-white sm:text-2xl">תמונת מצב אישית</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-300 sm:text-sm">
+            מחושב מהיומן שנשאב בפועל — בלי נתונים מומצאים.
           </p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-right shadow-inner">
-          <div className="text-xs text-slate-300">השבוע שלי</div>
-          <div className="flex items-end gap-2">
-            <span className="text-3xl font-black text-white">{analytics.week.mine}</span>
-            <span className="pb-1 text-sm font-bold text-white/80">הפקות</span>
-          </div>
-          <div className="text-xs text-orange-200">{formatHours(analytics.week.hours)} שעות משוערות</div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {[
-          { label: 'השבוע', value: analytics.week.mine, unit: 'הפקות שלי', sub: `${analytics.week.total} הפקות בלוח · ${formatHours(analytics.week.hours)} שעות`, icon: Target },
-          { label: 'החודש', value: analytics.month.mine, unit: 'הפקות שלי', sub: `${formatHours(analytics.month.hours)} שעות משוערות`, icon: PieChart },
-          { label: 'השנה', value: analytics.year.mine, unit: 'הפקות שלי', sub: `${analytics.year.total} הפקות בלוח · ${formatHours(analytics.year.hours)} שעות`, icon: TrendingUp },
+          { label: 'השבוע', value: analytics.week.mine, sub: `${formatHours(analytics.week.hours)} שעות`, icon: Target },
+          { label: 'החודש', value: analytics.month.mine, sub: `${formatHours(analytics.month.hours)} שעות`, icon: PieChart },
+          { label: 'השנה', value: analytics.year.mine, sub: `${formatHours(analytics.year.hours)} שעות`, icon: TrendingUp },
         ].map((item) => {
           const Icon = item.icon;
           return (
-            <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.08] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm text-slate-300">{item.label}</span>
-                <Icon className="h-5 w-5 text-cyan-300" />
+            <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.07] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <span className="text-xs font-bold text-slate-300">{item.label}</span>
+                <Icon className="h-4 w-4 text-sky-300" />
               </div>
-              <div className="flex items-end gap-2">
-                <span className="text-3xl font-black text-white">{item.value}</span>
-                <span className="pb-1 text-xs font-bold text-cyan-100">{item.unit}</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-white">{item.value}</span>
+                <span className="text-[11px] font-bold text-sky-100">הפקות</span>
               </div>
-              <div className="mt-1 text-xs text-slate-400">{item.sub}</div>
+              <div className="mt-1 text-[11px] text-slate-400">{item.sub}</div>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.06] p-4">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3">
+        <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h3 className="text-lg font-black text-white">{chartTitle}</h3>
-            <p className="text-xs text-slate-400">{chartSubtitle}</p>
-            <p className="mt-1 text-xs text-orange-100">שיא לתקופה: {topLabel} · {topValue} הפקות שלי</p>
+            <h3 className="text-lg font-black text-white">{chartTitle}: הפקות שלי</h3>
+            <p className="text-xs leading-5 text-slate-300">{chartSubtitle}</p>
+            <p className="mt-1 text-xs font-bold text-sky-100">שיא: {topLabel} · {topValue} הפקות</p>
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
-            <div className="flex rounded-2xl border border-white/10 bg-black/20 p-1">
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-slate-950/35 p-1">
               {[
                 { id: 'weekly' as ChartPeriod, label: 'שבועי' },
                 { id: 'monthly' as ChartPeriod, label: 'חודשי' },
@@ -359,13 +347,13 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
                   key={item.id}
                   type="button"
                   onClick={() => setPeriod(item.id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${period === item.id ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                  className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${period === item.id ? 'bg-sky-200 text-slate-950' : 'text-slate-300 hover:text-white'}`}
                 >
                   {item.label}
                 </button>
               ))}
             </div>
-            <div className="flex rounded-2xl border border-white/10 bg-black/20 p-1">
+            <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-slate-950/35 p-1">
               {[
                 { id: 'bars' as ChartMode, label: 'עמודות' },
                 { id: 'donut' as ChartMode, label: 'עוגה' },
@@ -375,7 +363,7 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
                   key={item.id}
                   type="button"
                   onClick={() => setMode(item.id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${mode === item.id ? 'bg-gradient-to-l from-orange-300 to-fuchsia-300 text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                  className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${mode === item.id ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'}`}
                 >
                   {item.label}
                 </button>
