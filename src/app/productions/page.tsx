@@ -116,6 +116,9 @@ type CalendarAnalytics = {
   loading: boolean;
 };
 
+type ChartMode = 'bars' | 'donut' | 'rank';
+type ChartPeriod = 'weekly' | 'monthly' | 'yearly';
+
 function roundTime30(t: string): string {
   const [h, m] = (t || '').split(':').map(Number);
   if (isNaN(h) || isNaN(m)) return t;
@@ -177,14 +180,17 @@ function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { dat
   const max = Math.max(1, ...data.map((item) => item.value));
 
   return (
-    <div className="flex h-32 items-end gap-1.5 rounded-2xl border border-white/10 bg-black/20 px-3 pb-3 pt-4" dir="ltr">
+    <div className="flex h-44 items-end gap-2 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.22))] px-3 pb-4 pt-5 shadow-inner" dir="ltr">
       {data.map((item) => (
         <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-          <div className="relative flex h-20 w-full items-end">
+          <div className="relative flex h-28 w-full items-end">
+            <span className="absolute -top-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {item.value}
+            </span>
             <div
-              className={`w-full rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_18px_rgba(255,120,40,0.22)] transition-all`}
+              className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_22px_rgba(255,120,40,0.28)] transition-all`}
               style={{ height: `${Math.max(8, (item.value / max) * 100)}%` }}
-              title={`${item.label}: ${item.value}`}
+              title={`${item.label}: ${item.value} הפקות`}
             />
           </div>
           <span className="max-w-full truncate text-[10px] text-slate-300">{item.label}</span>
@@ -194,13 +200,96 @@ function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { dat
   );
 }
 
-function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
-  const topWeekly = Math.max(0, ...analytics.weekly.map((item) => item.value));
-  const topMonthValue = Math.max(0, ...analytics.monthly.map((m) => m.value));
-  const currentMonthLabel = topMonthValue > 0 ? analytics.monthly.find((item) => item.value === topMonthValue)?.label || 'אין' : 'אין עדיין';
+function DonutChart({ data }: { data: CountBucket[] }) {
+  const palette = ['#fb7185', '#f97316', '#facc15', '#22d3ee', '#818cf8', '#e879f9', '#34d399', '#60a5fa'];
+  const activeData = data.filter((item) => item.value > 0);
+  const total = activeData.reduce((sum, item) => sum + item.value, 0);
+  let cursor = 0;
+  const gradient = total
+    ? activeData.map((item, index) => {
+        const start = cursor;
+        const end = cursor + (item.value / total) * 100;
+        cursor = end;
+        return `${palette[index % palette.length]} ${start}% ${end}%`;
+      }).join(', ')
+    : 'rgba(255,255,255,0.12) 0% 100%';
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-fuchsia-400/30 bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.22),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.2),transparent_36%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(46,16,101,0.92))] p-4 shadow-[0_22px_70px_rgba(124,58,237,0.28)] sm:p-5">
+    <div className="grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[180px_1fr]">
+      <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-full shadow-[0_0_35px_rgba(236,72,153,0.18)]" style={{ background: `conic-gradient(${gradient})` }}>
+        <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-slate-950/90 text-center">
+          <span className="text-2xl font-black text-white">{total}</span>
+          <span className="text-[11px] text-slate-300">הפקות</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {(activeData.length ? activeData : data.slice(0, 4)).slice(0, 8).map((item, index) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.06] px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: palette[index % palette.length] }} />
+              <span className="truncate text-xs text-slate-200">{item.label}</span>
+            </div>
+            <span className="shrink-0 text-xs font-black text-white">{item.value} הפקות</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RankChart({ data }: { data: CountBucket[] }) {
+  const max = Math.max(1, ...data.map((item) => item.value));
+  return (
+    <div className="space-y-2 rounded-2xl border border-white/10 bg-black/20 p-4">
+      {data.map((item, index) => (
+        <div key={item.label} className="rounded-xl bg-white/[0.05] p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs font-bold text-slate-200">{index + 1}. {item.label}</span>
+            <span className="text-xs font-black text-white">{item.value} הפקות</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full origin-left animate-[growWidth_900ms_ease-out_both] rounded-full bg-gradient-to-l from-orange-400 via-fuchsia-400 to-cyan-300"
+              style={{ width: `${Math.max(4, (item.value / max) * 100)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProfessionalChart({ data, mode }: { data: CountBucket[]; mode: ChartMode }) {
+  if (mode === 'donut') return <DonutChart data={data} />;
+  if (mode === 'rank') return <RankChart data={data} />;
+  return <MiniBarChart data={data} />;
+}
+
+function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
+  const [period, setPeriod] = useState<ChartPeriod>('weekly');
+  const [mode, setMode] = useState<ChartMode>('bars');
+  const chartData = period === 'weekly' ? analytics.weekly : period === 'monthly' ? analytics.monthly : analytics.yearly;
+  const chartTitle = period === 'weekly' ? 'הפקות שלי לפי שבועות' : period === 'monthly' ? 'הפקות שלי לפי חודשים' : 'הפקות שלי לפי שנים';
+  const chartSubtitle = period === 'weekly'
+    ? 'כל עמודה מייצגת שבוע עבודה ואת מספר ההפקות שלי בו'
+    : period === 'monthly'
+      ? 'כל עמודה מייצגת חודש ואת מספר ההפקות שלי בו'
+      : 'כל עמודה מייצגת שנה מתוך הנתונים הקיימים';
+  const topValue = Math.max(0, ...chartData.map((item) => item.value));
+  const topLabel = topValue > 0 ? chartData.find((item) => item.value === topValue)?.label || 'אין' : 'אין עדיין';
+
+  return (
+    <section className="relative overflow-hidden rounded-[2rem] border border-fuchsia-400/30 bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.24),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.18),transparent_36%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(46,16,101,0.92))] p-4 shadow-[0_22px_70px_rgba(124,58,237,0.28)] sm:p-5">
+      <style jsx global>{`
+        @keyframes growBar {
+          from { transform: scaleY(0.08); opacity: 0.35; }
+          to { transform: scaleY(1); opacity: 1; }
+        }
+        @keyframes growWidth {
+          from { transform: scaleX(0.04); opacity: 0.35; }
+          to { transform: scaleX(1); opacity: 1; }
+        }
+      `}</style>
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-300 to-transparent" />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -213,18 +302,21 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
             הנתונים מחושבים מההפקות והצוותים שנשאבו בפועל. לא מוצגים נתונים מומצאים.
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left shadow-inner" dir="ltr">
+        <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-right shadow-inner">
           <div className="text-xs text-slate-300">השבוע שלי</div>
-          <div className="text-3xl font-black text-white">{analytics.week.mine}</div>
+          <div className="flex items-end gap-2">
+            <span className="text-3xl font-black text-white">{analytics.week.mine}</span>
+            <span className="pb-1 text-sm font-bold text-white/80">הפקות</span>
+          </div>
           <div className="text-xs text-orange-200">{formatHours(analytics.week.hours)} שעות משוערות</div>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          { label: 'השבוע', value: analytics.week.mine, sub: `${analytics.week.total} הפקות בלוח`, icon: Target },
-          { label: 'החודש', value: analytics.month.mine, sub: `${formatHours(analytics.month.hours)} שעות משוערות`, icon: PieChart },
-          { label: 'השנה', value: analytics.year.mine, sub: `${analytics.year.total} הפקות בלוח`, icon: TrendingUp },
+          { label: 'השבוע', value: analytics.week.mine, unit: 'הפקות שלי', sub: `${analytics.week.total} הפקות בלוח · ${formatHours(analytics.week.hours)} שעות`, icon: Target },
+          { label: 'החודש', value: analytics.month.mine, unit: 'הפקות שלי', sub: `${formatHours(analytics.month.hours)} שעות משוערות`, icon: PieChart },
+          { label: 'השנה', value: analytics.year.mine, unit: 'הפקות שלי', sub: `${analytics.year.total} הפקות בלוח · ${formatHours(analytics.year.hours)} שעות`, icon: TrendingUp },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -233,35 +325,60 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
                 <span className="text-sm text-slate-300">{item.label}</span>
                 <Icon className="h-5 w-5 text-cyan-300" />
               </div>
-              <div className="text-3xl font-black text-white">{item.value}</div>
+              <div className="flex items-end gap-2">
+                <span className="text-3xl font-black text-white">{item.value}</span>
+                <span className="pb-1 text-xs font-bold text-cyan-100">{item.unit}</span>
+              </div>
               <div className="mt-1 text-xs text-slate-400">{item.sub}</div>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-white">הפקות שלי לפי שבועות</h3>
-              <p className="text-xs text-slate-400">שבועות השנה שנמצאים בנתונים שנשאבו</p>
-            </div>
-            <span className="rounded-full bg-orange-400/20 px-3 py-1 text-xs text-orange-100">שיא: {topWeekly}</span>
+      <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-black text-white">{chartTitle}</h3>
+            <p className="text-xs text-slate-400">{chartSubtitle}</p>
+            <p className="mt-1 text-xs text-orange-100">שיא לתקופה: {topLabel} · {topValue} הפקות שלי</p>
           </div>
-          <MiniBarChart data={analytics.weekly} />
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-white">חלוקה חודשית</h3>
-              <p className="text-xs text-slate-400">החודש הפעיל ביותר: {currentMonthLabel}</p>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex rounded-2xl border border-white/10 bg-black/20 p-1">
+              {[
+                { id: 'weekly' as ChartPeriod, label: 'שבועי' },
+                { id: 'monthly' as ChartPeriod, label: 'חודשי' },
+                { id: 'yearly' as ChartPeriod, label: 'שנתי' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPeriod(item.id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${period === item.id ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded-2xl border border-white/10 bg-black/20 p-1">
+              {[
+                { id: 'bars' as ChartMode, label: 'עמודות' },
+                { id: 'donut' as ChartMode, label: 'עוגה' },
+                { id: 'rank' as ChartMode, label: 'דירוג' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMode(item.id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${mode === item.id ? 'bg-gradient-to-l from-orange-300 to-fuchsia-300 text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
             {analytics.loading && <Loader2 className="h-4 w-4 animate-spin text-fuchsia-200" />}
           </div>
-          <MiniBarChart data={analytics.monthly} accent="from-cyan-300 to-fuchsia-400" />
         </div>
+        <ProfessionalChart data={chartData} mode={mode} />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -273,13 +390,6 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
           </div>
         ))}
       </div>
-
-      {analytics.yearly.length > 1 && (
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-          <h3 className="mb-3 font-bold text-white">מגמה לפי שנים</h3>
-          <MiniBarChart data={analytics.yearly} accent="from-emerald-300 to-blue-400" />
-        </div>
-      )}
     </section>
   );
 }
@@ -2224,19 +2334,13 @@ function ProductionsContent() {
       return Array.from(map.entries()).sort((a, b) => b[1] - a[1])[0] || null;
     };
 
-    const topStudio = countBy((production) => production.studio || 'לא צוין');
     const topDay = countBy((production) => getHebrewDay(production.date));
-    const roleMap = new Map<string, number>();
-    for (const production of myYearItems) {
-      for (const member of production.crew || []) {
-        if (!isCrewMatch([member], workerName || user?.displayName || profile?.displayName || '')) continue;
-        const role = normalizeRole(member.role || member.roleDetail || '');
-        if (role) roleMap.set(role, (roleMap.get(role) || 0) + 1);
-      }
-    }
-    const topRole = Array.from(roleMap.entries()).sort((a, b) => b[1] - a[1])[0] || null;
     const activeWeeks = weekMap.size;
     const averagePerActiveWeek = activeWeeks ? (myYearItems.length / activeWeeks).toFixed(1) : '0';
+    const topWeek = Array.from(weekMap.entries()).sort((a, b) => b[1] - a[1])[0] || null;
+    const longestProduction = myYearItems
+      .map((production) => ({ production, hours: productionDurationHours(production) }))
+      .sort((a, b) => b.hours - a.hours)[0] || null;
 
     return {
       week: countRange(weekStartDate, weekEndDate),
@@ -2253,14 +2357,14 @@ function ProductionsContent() {
           hint: topDay ? `${topDay[1]} הפקות שלי השנה ביום הזה` : 'יופיע אחרי שיש נתונים אישיים',
         },
         {
-          label: 'לוקיישן מוביל',
-          value: topStudio ? topStudio[0] : 'אין עדיין נתון',
-          hint: topStudio ? `${topStudio[1]} הפקות שלי השנה` : 'מחושב מתוך אולפן/ניידת ביומן',
+          label: 'שבוע שיא',
+          value: topWeek ? `${topWeek[1]} הפקות` : 'אין עדיין נתון',
+          hint: topWeek ? `שבוע שמתחיל ב-${topWeek[0]}` : `ממוצע ${averagePerActiveWeek} הפקות לשבוע פעיל`,
         },
         {
-          label: 'תפקיד נפוץ',
-          value: topRole ? topRole[0] : 'לא זוהה',
-          hint: topRole ? `${topRole[1]} הופעות בצוותים שנשאבו` : `ממוצע ${averagePerActiveWeek} הפקות לשבוע פעיל`,
+          label: 'משמרת ארוכה',
+          value: longestProduction && longestProduction.hours > 0 ? `${formatHours(longestProduction.hours)} שעות` : 'אין עדיין נתון',
+          hint: longestProduction && longestProduction.hours > 0 ? `${longestProduction.production.name} · ${longestProduction.production.date}` : `נספרו ${activeWeeks} שבועות פעילים`,
         },
       ],
     };
