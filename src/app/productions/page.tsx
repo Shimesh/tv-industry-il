@@ -112,6 +112,7 @@ type CalendarAnalytics = {
   weekly: CountBucket[];
   monthly: CountBucket[];
   yearly: CountBucket[];
+  availableYears: number[];
   insights: Array<{ label: string; value: string; hint: string }>;
   loading: boolean;
 };
@@ -326,7 +327,15 @@ function ProfessionalChart({ data, mode }: { data: CountBucket[]; mode: ChartMod
   return <MiniBarChart data={data} />;
 }
 
-function CalendarInsightsCard({ analytics, year }: { analytics: CalendarAnalytics; year: number }) {
+function CalendarInsightsCard({
+  analytics,
+  year,
+  onYearChange,
+}: {
+  analytics: CalendarAnalytics;
+  year: number;
+  onYearChange: (year: number) => void;
+}) {
   const [period, setPeriod] = useState<ChartPeriod>('weekly');
   const [mode, setMode] = useState<ChartMode>('bars');
   const chartData = period === 'weekly' ? analytics.weekly : period === 'monthly' ? analytics.monthly : analytics.yearly;
@@ -357,7 +366,8 @@ function CalendarInsightsCard({ analytics, year }: { analytics: CalendarAnalytic
       `}</style>
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
       <div className="mb-3">
-        <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
           <div className="mb-1.5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] text-sky-100">
             <Activity className="h-3.5 w-3.5 text-sky-300" />
             סטטיסטיקות יומן
@@ -366,6 +376,27 @@ function CalendarInsightsCard({ analytics, year }: { analytics: CalendarAnalytic
           <p className="mt-1 text-xs leading-5 text-slate-300 sm:text-sm">
             מחושב מהיומן שנשאב בפועל — בלי נתונים מומצאים.
           </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-2">
+            <div className="mb-1 text-[11px] font-bold text-slate-300">שנת תצוגה</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(analytics.availableYears.length ? analytics.availableYears : [year]).map((itemYear) => (
+                <button
+                  key={itemYear}
+                  type="button"
+                  onClick={() => onYearChange(itemYear)}
+                  className={`rounded-xl px-3 py-1.5 text-sm font-black transition ${
+                    year === itemYear
+                      ? 'bg-amber-300 text-slate-950 shadow-[0_8px_18px_rgba(251,191,36,0.24)]'
+                      : 'bg-white/8 text-slate-200 hover:bg-white/14'
+                  }`}
+                >
+                  {itemYear}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -807,6 +838,7 @@ function ProductionsContent() {
     // Calendar navigation state
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [analyticsYear, setAnalyticsYear] = useState(() => new Date().getFullYear());
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [navLoading, setNavLoading] = useState(false);
@@ -2109,9 +2141,10 @@ function ProductionsContent() {
     const controller = new AbortController();
 
     const loadAnalytics = async () => {
-      const selectedYear = currentDate.getFullYear();
+      const selectedYear = analyticsYear;
+      const endYear = Math.max(selectedYear, currentDate.getFullYear());
       const start = selectedYear >= 2025 ? '2025-03-01' : `${selectedYear}-01-01`;
-      const end = `${selectedYear}-12-31`;
+      const end = `${endYear}-12-31`;
       setAnalyticsLoading(true);
       try {
         const prods = await loadProductionsForPeriod(start, end, controller.signal);
@@ -2129,7 +2162,7 @@ function ProductionsContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [user?.uid, currentDate, loadProductionsForPeriod]);
+  }, [user?.uid, currentDate, analyticsYear, loadProductionsForPeriod]);
 
   // Load more productions for list view infinite scroll
   const handleLoadMoreList = useCallback(async () => {
@@ -2320,7 +2353,7 @@ function ProductionsContent() {
     const weekEndDate = toLocalDate(getWeekEndDate(currentDate));
     const monthStartDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
     const monthEndDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0));
-    const year = currentDate.getFullYear();
+    const year = analyticsYear;
     const yearStartDate = `${year}-01-01`;
     const yearEndDate = `${year}-12-31`;
     const sourceProductions = analyticsProductions.length ? analyticsProductions : summaryProductions;
@@ -2345,6 +2378,14 @@ function ProductionsContent() {
         hours: myItems.reduce((sum, production) => sum + productionDurationHours(production), 0),
       };
     };
+
+    const allMyItems = items.filter(isMine);
+    const availableYears = Array.from(new Set(allMyItems
+      .map((production) => Number(production.date.slice(0, 4)))
+      .filter((itemYear) => Number.isFinite(itemYear) && itemYear >= 2025)))
+      .sort((a, b) => a - b);
+    if (!availableYears.includes(year)) availableYears.push(year);
+    availableYears.sort((a, b) => a - b);
 
     const myYearItems = items.filter((production) => (
       production.date >= yearStartDate &&
@@ -2373,7 +2414,7 @@ function ProductionsContent() {
     if (!weekly.length) weekly.push({ label: 'אין', value: 0 });
 
     const yearlyMap = new Map<string, number>();
-    for (const production of items.filter(isMine)) {
+    for (const production of allMyItems) {
       const itemYear = production.date.slice(0, 4);
       yearlyMap.set(itemYear, (yearlyMap.get(itemYear) || 0) + 1);
     }
@@ -2406,6 +2447,7 @@ function ProductionsContent() {
       weekly,
       monthly,
       yearly,
+      availableYears,
       loading: analyticsLoading,
       insights: [
         {
@@ -2425,7 +2467,7 @@ function ProductionsContent() {
         },
       ],
     };
-  }, [analyticsLoading, analyticsProductions, currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
+  }, [analyticsLoading, analyticsProductions, analyticsYear, currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
 
   useEffect(() => {
     if (!productions.length) return;
@@ -3528,7 +3570,7 @@ function ProductionsContent() {
 
       {/* Calendar analytics */}
       <div id="calendar-insights" className="mb-6 scroll-mt-24">
-        <CalendarInsightsCard analytics={calendarSummary} year={currentDate.getFullYear()} />
+        <CalendarInsightsCard analytics={calendarSummary} year={analyticsYear} onYearChange={setAnalyticsYear} />
       </div>
 
       {/* AI Status */}
