@@ -185,25 +185,27 @@ function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: C
     ? dataWithoutTrailingZeros.slice(-6)
     : dataWithoutTrailingZeros;
   const max = Math.max(1, ...displayData.map((item) => item.value));
-  const yTicks = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
+  const middleTick = Math.round(max / 2);
+  const yTicks = [max, middleTick, 0]
     .filter((value, index, arr) => arr.indexOf(value) === index);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white p-4 text-slate-900 shadow-inner sm:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3 text-sm font-bold">
+    <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white p-3 text-slate-900 shadow-inner sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3 text-sm font-black">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-sm bg-blue-600" />
           <span>הפקות שלי</span>
         </div>
-        <span className="text-xs text-slate-500">ציר Y: מספר הפקות</span>
+        <span className="text-xs font-bold text-slate-500">מספר הפקות</span>
       </div>
 
-      <div className="grid grid-cols-[44px_1fr] gap-3" dir="ltr">
-        <div className="relative h-80 border-l border-slate-300 text-sm font-black text-slate-600 sm:h-96">
+      <div className="relative h-80 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 pb-12 pt-8 sm:h-96">
+        <div className="absolute bottom-12 left-9 right-2 top-8 border-b border-l border-slate-300" />
+        <div className="absolute bottom-12 left-2 top-8 w-7 text-[11px] font-bold tabular-nums text-slate-400 sm:text-xs">
           {yTicks.map((tick) => (
             <span
               key={tick}
-              className="absolute left-0 -translate-y-1/2 tabular-nums"
+              className="absolute left-0 -translate-y-1/2"
               style={{ top: `${100 - (tick / max) * 100}%` }}
             >
               {tick}
@@ -211,34 +213,41 @@ function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: C
           ))}
         </div>
 
-        <div className="relative h-80 border-b border-slate-300 bg-[repeating-linear-gradient(to_bottom,#e5e7eb_0,#e5e7eb_1px,transparent_1px,transparent_64px)] px-2 pt-11 sm:h-96 sm:px-4">
-          <div className="flex h-full items-end gap-3 sm:gap-4" dir="ltr">
-            {displayData.map((item) => (
-              <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
-                <div className="mb-2 rounded-full bg-slate-900 px-2 py-1 text-xs font-black text-white shadow-sm sm:text-sm" dir="rtl">
-                  {item.value} הפקות
-                </div>
-                <div
-                  className={`w-full max-w-14 origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-lg bg-gradient-to-t ${accent} shadow-[0_1px_4px_rgba(37,99,235,0.22)] sm:max-w-16`}
-                  style={{ height: `${Math.max(4, (item.value / max) * 86)}%` }}
-                  title={`${item.label}: ${item.value} הפקות`}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+        <div className="absolute bottom-12 left-9 right-2 top-8 bg-[repeating-linear-gradient(to_bottom,#e5e7eb_0,#e5e7eb_1px,transparent_1px,transparent_64px)]" />
 
-      <div
-        className="mt-4 grid gap-2 pr-[56px] text-center text-sm font-black leading-5 text-slate-800 sm:text-base"
-        dir="ltr"
-        style={{ gridTemplateColumns: `repeat(${displayData.length}, minmax(0, 1fr))` }}
-      >
-        {displayData.map((item) => (
-          <div key={item.label} className="min-w-0">
-            <span className="block whitespace-normal" dir="rtl" title={item.label}>{item.label}</span>
-          </div>
-        ))}
+        <div
+          className="absolute bottom-12 left-11 right-3 top-8 grid items-end gap-2 sm:gap-3"
+          dir="ltr"
+          style={{ gridTemplateColumns: `repeat(${displayData.length}, minmax(0, 1fr))` }}
+        >
+          {displayData.map((item) => (
+            <div key={item.label} className="flex h-full min-w-0 flex-col items-center justify-end overflow-hidden">
+              <span className="mb-1 flex min-h-8 flex-col items-center justify-end text-center leading-none text-slate-800" dir="rtl">
+                <span className="text-sm font-black tabular-nums sm:text-base">{item.value}</span>
+                <span className="mt-0.5 text-[9px] font-bold sm:text-[10px]">הפקות</span>
+              </span>
+              <div
+                className={`w-full max-w-10 origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-lg bg-gradient-to-t ${accent} shadow-[0_2px_8px_rgba(37,99,235,0.18)] sm:max-w-14`}
+                style={{ height: `${Math.max(4, (item.value / max) * 82)}%` }}
+                title={`${item.label}: ${item.value} הפקות`}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="absolute bottom-2 left-11 right-3 grid gap-2 text-center text-[11px] font-black leading-4 text-slate-800 sm:text-sm"
+          dir="ltr"
+          style={{ gridTemplateColumns: `repeat(${displayData.length}, minmax(0, 1fr))` }}
+        >
+          {displayData.map((item) => (
+            <div key={item.label} className="min-w-0">
+              <span className="block truncate" dir="rtl" title={item.label}>
+                {item.label}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {data.length > displayData.length && (
@@ -253,7 +262,6 @@ function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: C
     </div>
   );
 }
-
 function DonutChart({ data }: { data: CountBucket[] }) {
   const palette = ['#38bdf8', '#818cf8', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#22d3ee', '#60a5fa'];
   const activeData = data.filter((item) => item.value > 0);
