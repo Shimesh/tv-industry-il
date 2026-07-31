@@ -177,17 +177,13 @@ function formatHours(value: number): string {
 }
 
 function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: CountBucket[]; accent?: string }) {
-  const dataWithoutTrailingZeros = [...data];
-  while (dataWithoutTrailingZeros.length > 1 && dataWithoutTrailingZeros[dataWithoutTrailingZeros.length - 1].value === 0) {
-    dataWithoutTrailingZeros.pop();
-  }
-  const displayData = dataWithoutTrailingZeros.length > 6
-    ? dataWithoutTrailingZeros.slice(-6)
-    : dataWithoutTrailingZeros;
+  const displayData = data.length ? data : [{ label: 'אין נתונים', value: 0 }];
   const max = Math.max(1, ...displayData.map((item) => item.value));
   const middleTick = Math.round(max / 2);
   const yTicks = [max, middleTick, 0]
     .filter((value, index, arr) => arr.indexOf(value) === index);
+  const columnWidth = 76;
+  const chartWidth = Math.max(360, displayData.length * columnWidth);
 
   return (
     <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white p-3 text-slate-900 shadow-inner sm:p-5">
@@ -199,65 +195,68 @@ function MiniBarChart({ data, accent = 'from-sky-300 to-indigo-500' }: { data: C
         <span className="text-xs font-bold text-slate-500">מספר הפקות</span>
       </div>
 
-      <div className="relative h-80 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 pb-12 pt-8 sm:h-96">
-        <div className="absolute bottom-12 left-9 right-2 top-8 border-b border-l border-slate-300" />
-        <div className="absolute bottom-12 left-2 top-8 w-7 text-[11px] font-bold tabular-nums text-slate-400 sm:text-xs">
-          {yTicks.map((tick) => (
-            <span
-              key={tick}
-              className="absolute left-0 -translate-y-1/2"
-              style={{ top: `${100 - (tick / max) * 100}%` }}
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className="relative h-80 px-2 pb-12 pt-8 sm:h-96" style={{ width: chartWidth }}>
+            <div className="absolute bottom-12 left-9 right-2 top-8 border-b border-l border-slate-300" />
+            <div className="absolute bottom-12 left-2 top-8 w-7 text-[11px] font-bold tabular-nums text-slate-400 sm:text-xs">
+              {yTicks.map((tick) => (
+                <span
+                  key={tick}
+                  className="absolute left-0 -translate-y-1/2"
+                  style={{ top: `${100 - (tick / max) * 100}%` }}
+                >
+                  {tick}
+                </span>
+              ))}
+            </div>
+
+            <div className="absolute bottom-12 left-9 right-2 top-8 bg-[repeating-linear-gradient(to_bottom,#e5e7eb_0,#e5e7eb_1px,transparent_1px,transparent_64px)]" />
+
+            <div
+              className="absolute bottom-12 left-11 right-3 top-8 grid items-end gap-3"
+              dir="ltr"
+              style={{ gridTemplateColumns: `repeat(${displayData.length}, ${columnWidth - 18}px)` }}
             >
-              {tick}
-            </span>
-          ))}
-        </div>
-
-        <div className="absolute bottom-12 left-9 right-2 top-8 bg-[repeating-linear-gradient(to_bottom,#e5e7eb_0,#e5e7eb_1px,transparent_1px,transparent_64px)]" />
-
-        <div
-          className="absolute bottom-12 left-11 right-3 top-8 grid items-end gap-2 sm:gap-3"
-          dir="ltr"
-          style={{ gridTemplateColumns: `repeat(${displayData.length}, minmax(0, 1fr))` }}
-        >
-          {displayData.map((item) => (
-            <div key={item.label} className="flex h-full min-w-0 flex-col items-center justify-end overflow-hidden">
-              <span className="mb-1 flex min-h-8 flex-col items-center justify-end text-center leading-none text-slate-800" dir="rtl">
-                <span className="text-sm font-black tabular-nums sm:text-base">{item.value}</span>
-                <span className="mt-0.5 text-[9px] font-bold sm:text-[10px]">הפקות</span>
-              </span>
-              <div
-                className={`w-full max-w-10 origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-lg bg-gradient-to-t ${accent} shadow-[0_2px_8px_rgba(37,99,235,0.18)] sm:max-w-14`}
-                style={{ height: `${Math.max(4, (item.value / max) * 82)}%` }}
-                title={`${item.label}: ${item.value} הפקות`}
-              />
+              {displayData.map((item) => (
+                <div key={item.label} className="flex h-full min-w-0 flex-col items-center justify-end">
+                  <span className="mb-1 flex min-h-8 flex-col items-center justify-end text-center leading-none text-slate-800" dir="rtl">
+                    <span className="text-sm font-black tabular-nums sm:text-base">{item.value}</span>
+                    <span className="mt-0.5 text-[9px] font-bold sm:text-[10px]">הפקות</span>
+                  </span>
+                  <div
+                    className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-lg bg-gradient-to-t ${accent} shadow-[0_2px_8px_rgba(37,99,235,0.18)]`}
+                    style={{ height: `${Math.max(4, (item.value / max) * 82)}%` }}
+                    title={`${item.label}: ${item.value} הפקות`}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div
-          className="absolute bottom-2 left-11 right-3 grid gap-2 text-center text-[11px] font-black leading-4 text-slate-800 sm:text-sm"
-          dir="ltr"
-          style={{ gridTemplateColumns: `repeat(${displayData.length}, minmax(0, 1fr))` }}
-        >
-          {displayData.map((item) => (
-            <div key={item.label} className="min-w-0">
-              <span className="block truncate" dir="rtl" title={item.label}>
-                {item.label}
-              </span>
+            <div
+              className="absolute bottom-2 left-11 right-3 grid gap-3 text-center text-xs font-black leading-4 text-slate-800 sm:text-sm"
+              dir="ltr"
+              style={{ gridTemplateColumns: `repeat(${displayData.length}, ${columnWidth - 18}px)` }}
+            >
+              {displayData.map((item) => (
+                <div key={item.label} className="min-w-0">
+                  <span className="block whitespace-nowrap" dir="rtl" title={item.label}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+          <span>←</span>
+          <span>אפשר לגלול הצידה כדי לראות את כל התקופות</span>
+          <span>→</span>
         </div>
       </div>
 
-      {data.length > displayData.length && (
-        <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-center text-sm font-bold text-blue-900">
-          מוצגות {displayData.length} תקופות אחרונות מתוך {data.length}. לתצוגה מלאה ומפורטת עבור לתצוגת דירוג.
-        </div>
-      )}
-
       <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 sm:text-base">
-        כל עמודה מציגה את מספר ההפקות שלי בתקופה המסומנת בציר התחתון.
+        מוצגות כל התקופות הרלוונטיות. כל עמודה מציגה את מספר ההפקות שלי בתקופה המסומנת בציר התחתון.
       </div>
     </div>
   );
@@ -327,15 +326,19 @@ function ProfessionalChart({ data, mode }: { data: CountBucket[]; mode: ChartMod
   return <MiniBarChart data={data} />;
 }
 
-function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
+function CalendarInsightsCard({ analytics, year }: { analytics: CalendarAnalytics; year: number }) {
   const [period, setPeriod] = useState<ChartPeriod>('weekly');
   const [mode, setMode] = useState<ChartMode>('bars');
   const chartData = period === 'weekly' ? analytics.weekly : period === 'monthly' ? analytics.monthly : analytics.yearly;
-  const chartTitle = period === 'weekly' ? 'תצוגה שבועית' : period === 'monthly' ? 'תצוגה חודשית' : 'תצוגה שנתית';
-  const chartSubtitle = period === 'weekly'
-    ? 'כל עמודה מייצגת שבוע עבודה ואת מספר ההפקות שלי בו'
+  const chartTitle = period === 'weekly'
+    ? '12 השבועות האחרונים'
     : period === 'monthly'
-      ? 'כל עמודה מייצגת חודש ואת מספר ההפקות שלי בו'
+      ? `חודשי ${year}: ינואר עד דצמבר`
+      : 'תצוגה שנתית';
+  const chartSubtitle = period === 'weekly'
+    ? 'כל עמודה מייצגת שבוע עבודה ומציגה את מספר ההפקות שלי בו'
+    : period === 'monthly'
+      ? `כל עמודה מייצגת חודש מלא בשנת ${year}`
       : 'כל עמודה מייצגת שנה מתוך הנתונים הקיימים';
   const topValue = Math.max(0, ...chartData.map((item) => item.value));
   const topLabel = topValue > 0 ? chartData.find((item) => item.value === topValue)?.label || 'אין' : 'אין עדיין';
@@ -397,7 +400,7 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
             <p className="mt-1 text-xs font-bold text-sky-100">שיא: {topLabel} · {topValue} הפקות</p>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-slate-950/35 p-1">
+            <div className="grid grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-slate-950/45 p-1.5 shadow-inner">
               {[
                 { id: 'weekly' as ChartPeriod, label: 'שבועי' },
                 { id: 'monthly' as ChartPeriod, label: 'חודשי' },
@@ -407,13 +410,13 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
                   key={item.id}
                   type="button"
                   onClick={() => setPeriod(item.id)}
-                  className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${period === item.id ? 'bg-sky-200 text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${period === item.id ? 'bg-sky-200 text-slate-950 shadow-[0_8px_20px_rgba(125,211,252,0.25)]' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}
                 >
                   {item.label}
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-slate-950/35 p-1">
+            <div className="grid grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-slate-950/45 p-1.5 shadow-inner">
               {[
                 { id: 'bars' as ChartMode, label: 'עמודות' },
                 { id: 'donut' as ChartMode, label: 'עוגה' },
@@ -423,7 +426,7 @@ function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
                   key={item.id}
                   type="button"
                   onClick={() => setMode(item.id)}
-                  className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${mode === item.id ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'}`}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${mode === item.id ? 'bg-white text-slate-950 shadow-[0_8px_20px_rgba(255,255,255,0.16)]' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}
                 >
                   {item.label}
                 </button>
@@ -2362,7 +2365,7 @@ function ProductionsContent() {
     }
     const weekly = Array.from(weekMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-8)
+      .slice(-12)
       .map(([weekId, value]) => {
         const [, month, day] = weekId.split('-');
         return { label: `${day}/${month}`, value };
@@ -3525,7 +3528,7 @@ function ProductionsContent() {
 
       {/* Calendar analytics */}
       <div id="calendar-insights" className="mb-6 scroll-mt-24">
-        <CalendarInsightsCard analytics={calendarSummary} />
+        <CalendarInsightsCard analytics={calendarSummary} year={currentDate.getFullYear()} />
       </div>
 
       {/* AI Status */}
