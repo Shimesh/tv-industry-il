@@ -127,6 +127,34 @@ export default function HomePageClient({ greeting }: { greeting: string }) {
         <WeeklyCalendarWidget />
       </div>
 
+      <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+        <Link
+          href="/productions#calendar-insights"
+          className="group relative block overflow-hidden rounded-[1.75rem] border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.24),transparent_32%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(49,46,129,0.82))] p-4 shadow-[0_18px_55px_rgba(124,58,237,0.20)] transition-all hover:-translate-y-0.5 hover:border-orange-300/45"
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-orange-300 to-transparent" />
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 via-fuchsia-500 to-blue-500 text-white shadow-[0_0_24px_rgba(236,72,153,0.35)]">
+              <TrendingUp className="h-7 w-7" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-orange-100">
+                <Calendar className="h-3.5 w-3.5" />
+                סטטיסטיקות יומן
+              </div>
+              <h2 className="text-lg font-black text-white sm:text-xl">כרטיס הנתונים האישי שלך</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-300 sm:text-sm">
+                הפקות לפי שבועות, חודשים ושנים, שעות משוערות ותובנות מהנתונים שנשאבו בפועל.
+              </p>
+            </div>
+            <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-black text-white transition group-hover:bg-white/15 sm:flex">
+              פתח
+              <ArrowLeft className="h-4 w-4" />
+            </div>
+          </div>
+        </Link>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
 
         {/* 3 → Ratings */}

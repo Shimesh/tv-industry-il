@@ -37,7 +37,7 @@ import {
 } from '@/lib/calendarAccess';
 import { fetchScheduleFromBrowser, FetchProgress, getStepMessage } from '@/lib/browserFetch';
 // Firebase SDK imports removed - all Firestore ops now use REST API
-import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole } from 'lucide-react';
+import { Clapperboard, RefreshCw, Clock, CheckCircle, AlertTriangle as AlertTriangleIcon, Loader2, Sparkles, CalendarPlus, ExternalLink, Wand2, Users, ChevronDown, User, X, Search, LockKeyhole, Activity, Target, PieChart, TrendingUp } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { initiateGoogleCalendarConnect, syncProductionToCalendar, updateProductionInCalendar } from '@/lib/googleCalendar';
 import { useTeam } from '@/hooks/useTeam';
@@ -100,6 +100,22 @@ type GlobalWeeksResponse = {
   latestWeekId?: string | null;
 };
 
+type CountBucket = {
+  label: string;
+  value: number;
+};
+
+type CalendarAnalytics = {
+  week: { total: number; mine: number; hours: number };
+  month: { total: number; mine: number; hours: number };
+  year: { total: number; mine: number; hours: number };
+  weekly: CountBucket[];
+  monthly: CountBucket[];
+  yearly: CountBucket[];
+  insights: Array<{ label: string; value: string; hint: string }>;
+  loading: boolean;
+};
+
 function roundTime30(t: string): string {
   const [h, m] = (t || '').split(':').map(Number);
   if (isNaN(h) || isNaN(m)) return t;
@@ -136,6 +152,136 @@ function sanitizeCrewForFirestore(crew: Production['crew']) {
     addedBy: member.addedBy || '',
     addedAt: member.addedAt || '',
   }));
+}
+
+function toMinutes(time: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((time || '').trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function productionDurationHours(production: Production): number {
+  const start = toMinutes(production.startTime);
+  const end = toMinutes(production.endTime);
+  if (start === null || end === null) return 0;
+  const normalizedEnd = end <= start ? end + 24 * 60 : end;
+  return Math.max(0, (normalizedEnd - start) / 60);
+}
+
+function formatHours(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { data: CountBucket[]; accent?: string }) {
+  const max = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <div className="flex h-32 items-end gap-1.5 rounded-2xl border border-white/10 bg-black/20 px-3 pb-3 pt-4" dir="ltr">
+      {data.map((item) => (
+        <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+          <div className="relative flex h-20 w-full items-end">
+            <div
+              className={`w-full rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_18px_rgba(255,120,40,0.22)] transition-all`}
+              style={{ height: `${Math.max(8, (item.value / max) * 100)}%` }}
+              title={`${item.label}: ${item.value}`}
+            />
+          </div>
+          <span className="max-w-full truncate text-[10px] text-slate-300">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CalendarInsightsCard({ analytics }: { analytics: CalendarAnalytics }) {
+  const topWeekly = Math.max(0, ...analytics.weekly.map((item) => item.value));
+  const topMonthValue = Math.max(0, ...analytics.monthly.map((m) => m.value));
+  const currentMonthLabel = topMonthValue > 0 ? analytics.monthly.find((item) => item.value === topMonthValue)?.label || 'אין' : 'אין עדיין';
+
+  return (
+    <section className="relative overflow-hidden rounded-[2rem] border border-fuchsia-400/30 bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.22),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.2),transparent_36%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(46,16,101,0.92))] p-4 shadow-[0_22px_70px_rgba(124,58,237,0.28)] sm:p-5">
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-300 to-transparent" />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-fuchsia-100">
+            <Activity className="h-4 w-4 text-orange-300" />
+            סטטיסטיקות יומן חיות
+          </div>
+          <h2 className="text-2xl font-black text-white">תמונת מצב אישית מהיומן</h2>
+          <p className="mt-1 text-sm text-slate-300">
+            הנתונים מחושבים מההפקות והצוותים שנשאבו בפועל. לא מוצגים נתונים מומצאים.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left shadow-inner" dir="ltr">
+          <div className="text-xs text-slate-300">השבוע שלי</div>
+          <div className="text-3xl font-black text-white">{analytics.week.mine}</div>
+          <div className="text-xs text-orange-200">{formatHours(analytics.week.hours)} שעות משוערות</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'השבוע', value: analytics.week.mine, sub: `${analytics.week.total} הפקות בלוח`, icon: Target },
+          { label: 'החודש', value: analytics.month.mine, sub: `${formatHours(analytics.month.hours)} שעות משוערות`, icon: PieChart },
+          { label: 'השנה', value: analytics.year.mine, sub: `${analytics.year.total} הפקות בלוח`, icon: TrendingUp },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.08] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm text-slate-300">{item.label}</span>
+                <Icon className="h-5 w-5 text-cyan-300" />
+              </div>
+              <div className="text-3xl font-black text-white">{item.value}</div>
+              <div className="mt-1 text-xs text-slate-400">{item.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-white">הפקות שלי לפי שבועות</h3>
+              <p className="text-xs text-slate-400">שבועות השנה שנמצאים בנתונים שנשאבו</p>
+            </div>
+            <span className="rounded-full bg-orange-400/20 px-3 py-1 text-xs text-orange-100">שיא: {topWeekly}</span>
+          </div>
+          <MiniBarChart data={analytics.weekly} />
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-white">חלוקה חודשית</h3>
+              <p className="text-xs text-slate-400">החודש הפעיל ביותר: {currentMonthLabel}</p>
+            </div>
+            {analytics.loading && <Loader2 className="h-4 w-4 animate-spin text-fuchsia-200" />}
+          </div>
+          <MiniBarChart data={analytics.monthly} accent="from-cyan-300 to-fuchsia-400" />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {analytics.insights.map((insight) => (
+          <div key={insight.label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs text-slate-400">{insight.label}</div>
+            <div className="mt-1 text-lg font-black text-white">{insight.value}</div>
+            <div className="mt-1 text-xs text-slate-300">{insight.hint}</div>
+          </div>
+        ))}
+      </div>
+
+      {analytics.yearly.length > 1 && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+          <h3 className="mb-3 font-bold text-white">מגמה לפי שנים</h3>
+          <MiniBarChart data={analytics.yearly} accent="from-emerald-300 to-blue-400" />
+        </div>
+      )}
+    </section>
+  );
 }
 
 // Compute Saturday date string from a Sunday-based weekId (YYYY-MM-DD)
@@ -465,6 +611,8 @@ function ProductionsContent() {
   const [syncDebugLog, setSyncDebugLog] = useState<string>('');
   const [productions, setProductions] = useState<Production[]>([]);
   const [summaryProductions, setSummaryProductions] = useState<Production[]>([]);
+  const [analyticsProductions, setAnalyticsProductions] = useState<Production[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
   const [workerName, setWorkerName] = useState('');
@@ -1788,6 +1936,34 @@ function ProductionsContent() {
     return [...cached, ...fetched];
   }, [loadExistingWeek]);
 
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadAnalytics = async () => {
+      const selectedYear = currentDate.getFullYear();
+      const start = `${selectedYear}-01-01`;
+      const end = `${selectedYear}-12-31`;
+      setAnalyticsLoading(true);
+      try {
+        const prods = await loadProductionsForPeriod(start, end, controller.signal);
+        if (!cancelled) setAnalyticsProductions(prods);
+      } catch {
+        if (!cancelled) setAnalyticsProductions([]);
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false);
+      }
+    };
+
+    void loadAnalytics();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [user?.uid, currentDate, loadProductionsForPeriod]);
+
   // Load more productions for list view infinite scroll
   const handleLoadMoreList = useCallback(async () => {
     if (loadingMoreList || !hasMoreList) return;
@@ -1971,33 +2147,124 @@ function ProductionsContent() {
     };
   }, [user?.uid, currentDate, loadProductionsForPeriod]);
 
-  const calendarSummary = useMemo(() => {
+  const calendarSummary = useMemo<CalendarAnalytics>(() => {
     const userNames = [profile?.displayName, user?.displayName, workerName].filter(Boolean) as string[];
     const weekStartDate = toLocalDate(getWeekStartDate(currentDate));
     const weekEndDate = toLocalDate(getWeekEndDate(currentDate));
     const monthStartDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
     const monthEndDate = toLocalDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0));
+    const year = currentDate.getFullYear();
+    const yearStartDate = `${year}-01-01`;
+    const yearEndDate = `${year}-12-31`;
+    const sourceProductions = analyticsProductions.length ? analyticsProductions : summaryProductions;
+    const unique = new Map<string, Production>();
+
+    for (const production of sourceProductions) {
+      if (production.status === 'cancelled') continue;
+      if (!production.date) continue;
+      const key = production.id || `${production.name}-${production.date}-${production.studio}-${production.startTime}`;
+      unique.set(key, production);
+    }
+
+    const items = Array.from(unique.values());
+    const isMine = (production: Production) => isProductionAssignedToUser(production, userNames);
 
     const countRange = (start: string, end: string) => {
-      const unique = new Map<string, Production>();
-      for (const production of summaryProductions) {
-        if (production.status === 'cancelled') continue;
-        if (production.date < start || production.date > end) continue;
-        const key = production.id || `${production.name}-${production.date}-${production.studio}`;
-        unique.set(key, production);
-      }
-      const items = Array.from(unique.values());
+      const rangeItems = items.filter((production) => production.date >= start && production.date <= end);
+      const myItems = rangeItems.filter(isMine);
       return {
-        total: items.length,
-        mine: items.filter((production) => isProductionAssignedToUser(production, userNames)).length,
+        total: rangeItems.length,
+        mine: myItems.length,
+        hours: myItems.reduce((sum, production) => sum + productionDurationHours(production), 0),
       };
     };
+
+    const myYearItems = items.filter((production) => (
+      production.date >= yearStartDate &&
+      production.date <= yearEndDate &&
+      isMine(production)
+    ));
+
+    const monthLabels = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+    const monthly = monthLabels.map((label, index) => ({
+      label,
+      value: myYearItems.filter((production) => Number(production.date.slice(5, 7)) === index + 1).length,
+    }));
+
+    const weekMap = new Map<string, number>();
+    for (const production of myYearItems) {
+      const weekId = getWeekId(production.date);
+      weekMap.set(weekId, (weekMap.get(weekId) || 0) + 1);
+    }
+    const weekly = Array.from(weekMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([weekId, value]) => {
+        const [, month, day] = weekId.split('-');
+        return { label: `${day}/${month}`, value };
+      });
+    if (!weekly.length) weekly.push({ label: 'אין', value: 0 });
+
+    const yearlyMap = new Map<string, number>();
+    for (const production of items.filter(isMine)) {
+      const itemYear = production.date.slice(0, 4);
+      yearlyMap.set(itemYear, (yearlyMap.get(itemYear) || 0) + 1);
+    }
+    const yearly = Array.from(yearlyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, value]) => ({ label, value }));
+
+    const countBy = (selector: (production: Production) => string) => {
+      const map = new Map<string, number>();
+      for (const production of myYearItems) {
+        const value = selector(production).trim();
+        if (!value) continue;
+        map.set(value, (map.get(value) || 0) + 1);
+      }
+      return Array.from(map.entries()).sort((a, b) => b[1] - a[1])[0] || null;
+    };
+
+    const topStudio = countBy((production) => production.studio || 'לא צוין');
+    const topDay = countBy((production) => getHebrewDay(production.date));
+    const roleMap = new Map<string, number>();
+    for (const production of myYearItems) {
+      for (const member of production.crew || []) {
+        if (!isCrewMatch([member], workerName || user?.displayName || profile?.displayName || '')) continue;
+        const role = normalizeRole(member.role || member.roleDetail || '');
+        if (role) roleMap.set(role, (roleMap.get(role) || 0) + 1);
+      }
+    }
+    const topRole = Array.from(roleMap.entries()).sort((a, b) => b[1] - a[1])[0] || null;
+    const activeWeeks = weekMap.size;
+    const averagePerActiveWeek = activeWeeks ? (myYearItems.length / activeWeeks).toFixed(1) : '0';
 
     return {
       week: countRange(weekStartDate, weekEndDate),
       month: countRange(monthStartDate, monthEndDate),
+      year: countRange(yearStartDate, yearEndDate),
+      weekly,
+      monthly,
+      yearly,
+      loading: analyticsLoading,
+      insights: [
+        {
+          label: 'יום עמוס יותר',
+          value: topDay ? topDay[0] : 'אין עדיין נתון',
+          hint: topDay ? `${topDay[1]} הפקות שלי השנה ביום הזה` : 'יופיע אחרי שיש נתונים אישיים',
+        },
+        {
+          label: 'לוקיישן מוביל',
+          value: topStudio ? topStudio[0] : 'אין עדיין נתון',
+          hint: topStudio ? `${topStudio[1]} הפקות שלי השנה` : 'מחושב מתוך אולפן/ניידת ביומן',
+        },
+        {
+          label: 'תפקיד נפוץ',
+          value: topRole ? topRole[0] : 'לא זוהה',
+          hint: topRole ? `${topRole[1]} הופעות בצוותים שנשאבו` : `ממוצע ${averagePerActiveWeek} הפקות לשבוע פעיל`,
+        },
+      ],
     };
-  }, [currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
+  }, [analyticsLoading, analyticsProductions, currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
 
   useEffect(() => {
     if (!productions.length) return;
@@ -3098,14 +3365,9 @@ function ProductionsContent() {
         </div>
       )}
 
-      {/* Message Input */}
-      <div className="mb-6">
-        <MessageInput
-          onFetch={handleFetch}
-          loading={loading}
-          existingWeekId={currentWeekId}
-          fetchProgress={fetchProgress}
-        />
+      {/* Calendar analytics */}
+      <div id="calendar-insights" className="mb-6 scroll-mt-24">
+        <CalendarInsightsCard analytics={calendarSummary} />
       </div>
 
       {/* AI Status */}
@@ -3246,33 +3508,17 @@ function ProductionsContent() {
             hasMore={hasMoreList}
             loadingMore={loadingMoreList}
           />
-          <div
-            className="mt-4 grid gap-3 rounded-2xl border p-4 sm:grid-cols-2"
-            style={{
-              background: 'var(--theme-bg-secondary)',
-              borderColor: 'var(--theme-border)',
-            }}
-            dir="rtl"
-          >
-            <div>
-              <p className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>
-                סיכום השבוע
-              </p>
-              <p className="mt-1 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-                {calendarSummary.week.total} הפקות · {calendarSummary.week.mine} שלי
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold" style={{ color: 'var(--theme-text-secondary)' }}>
-                סיכום החודש
-              </p>
-              <p className="mt-1 text-sm font-bold" style={{ color: 'var(--theme-text)' }}>
-                {calendarSummary.month.total} הפקות · {calendarSummary.month.mine} שלי
-              </p>
-            </div>
-          </div>
         </>
       )}
+
+      <div className="mt-4 mb-6">
+        <MessageInput
+          onFetch={handleFetch}
+          loading={loading}
+          existingWeekId={currentWeekId}
+          fetchProgress={fetchProgress}
+        />
+      </div>
 
       {/* Empty state */}
       {!loading && productions.length === 0 && !statusMessage && !showManualFallback && requestStatus === 'idle' && (
