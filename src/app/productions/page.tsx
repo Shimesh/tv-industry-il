@@ -178,24 +178,30 @@ function formatHours(value: number): string {
 
 function MiniBarChart({ data, accent = 'from-fuchsia-400 to-orange-400' }: { data: CountBucket[]; accent?: string }) {
   const max = Math.max(1, ...data.map((item) => item.value));
+  const minWidth = Math.max(420, data.length * 82);
 
   return (
-    <div className="flex h-44 items-end gap-2 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.22))] px-3 pb-4 pt-5 shadow-inner" dir="ltr">
-      {data.map((item) => (
-        <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-          <div className="relative flex h-28 w-full items-end">
-            <span className="absolute -top-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white">
-              {item.value}
-            </span>
-            <div
-              className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-xl bg-gradient-to-t ${accent} shadow-[0_0_22px_rgba(255,120,40,0.28)] transition-all`}
-              style={{ height: `${Math.max(8, (item.value / max) * 100)}%` }}
-              title={`${item.label}: ${item.value} הפקות`}
-            />
+    <div className="overflow-x-auto rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(0,0,0,0.24))] p-3 shadow-inner">
+      <div className="flex h-72 items-end gap-3 px-2 pb-4 pt-10" dir="ltr" style={{ minWidth }}>
+        {data.map((item) => (
+          <div key={item.label} className="flex min-w-[64px] flex-1 flex-col items-center gap-3">
+            <div className="relative flex h-48 w-full items-end">
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-2.5 py-1 text-sm font-black text-white">
+                {item.value}
+              </span>
+              <div
+                className={`w-full origin-bottom animate-[growBar_900ms_ease-out_both] rounded-t-2xl bg-gradient-to-t ${accent} shadow-[0_0_26px_rgba(255,120,40,0.32)] transition-all`}
+                style={{ height: `${Math.max(7, (item.value / max) * 100)}%` }}
+                title={`${item.label}: ${item.value} הפקות`}
+              />
+            </div>
+            <div className="min-h-10 text-center">
+              <span className="block whitespace-normal text-sm font-bold leading-5 text-slate-100">{item.label}</span>
+              <span className="block text-[11px] text-slate-400">הפקות</span>
+            </div>
           </div>
-          <span className="max-w-full truncate text-[10px] text-slate-300">{item.label}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -215,21 +221,21 @@ function DonutChart({ data }: { data: CountBucket[] }) {
     : 'rgba(255,255,255,0.12) 0% 100%';
 
   return (
-    <div className="grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[180px_1fr]">
-      <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-full shadow-[0_0_35px_rgba(236,72,153,0.18)]" style={{ background: `conic-gradient(${gradient})` }}>
-        <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-slate-950/90 text-center">
-          <span className="text-2xl font-black text-white">{total}</span>
-          <span className="text-[11px] text-slate-300">הפקות</span>
+    <div className="grid gap-5 rounded-3xl border border-white/10 bg-black/20 p-5 md:grid-cols-[260px_1fr]">
+      <div className="mx-auto flex h-64 w-64 items-center justify-center rounded-full shadow-[0_0_42px_rgba(236,72,153,0.22)]" style={{ background: `conic-gradient(${gradient})` }}>
+        <div className="flex h-36 w-36 flex-col items-center justify-center rounded-full bg-slate-950/90 text-center">
+          <span className="text-4xl font-black text-white">{total}</span>
+          <span className="text-sm font-bold text-slate-300">הפקות</span>
         </div>
       </div>
-      <div className="space-y-2">
-        {(activeData.length ? activeData : data.slice(0, 4)).slice(0, 8).map((item, index) => (
-          <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.06] px-3 py-2">
+      <div className="space-y-3">
+        {(activeData.length ? activeData : data.slice(0, 4)).slice(0, 10).map((item, index) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.07] px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: palette[index % palette.length] }} />
-              <span className="truncate text-xs text-slate-200">{item.label}</span>
+              <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: palette[index % palette.length] }} />
+              <span className="truncate text-base font-bold text-slate-100">{item.label}</span>
             </div>
-            <span className="shrink-0 text-xs font-black text-white">{item.value} הפקות</span>
+            <span className="shrink-0 text-base font-black text-white">{item.value} הפקות</span>
           </div>
         ))}
       </div>
@@ -240,14 +246,14 @@ function DonutChart({ data }: { data: CountBucket[] }) {
 function RankChart({ data }: { data: CountBucket[] }) {
   const max = Math.max(1, ...data.map((item) => item.value));
   return (
-    <div className="space-y-2 rounded-2xl border border-white/10 bg-black/20 p-4">
+    <div className="space-y-3 rounded-3xl border border-white/10 bg-black/20 p-4">
       {data.map((item, index) => (
-        <div key={item.label} className="rounded-xl bg-white/[0.05] p-3">
+        <div key={item.label} className="rounded-2xl bg-white/[0.06] p-4">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-xs font-bold text-slate-200">{index + 1}. {item.label}</span>
-            <span className="text-xs font-black text-white">{item.value} הפקות</span>
+            <span className="text-base font-black text-slate-100">{index + 1}. {item.label}</span>
+            <span className="text-base font-black text-white">{item.value} הפקות</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="h-4 overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full origin-left animate-[growWidth_900ms_ease-out_both] rounded-full bg-gradient-to-l from-orange-400 via-fuchsia-400 to-cyan-300"
               style={{ width: `${Math.max(4, (item.value / max) * 100)}%` }}
@@ -2053,7 +2059,7 @@ function ProductionsContent() {
 
     const loadAnalytics = async () => {
       const selectedYear = currentDate.getFullYear();
-      const start = `${selectedYear}-01-01`;
+      const start = selectedYear >= 2025 ? '2025-03-01' : `${selectedYear}-01-01`;
       const end = `${selectedYear}-12-31`;
       setAnalyticsLoading(true);
       try {
@@ -2295,7 +2301,7 @@ function ProductionsContent() {
       isMine(production)
     ));
 
-    const monthLabels = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+    const monthLabels = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
     const monthly = monthLabels.map((label, index) => ({
       label,
       value: myYearItems.filter((production) => Number(production.date.slice(5, 7)) === index + 1).length,
