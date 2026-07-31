@@ -373,9 +373,6 @@ function CalendarInsightsCard({
             סטטיסטיקות יומן
           </div>
           <h2 className="text-xl font-black text-white sm:text-2xl">תמונת מצב אישית</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-300 sm:text-sm">
-            מחושב מהיומן שנשאב בפועל — בלי נתונים מומצאים.
-          </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-2">
