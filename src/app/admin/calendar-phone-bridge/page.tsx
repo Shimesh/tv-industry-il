@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const DEFAULT_TARGET_UID = 'pVtM4KuNSSSexQ3W32UmImJHJID3';
 const HERZLIYA_FULL_DEPARTMENT_BASE = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll';
-const SCHEDULE_INPUT_STORAGE_KEY = 'tv-industry-herzliya-phone-bridge-input';
 const FULL_URL_STORAGE_KEY = 'tv-industry-herzliya-phone-bridge-full-url';
 
 type TokenResponse = {
@@ -35,6 +34,14 @@ type BridgeStatus = {
   log: string[];
 };
 
+type ResolveResponse = {
+  ok: boolean;
+  fullDepartmentUrl?: string;
+  resolvedArgument?: string;
+  resolvedFrom?: string;
+  error?: string;
+};
+
 function clampProgress(value: number | undefined): number {
   if (typeof value !== 'number' || Number.isNaN(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -54,6 +61,7 @@ function deriveFullDepartmentUrl(input: string): string {
   if (!match) return '';
   const guid = match[1];
   const date = match[2];
+  if (!/^\d{8}$/.test(date)) return '';
   return `${HERZLIYA_FULL_DEPARTMENT_BASE}?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N${guid},-A${date},-Atrue`;
 }
 
@@ -136,8 +144,10 @@ const report = async (phase, message, progress, extra = {}) => {
     const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
     if (!isFullDepartmentPage) {
       const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
-      const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i)
-        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i);
+      const dateMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false|\\$\\{inputValue2\\}))?/i);
+      const match = dateMatch
+        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+        || sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i);
       if (match) {
         const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
           + match[1] + ',-A' + match[2] + ',-Atrue';
@@ -330,8 +340,10 @@ const report = async (phase, message, progress, extra = {}) => {
       const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
       if (!isFullDepartmentPage) {
         const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
-        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i)
-          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i);
+        const dateMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false|\\$\\{inputValue2\\}))?/i);
+        const match = dateMatch
+          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+          || sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i);
         if (match) {
           const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
             + match[1] + ',-A' + match[2] + ',-Atrue';
@@ -463,6 +475,8 @@ export default function CalendarPhoneBridgePage() {
   const [message, setMessage] = useState('');
   const [scheduleInput, setScheduleInput] = useState('');
   const [lastValidFullDepartmentUrl, setLastValidFullDepartmentUrl] = useState('');
+  const [resolvedFullDepartmentUrl, setResolvedFullDepartmentUrl] = useState('');
+  const [resolveMessage, setResolveMessage] = useState('');
 
   const bookmarklet = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl
@@ -484,7 +498,8 @@ export default function CalendarPhoneBridgePage() {
       ? `/admin/calendar-phone-bridge/android.user.js?token=${encodeURIComponent(tokenData.token)}`
       : ''
   ), [tokenData?.token]);
-  const fullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
+  const immediateFullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
+  const fullDepartmentUrl = immediateFullDepartmentUrl || resolvedFullDepartmentUrl;
   const displayedFullDepartmentUrl = fullDepartmentUrl || lastValidFullDepartmentUrl;
   const isUsingSavedFullDepartmentUrl = !fullDepartmentUrl && Boolean(lastValidFullDepartmentUrl);
   const displayedFullDepartmentUrlForEdge = useMemo(() => {
@@ -500,22 +515,64 @@ export default function CalendarPhoneBridgePage() {
 
   useEffect(() => {
     try {
-      const savedInput = window.localStorage.getItem(SCHEDULE_INPUT_STORAGE_KEY);
       const savedFullUrl = window.localStorage.getItem(FULL_URL_STORAGE_KEY);
-      if (savedInput) setScheduleInput(savedInput);
-      if (savedFullUrl) setLastValidFullDepartmentUrl(savedFullUrl);
+      if (savedFullUrl && /,-A\d{8},-Atrue/i.test(savedFullUrl)) setLastValidFullDepartmentUrl(savedFullUrl);
+      window.localStorage.removeItem('tv-industry-herzliya-phone-bridge-input');
     } catch {
       // localStorage is optional for this helper screen.
     }
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(SCHEDULE_INPUT_STORAGE_KEY, scheduleInput);
-    } catch {
-      // localStorage is optional for this helper screen.
+    setResolvedFullDepartmentUrl('');
+    setResolveMessage('');
+    if (!scheduleInput.trim() || immediateFullDepartmentUrl || !user) return undefined;
+    if (!/hsil\.acc\.co\.il:5443/i.test(scheduleInput) && !/\bA=[A-F0-9-]{36},/i.test(scheduleInput)) return undefined;
+
+    const activeUser = user;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+    }, 20000);
+
+    async function resolveOpaqueHerzliyaLink() {
+      try {
+        setResolveMessage('מזהה קישור חדש של הרצליה ומחלץ ממנו את תאריך היומן האמיתי...');
+        const idToken = await activeUser.getIdToken();
+        const response = await fetch('/api/admin/calendar-phone-bridge/resolve', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ input: scheduleInput }),
+          signal: controller.signal,
+        });
+        const payload = await response.json() as ResolveResponse;
+        if (!response.ok || !payload.ok || !payload.fullDepartmentUrl) {
+          throw new Error(payload.error || 'לא הצלחתי לפתור את קישור הרצליה');
+        }
+        setResolvedFullDepartmentUrl(payload.fullDepartmentUrl);
+        setResolveMessage(payload.resolvedArgument
+          ? `נפתר דרך הרצליה: נבנה יומן מלא לתאריך ${payload.resolvedArgument}.`
+          : 'נפתר דרך הרצליה ונבנה קישור יומן מלא.');
+      } catch (error) {
+        if (controller.signal.aborted) {
+          setResolveMessage('לא הצלחתי לפתור את הקישור בזמן. אפשר לנסות שוב או לפתוח את הקישור האישי ב־Edge והסקריפט ינתב ליומן המלא.');
+          return;
+        }
+        setResolveMessage(error instanceof Error ? error.message : 'לא הצלחתי לפתור את קישור הרצליה');
+      } finally {
+        window.clearTimeout(timeout);
+      }
     }
-  }, [scheduleInput]);
+
+    void resolveOpaqueHerzliyaLink();
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [immediateFullDepartmentUrl, scheduleInput, user]);
 
   useEffect(() => {
     if (!fullDepartmentUrl) return;
@@ -671,6 +728,11 @@ export default function CalendarPhoneBridgePage() {
                 placeholder="אחרי הדבקת הודעת הרצליה יופיע כאן קישור ShowEmp6 מלא לפתיחה בטלפון"
                 className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50 placeholder:text-violet-300"
               />
+              {resolveMessage ? (
+                <p className="rounded-lg border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-xs leading-5 text-cyan-100">
+                  {resolveMessage}
+                </p>
+              ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
