@@ -651,8 +651,13 @@ export default function CalendarPhoneBridgePage() {
             placeholder="הדבק כאן הודעת WhatsApp מהרצליה או URL של sendwa.html..."
           />
 
-          {displayedFullDepartmentUrl ? (
-            <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+          <div
+            className={`space-y-3 rounded-xl border p-4 ${
+              displayedFullDepartmentUrl
+                ? 'border-emerald-400/30 bg-emerald-500/10'
+                : 'border-violet-400/30 bg-[#09061a]'
+            }`}
+          >
               <div className="text-sm font-bold text-emerald-200">קישור מלא שנבנה:</div>
               {isUsingSavedFullDepartmentUrl ? (
                 <p className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
@@ -663,36 +668,42 @@ export default function CalendarPhoneBridgePage() {
                 value={displayedFullDepartmentUrlForEdge}
                 readOnly
                 dir="ltr"
-                className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50"
+                placeholder="אחרי הדבקת הודעת הרצליה יופיע כאן קישור ShowEmp6 מלא לפתיחה בטלפון"
+                className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50 placeholder:text-violet-300"
               />
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => void copy(displayedFullDepartmentUrl, 'קישור היומן המלא')}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+                  disabled={!displayedFullDepartmentUrl}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                 >
                   <Copy className="h-4 w-4" />
                   העתק קישור מלא
                 </button>
-                <a
-                  href={displayedFullDepartmentUrlForEdge}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10"
+                <button
+                  type="button"
+                  disabled={!displayedFullDepartmentUrlForEdge}
+                  onClick={() => {
+                    if (!displayedFullDepartmentUrlForEdge) return;
+                    window.open(displayedFullDepartmentUrlForEdge, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
                 >
                   פתח קישור מלא ב־Edge
-                </a>
+                </button>
               </div>
               <p className="text-xs leading-5 text-emerald-100">
                 פתח את הקישור מתוך Microsoft Edge בטלפון. אם Tampermonkey מותקן והסקריפט עודכן, יופיע בתוך דף הרצליה כפתור כתום “עדכן יומן”.
                 הכפתור ישאב את כל `openmd2`, יפתח את כל פופאפי `ShowCrew`, וישלח לאפליקציה חבילה אחת לשמירה.
               </p>
+              {!displayedFullDepartmentUrl ? (
+                <p className="rounded-lg bg-violet-500/10 px-4 py-3 text-sm leading-6 text-violet-200">
+                  עדיין לא זוהה קישור הרצליה. הדבק למעלה הודעת WhatsApp מהרצליה או URL שמכיל `sendwa.html?A=...,...` או `arguments=-N...,-A...`.
+                  הכפתורים ייפתחו אוטומטית ברגע שהקישור יזוהה.
+                </p>
+              ) : null}
             </div>
-          ) : (
-            <p className="rounded-lg bg-[#09061a] px-4 py-3 text-sm text-violet-300">
-              עדיין לא זוהה קישור הרצליה. צריך URL שמכיל `sendwa.html?A=...,...` או `arguments=-N...,-A...`.
-            </p>
-          )}
         </section>
 
         <button
