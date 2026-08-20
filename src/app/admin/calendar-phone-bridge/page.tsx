@@ -548,9 +548,20 @@ export default function CalendarPhoneBridgePage() {
           body: JSON.stringify({ input: scheduleInput }),
           signal: controller.signal,
         });
-        const payload = await response.json() as ResolveResponse;
+        const rawResponse = await response.text();
+        let payload: ResolveResponse;
+        try {
+          payload = rawResponse
+            ? JSON.parse(rawResponse) as ResolveResponse
+            : { ok: false, error: 'השרת החזיר תשובה ריקה בזמן פתרון הקישור' };
+        } catch {
+          payload = {
+            ok: false,
+            error: `השרת החזיר תשובה לא תקינה בזמן פתרון הקישור${rawResponse ? `: ${rawResponse.slice(0, 140)}` : ''}`,
+          };
+        }
         if (!response.ok || !payload.ok || !payload.fullDepartmentUrl) {
-          throw new Error(payload.error || 'לא הצלחתי לפתור את קישור הרצליה');
+          throw new Error(payload.error || `לא הצלחתי לפתור את קישור הרצליה (HTTP ${response.status})`);
         }
         setResolvedFullDepartmentUrl(payload.fullDepartmentUrl);
         setResolveMessage(payload.resolvedArgument

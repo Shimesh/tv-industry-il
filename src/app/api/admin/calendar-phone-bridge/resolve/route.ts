@@ -28,16 +28,28 @@ function buildFullDepartmentUrl(guid: string, argument: string): string {
 }
 
 async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: {
-      'user-agent': 'Mozilla/5.0 TV-Industry-IL/1.0',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Herzliya returned HTTP ${response.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 TV-Industry-IL/1.0',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Herzliya returned HTTP ${response.status}`);
+    }
+    return response.text();
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('החיבור של האפליקציה להרצליה לא החזיר תשובה בזמן');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.text();
 }
 
 function extractEffectiveDateFromPersonalHtml(html: string): string {
@@ -51,48 +63,57 @@ function extractEffectiveDateFromPersonalHtml(html: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const authUser = await requirePrimaryAdminRequest(request);
-  if (authUser instanceof NextResponse) return authUser;
+  try {
+    const authUser = await requirePrimaryAdminRequest(request);
+    if (authUser instanceof NextResponse) return authUser;
 
-  const body = (await request.json().catch(() => ({}))) as { input?: string };
-  const input = String(body.input || '').trim();
-  const parsed = parseSource(input);
-  if (!parsed) {
-    return NextResponse.json({ ok: false, error: 'לא זוהה קישור הרצליה תקין' }, { status: 400 });
-  }
+    const body = (await request.json().catch(() => ({}))) as { input?: string };
+    const input = String(body.input || '').trim();
+    const parsed = parseSource(input);
+    if (!parsed) {
+      return NextResponse.json({ ok: false, error: 'לא זוהה קישור הרצליה תקין' }, { status: 400 });
+    }
 
-  const immediateUrl = buildFullDepartmentUrl(parsed.guid, parsed.argument);
+    const immediateUrl = buildFullDepartmentUrl(parsed.guid, parsed.argument);
 
-  if (/^\d{8}$/.test(parsed.argument)) {
+    if (/^\d{8}$/.test(parsed.argument)) {
+      return NextResponse.json({
+        ok: true,
+        fullDepartmentUrl: immediateUrl,
+        guid: parsed.guid,
+        sourceArgument: parsed.argument,
+        resolvedArgument: parsed.argument,
+        resolvedFrom: 'source-date',
+      });
+    }
+
+    const personalUrl = `${HERZLIYA_BASE}?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N${parsed.guid},-A${parsed.argument}`;
+    const personalHtml = await fetchText(personalUrl);
+    const resolvedDate = extractEffectiveDateFromPersonalHtml(personalHtml);
+
+    if (!resolvedDate) {
+      return NextResponse.json({
+        ok: false,
+        error: 'הרצליה פתחה את הקישור האישי, אבל לא נמצא בו תאריך עבודה לבניית יומן מלא',
+        personalUrl,
+      }, { status: 422 });
+    }
+
     return NextResponse.json({
       ok: true,
-      fullDepartmentUrl: immediateUrl,
+      fullDepartmentUrl: buildFullDepartmentUrl(parsed.guid, resolvedDate),
       guid: parsed.guid,
       sourceArgument: parsed.argument,
-      resolvedArgument: parsed.argument,
-      resolvedFrom: 'source-date',
+      resolvedArgument: resolvedDate,
+      resolvedFrom: 'personal-page',
+      personalUrl,
     });
-  }
-
-  const personalUrl = `${HERZLIYA_BASE}?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N${parsed.guid},-A${parsed.argument}`;
-  const personalHtml = await fetchText(personalUrl);
-  const resolvedDate = extractEffectiveDateFromPersonalHtml(personalHtml);
-
-  if (!resolvedDate) {
+  } catch (error) {
     return NextResponse.json({
       ok: false,
-      error: 'הרצליה פתחה את הקישור האישי, אבל לא נמצא בו תאריך עבודה לבניית יומן מלא',
-      personalUrl,
-    }, { status: 422 });
+      error: error instanceof Error
+        ? error.message
+        : 'לא הצלחתי לפתור את קישור הרצליה',
+    }, { status: 502 });
   }
-
-  return NextResponse.json({
-    ok: true,
-    fullDepartmentUrl: buildFullDepartmentUrl(parsed.guid, resolvedDate),
-    guid: parsed.guid,
-    sourceArgument: parsed.argument,
-    resolvedArgument: resolvedDate,
-    resolvedFrom: 'personal-page',
-    personalUrl,
-  });
 }
