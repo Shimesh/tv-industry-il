@@ -46,10 +46,10 @@ function extractHerzliyaUrl(input: string): string {
 
 function deriveFullDepartmentUrl(input: string): string {
   const candidate = extractHerzliyaUrl(input);
-  const sendwaMatch = candidate.match(/[?&]A=([^,\s&]+),(\d{8})/i)
-    || input.match(/\bA=([A-F0-9-]{36}),(\d{8})/i);
-  const directMatch = candidate.match(/arguments=-N([^,\s&]+),-A(\d{8})(?:,-A(?:true|false))?/i)
-    || input.match(/arguments=-N([^,\s&]+),-A(\d{8})(?:,-A(?:true|false))?/i);
+  const sendwaMatch = candidate.match(/[?&]A=([^,\s&]+),([A-Za-z0-9-]{6,64})/i)
+    || input.match(/\bA=([A-F0-9-]{36}),([A-Za-z0-9-]{6,64})/i);
+  const directMatch = candidate.match(/arguments=-N([^,\s&]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+    || input.match(/arguments=-N([^,\s&]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i);
   const match = directMatch || sendwaMatch;
   if (!match) return '';
   const guid = match[1];
@@ -136,8 +136,8 @@ const report = async (phase, message, progress, extra = {}) => {
     const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
     if (!isFullDepartmentPage) {
       const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
-      const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
-        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+      const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i)
+        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i);
       if (match) {
         const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
           + match[1] + ',-A' + match[2] + ',-Atrue';
@@ -330,8 +330,8 @@ const report = async (phase, message, progress, extra = {}) => {
       const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
       if (!isFullDepartmentPage) {
         const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
-        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
-          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i)
+          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i);
         if (match) {
           const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
             + match[1] + ',-A' + match[2] + ',-Atrue';
