@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const DEFAULT_TARGET_UID = 'pVtM4KuNSSSexQ3W32UmImJHJID3';
 const HERZLIYA_FULL_DEPARTMENT_BASE = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll';
+const SCHEDULE_INPUT_STORAGE_KEY = 'tv-industry-herzliya-phone-bridge-input';
+const FULL_URL_STORAGE_KEY = 'tv-industry-herzliya-phone-bridge-full-url';
 
 type TokenResponse = {
   ok: boolean;
@@ -460,6 +462,7 @@ export default function CalendarPhoneBridgePage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [scheduleInput, setScheduleInput] = useState('');
+  const [lastValidFullDepartmentUrl, setLastValidFullDepartmentUrl] = useState('');
 
   const bookmarklet = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl
@@ -482,16 +485,47 @@ export default function CalendarPhoneBridgePage() {
       : ''
   ), [tokenData?.token]);
   const fullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
-  const fullDepartmentUrlForEdge = useMemo(() => {
-    if (!fullDepartmentUrl || !tokenData?.token) return fullDepartmentUrl;
-    const separator = fullDepartmentUrl.includes('#') ? '&' : '#';
-    return `${fullDepartmentUrl}${separator}tvib_token=${encodeURIComponent(tokenData.token)}`;
-  }, [fullDepartmentUrl, tokenData?.token]);
+  const displayedFullDepartmentUrl = fullDepartmentUrl || lastValidFullDepartmentUrl;
+  const isUsingSavedFullDepartmentUrl = !fullDepartmentUrl && Boolean(lastValidFullDepartmentUrl);
+  const displayedFullDepartmentUrlForEdge = useMemo(() => {
+    if (!displayedFullDepartmentUrl || !tokenData?.token) return displayedFullDepartmentUrl;
+    const separator = displayedFullDepartmentUrl.includes('#') ? '&' : '#';
+    return `${displayedFullDepartmentUrl}${separator}tvib_token=${encodeURIComponent(tokenData.token)}`;
+  }, [displayedFullDepartmentUrl, tokenData?.token]);
   const androidAppUrl = useMemo(() => (
-    tokenData?.token && tokenData.ingestUrl && fullDepartmentUrl
-      ? `tvindustryherzliya://sync?token=${encodeURIComponent(tokenData.token)}&ingestUrl=${encodeURIComponent(tokenData.ingestUrl)}&url=${encodeURIComponent(fullDepartmentUrl)}`
+    tokenData?.token && tokenData.ingestUrl && displayedFullDepartmentUrl
+      ? `tvindustryherzliya://sync?token=${encodeURIComponent(tokenData.token)}&ingestUrl=${encodeURIComponent(tokenData.ingestUrl)}&url=${encodeURIComponent(displayedFullDepartmentUrl)}`
       : ''
-  ), [fullDepartmentUrl, tokenData?.ingestUrl, tokenData?.token]);
+  ), [displayedFullDepartmentUrl, tokenData?.ingestUrl, tokenData?.token]);
+
+  useEffect(() => {
+    try {
+      const savedInput = window.localStorage.getItem(SCHEDULE_INPUT_STORAGE_KEY);
+      const savedFullUrl = window.localStorage.getItem(FULL_URL_STORAGE_KEY);
+      if (savedInput) setScheduleInput(savedInput);
+      if (savedFullUrl) setLastValidFullDepartmentUrl(savedFullUrl);
+    } catch {
+      // localStorage is optional for this helper screen.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SCHEDULE_INPUT_STORAGE_KEY, scheduleInput);
+    } catch {
+      // localStorage is optional for this helper screen.
+    }
+  }, [scheduleInput]);
+
+  useEffect(() => {
+    if (!fullDepartmentUrl) return;
+    setLastValidFullDepartmentUrl(fullDepartmentUrl);
+    try {
+      window.localStorage.setItem(FULL_URL_STORAGE_KEY, fullDepartmentUrl);
+    } catch {
+      // localStorage is optional for this helper screen.
+    }
+  }, [fullDepartmentUrl]);
 
   useEffect(() => {
     if (!user || !tokenData?.token) return undefined;
@@ -539,7 +573,7 @@ export default function CalendarPhoneBridgePage() {
         body: JSON.stringify({
           targetUid,
           sourceUrl: extractHerzliyaUrl(scheduleInput),
-          fullDepartmentUrl,
+          fullDepartmentUrl: displayedFullDepartmentUrl,
         }),
       });
       const payload = await response.json() as TokenResponse;
@@ -554,7 +588,7 @@ export default function CalendarPhoneBridgePage() {
   }
 
   async function copy(text: string, label: string) {
-    const value = text === fullDepartmentUrl ? fullDepartmentUrlForEdge : text;
+    const value = text === displayedFullDepartmentUrl ? displayedFullDepartmentUrlForEdge : text;
     await navigator.clipboard.writeText(value);
     setMessage(`${label} הועתק.`);
   }
@@ -617,11 +651,16 @@ export default function CalendarPhoneBridgePage() {
             placeholder="הדבק כאן הודעת WhatsApp מהרצליה או URL של sendwa.html..."
           />
 
-          {fullDepartmentUrl ? (
+          {displayedFullDepartmentUrl ? (
             <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
               <div className="text-sm font-bold text-emerald-200">קישור מלא שנבנה:</div>
+              {isUsingSavedFullDepartmentUrl ? (
+                <p className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  הקלט הנוכחי לא נראה כמו הודעת הרצליה תקינה, לכן מוצג כאן הקישור המלא האחרון שזוהה ונשמר בדפדפן.
+                </p>
+              ) : null}
               <input
-                value={fullDepartmentUrlForEdge}
+                value={displayedFullDepartmentUrlForEdge}
                 readOnly
                 dir="ltr"
                 className="w-full rounded-lg border border-emerald-300/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-emerald-50"
@@ -629,14 +668,14 @@ export default function CalendarPhoneBridgePage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => void copy(fullDepartmentUrl, 'קישור היומן המלא')}
+                  onClick={() => void copy(displayedFullDepartmentUrl, 'קישור היומן המלא')}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
                 >
                   <Copy className="h-4 w-4" />
                   העתק קישור מלא
                 </button>
                 <a
-                  href={fullDepartmentUrlForEdge}
+                  href={displayedFullDepartmentUrlForEdge}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10"
