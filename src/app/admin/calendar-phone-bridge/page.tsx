@@ -500,8 +500,9 @@ export default function CalendarPhoneBridgePage() {
   ), [tokenData?.token]);
   const immediateFullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
   const fullDepartmentUrl = immediateFullDepartmentUrl || resolvedFullDepartmentUrl;
-  const displayedFullDepartmentUrl = fullDepartmentUrl || lastValidFullDepartmentUrl;
-  const isUsingSavedFullDepartmentUrl = !fullDepartmentUrl && Boolean(lastValidFullDepartmentUrl);
+  const hasCurrentScheduleInput = Boolean(scheduleInput.trim());
+  const displayedFullDepartmentUrl = fullDepartmentUrl || (!hasCurrentScheduleInput ? lastValidFullDepartmentUrl : '');
+  const isUsingSavedFullDepartmentUrl = !fullDepartmentUrl && !hasCurrentScheduleInput && Boolean(lastValidFullDepartmentUrl);
   const displayedFullDepartmentUrlForEdge = useMemo(() => {
     if (!displayedFullDepartmentUrl || !tokenData?.token) return displayedFullDepartmentUrl;
     const separator = displayedFullDepartmentUrl.includes('#') ? '&' : '#';

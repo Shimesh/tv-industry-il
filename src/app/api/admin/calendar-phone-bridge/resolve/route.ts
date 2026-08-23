@@ -62,6 +62,40 @@ function extractEffectiveDateFromPersonalHtml(html: string): string {
   return '';
 }
 
+function extractEffectiveDateFromInput(input: string): string {
+  const dates = [...input.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)]
+    .map((match) => {
+      const day = Number(match[1]);
+      const month = Number(match[2]);
+      const year = Number(match[3]);
+      const timestamp = Date.UTC(year, month - 1, day);
+      if (
+        !Number.isFinite(timestamp)
+        || day < 1
+        || day > 31
+        || month < 1
+        || month > 12
+        || year < 2020
+        || year > 2035
+      ) {
+        return null;
+      }
+      return {
+        day: match[1],
+        month: match[2],
+        year: match[3],
+        timestamp,
+      };
+    })
+    .filter((date): date is { day: string; month: string; year: string; timestamp: number } => Boolean(date));
+
+  if (!dates.length) return '';
+  const firstDayOfRange = dates.reduce((earliest, current) => (
+    current.timestamp < earliest.timestamp ? current : earliest
+  ));
+  return `${firstDayOfRange.day}${firstDayOfRange.month}${firstDayOfRange.year}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authUser = await requirePrimaryAdminRequest(request);
@@ -84,6 +118,18 @@ export async function POST(request: NextRequest) {
         sourceArgument: parsed.argument,
         resolvedArgument: parsed.argument,
         resolvedFrom: 'source-date',
+      });
+    }
+
+    const dateFromInput = extractEffectiveDateFromInput(input);
+    if (dateFromInput) {
+      return NextResponse.json({
+        ok: true,
+        fullDepartmentUrl: buildFullDepartmentUrl(parsed.guid, dateFromInput),
+        guid: parsed.guid,
+        sourceArgument: parsed.argument,
+        resolvedArgument: dateFromInput,
+        resolvedFrom: 'message-date',
       });
     }
 
