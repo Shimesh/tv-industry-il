@@ -482,16 +482,16 @@ function CalendarInsightsCard({
 function CalendarQuickCounts({
   weekCount,
   monthCount,
-  weekHours,
-  monthHours,
+  weekTotal,
+  monthTotal,
   weekLabel,
   monthLabel,
   loading,
 }: {
   weekCount: number;
   monthCount: number;
-  weekHours: number;
-  monthHours: number;
+  weekTotal: number;
+  monthTotal: number;
   weekLabel: string;
   monthLabel: string;
   loading: boolean;
@@ -500,8 +500,8 @@ function CalendarQuickCounts({
     {
       label: 'השבוע שלי',
       value: weekCount,
-      hours: weekHours,
-      hoursLabel: 'שעות שבועיות',
+      total: weekTotal,
+      totalLabel: 'הפקות שבועיות בלוח',
       period: weekLabel,
       icon: Target,
       accent: 'from-cyan-300 to-blue-500',
@@ -509,8 +509,8 @@ function CalendarQuickCounts({
     {
       label: 'החודש שלי',
       value: monthCount,
-      hours: monthHours,
-      hoursLabel: 'שעות חודשיות',
+      total: monthTotal,
+      totalLabel: 'הפקות חודשיות בלוח',
       period: monthLabel,
       icon: CalendarPlus,
       accent: 'from-fuchsia-300 to-purple-500',
@@ -532,7 +532,7 @@ function CalendarQuickCounts({
             סיכום הפקות מהיר
           </h2>
           <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
-            ספירה פשוטה של ההפקות שלי בתקופות הנוכחיות
+            כמה הפקות שלי מתוך כלל ההפקות בתקופות הנוכחיות
           </p>
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--theme-accent)' }} />}
@@ -578,12 +578,15 @@ function CalendarQuickCounts({
                   }}
                 >
                   <div className="flex items-baseline justify-center gap-1.5">
-                    <span className="text-xl font-black leading-none">
-                      {formatHours(item.hours)}
+                    <span className="text-2xl font-black leading-none" dir="ltr">
+                      {item.value}/{item.total}
                     </span>
                     <span className="text-xs font-black">
-                      {item.hoursLabel}
+                      הפקות
                     </span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-bold opacity-80">
+                    {item.value} שלי מתוך {item.total} קיימות
                   </div>
                 </div>
 
@@ -3852,8 +3855,8 @@ function ProductionsContent() {
           <CalendarQuickCounts
             weekCount={calendarSummary.week.mine}
             monthCount={calendarSummary.month.mine}
-            weekHours={calendarSummary.week.hours}
-            monthHours={calendarSummary.month.hours}
+            weekTotal={calendarSummary.week.total}
+            monthTotal={calendarSummary.month.total}
             weekLabel={quickCountsPeriodLabels.week}
             monthLabel={quickCountsPeriodLabels.month}
             loading={calendarSummary.loading}
