@@ -479,6 +479,107 @@ function CalendarInsightsCard({
   );
 }
 
+function CalendarQuickCounts({
+  weekCount,
+  monthCount,
+  weekHours,
+  monthHours,
+  weekLabel,
+  monthLabel,
+  loading,
+}: {
+  weekCount: number;
+  monthCount: number;
+  weekHours: number;
+  monthHours: number;
+  weekLabel: string;
+  monthLabel: string;
+  loading: boolean;
+}) {
+  const items = [
+    {
+      label: 'השבוע שלי',
+      value: weekCount,
+      hours: weekHours,
+      period: weekLabel,
+      icon: Target,
+      accent: 'from-cyan-300 to-blue-500',
+    },
+    {
+      label: 'החודש שלי',
+      value: monthCount,
+      hours: monthHours,
+      period: monthLabel,
+      icon: CalendarPlus,
+      accent: 'from-fuchsia-300 to-purple-500',
+    },
+  ];
+
+  return (
+    <section
+      className="mt-4 rounded-2xl border p-3 shadow-[0_18px_45px_rgba(8,5,30,0.28)]"
+      style={{
+        background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-bg-secondary) 92%, transparent), color-mix(in srgb, var(--theme-accent) 10%, transparent))',
+        borderColor: 'var(--theme-border)',
+      }}
+      aria-label="סיכום מהיר של ההפקות שלי"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-black" style={{ color: 'var(--theme-text)' }}>
+            סיכום הפקות מהיר
+          </h2>
+          <p className="text-xs" style={{ color: 'var(--theme-text-secondary)' }}>
+            ספירה פשוטה של ההפקות שלי בתקופות הנוכחיות
+          </p>
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--theme-accent)' }} />}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.label}
+              className="relative overflow-hidden rounded-2xl border p-3"
+              style={{
+                background: 'color-mix(in srgb, var(--theme-bg) 84%, transparent)',
+                borderColor: 'var(--theme-border)',
+              }}
+            >
+              <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-l ${item.accent}`} />
+              <div className="flex items-start justify-between gap-2">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${item.accent} text-white shadow-lg`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 text-left" dir="rtl">
+                  <div className="text-xs font-bold" style={{ color: 'var(--theme-text-secondary)' }}>
+                    {item.label}
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-end gap-1.5">
+                    <span className="text-2xl font-black leading-none" style={{ color: 'var(--theme-text)' }}>
+                      {item.value}
+                    </span>
+                    <span className="text-sm font-black" style={{ color: 'var(--theme-text)' }}>
+                      הפקות
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 rounded-xl px-2.5 py-2 text-center text-xs font-semibold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
+                <span>{item.period}</span>
+                <span className="mx-1.5 opacity-50">•</span>
+                <span>{formatHours(item.hours)} שעות</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // Compute Saturday date string from a Sunday-based weekId (YYYY-MM-DD)
 function getWeekEndStr(weekId: string): string {
   const [y, m, d] = weekId.split('-').map(Number);
@@ -2466,6 +2567,23 @@ function ProductionsContent() {
     };
   }, [analyticsLoading, analyticsProductions, analyticsYear, currentDate, profile?.displayName, summaryProductions, user?.displayName, workerName]);
 
+  const quickCountsPeriodLabels = useMemo(() => {
+    const weekStart = getWeekStartDate(currentDate);
+    const weekEnd = getWeekEndDate(currentDate);
+    const formatShortDate = (date: Date) => date.toLocaleDateString('he-IL', {
+      day: '2-digit',
+      month: '2-digit',
+    });
+
+    return {
+      week: `${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`,
+      month: currentDate.toLocaleDateString('he-IL', {
+        month: 'long',
+        year: 'numeric',
+      }),
+    };
+  }, [currentDate]);
+
   useEffect(() => {
     if (!productions.length) return;
     const allCrew = productions.flatMap((production) => production.crew || []);
@@ -3707,6 +3825,16 @@ function ProductionsContent() {
             onLoadMore={handleLoadMoreList}
             hasMore={hasMoreList}
             loadingMore={loadingMoreList}
+          />
+
+          <CalendarQuickCounts
+            weekCount={calendarSummary.week.mine}
+            monthCount={calendarSummary.month.mine}
+            weekHours={calendarSummary.week.hours}
+            monthHours={calendarSummary.month.hours}
+            weekLabel={quickCountsPeriodLabels.week}
+            monthLabel={quickCountsPeriodLabels.month}
+            loading={calendarSummary.loading}
           />
         </>
       )}
