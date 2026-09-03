@@ -501,6 +501,7 @@ function CalendarQuickCounts({
       label: 'השבוע שלי',
       value: weekCount,
       hours: weekHours,
+      hoursLabel: 'שעות שבועיות',
       period: weekLabel,
       icon: Target,
       accent: 'from-cyan-300 to-blue-500',
@@ -509,6 +510,7 @@ function CalendarQuickCounts({
       label: 'החודש שלי',
       value: monthCount,
       hours: monthHours,
+      hoursLabel: 'שעות חודשיות',
       period: monthLabel,
       icon: CalendarPlus,
       accent: 'from-fuchsia-300 to-purple-500',
@@ -567,10 +569,30 @@ function CalendarQuickCounts({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 rounded-xl px-2.5 py-2 text-center text-xs font-semibold" style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}>
-                <span>{item.period}</span>
-                <span className="mx-1.5 opacity-50">•</span>
-                <span>{formatHours(item.hours)} שעות</span>
+              <div className="mt-3 grid gap-2">
+                <div
+                  className="rounded-xl px-2.5 py-2 text-center"
+                  style={{
+                    background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 14%, transparent), color-mix(in srgb, #38bdf8 10%, transparent))',
+                    color: 'var(--theme-text)',
+                  }}
+                >
+                  <div className="flex items-baseline justify-center gap-1.5">
+                    <span className="text-xl font-black leading-none">
+                      {formatHours(item.hours)}
+                    </span>
+                    <span className="text-xs font-black">
+                      {item.hoursLabel}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-xl px-2.5 py-1.5 text-center text-[11px] font-semibold"
+                  style={{ background: 'var(--theme-bg-secondary)', color: 'var(--theme-text-secondary)' }}
+                >
+                  {item.period}
+                </div>
               </div>
             </div>
           );
