@@ -16,11 +16,12 @@ import { splitHerzliyaRole } from '@/lib/productionScheduleParser';
 import { normalizePhone, normalizeName } from '@/lib/crewNormalization';
 import { getWeekId, type Production } from '@/lib/productionDiff';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
-import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
+import { syncSavedCrew } from '@/lib/server/syncSavedCrew';
 import { hasFullCalendarAccess } from '@/lib/calendarAccess';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 /* ─── POST — write productions to global_productions ─────────────────────── */
 
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
 
   const errors: string[] = [];
   let count = 0;
+  const savedProductions: Production[] = [];
   const snapshotRunId = `${Date.now()}-${authUser.uid.slice(0, 10)}-global`;
 
   await writeDoc(`calendar_sync_snapshots/${snapshotRunId}`, {
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
         const merged = mergeGlobalProduction(existing, doc);
         await writeDoc(`global_productions/${doc.id}`, merged as unknown as Record<string, unknown>);
         count++;
+        savedProductions.push(prod);
       } catch (err) {
         errors.push(`${prod.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -83,9 +86,11 @@ export async function POST(request: NextRequest) {
   );
 
   if (count > 0) {
-    void syncContactsFromSavedProductions(true).catch((err) =>
-      console.error('[api/productions/global] background sync error:', err),
-    );
+    try {
+      await syncSavedCrew(savedProductions);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'עדכון האלפון נכשל');
+    }
   }
 
   await writeDoc(`calendar_sync_snapshots/${snapshotRunId}`, {
@@ -95,7 +100,7 @@ export async function POST(request: NextRequest) {
     errorCount: errors.length,
   });
 
-  return NextResponse.json({ success: true, count, errors, snapshotRunId });
+  return NextResponse.json({ success: errors.length === 0, count, errors, snapshotRunId }, { status: errors.length ? 500 : 200 });
 }
 
 /* ─── GET — query global_productions by phone or shadowKey + date range ───── */

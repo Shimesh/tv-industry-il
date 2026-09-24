@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { syncSavedCrew } from '@/lib/server/syncSavedCrew';
 import { deleteDocument, getDocument, listDocuments, patchDocument } from '@/lib/server/firestoreAdminRest';
 import {
   extractDateFromPopup,
@@ -282,6 +283,8 @@ export async function POST(request: NextRequest) {
 
     await updateBridgeStatus(token, tokenDoc, 'saving', 'הנתונים תקינים. שומר ליומן וללוח הגלובלי.', 90);
     const result = await saveProductions(String(tokenDoc.targetUid || ''), productions);
+    await updateBridgeStatus(token, tokenDoc, 'saving', 'ההפקות נשמרו. מעדכן אנשי צוות באלפון.', 96);
+    const contacts = await syncSavedCrew(productions);
     await patchDocument(`calendar_phone_bridge_tokens/${token}`, {
       usedAt: Date.now(),
       status: 'used',
@@ -299,7 +302,7 @@ export async function POST(request: NextRequest) {
       ].slice(-30),
     });
 
-    return cors(NextResponse.json({ ok: true, ...result }));
+    return cors(NextResponse.json({ ok: true, ...result, contacts }));
   } catch (error) {
     try {
       await updateBridgeStatus(failureToken, failureTokenDoc, 'failed', error instanceof Error ? error.message : 'ייבוא מהטלפון נכשל', 100, {

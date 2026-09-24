@@ -43,6 +43,8 @@ async function callAdminContactsSync(method: 'GET' | 'POST'): Promise<SyncResult
     throw new Error(payload.error || `Contacts sync failed (${response.status})`);
   }
 
+  if (method === 'POST') window.dispatchEvent(new Event('contacts-updated'));
+
   return payload;
 }
 

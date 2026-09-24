@@ -190,6 +190,13 @@ const ROLE_ALIAS_KEYS: Record<string, string> = {
   [roleKey('מסכי LED')]: 'מסכי LED',
   [roleKey('LED')]: 'מסכי LED',
   [roleKey('טלפרומפטר')]: 'טלפרומפטר',
+  [roleKey('CG במלווה לרוקדים')]: 'כתוביות / CG',
+  [roleKey('טכנאי תורן')]: 'טכנאי',
+  [roleKey('נתב במאי')]: 'נתב/ת תמונה',
+  [roleKey('עיצוב תאורה')]: 'מעצב/ת תאורה',
+  [roleKey('מפעיל טלפרומפטר')]: 'טלפרומפטר',
+  [roleKey('מפעילת טלפרומפטר')]: 'טלפרומפטר',
+  [roleKey('מפעיל/ת טלפרומפטר')]: 'טלפרומפטר',
   [roleKey('פרומפטר')]: 'טלפרומפטר',
   [roleKey('prompter')]: 'טלפרומפטר',
   [roleKey('teleprompter')]: 'טלפרומפטר',
@@ -242,12 +249,15 @@ for (const role of INDUSTRY_ROLE_OPTIONS) {
 
 export function stripRoleNoise(value: unknown): string {
   if (typeof value !== 'string') return '';
+  if (/^(?:עם\s|החליף\s|החליפה\s|מחליף את\s|מחליפה את\s)/u.test(value.trim())) return '';
   const beforePlus = value.split('+')[0] || '';
   const withoutNoise = NOISE_WORDS.reduce(
     (current, word) => current.replace(new RegExp(`(^|\\s)${word}(?=\\s|$)`, 'giu'), ' '),
     beforePlus,
   );
-  return compact(withoutNoise.replace(/[|,:;]+/g, ' '));
+  const cleaned = compact(withoutNoise.replace(/[|,:;]+/g, ' '));
+  if (/^(?:עם\s|החליף\s|החליפה\s|\(?לו["״']?ז\s)/u.test(cleaned)) return '';
+  return cleaned;
 }
 
 export function isCanonicalRole(role: string): boolean {

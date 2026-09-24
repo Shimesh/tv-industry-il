@@ -4,6 +4,7 @@ import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const authUser = await requireAdminRequest(request);

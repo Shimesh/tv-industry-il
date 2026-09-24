@@ -4,6 +4,7 @@ import { syncContactsFromProductions } from '@/lib/server/contactsSync';
 import { recordJobMetric, recordRouteMetric } from '@/lib/server/adminTelemetry';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 type ReconcileProductionPayload = {
   id?: string;

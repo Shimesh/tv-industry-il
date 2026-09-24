@@ -1166,6 +1166,7 @@ function ProductionsContent() {
       const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
       throw new Error(payload.error || 'Failed to reconcile contacts');
     }
+    window.dispatchEvent(new Event('contacts-updated'));
   }, []);
 
   // Load existing week data via REST API - supports both personal and team paths

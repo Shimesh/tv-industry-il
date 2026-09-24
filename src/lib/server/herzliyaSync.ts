@@ -13,7 +13,7 @@ import { mergeGlobalProduction, toGlobalProduction, type GlobalProductionDoc } f
 import { generateProductionId, getHebrewDay } from '@/lib/productionDiff';
 import { normalizePhone } from '@/lib/crewNormalization';
 import { getDocument, patchDocument, runQuery, deleteDocument } from '@/lib/server/firestoreAdminRest';
-import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
+import { syncSavedCrew } from '@/lib/server/syncSavedCrew';
 import { getLinkedProductionIdentity } from '@/lib/server/identityLink';
 import type { Production, CrewMember } from '@/lib/productionDiff';
 
@@ -1184,7 +1184,7 @@ export async function syncHerzliyaUrl(
     } catch { /* non-critical */ }
   }
 
-  void syncContactsFromSavedProductions(true).catch(() => {});
+  await syncSavedCrew(productions);
 
   const studioSummary = productions.map(p => `${p.name}→"${p.studio}"`).join(', ');
   console.log('[herzliyaSync] saved', productions.length, '| studios:', studioSummary, '| debug:', parsed.debug);

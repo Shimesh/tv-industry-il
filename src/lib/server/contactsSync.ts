@@ -1,7 +1,6 @@
 import { createHash } from 'crypto';
 import { splitName, inferDepartment, inferSpecialty, inferWorkArea } from '@/lib/contactsUtils';
 import {
-  deduplicateCrewEntries,
   normalizeName,
   normalizePhone,
   normalizeRole,
@@ -329,12 +328,18 @@ async function cleanupDuplicateContacts(
 function toSyncCandidate(member: CrewInput, source = 'schedule'): SyncCandidate | null {
   const normalizedName = normalizeName(member.normalizedName || member.name || '');
   if (!normalizedName || normalizedName.length < 2) return null;
+  // Legacy calendar parsing occasionally placed a programme heading in the crew.
+  if (/^(?:רצועת\s|סה[״"']?כ(?:\s|$)|שם העובד$|שם עובד$|לא צוין$|טרם נקבע$)/u.test(normalizedName)) return null;
 
   const normalizedPhone = normalizePhone(member.normalizedPhone || member.phone || null);
   const identityKey = normalizedPhone ? `${normalizedName}::${normalizedPhone}` : normalizedName;
-  const rawRole = member.roleDetail || member.role || '';
+  const detail = normalizeRoleToCanonical(member.roleDetail || '');
+  const base = normalizeRoleToCanonical(member.role || '');
+  const rawRole = detail.isCanonical ? detail.canonicalRole
+    : base.isCanonical ? base.canonicalRole
+      : member.roleDetail || member.role || '';
   const normalizedRole = normalizeRoleToCanonical(rawRole);
-  if (normalizedRole.ignoredAsNoise || !normalizedRole.isCanonical || !normalizedRole.canonicalRole) return null;
+  // A new profession must never make a real crew member disappear from the directory.
 
   const role = normalizedRole.canonicalRole || normalizeRole(rawRole);
   const department = getDepartmentForRole(role) || inferDepartment(role, normalizedName);
@@ -395,7 +400,17 @@ function collectCandidates(
     ),
   ];
 
-  const candidates = deduplicateCrewEntries(flattened)
+  // Deduplicate contact evidence by identity AND role. Calendar-row deduplication
+  // merges phone-less rows by name and can discard a person's other professions.
+  const seen = new Set<string>();
+  const rawSeen = new Set<string>();
+  const candidates = flattened
+    .filter((member) => {
+      const key = `${normalizeName(member.name)}::${normalizePhone(member.phone) || ''}::${member.roleDetail || member.role}`;
+      if (rawSeen.has(key)) return false;
+      rawSeen.add(key);
+      return true;
+    })
     .map((member) => {
       const normalizedRole = normalizeRoleToCanonical(member.roleDetail || member.role || '');
       if (normalizedRole.ignoredAsNoise) {
@@ -411,7 +426,14 @@ function collectCandidates(
       }
       return toSyncCandidate(member);
     })
-    .filter((member): member is SyncCandidate => Boolean(member));
+    .filter((member): member is SyncCandidate => Boolean(member))
+    .filter((member) => {
+      const key = `${member.identityKey}::${member.role}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Number(Boolean(b.normalizedPhone)) - Number(Boolean(a.normalizedPhone)));
 
   return { candidates, ignoredNoiseRoles, customRoles, sampleIgnoredNoiseRoles, sampleCustomRoles };
 }
@@ -428,9 +450,7 @@ function mergeRoleFields(
   const existingDepartments = options.replaceExistingRoles
     ? []
     : normalizeProfessionalFields(existing).departments;
-  const inferredDepartments = roles
-    .map((role) => getDepartmentForRole(role))
-    .filter(Boolean);
+  const inferredDepartments = normalizeProfessionalFields({ roles }).departments;
   const departments = uniqueStrings([...existingDepartments, ...inferredDepartments]);
 
   return {
@@ -458,14 +478,13 @@ function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandid
   const source = existing?.source || sources[0] || 'schedule';
   const isHiddenFromDirectory = existing?.hiddenFromDirectory === true;
   const mergedPhone = isHiddenFromDirectory ? null : existing?.phone || candidate.normalizedPhone;
-  const replaceLegacyProfessional = shouldReplaceLegacyProfessionalFields(existing, candidate, evidenceRoles);
   const mergedRoleFields = mergeRoleFields(
     existing as Record<string, unknown> | null,
     evidenceRoles.length ? evidenceRoles : [candidate.role],
-    { replaceExistingRoles: replaceLegacyProfessional },
   );
   const createdAt = existing ? undefined : nowIso();
   const ghostFields = existing ? {} : { isGhost: true, ghostAvatarSeed: ghostSeed(candidate.normalizedName) };
+  const normalizedName = existing ? normalizedContactName(existing) : candidate.normalizedName;
   const department = existing?.department && !isLegacyDepartment(existing.department)
     ? mergedRoleFields.department || existing.department
     : mergedRoleFields.department || candidate.department;
@@ -484,10 +503,10 @@ function buildContactPatch(existing: ContactRecord | null, candidate: SyncCandid
     department,
     departments: mergedRoleFields.departments.length ? mergedRoleFields.departments : [department].filter(Boolean),
     workArea: existing?.workArea || candidate.workArea,
-    specialty: existing?.specialty || candidate.specialty,
-    normalizedName: candidate.normalizedName,
+    specialty: normalizeRole(existing?.specialty || '') || candidate.specialty,
+    normalizedName,
     normalizedPhone: mergedPhone || null,
-    identityKey: mergedPhone ? `${candidate.normalizedName}::${mergedPhone}` : candidate.normalizedName,
+    identityKey: mergedPhone ? `${normalizedName}::${mergedPhone}` : normalizedName,
     partialContact: !mergedPhone,
     source,
     sources,
@@ -636,6 +655,14 @@ export async function syncContactsFromProductions(
     }
   }
 
+  // A calendar can use an old spelling both with and without a phone. Resolve
+  // those aliases from phone-backed evidence before processing phone-less rows.
+  for (const candidate of candidates) {
+    if (!candidate.normalizedPhone) continue;
+    const existing = byPhone.get(candidate.normalizedPhone);
+    if (existing) byNameWithPhone.set(candidate.normalizedName, existing);
+  }
+
   let created = 0;
   let updated = 0;
   let skipped = 0;
@@ -660,7 +687,7 @@ export async function syncContactsFromProductions(
     const existing =
       (candidate.normalizedPhone && byPhone.get(candidate.normalizedPhone)) ||
       (candidate.normalizedPhone && byComposite.get(candidate.identityKey)) ||
-      (!candidate.normalizedPhone ? byNameWithoutPhone.get(candidate.normalizedName) : null) ||
+      byNameWithoutPhone.get(candidate.normalizedName) ||
       (!candidate.normalizedPhone ? byNameWithPhone.get(candidate.normalizedName) : null) ||
       null;
 
@@ -731,9 +758,14 @@ export async function syncContactsFromProductions(
       skipped++;
     }
 
+    if (candidate.normalizedPhone) {
+      const resolved = byPhone.get(candidate.normalizedPhone);
+      if (resolved) byNameWithPhone.set(candidate.normalizedName, resolved);
+    }
+
     for (const user of usersForCandidate(candidate, existing, userIndex)) {
       if (touchedUsers.has(user.id)) continue;
-      const mergedUserFields = mergeRoleFields(user as Record<string, unknown>, [candidate.role]);
+      const mergedUserFields = mergeRoleFields(user as Record<string, unknown>, evidenceRoles);
       const needsUserUpdate =
         user.role !== mergedUserFields.role ||
         user.department !== mergedUserFields.department ||
@@ -762,8 +794,8 @@ export async function syncContactsFromProductions(
     const role = professional.role || String(contact.role || '');
     const fullName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
     const correctDepartment = professional.department || inferDepartment(role, fullName);
-    const correctWorkArea = inferWorkArea(role, fullName);
-    const correctSpecialty = inferSpecialty(role, fullName);
+    const correctWorkArea = contact.workArea || inferWorkArea(role, fullName);
+    const correctSpecialty = normalizeRole(contact.specialty || '') || inferSpecialty(role, fullName);
     if (
       contact.department === correctDepartment &&
       (contact.workArea || null) === correctWorkArea &&
@@ -827,12 +859,13 @@ export async function syncContactsFromSavedProductions(applyChanges: boolean): P
       {
         from: [{ collectionId: 'global_productions' }],
       },
-    ).catch(() => [] as GlobalProductionInput[]),
+    ),
   ]);
 
   const filtered = productionDocs.filter((production) =>
     shouldIncludeProductionDocument(String(production._path || ''), production),
   );
 
-  return syncContactsFromProductions(filtered, applyChanges, globalProductionDocs, { cleanupDuplicates: true });
+  // Discovery must not delete existing directory cards or their profile links.
+  return syncContactsFromProductions(filtered, applyChanges, globalProductionDocs);
 }

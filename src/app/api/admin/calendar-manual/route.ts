@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { syncSavedCrew } from '@/lib/server/syncSavedCrew';
 import { requirePrimaryAdminRequest } from '@/lib/server/primaryAdmin';
 import { deleteDocument, getDocument, listDocuments, patchDocument, runQuery } from '@/lib/server/firestoreAdminRest';
 import { fetchHerzliyaProductions } from '@/lib/server/herzliyaSync';
@@ -309,7 +310,8 @@ async function saveProductions(targetUid: string, adminUid: string, productions:
   const removedPersonal = marked.identityAvailable
     ? await removeStalePersonalAssignments(targetUid, resolvedProductions)
     : 0;
-  return { personal, global, removedPersonal };
+  const contacts = await syncSavedCrew(resolvedProductions);
+  return { personal, global, removedPersonal, contacts };
 }
 
 export async function POST(request: NextRequest) {

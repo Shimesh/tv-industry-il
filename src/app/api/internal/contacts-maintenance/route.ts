@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { syncContactsFromSavedProductions } from '@/lib/server/contactsSync';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 function isAuthorized(request: NextRequest): boolean {
   const expectedSecret = process.env.CONTACTS_MAINTENANCE_SECRET?.trim();

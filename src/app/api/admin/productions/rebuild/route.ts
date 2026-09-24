@@ -320,7 +320,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     simulation = { phone: simulatePhone, matchedProductions: matched };
   }
 
-  void syncContactsFromSavedProductions(true).catch(() => {});
+  await syncContactsFromSavedProductions(true);
 
   const elapsed = Date.now() - startedAt;
 

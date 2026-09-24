@@ -1349,37 +1349,17 @@ export default function AdminPage() {
 
 
   async function runFullSync() {
-    if (!window.confirm('להריץ סנכרון מלא?\n\nשלב 1: מיגרציית הפקות → global_productions\nשלב 2: סנכרון אנשי קשר מלוחות עבודה\n\nתהליך זה יעדכן את ה-Pro Cards ואת רשימת אנשי הקשר.')) return;
+    if (!window.confirm('להשלים ולעדכן אנשי קשר מכל ההפקות השמורות?')) return;
     setFullSyncRunning(true);
     const results: string[] = [];
     try {
-      setFullSyncStep('בודק הפקות...');
-      const dryResult = await fetchWithAuth<{
-        unique?: number; total?: number; existingGlobalCount?: number;
-      }>(
-        '/api/admin/migrate-global-productions',
-        { method: 'POST', body: JSON.stringify({ dryRun: true }) },
-      );
-
-      const newProductions = (dryResult.unique || 0) - (dryResult.existingGlobalCount || 0);
-      if (newProductions > 0 || (dryResult.unique || 0) > 0) {
-        setFullSyncStep(`מעתיק ${dryResult.unique || 0} הפקות...`);
-        const migResult = await fetchWithAuth<{ written?: number; skipped?: number; errors?: string[] }>(
-          '/api/admin/migrate-global-productions',
-          { method: 'POST', body: JSON.stringify({ dryRun: false }) },
-        );
-        results.push(`הפקות: ${migResult.written || 0} נכתבו`);
-        if ((migResult.errors?.length || 0) > 0) results.push(`שגיאות: ${migResult.errors!.length}`);
-      } else {
-        results.push('הפקות: כבר מעודכן');
-      }
-
       setFullSyncStep('מסנכרן אנשי קשר...');
       const syncResult = await fetchWithAuth<{ created?: number; updated?: number; deletedDuplicates?: number }>(
         '/api/admin/contacts-sync',
         { method: 'POST' },
       );
       results.push(`אנשי קשר: ${syncResult.created || 0} חדשים, ${syncResult.updated || 0} עודכנו`);
+      window.dispatchEvent(new Event('contacts-updated'));
 
       showToast('ok', results.join(' | '));
       await loadOverview(true);
@@ -1839,7 +1819,7 @@ export default function AdminPage() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-bold shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 sm:w-auto"
             >
               {fullSyncRunning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-              {fullSyncStep || 'סנכרון מלא'}
+              {fullSyncStep || 'סנכרון אנשי קשר מהפקות'}
             </button>
             {/* Quick actions */}
             <div className="flex flex-wrap gap-1.5">
@@ -3070,7 +3050,7 @@ export default function AdminPage() {
                     disabled={fullSyncRunning || runningSync}
                     className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-purple-500 hover:to-blue-500 disabled:opacity-60"
                   >
-                    {fullSyncRunning ? (fullSyncStep || 'מריץ...') : 'סנכרון מלא (הפקות + אנשי קשר)'}
+                    {fullSyncRunning ? (fullSyncStep || 'מריץ...') : 'סנכרון אנשי קשר מהפקות'}
                   </button>
                   <Link
                     href="/directory"
