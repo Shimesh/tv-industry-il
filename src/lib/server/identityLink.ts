@@ -315,8 +315,12 @@ export type LinkedProductionIdentity = {
   linkedContactId: string | null;
 };
 
-export async function getLinkedProductionIdentity(authUser: VerifiedAuthUser): Promise<LinkedProductionIdentity> {
-  const userDoc = await getDocument<RawIdentityDoc>(`users/${authUser.uid}`).catch(() => null);
+export async function getLinkedProductionIdentity(authUser: VerifiedAuthUser, options: { strict?: boolean } = {}): Promise<LinkedProductionIdentity> {
+  const readIdentityDocument = (path: string) => getDocument<RawIdentityDoc>(path).catch(error => {
+    if (options.strict) throw error;
+    return null;
+  });
+  const userDoc = await readIdentityDocument(`users/${authUser.uid}`);
   const linkedUids = Array.from(new Set([authUser.uid, ...stringArrayField(userDoc?.linkedUids)]));
   const profileId = stringField(userDoc || {}, ['profileId']) || null;
   const linkedContactIdRaw = userDoc?.linkedContactId;
@@ -348,9 +352,9 @@ export async function getLinkedProductionIdentity(authUser: VerifiedAuthUser): P
   addName(userDoc?.crewName);
 
   const sourceDocs = await Promise.all([
-    profileId ? getDocument<RawIdentityDoc>(`profiles/${profileId}`).catch(() => null) : Promise.resolve(null),
-    profileId ? getDocument<RawIdentityDoc>(`industry_people/${profileId}`).catch(() => null) : Promise.resolve(null),
-    linkedContactId ? getDocument<RawIdentityDoc>(`contacts/${linkedContactId}`).catch(() => null) : Promise.resolve(null),
+    profileId ? readIdentityDocument(`profiles/${profileId}`) : Promise.resolve(null),
+    profileId ? readIdentityDocument(`industry_people/${profileId}`) : Promise.resolve(null),
+    linkedContactId ? readIdentityDocument(`contacts/${linkedContactId}`) : Promise.resolve(null),
   ]);
 
   for (const doc of sourceDocs) {

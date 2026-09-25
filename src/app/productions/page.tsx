@@ -6,6 +6,7 @@ import { useAppConfig } from '@/contexts/AppConfigContext';
 import Link from 'next/link';
 import MessageInput from '@/components/productions/MessageInput';
 import WeeklyCalendar from '@/components/productions/WeeklyCalendar';
+import CalendarBriefing from '@/components/productions/CalendarBriefing';
 import UpdateSummary from '@/components/productions/UpdateSummary';
 import {
   Production,
@@ -3769,25 +3770,9 @@ function ProductionsContent() {
       )}
 
       {/* Calendar - always show once we have a valid range */}
+      <CalendarBriefing refreshSignal={lastSyncAt} />
       {renderedRange.start && renderedRange.end && (
         <>
-          {lastSyncAt && (
-            <div
-              className="mb-2 flex items-center gap-1.5 rounded-xl border px-3 py-1.5"
-              style={{ borderColor: 'var(--theme-border)', background: 'color-mix(in srgb, var(--theme-accent) 4%, transparent)' }}
-            >
-              <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-45" style={{ color: 'var(--theme-accent)' }} />
-              <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>
-                עודכן:{' '}
-                <span className="font-semibold" dir="ltr">
-                  {new Date(lastSyncAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                  {' '}
-                  {new Date(lastSyncAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </span>
-            </div>
-          )}
-
           {/* Google Calendar sync banner */}
           <button
             onClick={() => setShowCalendarMenu(true)}

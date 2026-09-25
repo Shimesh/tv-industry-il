@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import CalendarBriefing from '@/components/productions/CalendarBriefing';
 import { ArrowLeft, Clapperboard, Clock, MapPin, RefreshCw, User, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppConfig } from '@/contexts/AppConfigContext';
@@ -593,6 +594,7 @@ export default function WeeklyCalendarWidget() {
 
   return (
     <>
+      <CalendarBriefing showNext />
       <div className="overflow-hidden rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.25),0_8px_20px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.09)] transition duration-200 hover:shadow-[0_32px_80px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.13)]" style={{ background: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
         <div className="h-[3px] bg-gradient-to-l from-orange-500 via-amber-400 to-purple-500 opacity-90" />
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--theme-border)' }}>
