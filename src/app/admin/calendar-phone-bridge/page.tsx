@@ -523,11 +523,6 @@ export default function CalendarPhoneBridgePage() {
       ? buildAndroidUserscript(tokenData.token, tokenData.ingestUrl)
       : ''
   ), [tokenData]);
-  const androidInstallUrl = useMemo(() => (
-    tokenData?.token
-      ? `/admin/calendar-phone-bridge/android.user.js?token=${encodeURIComponent(tokenData.token)}`
-      : ''
-  ), [tokenData?.token]);
   const immediateFullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
   const pastedHerzliyaUrl = useMemo(() => findHerzliyaUrl(scheduleInput), [scheduleInput]);
   const fullDepartmentUrl = immediateFullDepartmentUrl || resolvedFullDepartmentUrl;
@@ -659,8 +654,8 @@ export default function CalendarPhoneBridgePage() {
     };
   }, [tokenData?.token, user]);
 
-  async function createToken() {
-    if (!user) return;
+  async function createToken(): Promise<TokenResponse | null> {
+    if (!user) return null;
     setBusy(true);
     setMessage('');
     setBridgeStatus(null);
@@ -681,11 +676,35 @@ export default function CalendarPhoneBridgePage() {
       const payload = await response.json() as TokenResponse;
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'יצירת הטוקן נכשלה');
       setTokenData(payload);
-      setMessage(`נוצר טוקן ל-${payload.expiresInMinutes} דקות. עכשיו הפעל את ה-Bookmarklet מהטלפון.`);
+      setMessage(`נוצר טוקן ל-${payload.expiresInMinutes} דקות. עכשיו אפשר להתקין/לעדכן את סקריפט Edge.`);
+      return payload;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'יצירת הטוקן נכשלה');
+      return null;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function installOrUpdateAndroidUserscript() {
+    if (!user || busy) return;
+
+    const installWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    if (installWindow) {
+      installWindow.document.write('<p style="font-family:Arial,sans-serif;direction:rtl">מכין התקנת Tampermonkey...</p>');
+    }
+
+    const activeToken = tokenData ?? await createToken();
+    if (!activeToken?.token) {
+      if (installWindow) installWindow.close();
+      return;
+    }
+
+    const installUrl = `/admin/calendar-phone-bridge/android.user.js?token=${encodeURIComponent(activeToken.token)}`;
+    if (installWindow) {
+      installWindow.location.href = installUrl;
+    } else {
+      window.open(installUrl, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -890,52 +909,57 @@ export default function CalendarPhoneBridgePage() {
           </section>
         ) : null}
 
-        {androidUserscript ? (
-          <section className="space-y-4 rounded-2xl border border-emerald-400/40 bg-[#17102f] p-5">
-            <h2 className="font-bold text-emerald-300">מסלול מומלץ ל־Edge Android + Tampermonkey</h2>
-            <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100">
-              זה המסלול שעבד בפועל: Edge בטלפון פותח את הרצליה, Tampermonkey מוסיף כפתור “עדכן יומן”
-              בתוך דף הרצליה, והשאיבה רצה מהטלפון בלי המחשב.
+        <section className="space-y-4 rounded-2xl border border-emerald-400/40 bg-[#17102f] p-5">
+          <h2 className="font-bold text-emerald-300">מסלול מומלץ ל־Edge Android + Tampermonkey</h2>
+          <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100">
+            זה המסלול שעבד בפועל: Edge בטלפון פותח את הרצליה, Tampermonkey מוסיף כפתור “עדכן יומן”
+            בתוך דף הרצליה, והשאיבה רצה מהטלפון בלי המחשב.
+          </p>
+          <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
+            <li>פתח את המסך הזה בטלפון מתוך <span dir="ltr">Microsoft Edge</span>.</li>
+            <li>לחץ “התקן/עדכן סקריפט Edge”. אם אין הפעלת טלפון פעילה, הכפתור ייצור אותה לבד.</li>
+            <li>במסך Tampermonkey לחץ <span dir="ltr">Install</span> או <span dir="ltr">Update</span>.</li>
+            <li>חזור למסך הזה ב־Edge ולחץ “פתח קישור מלא ב־Edge” או “פתח קישור הרצליה ב־Edge”.</li>
+            <li>בדף הרצליה לחץ על הכפתור הכתום “עדכן יומן”.</li>
+            <li>המתן עד שמופיע כאן שכל ההפקות וכל הפופאפים הושלמו, למשל 29/29. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
+          </ol>
+          {!user ? (
+            <p className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+              צריך להתחבר לאפליקציה כדי ליצור טוקן פרטי להתקנת הסקריפט.
             </p>
-            <ol className="list-decimal space-y-2 pr-5 text-sm leading-6 text-violet-100">
-              <li>פתח את המסך הזה בטלפון מתוך <span dir="ltr">Microsoft Edge</span>.</li>
-              <li>לחץ “צור הפעלת טלפון חדשה”.</li>
-              <li>לחץ “התקן/עדכן סקריפט Edge”.</li>
-              <li>במסך Tampermonkey לחץ <span dir="ltr">Install</span> או <span dir="ltr">Update</span>.</li>
-              <li>חזור למסך הזה ב־Edge ולחץ “פתח קישור מלא ב־Edge”.</li>
-              <li>בדף הרצליה לחץ על הכפתור הכתום “עדכן יומן”.</li>
-              <li>המתן עד שמופיע כאן שכל ההפקות וכל הפופאפים הושלמו, למשל 29/29. אם חסר צוות/פופאפ, שום דבר חלקי לא נשמר.</li>
-            </ol>
-            {androidInstallUrl ? (
-              <a
-                href={androidInstallUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-3 text-center text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void installOrUpdateAndroidUserscript()}
+            disabled={!user || busy}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-center text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          >
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+            התקן/עדכן סקריפט Edge
+          </button>
+          <p className="text-xs leading-5 text-violet-300">
+            אם ההתקנה הישירה לא נפתחת, צור הפעלת טלפון חדשה ואז השתמש בקוד הגיבוי למטה והדבק אותו ידנית ב־Tampermonkey בתוך Edge.
+          </p>
+          {androidUserscript ? (
+            <>
+              <textarea
+                value={androidUserscript}
+                readOnly
+                rows={12}
+                dir="ltr"
+                className="w-full rounded-lg border border-violet-400/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-violet-100"
+              />
+              <button
+                type="button"
+                onClick={() => void copy(androidUserscript, 'קוד סקריפט')}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
               >
-                התקן/עדכן סקריפט Edge
-              </a>
-            ) : null}
-            <p className="text-xs leading-5 text-violet-300">
-              אם ההתקנה הישירה לא נפתחת, השתמש בקוד הגיבוי למטה והדבק אותו ידנית ב־Tampermonkey בתוך Edge.
-            </p>
-            <textarea
-              value={androidUserscript}
-              readOnly
-              rows={12}
-              dir="ltr"
-              className="w-full rounded-lg border border-violet-400/30 bg-[#09061a] px-3 py-2 font-mono text-xs text-violet-100"
-            />
-            <button
-              type="button"
-              onClick={() => void copy(androidUserscript, 'קוד סקריפט')}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
-            >
-              <Copy className="h-4 w-4" />
-              העתק קוד סקריפט
-            </button>
-          </section>
-        ) : null}
+                <Copy className="h-4 w-4" />
+                העתק קוד סקריפט
+              </button>
+            </>
+          ) : null}
+        </section>
 
         {shortcutScript ? (
           <details className="rounded-2xl border border-violet-400/30 bg-[#17102f] p-5">
