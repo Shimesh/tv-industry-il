@@ -51,6 +51,18 @@ function extractHerzliyaUrl(input: string): string {
   return input.match(/https?:\/\/hsil\.acc\.co\.il:5443\/[^\s<>"']+/i)?.[0] || input.trim();
 }
 
+function findHerzliyaUrl(input: string): string {
+  return input.match(/https?:\/\/hsil\.acc\.co\.il:5443\/[^\s<>"']+/i)?.[0] || '';
+}
+
+function appendBridgeToken(url: string, token: string | undefined): string {
+  if (!url || !token) return url;
+  const [base, hash = ''] = url.split('#');
+  const params = new URLSearchParams(hash);
+  params.set('tvib_token', token);
+  return `${base}#${params.toString()}`;
+}
+
 function deriveFullDepartmentUrl(input: string): string {
   const candidate = extractHerzliyaUrl(input);
   const sendwaMatch = candidate.match(/[?&]A=([^,\s&]+),([A-Za-z0-9-]{6,64})/i)
@@ -144,15 +156,24 @@ const report = async (phase, message, progress, extra = {}) => {
     const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
     if (!isFullDepartmentPage) {
       const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
+      const headerDate = sourceText.match(/\\b(\\d{2})\\/(\\d{2})\\/(\\d{4})\\b/);
       const dateMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false|\\$\\{inputValue2\\}))?/i);
-      const match = dateMatch
-        || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+      const opaqueMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
         || sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i);
+      const resolvedDate = dateMatch ? dateMatch[2] : headerDate ? headerDate[1] + headerDate[2] + headerDate[3] : '';
+      const match = dateMatch || (resolvedDate && opaqueMatch ? [opaqueMatch[0], opaqueMatch[1], resolvedDate] : null);
       if (match) {
         const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
-          + match[1] + ',-A' + match[2] + ',-Atrue';
+          + match[1] + ',-A' + match[2] + ',-Atrue' + location.hash;
         await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
         location.href = fullUrl;
+        return;
+      }
+      if (opaqueMatch && !/prgname=ShowEmp3/i.test(location.href)) {
+        const personalUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N'
+          + opaqueMatch[1] + ',-A' + opaqueMatch[2] + location.hash;
+        await report('opening_personal_calendar', 'פותח קודם את הקישור האישי כדי לחלץ ממנו תאריך יומן מלא.', 11, { personalUrl });
+        location.href = personalUrl;
         return;
       }
     }
@@ -340,15 +361,24 @@ const report = async (phase, message, progress, extra = {}) => {
       const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
       if (!isFullDepartmentPage) {
         const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
+        const headerDate = sourceText.match(/\\b(\\d{2})\\/(\\d{2})\\/(\\d{4})\\b/);
         const dateMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false|\\$\\{inputValue2\\}))?/i);
-        const match = dateMatch
-          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+        const opaqueMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
           || sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i);
+        const resolvedDate = dateMatch ? dateMatch[2] : headerDate ? headerDate[1] + headerDate[2] + headerDate[3] : '';
+        const match = dateMatch || (resolvedDate && opaqueMatch ? [opaqueMatch[0], opaqueMatch[1], resolvedDate] : null);
         if (match) {
           const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
-            + match[1] + ',-A' + match[2] + ',-Atrue';
+            + match[1] + ',-A' + match[2] + ',-Atrue' + location.hash;
           await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
           location.href = fullUrl;
+          return;
+        }
+        if (opaqueMatch && !/prgname=ShowEmp3/i.test(location.href)) {
+          const personalUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N'
+            + opaqueMatch[1] + ',-A' + opaqueMatch[2] + location.hash;
+          await report('opening_personal_calendar', 'פותח קודם את הקישור האישי כדי לחלץ ממנו תאריך יומן מלא.', 11, { personalUrl });
+          location.href = personalUrl;
           return;
         }
       }
@@ -499,15 +529,18 @@ export default function CalendarPhoneBridgePage() {
       : ''
   ), [tokenData?.token]);
   const immediateFullDepartmentUrl = useMemo(() => deriveFullDepartmentUrl(scheduleInput), [scheduleInput]);
+  const pastedHerzliyaUrl = useMemo(() => findHerzliyaUrl(scheduleInput), [scheduleInput]);
   const fullDepartmentUrl = immediateFullDepartmentUrl || resolvedFullDepartmentUrl;
   const hasCurrentScheduleInput = Boolean(scheduleInput.trim());
   const displayedFullDepartmentUrl = fullDepartmentUrl || (!hasCurrentScheduleInput ? lastValidFullDepartmentUrl : '');
   const isUsingSavedFullDepartmentUrl = !fullDepartmentUrl && !hasCurrentScheduleInput && Boolean(lastValidFullDepartmentUrl);
   const displayedFullDepartmentUrlForEdge = useMemo(() => {
-    if (!displayedFullDepartmentUrl || !tokenData?.token) return displayedFullDepartmentUrl;
-    const separator = displayedFullDepartmentUrl.includes('#') ? '&' : '#';
-    return `${displayedFullDepartmentUrl}${separator}tvib_token=${encodeURIComponent(tokenData.token)}`;
+    return appendBridgeToken(displayedFullDepartmentUrl, tokenData?.token);
   }, [displayedFullDepartmentUrl, tokenData?.token]);
+  const fallbackHerzliyaUrlForEdge = useMemo(() => (
+    appendBridgeToken(pastedHerzliyaUrl, tokenData?.token)
+  ), [pastedHerzliyaUrl, tokenData?.token]);
+  const openUrlForEdge = displayedFullDepartmentUrlForEdge || fallbackHerzliyaUrlForEdge;
   const androidAppUrl = useMemo(() => (
     tokenData?.token && tokenData.ingestUrl && displayedFullDepartmentUrl
       ? `tvindustryherzliya://sync?token=${encodeURIComponent(tokenData.token)}&ingestUrl=${encodeURIComponent(tokenData.ingestUrl)}&url=${encodeURIComponent(displayedFullDepartmentUrl)}`
@@ -745,6 +778,16 @@ export default function CalendarPhoneBridgePage() {
                   {resolveMessage}
                 </p>
               ) : null}
+              {!user && hasCurrentScheduleInput ? (
+                <p className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  צריך להתחבר לאפליקציה כדי לבנות אוטומטית קישור מלא וליצור טוקן גשר חדש. בלי התחברות אפשר לפתוח רק את קישור הרצליה המקורי.
+                </p>
+              ) : null}
+              {!displayedFullDepartmentUrl && fallbackHerzliyaUrlForEdge ? (
+                <p className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  עדיין לא נבנה קישור מלא, אבל זוהה קישור הרצליה. אפשר לפתוח אותו ב־Edge; סקריפט הגשר המעודכן ינסה להשלים מעבר ליומן המלא מתוך דף הרצליה.
+                </p>
+              ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
@@ -757,14 +800,14 @@ export default function CalendarPhoneBridgePage() {
                 </button>
                 <button
                   type="button"
-                  disabled={!displayedFullDepartmentUrlForEdge}
+                  disabled={!openUrlForEdge}
                   onClick={() => {
-                    if (!displayedFullDepartmentUrlForEdge) return;
-                    window.open(displayedFullDepartmentUrlForEdge, '_blank', 'noopener,noreferrer');
+                    if (!openUrlForEdge) return;
+                    window.open(openUrlForEdge, '_blank', 'noopener,noreferrer');
                   }}
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300/50 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
                 >
-                  פתח קישור מלא ב־Edge
+                  {displayedFullDepartmentUrlForEdge ? 'פתח קישור מלא ב־Edge' : 'פתח קישור הרצליה ב־Edge'}
                 </button>
               </div>
               <p className="text-xs leading-5 text-emerald-100">
@@ -774,7 +817,7 @@ export default function CalendarPhoneBridgePage() {
               {!displayedFullDepartmentUrl ? (
                 <p className="rounded-lg bg-violet-500/10 px-4 py-3 text-sm leading-6 text-violet-200">
                   עדיין לא זוהה קישור הרצליה. הדבק למעלה הודעת WhatsApp מהרצליה או URL שמכיל `sendwa.html?A=...,...` או `arguments=-N...,-A...`.
-                  הכפתורים ייפתחו אוטומטית ברגע שהקישור יזוהה.
+                  כפתור הפתיחה יופעל ברגע שיזוהה קישור הרצליה, גם אם הקישור המלא עדיין לא נבנה.
                 </p>
               ) : null}
             </div>

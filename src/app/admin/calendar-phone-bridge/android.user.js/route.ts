@@ -103,13 +103,25 @@ function buildAndroidUserscript(token: string, origin: string): string {
       const isFullDepartmentPage = /prgname=ShowEmp6/i.test(location.href) && /-Atrue/i.test(location.href);
       if (!isFullDepartmentPage) {
         const sourceText = location.href + '\\n' + document.documentElement.innerHTML;
-        const match = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
-          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false))?/i);
+        const headerDate = sourceText.match(/\\b(\\d{2})\\/(\\d{2})\\/(\\d{4})\\b/);
+        const dateMatch = sourceText.match(/[?&]A=([^,\\s&"'<>]+),(\\d{8})/i)
+          || sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A(\\d{8})(?:,-A(?:true|false|\\$\\{inputValue2\\}))?/i);
+        const opaqueMatch = sourceText.match(/arguments=-N([^,\\s&"'<>]+),-A([A-Za-z0-9-]{6,64})(?:,-A(?:true|false))?/i)
+          || sourceText.match(/[?&]A=([^,\\s&"'<>]+),([A-Za-z0-9-]{6,64})/i);
+        const resolvedDate = dateMatch ? dateMatch[2] : headerDate ? headerDate[1] + headerDate[2] + headerDate[3] : '';
+        const match = dateMatch || (resolvedDate && opaqueMatch ? [opaqueMatch[0], opaqueMatch[1], resolvedDate] : null);
         if (match) {
           const fullUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWeb&prgname=ShowEmp6&arguments=-N'
-            + match[1] + ',-A' + match[2] + ',-Atrue';
+            + match[1] + ',-A' + match[2] + ',-Atrue' + location.hash;
           await report('opening_full_calendar', 'פותח את יומן המחלקה המלא לפני חילוץ הנתונים.', 12, { fullDepartmentUrl: fullUrl });
           location.href = fullUrl;
+          return;
+        }
+        if (opaqueMatch && !/prgname=ShowEmp3/i.test(location.href)) {
+          const personalUrl = 'https://hsil.acc.co.il:5443/magicscripts/mgrqispi.dll?appname=HSiLWEB&prgname=ShowEmp3&arguments=-N'
+            + opaqueMatch[1] + ',-A' + opaqueMatch[2] + location.hash;
+          await report('opening_personal_calendar', 'פותח קודם את הקישור האישי כדי לחלץ ממנו תאריך יומן מלא.', 11, { personalUrl });
+          location.href = personalUrl;
           return;
         }
       }
