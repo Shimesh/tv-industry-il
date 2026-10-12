@@ -99,7 +99,7 @@ const loadPopupHtml = async (id) => {
   };
 
 const eventElement = [...document.querySelectorAll('[onclick*="openmd2("]')]
-  .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\((\d+)\)/)?.[1] === String(id));
+  .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1] === String(id));
 
 if (eventElement || typeof pageWindow.openmd2 === 'function') {
   clearModal();
@@ -296,7 +296,7 @@ function buildAndroidUserscript(token: string, ingestUrl: string): string {
   };
 
   const eventElement = [...document.querySelectorAll('[onclick*="openmd2("]')]
-    .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\((\d+)\)/)?.[1] === String(id));
+    .find((element) => String(element.getAttribute('onclick') || '').match(/openmd2\\((\\d+)\\)/)?.[1] === String(id));
 
   if (eventElement || typeof pageWindow.openmd2 === 'function') {
     clearModal();
