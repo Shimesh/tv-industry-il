@@ -453,10 +453,11 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
 
   // Rendering priority: HLS stream > iframe embed > loading spinner > fallback placeholder
   const showHls = hasDirectStream && !error;
-  const showEmbed = !showHls && hasEmbed && !error && !isResolvingDynamicStream;
+  const showOfficialPlayer = channel.id === 'keshet12' && !showHls && !isResolvingDynamicStream && !!stream?.websiteUrl;
+  const showEmbed = !showOfficialPlayer && !showHls && hasEmbed && !error && !isResolvingDynamicStream;
   const showLiveBadge = showHls || showEmbed;
   const showDynamicLoading = isResolvingDynamicStream;
-  const showFallback = !showEmbed && !showHls && !showDynamicLoading;
+  const showFallback = !showOfficialPlayer && !showEmbed && !showHls && !showDynamicLoading;
 
   useEffect(() => {
     if (!isKeshetMobile) return;
@@ -498,7 +499,23 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
       onMouseMove={resetHideTimer}
       onClick={resetHideTimer}
     >
-      {showEmbed ? (
+      {showOfficialPlayer ? (
+        <div dir="rtl" className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-slate-950 px-5 text-center text-white">
+          <p className="text-lg font-bold sm:text-2xl">קשת 12 בשידור חי</p>
+          <p className="max-w-md text-sm text-slate-300">השידור זמין בנגן הרשמי. לחצו לצפייה בחלון חדש.</p>
+          <a
+            href={stream?.websiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-base font-bold text-white hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            <span aria-hidden="true">▶</span>
+            צפה בשידור חי של ערוץ 12
+            <span aria-hidden="true">↗</span>
+          </a>
+          <button type="button" onClick={handleRetry} className="min-h-10 px-3 text-sm text-slate-300 underline hover:text-white">נסה שוב לנגן כאן</button>
+        </div>
+      ) : showEmbed ? (
         <iframe
           key={resolvedEmbedUrl}
           src={resolvedAutoplayEmbedUrl || resolvedEmbedUrl}
@@ -637,7 +654,7 @@ export function VideoPlayer({ channel, stream, onNext, onPrev, currentProgram, i
       ) : null}
 
       {/* Error overlay */}
-      {error && (
+      {error && !showOfficialPlayer && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
           <div className="text-center text-white px-6">
             <div className="text-4xl mb-3">⚠️</div>
