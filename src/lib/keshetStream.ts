@@ -7,6 +7,11 @@ const KESHET_PLAYER_VERSION = '7.15.0';
 const KESHET_PLAYLIST_KEY = 'LTf7r/zM2VndHwP+4So6bw==';
 const KESHET_TOKEN_KEY = 'YhnUaXMmltB6gd8p9SWleQ==';
 const KESHET_CRYPTO_IV = 'theExact16Chars=';
+// Public live source from mako's playlist. Entitlement is still requested afresh.
+const KESHET_LIVE_SOURCE = {
+  url: 'https://d2249b6f08tjt0.cloudfront.net/k12dvr/master.m3u8?b-in-range=0-800',
+  cdn: 'AWS',
+};
 
 type KeshetPlaylist = {
   media?: Array<{
@@ -70,40 +75,35 @@ function encryptPayload(payload: object, keyValue: string): string {
 async function resolveKeshet12BrowserStreamOnce(sourceOffset: number): Promise<string | null> {
   let stage = 'playlist-request';
   try {
+    let playlist: KeshetPlaylist = {};
+    try {
     const playlistResponse = await fetch(KESHET_PLAYLIST_URL, {
       headers: { Accept: 'text/plain,*/*' },
       credentials: 'omit',
+      signal: AbortSignal.timeout(5000),
     });
-    if (!playlistResponse.ok) return resolveKeshet12ServerStream();
+    if (!playlistResponse.ok) throw new Error('Playlist unavailable');
 
     stage = 'playlist-decrypt';
     const encryptedPlaylist = await playlistResponse.text();
-    const playlist = decryptPayload<KeshetPlaylist>(
+    playlist = decryptPayload<KeshetPlaylist>(
       encryptedPlaylist,
       KESHET_PLAYLIST_KEY,
     );
+    } catch {
+      // A challenge HTML page is not a playlist; retain the public live source.
+    }
     const orderedSources = [
       ...(playlist.media?.filter(item => item.cdn === 'AWS' && item.ssai === false) ?? []),
       ...(playlist.media?.filter(item => item.cdn === 'AWS' && item.ssai === true) ?? []),
       ...(playlist.media?.filter(item => item.cdn === 'AWS') ?? []),
+      KESHET_LIVE_SOURCE,
     ].filter((item, index, items) =>
       Boolean(item.url && item.cdn)
       && items.findIndex(candidate => candidate.url === item.url) === index
     );
     const source = orderedSources[sourceOffset % orderedSources.length];
     if (!source?.url || !source.cdn) return resolveKeshet12ServerStream();
-
-    stage = 'server-entitlement-request';
-    const serverEntitlementResponse = await fetch('/api/stream-token/keshet12', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceUrl: source.url, sourceCdn: source.cdn }),
-      cache: 'no-store',
-    });
-    if (serverEntitlementResponse.ok) {
-      const serverEntitlement = (await serverEntitlementResponse.json()) as { url?: string | null };
-      if (serverEntitlement.url) return serverEntitlement.url;
-    }
 
     const sourceUrl = new URL(source.url);
     stage = 'entitlement-encrypt';
@@ -120,6 +120,7 @@ async function resolveKeshet12BrowserStreamOnce(sourceOffset: number): Promise<s
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: entitlementPayload,
       credentials: 'omit',
+      signal: AbortSignal.timeout(8000),
     });
     if (!entitlementResponse.ok) return resolveKeshet12ServerStream();
 

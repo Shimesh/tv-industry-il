@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCipheriv, createDecipheriv } from 'node:crypto';
 
+// Live-channel entitlement is location-sensitive; resolve near Israeli viewers.
+export const preferredRegion = 'tlv1';
+
 const DESKTOP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const I24_HEBREW_HLS = 'https://i24newshebrew-cdn.encoders.immergo.tv/master.m3u8';
 const NOW14_GUID = '9fb14ce7-fcc2-4695-839b-e641390d7a00';
